@@ -1,145 +1,216 @@
-# ADR-0001: Monorepo with Independent Workspace Architecture
+# ADR-0001: Monorepo with Independent Workspace Architecture (Revision 2)
 
 - **Status**: PROPOSED
-- **Date**: 2026-02-07
+- **Date**: 2026-02-07 (revised)
 - **Deciders**: nrd
 - **Source**: [Plan](../plans/ion-atom-restructuring.md) | [Sketch](../../.sketches/2026-02-07-ion-atom-restructuring.md)
+- **Supersedes**: Revision 1 (two-workspace design)
 
 ## Context
 
-The eka project has validated its core concepts over ~2 years of development: decentralized atom publishing, git-backed storage, URI addressing, dependency resolution, and a Nix-targeting CLI. However, the codebase has accumulated tight coupling between protocol-level concerns (identity, addressing, publishing) and tooling-level concerns (CLI, resolution, manifests, runtime dispatch). The `atom` crate directly imports `gix`, `snix-*`, `resolvo`, `tokio`, `toml_edit`, and ~25 other dependencies — most of which are irrelevant to the Atom Protocol itself.
+The eka project has validated its core concepts over ~2 years of development: decentralized atom publishing, git-backed storage, URI addressing, dependency resolution, and a Nix-targeting CLI. However, the codebase has accumulated tight coupling between three distinct concerns:
 
-This coupling is not accidental; it reflects the natural trajectory of a validating prototype. But it now blocks three strategic objectives:
+1. **Protocol** (identity, addressing, publishing) — the Atom Protocol
+2. **Runtime engine** (evaluation, builds, store management) — what we now call Eos
+3. **User frontend** (CLI, manifests, resolution) — Ion
 
-1. **Cyphrpass integration** — the Atom Protocol's identity and storage layers will migrate to Cyphrpass as their substrate. This requires clean trait boundaries between protocol operations and storage implementations. The current codebase has no such boundary — git storage internals leak into identity construction, manifest parsing, and resolution.
+The coupling manifests at every layer. The `atom` crate directly imports runtime dependencies (`snix-*`, `tokio`). The CLI directly invokes nix evaluation. Manifest parsing is entangled with IO. An initial restructuring plan (revision 1) correctly separated atom from ion but **repeated the coupling mistake** by placing runtime logic (`IonRuntime` trait with evaluate/build/query) directly in ion. This was the same pattern that caused problems in eka — coupling the frontend to the engine.
 
-2. **Team scalability** — external contributors cannot work on ion's CLI without understanding atom's storage internals, and vice versa. Module-level `pub(crate)` boundaries are a convention; crate boundaries are enforcement.
-
-3. **Ecosystem breadth** — atom is a protocol with potential consumers beyond ion. CI tools, metadata indexers, registry frontends, and alternative package managers should be able to depend on atom's protocol types without pulling in gix, tokio, or nix dependencies.
-
-Additionally, ion itself has grown complex enough that its internal concerns — manifest parsing, dependency resolution, runtime dispatch — warrant library-level decomposition so they can be tested, documented, and versioned independently of the CLI binary.
+This revision addresses a critical architectural insight: **ion is a planner, not an executor.** Ion decides what to build; a separate engine (eos) performs the builds, manages stores, and (eventually) distributes work across machines.
 
 ### Forces
 
-- **Coupling enforcement must be mechanical, not conventional**. A solo developer can maintain module discipline; a team cannot. Crate boundaries provide compiler-enforced API surfaces.
-- **Atom is a protocol; ion is a tool**. Their release cadences, stability guarantees, and dependency profiles are fundamentally different. A manifest format change in ion should not trigger a version bump in atom.
-- **The 4-layer stack** (Cyphrpass → Atom → Ion → Plugins) places atom and ion at different architectural layers. Shared workspaces would allow — and eventually encourage — dependencies to flow in the wrong direction.
-- **Prior art** (gitoxide, iroh, sigstore-rs, cargo) consistently demonstrates that protocol libraries and CLI tools benefit from crate-level separation when the protocol is intended for external consumption.
-- **But also**: multi-workspace monorepos have real costs. IDE support (rust-analyzer) requires per-workspace configuration. `cargo check` only checks one workspace at a time. Cross-workspace path dependencies don't publish cleanly. Version coordination is manual.
+- **The eka lesson**: Tight coupling between CLI and runtime was the original problem. Any architecture that puts runtime operations in the CLI crate repeats this mistake, regardless of how clean the trait boundary is. The solution must physically separate the engine from the frontend.
+- **Eos is inevitable**: The long-term vision includes distributed builds, shared stores, coordinated caching, and cryptographic build auditing. If runtime logic starts in ion, it will need to be extracted later — at significant cost. Designing the seam now while the codebase is being restructured is the right time.
+- **Store operations are cryptographically significant**: Both ion and eos use `AtomStore`, but their stores serve different purposes (ion: local cache, eos: source of truth). Both are backed by Cyphrpass/git with transaction logs, enabling auditing of how atoms enter and move between stores.
+- **The manifest is ecosystem-level**: Ion's manifest format is consumed by both ion (for resolution) and eos (to know what to build). It also supports multiple runtimes (nix today, potentially guix). It is not tool-specific and should not be owned by a single workspace.
+- **Coupling enforcement must be mechanical, not conventional**. Crate boundaries provide compiler-enforced API surfaces. Module discipline doesn't scale to team.
+- **Prior art validates the planner/executor split**:
+  - **Bazel**: Client (planner) ↔ Remote Execution API (executor). Multiple independent server implementations exist behind the same protocol.
+  - **Nix**: `nix` CLI ↔ `nix-daemon`. The daemon protocol's limitations (no scheduling, no affinity) are the problems eos aims to solve.
+  - **snix**: gRPC builder protocol with pluggable local/remote backends — closest to the right answer and already in the dependency tree.
+- **But also**: three workspaces + shared crates have real costs. IDE configuration, multi-step `cargo check`, cross-workspace version coordination, and initial scaffold complexity.
 
 ## Decision
 
-We adopt a **monorepo with independent Cargo workspaces** architecture. The monorepo (`axios/`) contains two top-level workspaces:
+We adopt a **monorepo with three independent Cargo workspaces** and a shared library crate. The monorepo (`axios/`) cleanly maps to a 5-layer stack:
 
-### `atom/` — The Protocol Workspace
+```
+Cyphrpass (L0) → Atom (L1) → Eos (L2) → Ion (L3) → Plugins (L4)
+```
+
+### `atom/` — The Protocol Workspace (Layer 1)
 
 Decomposes the Atom Protocol into focused crates:
 
-| Crate       | Responsibility                                                                                                     | Dependencies                                                                   |
-| :---------- | :----------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------- |
-| `atom-id`   | Identity primitives: `Label`, `Tag`, `AtomDigest`, `AtomId<R>`, `Genesis`, `Compute`                               | ≤ 5: `unicode-ident`, `unicode-normalization`, `blake3`, `base32`, `thiserror` |
-| `atom-uri`  | URI parsing, version trait abstraction                                                                             | atom-id + `nom`, `semver`, `url`, `addr`                                       |
-| `atom-core` | Aggregation: re-exports atom-id/atom-uri, defines `AtomBackend`, `AtomStore`, `VersionScheme` traits, test vectors | atom-id, atom-uri (aggregation)                                                |
-| `atom-git`  | Git backend: implements `AtomBackend` + `AtomStore` for git repositories                                           | atom-core, `gix`, `snix-*`, `nix-compat`                                       |
+| Crate       | Responsibility                                                                | Dependencies                                                                   |
+| :---------- | :---------------------------------------------------------------------------- | :----------------------------------------------------------------------------- |
+| `atom-id`   | Identity primitives: `Label`, `Tag`, `AtomDigest`, `AtomId<R>`, `Compute`     | ≤ 5: `unicode-ident`, `unicode-normalization`, `blake3`, `base32`, `thiserror` |
+| `atom-uri`  | URI parsing, version trait abstraction                                        | atom-id + `nom`, `semver`, `url`, `addr`                                       |
+| `atom-core` | Aggregation: `AtomBackend`, `AtomStore`, `VersionScheme` traits, test vectors | atom-id, atom-uri (aggregation only)                                           |
+| `atom-git`  | Git backend: implements `AtomBackend` + `AtomStore` for git repositories      | atom-core, `gix`, `snix-*`, `nix-compat`                                       |
 
-The critical invariant: **atom-core has zero storage dependencies**. If a type requires `gix`, `tokio`, or `snix`, it belongs in atom-git, not atom-core. This is enforced by the crate boundary — atom-core's `Cargo.toml` cannot list these dependencies.
+Critical invariant: **atom-core has zero storage dependencies**. If a type requires `gix`, `tokio`, or `snix`, it belongs in atom-git.
 
-### `ion/` — The Tooling Workspace
+### `eos/` — The Runtime Engine Workspace (Layer 2)
 
-Decomposes ion into library crates consumed by a CLI binary:
+Houses the build engine that ion dispatches work to:
 
-| Crate          | Responsibility                                                          | Dependencies                                                     |
-| :------------- | :---------------------------------------------------------------------- | :--------------------------------------------------------------- |
-| `ion-manifest` | Manifest parsing (`ion.toml`), lock files, atom-set metadata            | atom-core, `toml_edit`, `serde`                                  |
-| `ion-resolve`  | Dependency resolution (SAT solver, version matching)                    | atom-core, `resolvo`                                             |
-| `ion-cli`      | CLI entrypoint, subcommand dispatch, `IonRuntime` trait + impls, config | ion-manifest, ion-resolve, atom-core, atom-git, `clap`, `snix-*` |
+| Crate       | Responsibility                                                                | Dependencies                                      |
+| :---------- | :---------------------------------------------------------------------------- | :------------------------------------------------ |
+| `eos-core`  | `BuildEngine` trait + common types (`StorePath`, `Derivation`, `BuildOutput`) | atom-core                                         |
+| `eos-local` | `LocalEngine` impl: snix-based local evaluation and builds                    | eos-core, shared/manifest, `snix-*`, `nix-compat` |
 
-Ion-manifest and ion-resolve are **libraries** — independently testable, documentable, and potentially reusable by other atom consumers. Ion-cli is the binary that wires them together.
+Future crates (not in this plan): `eos-remote` (gRPC client to eos daemon), `eos-scheduler` (distributed build coordination), `eos-cache` (binary substitution management).
+
+**BuildEngine** — the execution interface (replaces the former `IonRuntime`):
+
+- `evaluate(expr, args) → Derivation` — evaluate expressions to build plans
+- `build(derivation) → Vec<BuildOutput>` — realize derivations
+- `query(path) → Option<PathInfo>` — query store state
+- `check_substitutes(paths) → Vec<SubstituteResult>` — check binary availability
+
+All operations are synchronous in this initial design. Async is an eos-internal concern that will be introduced when the distributed engine arrives, without affecting the trait's external interface.
+
+### `ion/` — The Frontend Workspace (Layer 3)
+
+The user-facing planner that dispatches to eos:
+
+| Crate         | Responsibility                                                      | Dependencies                                              |
+| :------------ | :------------------------------------------------------------------ | :-------------------------------------------------------- |
+| `ion-resolve` | Dependency resolution (SAT solver, version matching)                | atom-core, `resolvo`                                      |
+| `ion-cli`     | CLI entrypoint, subcommand dispatch, config, `BuildEngine` dispatch | ion-resolve, atom-core, eos-core, shared/manifest, `clap` |
+
+Ion-cli does NOT depend on snix directly. In `embedded-engine` mode (default), it transitively depends on snix through eos-local. In future client mode, it connects to an eos daemon with zero snix dependency.
+
+### `shared/manifest/` — Ecosystem Manifest
+
+A library crate shared between ion and eos:
+
+- Manifest parsing (the project's dependency declaration format)
+- Lock file types
+- Atom-set handling
+- VersionScheme-abstract version requirements
+- Runtime-agnostic — supports nix today, extensible to guix and others
+
+The manifest filename (ion.toml, atom.toml, manifest.toml) is a UX decision deferred from this architectural decision.
 
 ### Monorepo Layout
 
 ```
 axios/
-├── atom/                        ← atom protocol workspace
-│   ├── Cargo.toml               ← [workspace] members
-│   ├── crates/
-│   │   ├── atom-id/
-│   │   ├── atom-uri/
-│   │   ├── atom-core/
-│   │   └── atom-git/
-│   └── SPEC.md
-├── ion/                         ← ion tooling workspace
-│   ├── Cargo.toml               ← [workspace] members
-│   ├── crates/
-│   │   ├── ion-cli/
-│   │   ├── ion-manifest/
-│   │   └── ion-resolve/
-│   └── ...
+├── atom/                        ← atom protocol workspace (L1)
+│   ├── Cargo.toml
+│   └── crates/
+│       ├── atom-id/
+│       ├── atom-uri/
+│       ├── atom-core/
+│       └── atom-git/
+├── eos/                         ← runtime engine workspace (L2)
+│   ├── Cargo.toml
+│   └── crates/
+│       ├── eos-core/
+│       └── eos-local/
+├── ion/                         ← user frontend workspace (L3)
+│   ├── Cargo.toml
+│   └── crates/
+│       ├── ion-cli/
+│       └── ion-resolve/
+├── shared/
+│   └── manifest/                ← ecosystem manifest library
 ├── docs/
 │   ├── plans/
 │   └── adr/
 └── README.md
 ```
 
+### Store Architecture
+
+Both eos and ion implement `AtomStore`, but at different scopes:
+
+```
+Ion (local cache)  ──send atoms──→  Eos (source of truth store)
+     ↓                                    ↓
+  AtomStore impl                      AtomStore impl
+     ↓                                    ↓
+  Cyphrpass/git                      Cyphrpass/git
+  (local tx log)                     (shared tx log)
+```
+
+- **Ion's store** is a local atom cache. Atoms are ingested from remote sources, cached locally, and forwarded to eos when needed.
+- **Eos's store** is the authoritative record. Eos may prune atoms, but conceptually it is a stateless store tracking all atoms it's aware of.
+- **Both stores are cryptographically tracked** via Cyphrpass transaction logs. An auditor asking "how did this atom enter our store?" can trace the full transaction history.
+
 ### Trait Surface
 
-Two protocol-level trait families bridge atom and ion:
+Two protocol-level trait families (in atom-core):
 
 **AtomBackend** — publishing layer (transaction-centric vocabulary):
 
-- `claim(anchor, label) → AtomDigest` — establish atom identity
-- `publish(digest, version, snapshot) → ()` — record a version
-- `resolve(digest, version) → Snapshot` — retrieve a version
-- `discover(anchor) → Vec<(Label, AtomDigest)>` — enumerate atoms
+- `claim(anchor, label) → AtomDigest`
+- `publish(digest, version, snapshot) → ()`
+- `resolve(digest, version) → Snapshot`
+- `discover(anchor) → Vec<(Label, AtomDigest)>`
 
 **AtomStore** — consumption layer (store-centric vocabulary):
 
-- `ingest(source) → ()` — pull atoms from a backend
-- `query(digest) → AtomEntry` — look up metadata
-- `fetch(digest) → Path` — materialize content
+- `ingest(source) → ()`
+- `query(digest) → AtomEntry`
+- `fetch(digest) → Path`
 
-**IonRuntime** — execution substrate (required, not optional):
+One engine trait (in eos-core):
 
-- `evaluate(expr, args) → StorePath` — evaluate expressions
-- `build(derivation) → Vec<OutputPath>` — realize derivations
-- `query_path(path) → PathInfo` — query store
+**BuildEngine** — execution substrate:
 
-The two-layer trait vocabulary (AtomBackend + AtomStore) is derived from the Atom SPEC's two-layer data flow: publishing layer (`label@version`) and store layer (`atom-digest`). The Cyphrpass-aligned terminology (`claim`, `publish`) is chosen deliberately — these operations are transaction-like, and the eventual Cyphrpass substrate will express them as signed transactions.
+- `evaluate(expr, args) → Derivation`
+- `build(derivation) → Vec<BuildOutput>`
+- `query(path) → Option<PathInfo>`
+- `check_substitutes(paths) → Vec<SubstituteResult>`
 
-### Runtime vs. Plugin Distinction
+### Embedded vs. Client Mode
 
-A critical architectural distinction: **runtimes are not plugins**.
+Ion supports two modes via feature flag:
 
-- **Runtimes** (snix, nix CLI, guix): Required backends. Ion dispatches to a runtime the way a compiler dispatches to a code generator. No runtime = no useful ion. Modeled by the `IonRuntime` trait.
-- **Plugins** (hypothetical: `ion deploy`, `ion audit`): Optional CLI extensions. User-facing, additive. May use WASM component model or similar. Explicitly deferred — not designed in this plan.
+- **Embedded** (`--features embedded-engine`, default): `LocalEngine` from eos-local is compiled into ion-cli. Single-machine development experience. No eos daemon needed.
+- **Client** (future): `RemoteEngine` connects to an eos daemon over the network. Distributed builds, shared caches, team workflows. Not implemented in this plan phase.
+
+Both modes satisfy the same `BuildEngine` trait. Ion's code is identical regardless of which mode is active.
 
 ## Consequences
 
 ### Positive
 
-- **Cyphrpass readiness**: When Cyphrpass integration begins, it implements `AtomBackend` — the trait boundary is already in place. atom-git becomes a legacy/compatibility backend, not the only option.
-- **External consumability**: CI tools, indexers, and registries can depend on `atom-core` (≤ 10 deps) without pulling the full dependency tree.
-- **Contributor isolation**: A contributor working on ion-resolve cannot accidentally import atom-git internals. A contributor working on atom-id has no exposure to gix or snix.
-- **Library reuse**: ion-manifest and ion-resolve are independently useful. Another atom consumer (hypothetical `guix-atom`) could use ion-resolve without ion-cli.
-- **Test isolation**: atom-id can be tested with zero fixtures — pure validation logic. atom-git tests can focus on git-specific behavior against atom-core trait contracts.
+- **Cyphrpass readiness**: `AtomBackend` trait boundary is in place. atom-git becomes a legacy backend.
+- **Eos readiness**: `BuildEngine` trait boundary is in place. When distributed eos arrives, `RemoteEngine` slots in without modifying ion.
+- **No repeated mistake**: Runtime logic is in eos from day one. Ion won't accumulate engine internals that need costly extraction later.
+- **External consumability**: CI tools and registries can depend on atom-core (≤ 10 deps) without the full tree.
+- **Contributor isolation**: Contributors in different workspaces cannot accidentally create coupling.
+- **Library reuse**: ion-resolve, shared/manifest, and eos-core are all independently useful.
+- **Cryptographic auditability**: Store operations in both ion and eos are transaction-logged from the start.
 
 ### Negative
 
-- **Cross-crate coordination overhead**: Changes to atom-core trait signatures require coordinated updates across atom-git + ion crates. This is real friction, especially during early development when traits are still stabilizing.
-- **IDE configuration**: rust-analyzer needs per-workspace configuration for multi-workspace monorepos. This adds developer setup friction.
-- **Publishing complexity**: When atom crates are published to crates.io, cross-workspace path dependencies must be replaced with version dependencies. This is a well-understood but tedious process.
-- **Initial velocity cost**: Setting up 7+ crate skeletons, workspaces, and inter-crate dependencies is significant upfront work before any concrete logic is ported.
+- **Three-workspace coordination cost**: Trait changes in atom-core propagate through eos-core and ion. This friction is worst during early development while traits stabilize.
+- **IDE complexity**: rust-analyzer needs per-workspace configuration. `cargo check` runs per workspace.
+- **Initial scaffold burden**: 8+ crate skeletons, 3 workspaces, shared crate, inter-workspace path deps. Significant upfront work before logic is ported.
+- **Premature eos abstraction risk**: Eos has no battle-tested code. The `BuildEngine` trait is designed from prior art, not experience. It may need revision.
+- **Shared manifest dependency direction**: eos → shared/manifest is architecturally clean (shared library), but the manifest format is conceptually a "frontend concern" that the engine consumes. This inversion is acceptable but warrants awareness.
 
 ### Risks Accepted
 
-- **~30% chance of trait signature breakage** when Cyphrpass integrates. The boundary location is correct; the method signatures may need revision. This is an acceptable cost — the alternative (no boundary) would make integration harder, not easier.
-- **atom-uri crate requires surgery**: `LocalAtom` must move to ion (it's a resolution concern), and `gix::Url` must be replaced with a backend-agnostic URL type. This is known work, not speculative.
-- **VersionScheme generics permeate ion-resolve**: Every resolution function carries `V: VersionScheme` bounds. This is the cost of version abstraction, explicitly accepted by nrd.
+- **~30% chance of trait signature breakage** when Cyphrpass integrates.
+- **BuildEngine trait may need revision** as eos matures from concept to implementation. The Bazel/snix prior art provides confidence in the operation vocabulary, but associated types will evolve.
+- **VersionScheme generics permeate resolution code**. Accepted cost of version abstraction.
+- **atom-uri requires surgery**: `LocalAtom` moves to ion; `gix::Url` becomes generic.
 
-### Alternatives Considered
+## Alternatives Considered
 
-**Single-crate with module boundaries**: A single `atom` crate with `pub(crate)` module boundaries achieves ~90% of decoupling at ~10% of the cost. Genuinely compelling for solo development. Rejected because crate boundaries provide mechanical enforcement that external contributors need — module discipline doesn't scale to team.
+**Two workspaces (atom + ion), IonRuntime in ion** (revision 1 of this ADR): Places runtime operations directly in ion. Rejected because it repeats eka's coupling mistake. When eos matures, runtime logic would need extraction from ion — the exact expensive rearchitecture exercise this restructuring aims to prevent.
 
-**No generalization (concrete git library)**: Build atom as a clean, git-specific library with no traits. Extract traits later when a second backend exists. Avoids the "wrong abstraction" problem. Rejected because nrd's thesis is that it's easier to fix a broken abstraction than to abstract an overly concrete implementation — and the existing codebase is evidence of what happens when boundaries are deferred.
+**Single-crate with module boundaries**: ~90% of decoupling at ~10% of cost. Genuinely compelling for solo development. Rejected because module discipline doesn't scale to team, and three distinct architectural layers (protocol, engine, frontend) have fundamentally different dependency profiles and evolution rates.
 
-**Monolithic ion**: Keep all ion concerns in a single crate with internal modules. Rejected because ion-manifest and ion-resolve are library concerns that should be independently testable and potentially reusable by other atom consumers.
+**No generalization (concrete git library)**: Avoids the "wrong abstraction" problem. Rejected per nrd: easier to fix a broken abstraction than to abstract overly concrete implementations.
+
+**Protocol-based separation (gRPC for eos from day one)**: True network decoupling between ion and eos. Rejected as premature — adds serialization, transport, and daemon management complexity before the concepts are validated. The trait-based approach (Option A from sketch) allows migration to protocol-based separation later when eos is ready for distributed deployment.
+
+**Manifest owned by ion (eos depends cross-workspace)**: Simpler initial layout. Rejected because the manifest is genuinely shared — eos needs it for builds, not as an ion courtesy. Shared crate location reflects the reality.
