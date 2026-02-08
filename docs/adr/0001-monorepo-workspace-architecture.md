@@ -27,7 +27,7 @@ Every atom traces a content-addressed path from identity to output:
 
 ```
 AtomId → Version → Revision → Plan → Output
- (czd)   (semver)   (commit)  (recipe) (artifact)
+ (czd)   (semver)   (commit)  (drv) (artifact)
 ```
 
 "Plan" is the abstract term. For the snix engine, a plan is a derivation
@@ -180,7 +180,7 @@ AtomRegistry (publishing front)
         ↓ resolve/discover
     AtomSource (read interface)
         ↓ ingest
-    AtomStore (working store)  ←── DevWorkspace (also an AtomSource)
+    AtomStore (working store)  ←── import_path (local atoms copied from disk)
         ↓ read
     BuildEngine (plan/apply)
         ↓ produce
@@ -203,7 +203,7 @@ Both satisfy `BuildEngine`. Ion's code is generic: `fn run(engine: impl BuildEng
 - Any ecosystem can publish atoms by implementing Manifest.
 - AtomSource as universal read interface enables mirrors, syndicated stores, and dev workspaces through one mechanism.
 - ArtifactStore enables binary caches and globally syndicated blob stores.
-- DevWorkspace implements AtomSource — no special codepath for unpublished atoms.
+- Local atoms are copied into the same store from disk — no special codepath once they're ingested.
 - Runtime is in eos from day one. Contributor isolation via workspace boundaries.
 
 ### Negative

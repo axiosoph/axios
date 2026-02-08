@@ -85,11 +85,12 @@ dev workspaces identically.
 
 Ion populates the `AtomStore` from multiple sources:
 
-- Published atoms: `store.ingest(&registry)`
-- Dev atoms: `store.ingest(&dev_workspace)`
-- Cross-store: `store.ingest(&other_store)`
+- Published atoms: `store.ingest(&registry)` — pull from registries
+- Local atoms: `store.import_path(path)` — copy from disk, stamp with dev prerelease version
+- Cross-store: `store.ingest(&other_store)` — transfer between stores
 
-Eos reads from the AtomStore. Published or local — same codepath.
+Eos reads from the AtomStore. Published or local, they look the same once
+they're in the store.
 
 **Deployment modes:**
 
@@ -126,7 +127,7 @@ Eos reads from the AtomStore. Published or local — same codepath.
 | KD-7  | Build engine         | `BuildEngine` trait with plan/apply and associated types (Plan, Output)                   | Cache-skipping at every stage. Terraform-style.                                 |
 | KD-8  | atom-core substance  | Contains core implementation + test vectors, not just types                               | Prevents "ghost crate" failure. Must be independently testable.                 |
 | KD-9  | Store taxonomy       | AtomSource (read) + AtomRegistry (publish) + AtomStore (working) + ArtifactStore (output) | Four distinct concerns with different semantics.                                |
-| KD-10 | Store transfer       | `AtomStore::ingest(&dyn AtomSource)`                                                      | One codepath for published and dev atoms.                                       |
+| KD-10 | Store transfer       | `AtomStore::ingest(&dyn AtomSource)` + `import_path` for local atoms                      | Published atoms via ingest; local atoms copied from disk into the same store.   |
 | KD-11 | Ion decomposition    | ion-cli, ion-resolve, ion-manifest                                                        | ion-manifest implements Manifest. ion-resolve does SAT.                         |
 | KD-12 | Eos modularization   | eos-core + eos-store + eos                                                                | Will be the largest component. Early split prevents monolith.                   |
 | KD-13 | Embedded engine      | `embedded-engine` feature flag on ion-cli                                                 | Solo dev works immediately. Daemon is opt-in.                                   |
@@ -154,7 +155,7 @@ Eos reads from the AtomStore. Published or local — same codepath.
 | A-2  | Existing code has proven concepts worth porting | —        | Validated | 2 years of working dep resolution, publishing, URI parsing, manifests.                            |
 | A-3  | Protocol is manifest-agnostic                   | —        | Validated | Per v2 spec.                                                                                      |
 | A-4  | Cryptographic chain is the foundation           | —        | Validated | Every step is content-addressed and cacheable.                                                    |
-| A-5  | Store transfer unifies published and dev atoms  | —        | Validated | Current eka uses an internal AtomStore for this already.                                          |
+| A-5  | Local atoms land in the same store as published  | —        | Validated | Current eka copies local atoms into the cache repo with a dev prerelease version.                 |
 | A-6  | ekala.toml is not a central pillar              | —        | Validated | May not survive Cyphrpass transition.                                                             |
 | A-7  | Embedded engine is the right default            | —        | Validated | Prior art: Cargo, single-user Nix, Go.                                                            |
 
@@ -172,7 +173,7 @@ Eos reads from the AtomStore. Published or local — same codepath.
 - BuildEngine implementation with snix
 - ArtifactStore with snix BlobService wrapper
 - `embedded-engine` feature flag
-- Store-to-store transfer via `AtomStore::ingest`
+- Store-to-store transfer via `AtomStore::ingest` and disk-to-store via `import_path`
 
 ### Out of scope
 
@@ -322,8 +323,8 @@ Assemble ion as a working binary.
 - Config handling
 - Wire `BuildEngine` — ion-cli is generic over `E: BuildEngine`
 - `embedded-engine` feature: construct `eos::Engine` directly
-- `DevWorkspace` as `AtomSource` for local dev atoms
-- `AtomStore::ingest` for populating the store
+- Local atom import: read atom.toml from disk, build git tree, stamp dev prerelease version, write to store
+- `AtomStore::ingest` for populating from registries
 - plan/apply dispatch (dry-run support)
 - Verify: `ion --help` works, basic subcommands function
 
