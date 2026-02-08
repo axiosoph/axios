@@ -1,12 +1,12 @@
-# PLAN: Ion-Atom Restructuring (Revision 4)
+# PLAN: Ion-Atom Restructuring (Revision 4a)
 
 <!--
   Source sketch: .sketches/2026-02-07-ion-atom-restructuring.md
-  Plan stage: SCOPE → COMMIT (revision 4)
+  Plan stage: SCOPE → COMMIT (revision 4a)
   Confidence: see bottom of document
 
   Key changes from revision 3:
-  - Cryptographic chain as the motivating principle (AtomId→Version→Revision→Derivation→Output)
+  - Cryptographic chain as the motivating principle (AtomId→Version→Revision→Plan→Output)
   - BuildEngine redesigned: plan/apply with cache-skipping at every stage
   - Store taxonomy: AtomSource (read super-trait) + AtomRegistry (publishing) + AtomStore (working) + ArtifactStore (build outputs)
   - eos-local removed → eos. Engine is engine regardless of deployment mode
@@ -35,15 +35,23 @@ identity/auth/signing   protocol types     runtime engine     user frontend     
 Every atom forms an unbroken, content-addressed chain from identity to final output:
 
 ```
-AtomId → Version → Revision → Derivation → Output
- (czd)   (semver)   (commit)     (.drv)    (artifact)
+AtomId → Version → Revision → Plan → Output
+ (czd)   (semver)   (commit)  (recipe) (artifact)
 ```
+
+For the snix engine, `Plan` is a Derivation (`.drv`). The chain uses the abstract
+term because `BuildEngine::Plan` is an associated type — other engines may use
+different plan formats.
 
 Each step is cryptographically verifiable. Each step is independently cacheable.
 This chain is what makes cache-skipping possible — if an artifact already exists
-for a given derivation, skip the build. If a derivation already exists for a
-given revision, skip evaluation. If the output is already built and signed by
-a trusted key, skip everything.
+for a given plan, skip the build. If a plan already exists for a given revision,
+skip evaluation. If the output is already built and signed by a trusted key, skip
+everything.
+
+The chain is actually a **DAG**: each atom's lock entry carries a `requires` field
+listing the content-addressed digests of its transitive dependencies. The lock file
+captures the complete dependency graph, not just a flat list.
 
 This chain is the foundation of everything eos does.
 
@@ -136,8 +144,8 @@ an atom was published or being developed locally. One codepath handles both.
 | KD-12 | Eos modularization         | eos-core (trait + plan types) + eos-store (ArtifactStore + snix wrapper) + eos (engine)    | Eos will be the largest component. Early modularization prevents monolith.                                                |
 | KD-13 | Embedded engine mode       | `embedded-engine` feature flag on ion-cli compiles in `eos` directly                       | Solo dev: `ion build` works immediately. Daemon: opt-in for teams. No process management overhead by default.             |
 | KD-14 | Sync-first traits          | All traits start synchronous. Async is internal to eos.                                    | Avoids forcing tokio into atom-core or ion.                                                                               |
-| KD-15 | Lock file ownership        | Per-tool. Ion produces a unified lock across atom ecosystems.                              | The lock schema is ion-specific. Atom doesn't overspecify.                                                                |
-| KD-16 | Derivation abstraction     | Associated type `BuildEngine::Plan` — not a concrete `Derivation` in eos-core              | Future-proofs against post-nix build formats (Guix G-expressions, hypothetical Bazel actions). Costs nothing.             |
+| KD-15 | Lock file ownership        | Per-tool. Ion produces a unified lock containing both atom deps and engine-specific deps.  | Lock schema is ion-specific. Includes `AtomDep` (with `requires` for transitive digests) and direct nix deps.            |
+| KD-16 | Plan abstraction           | Associated type `BuildEngine::Plan` — not a concrete Derivation in eos-core               | Future-proofs against post-nix plan formats (Guix G-expressions, hypothetical Bazel actions). Costs nothing.              |
 | KD-17 | ArtifactStore wrapping     | Thin wrapper in eos-store over snix BlobService/DirectoryService                           | Store interface is eos's contract, not snix's. snix is an implementation detail of the default backend.                   |
 | KD-18 | AtomBackend (adapter)      | Deferred. Future trait for package-format→atom adaptation (cargo→atom, npm→atom).          | Only ion exists as an implementor now. Cross-ecosystem adapters are future work. Manifest trait covers the metadata side. |
 
@@ -175,7 +183,7 @@ All major gaps have been filled through 9 challenge iterations:
 - **GAP-6** (Manifest identity): FILLED — abstract trait in atom-core, concrete in ion-manifest.
 - **GAP-7** (Store taxonomy): FILLED — AtomSource + AtomRegistry + AtomStore + ArtifactStore.
 - **GAP-8** (Async boundaries): DEFERRED — start sync. Async is eos-internal.
-- **GAP-9** (Cryptographic chain): FILLED — AtomId→Version→Revision→Derivation→Output. Each step cacheable.
+- **GAP-9** (Cryptographic chain): FILLED — AtomId→Version→Revision→Plan→Output. Each step cacheable. Chain is a DAG via `requires`.
 - **GAP-10** (Dev atom flow): FILLED — DevWorkspace implements AtomSource. ingest() unifies codepaths.
 
 **Remaining**: Exact trait associated types, method signatures, and error taxonomies will emerge from porting concrete code.
@@ -187,9 +195,11 @@ All major gaps have been filled through 9 challenge iterations:
 - Monorepo initialization (`axios/`) with three Cargo workspaces
 - atom workspace: `atom-id`, `atom-uri`, `atom-core`, `atom-git`
 - atom-core: `AtomSource`, `AtomRegistry`, `AtomStore`, `Manifest`, `VersionScheme` traits
+- atom-core: `Manifest` trait includes composer information (how atoms declare their evaluator)
 - eos workspace: `eos-core` (BuildEngine plan/apply), `eos-store` (ArtifactStore), `eos` (engine impl)
 - ion workspace: `ion-cli`, `ion-resolve`, `ion-manifest`
 - ion-manifest: concrete `ion.toml` format implementing atom-core's `Manifest` trait
+- ion-manifest: Compose system (With/As variants) ported alongside manifest types
 - Core trait definitions with all trait surfaces described above
 - Porting proven types and logic from eka into the new structure
 - Test vectors for protocol-level types
@@ -250,7 +260,7 @@ Define the full trait surface.
 - Define `AtomRegistry` trait extending `AtomSource` (claim, publish)
 - Define `AtomStore` trait extending `AtomSource` (ingest, fetch, contains)
 - Define `VersionScheme` trait — abstract version comparison
-- Define `Manifest` trait — thin metadata view (label, version, description, deps)
+- Define `Manifest` trait — thin metadata view (label, version, description, deps, composer)
 - Define common types: `AtomContent`, `AtomEntry`, `Anchor`, `Snapshot`
 - Define error taxonomy
 - Re-export all atom-id public types
@@ -287,7 +297,7 @@ Port the git backend against atom-core traits.
 Define the build engine interface with plan/apply and cache-skipping.
 
 - Define `BuildEngine` trait with associated types:
-  - `type Plan` — engine-specific build recipe (Derivation for snix)
+  - `type Plan` — engine-specific build recipe (for the snix engine, this is a Derivation)
   - `type Output` — engine-specific build output
   - `type Error`
   - `fn plan(&self, atom: &AtomRef) → Result<BuildPlan<Self::Plan>>`
@@ -314,7 +324,7 @@ Implement `BuildEngine` for snix-based evaluation and building.
 
 - Implement the engine struct satisfying `BuildEngine`
 - Wire up snix dependencies (`snix-castore`, `snix-store`, `snix-glue`, `nix-compat`)
-- Implement plan(): check artifact store → check derivation cache → full eval needed
+- Implement plan(): check artifact store → check plan cache → full eval needed
 - Implement apply(): evaluate (if needed) → build (if needed) → store artifact
 - Implement `ArtifactStore` backend using snix BlobService
 - Engine reads atoms from `AtomStore` (passed at construction or via trait)
@@ -325,10 +335,11 @@ Implement `BuildEngine` for snix-based evaluation and building.
 Port the ion.toml format as atom-core's `Manifest` implementation.
 
 - Implement `Manifest` trait for ion.toml format
-- Port `Manifest`, `ValidManifest`, `Atom`, `Dependency`, `Compose` types
+- Port `Manifest`, `ValidManifest`, `Atom`, `Dependency`, `Compose` (With/As) types
 - Port `AtomSet`, `SetMirror`, `AtomReq`, `ComposerSpec` types
+- Port Compose system: how atoms declare their evaluator (With = use another atom's evaluator, As = self-contained nix/static)
 - Port TOML serialization/deserialization
-- Port lock file types (`Lockfile`, `SetDetails`, `Dep`)
+- Port lock file types (`Lockfile`, `SetDetails`, `Dep` with atom + nix dep variants, `AtomDep` with `requires`)
 - ion-manifest depends on atom-id, atom-core
 - Verify: `cargo test` validates round-tripping and `Manifest` trait satisfaction
 
@@ -336,7 +347,7 @@ Port the ion.toml format as atom-core's `Manifest` implementation.
 
 Port the cross-ecosystem SAT resolver.
 
-- Port `AtomResolver` and SAT logic
+- Port `AtomResolver` and SAT logic (from existing `hyperdep-resolve` and `resolve/sat.rs`)
 - Integrate with `VersionScheme` — resolver is generic over version schemes
 - Port `resolvo` integration
 - Port lock file writing / reconciliation
@@ -360,7 +371,7 @@ Assemble ion as a working binary.
 End-to-end validation across all three workspaces.
 
 - Verify the full data flow: ion.toml → resolve → ingest → plan → apply → artifact
-- Verify the cryptographic chain: AtomId→Version→Revision→Derivation→Output
+- Verify the cryptographic chain: AtomId→Version→Revision→Plan→Output
 - Document trait boundaries and cross-workspace contracts
 - Final dependency audit: no leaking deps, no upward dependencies
 - Verify `embedded-engine` feature flag
@@ -376,7 +387,7 @@ End-to-end validation across all three workspaces.
 - [ ] `AtomSource`, `AtomRegistry`, `AtomStore` traits are implementable outside atom workspace
 - [ ] `VersionScheme` is abstract — no `semver` types in atom-core's public API
 - [ ] `Manifest` trait is abstract — no `ion.toml` types in atom-core's public API
-- [ ] `BuildEngine` uses associated types (Plan, Output) — no concrete Derivation in eos-core's public API
+- [ ] `BuildEngine` uses associated types (Plan, Output) — no concrete Derivation type in eos-core's public API
 - [ ] `BuildEngine::plan()` returns cache-aware `BuildPlan` enum
 - [ ] serde derives are behind feature flags
 - [ ] `BuildEngine` is in eos-core, NOT in any ion crate
@@ -391,15 +402,18 @@ End-to-end validation across all three workspaces.
 
 ## Confidence Assessment
 
-**CONFIDENCE: 0.92**
+**CONFIDENCE: 0.93**
+
+(Revised from 0.92 after challenge 10 codebase audit confirmed no architectural
+gaps. Terminology incoherence fixed: chain now uses 'Plan' consistently.)
 
 Remaining uncertainties (why not 1.0):
 
 1. **Exact `Manifest` trait associated types** (MEDIUM): We know the trait is thin
-   (label, version, description, dep summary), but the exact types — especially
-   how the dependency summary is represented generically across ecosystems — will
-   only become clear when porting concrete ion.toml types. This may require
-   iterating the trait design during Phase 3/Phase 9.
+   (label, version, description, dep summary, composer), but the exact types —
+   especially how the dependency summary and composer configuration are represented
+   generically across ecosystems — will only become clear when porting concrete
+   ion.toml types. This may require iterating the trait design during Phase 3/Phase 9.
 
 2. **`AtomStore::ingest` granularity** (LOW-MEDIUM): `ingest(&dyn AtomSource)` is
    the right abstraction, but the method may need to be more targeted — e.g.,
@@ -422,7 +436,7 @@ decomposition, store taxonomy, and data flow are all settled.
 
 ## References
 
-- Sketch: `.sketches/2026-02-07-ion-atom-restructuring.md` (9 challenge iterations)
+- Sketch: `.sketches/2026-02-07-ion-atom-restructuring.md` (10 challenge iterations)
 - ADR: `docs/adr/0001-monorepo-workspace-architecture.md`
 - Atom Protocol SPEC: `atom/SPEC.md`
 - Prior art: Bazel REAPI, Terraform plan/apply, gitoxide, snix, sigstore-rs

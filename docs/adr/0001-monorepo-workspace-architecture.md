@@ -1,4 +1,4 @@
-# ADR-0001: Monorepo with Independent Workspace Architecture (Revision 4)
+# ADR-0001: Monorepo with Independent Workspace Architecture (Revision 4a)
 
 - **Status**: PROPOSED
 - **Date**: 2026-02-07 (revised)
@@ -21,11 +21,15 @@ This revision resolves the remaining architectural questions through challenges 
 The fundamental principle driving the architecture is the unbroken, content-addressed chain:
 
 ```
-AtomId → Version → Revision → Derivation → Output
- (czd)   (semver)   (commit)     (.drv)    (artifact)
+AtomId → Version → Revision → Plan → Output
+ (czd)   (semver)   (commit)  (recipe) (artifact)
 ```
 
-Each step is cryptographically verifiable and independently cacheable. This chain enables cache-skipping at every stage — the core value proposition of eos. If the output exists and is trusted, no work is needed. If the derivation exists, skip evaluation. This chain must be expressible through the trait boundaries.
+For the snix engine, `Plan` is a Derivation (`.drv`). The chain uses the abstract
+term because `BuildEngine::Plan` is an associated type — other engines may use
+different plan formats.
+
+Each step is cryptographically verifiable and independently cacheable. This chain enables cache-skipping at every stage — the core value proposition of eos. The chain is actually a **DAG**: each atom's lock entry carries a `requires` field listing the content-addressed digests of its transitive dependencies, capturing the complete dependency graph.
 
 ### Forces
 
@@ -90,7 +94,7 @@ trait AtomStore: AtomSource {
 
 ```rust
 trait BuildEngine {
-    type Plan;      // engine-specific build recipe (e.g., Derivation)
+    type Plan;      // engine-specific build recipe (for snix: Derivation)
     type Output;    // engine-specific build output
     type Error;
 
@@ -100,7 +104,7 @@ trait BuildEngine {
 
 enum BuildPlan<P> {
     Cached { outputs: Vec<ArtifactRef> },     // output exists + trusted
-    NeedsBuild { plan: P },                    // derivation cached, build needed
+    NeedsBuild { plan: P },                    // plan cached, build needed
     NeedsEvaluation { atom: AtomRef },         // nothing cached, full pipeline
 }
 ```
@@ -124,8 +128,8 @@ Thin wrapper over snix BlobService/DirectoryService. The trait is eos's contract
 
 | Crate          | Responsibility                                                 | Dependencies                |
 | :------------- | :------------------------------------------------------------- | :-------------------------- |
-| `ion-manifest` | Concrete `ion.toml` format — implements atom-core's `Manifest` | atom-core, atom-id          |
-| `ion-resolve`  | Cross-ecosystem SAT resolver, unified lock file                | atom-core, ion-manifest     |
+| `ion-manifest` | Concrete `ion.toml` format — implements atom-core's `Manifest`. Compose system (With/As). | atom-core, atom-id          |
+| `ion-resolve`  | Cross-ecosystem SAT resolver, unified lock file (atom + nix deps, `AtomDep` with `requires`)| atom-core, ion-manifest     |
 | `ion-cli`      | CLI, BuildEngine dispatch, dev workspace management            | ion-\*, eos-core, atom-core |
 
 ### Monorepo Layout
@@ -187,7 +191,7 @@ Both satisfy the same `BuildEngine` trait. Ion's code is generic: `fn run(engine
 
 ### Positive
 
-- **Cryptographic chain is expressible**: AtomId→Output chain maps directly to plan/apply cache-skipping behavior.
+- **Cryptographic chain is expressible**: AtomId→Output chain maps directly to plan/apply cache-skipping behavior. DAG structure via `requires` captures full dependency graph.
 - **Eos readiness**: BuildEngine trait + ArtifactStore are in place. Distributed eos slots in without modifying ion.
 - **Manifest extensibility**: Any ecosystem can publish atoms by implementing the thin Manifest trait.
 - **Store model supports federation**: AtomSource as universal read interface enables mirrors, syndicated stores, dev workspaces through one mechanism.
@@ -213,7 +217,7 @@ Both satisfy the same `BuildEngine` trait. Ion's code is generic: `fn run(engine
 
 **Shared manifest crate** (rev 2): Treated manifest as neutral infrastructure. Rejected — "shared" was a code smell. Manifest follows VersionScheme pattern.
 
-**Concrete Derivation type in eos-core** (rev 3): Hardcoded nix derivations. Rejected — associated types cost nothing and future-proof against post-nix formats.
+**Concrete Derivation type in eos-core** (rev 3): Hardcoded nix derivations. Rejected — associated `Plan` type costs nothing and future-proofs against post-nix formats.
 
 **Always-daemon** for eos: Unified architecture. Rejected — unacceptable friction for solo dev. `ion build` must just work without process management.
 
