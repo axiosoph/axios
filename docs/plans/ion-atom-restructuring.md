@@ -1,22 +1,21 @@
-# PLAN: Ion-Atom Restructuring (Revision 3 — Manifest Abstraction)
+# PLAN: Ion-Atom Restructuring (Revision 4)
 
 <!--
   Source sketch: .sketches/2026-02-07-ion-atom-restructuring.md
-  Plan stage: SCOPE → COMMIT (revision 3)
-  Confidence: 0.85
+  Plan stage: SCOPE → COMMIT (revision 4)
+  Confidence: see bottom of document
 
-  This revision resolves the manifest placement question from challenges 3–6.
-  The manifest is an abstract protocol-level trait (like VersionScheme) defined
-  in atom-core, with a concrete ion.toml implementation in ion-manifest.
-
-  Key changes from revision 2:
-  - Removed shared/manifest/ — the "shared" smell indicated unclear boundaries
-  - Manifest is a thin abstract trait in atom-core (metadata view)
-  - Concrete ion.toml format lives in ion-manifest (ion workspace)
-  - Atom protocol is explicitly manifest-agnostic per the v2 spec
-  - ekala.toml deferred as non-pillar (may not survive Cyphrpass transition)
-  - Phase ordering reorganized around corrected dependency graph
-  - Lock file management is per-tool; atom knows format-type at most
+  Key changes from revision 3:
+  - Cryptographic chain as the motivating principle (AtomId→Version→Revision→Derivation→Output)
+  - BuildEngine redesigned: plan/apply with cache-skipping at every stage
+  - Store taxonomy: AtomSource (read super-trait) + AtomRegistry (publishing) + AtomStore (working) + ArtifactStore (build outputs)
+  - eos-local removed → eos. Engine is engine regardless of deployment mode
+  - eos modularized: eos-core + eos-store + eos (3 crates)
+  - BuildEngine uses associated types (Plan, Output) — object safety resolved via compile-time generics
+  - Store-to-store transfer model: AtomStore::ingest(&dyn AtomSource)
+  - DevWorkspace implements AtomSource — one codepath for published + dev atoms
+  - Embedded engine default, daemon opt-in
+  - AtomBackend (package-format adapter) deferred to future
 -->
 
 ## Goal
@@ -24,172 +23,194 @@
 Establish a clean, trait-bounded architecture for the **Atom protocol library**,
 the **Eos runtime engine**, and the **Ion CLI tool**, housed in a monorepo
 (`axios`) with independent Cargo workspaces. The architecture separates concerns
-into a 5-layer stack where each layer has a well-defined role:
+into a 5-layer stack:
 
 ```
 Cyphrpass (Layer 0)  →  Atom (Layer 1)  →  Eos (Layer 2)  →  Ion (Layer 3)  →  Plugins (Layer 4)
 identity/auth/signing   protocol types     runtime engine     user frontend     ecosystem adapters
 ```
 
-The restructuring produces three independently valuable workspaces:
+### The Motivating Principle: The Cryptographic Chain
 
-- **atom/** — the protocol library. Defines identity, addressing, publishing,
-  store operations, and thin abstract interfaces (`Manifest` trait,
-  `VersionScheme` trait) that ecosystem implementors satisfy. The Atom protocol
-  is generic — cargo crates, npm packages, and ion-managed builds can all be
+Every atom forms an unbroken, content-addressed chain from identity to final output:
+
+```
+AtomId → Version → Revision → Derivation → Output
+ (czd)   (semver)   (commit)     (.drv)    (artifact)
+```
+
+Each step is cryptographically verifiable. Each step is independently cacheable.
+This chain is what makes cache-skipping possible — if an artifact already exists
+for a given derivation, skip the build. If a derivation already exists for a
+given revision, skip evaluation. If the output is already built and signed by
+a trusted key, skip everything.
+
+This chain is the foundation of everything eos does.
+
+### Three Workspaces
+
+- **atom/** — the protocol library. Identity, addressing, publishing, store
+  operations, and thin abstract interfaces (`Manifest` trait, `VersionScheme`
+  trait, `AtomSource`/`AtomRegistry`/`AtomStore` traits). The Atom protocol is
+  generic — cargo crates, npm packages, and ion-managed builds can all be
   atoms. The protocol is explicitly manifest-agnostic and version-scheme-agnostic.
-- **eos/** — the runtime engine. Owns build execution, store management, and
-  metadata queries. Reads manifests through atom-core's abstract `Manifest`
-  trait. By the time work reaches eos, dependencies are locked — no resolution
-  at the engine layer.
-- **ion/** — the reference user frontend. Provides CLI, dependency resolution,
-  and the concrete `ion.toml` manifest format. Ion is the planner (decides
-  WHAT to build); eos is the executor (DOES the builds). Ion's resolver is
-  unique: it resolves dependencies across atom ecosystems (ion atoms, cargo
-  crate atoms, npm atoms) into a single unified lock using the generic
-  `VersionScheme` abstraction.
+- **eos/** — the runtime engine. Build execution via plan/apply with
+  cache-skipping, artifact storage (snix blob model), and metadata queries.
+  By the time work reaches eos, dependencies are locked. Eos reads atoms
+  from an `AtomStore` — it never needs to know where they came from.
+- **ion/** — the reference user frontend. CLI, dependency resolution, the
+  concrete `ion.toml` manifest format, and dev workspace management. Ion is
+  the planner (decides WHAT to build); eos is the executor (DOES the builds).
 
-### Why Three Workspaces
+### Why the Manifest Is an Abstract Trait
 
-The existing eka codebase tightly couples the CLI to the runtime. The initial
-plan (revision 1) repeated this mistake by placing `IonRuntime` directly in
-ion. Lesson: **don't couple the frontend to the engine.** Eos as a separate
-workspace mechanically prevents ion from accumulating engine implementation
-details.
+The Atom protocol is **manifest-agnostic** (per v2 spec). Cargo crates use
+`Cargo.toml`, npm packages use `package.json`, ion-managed atoms use
+`ion.toml`. The `Manifest` trait in `atom-core` follows the same pattern as
+`VersionScheme` — atom defines the abstraction, each ecosystem provides a
+concrete implementation.
 
-The planner/executor split maps cleanly to prior art:
+### Store Taxonomy
 
-- **Bazel**: client (planner) submits actions to Remote Execution API (executor)
-- **Nix**: `nix` CLI vs. `nix-daemon` (limited by undocumented internal coupling)
-- **snix**: gRPC builder protocol with pluggable local/remote backends
+Three distinct stores, each with different semantics:
 
-### Why the Manifest Is an Abstract Trait, Not a Shared Crate
+| Store             | Semantic                                                                                                                                              | Trait                      | Layer     |
+| :---------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------- | :-------- |
+| **AtomRegistry**  | Publishing front — source of truth for atom identity and versions. Git-backed, globally distributed, immutable once published.                        | `AtomRegistry: AtomSource` | atom-core |
+| **AtomStore**     | Central working store — atoms collected from disparate sources (registries, other stores, dev workspaces). The universal handoff between ion and eos. | `AtomStore: AtomSource`    | atom-core |
+| **ArtifactStore** | Build outputs — content-addressed blobs. snix BlobService/DirectoryService model. Shareable, substitutable, cacheable.                                | `ArtifactStore`            | eos-store |
 
-Revision 2 placed the manifest in `shared/manifest/`. The name "shared" was a
-code smell indicating unclear abstraction boundaries. Through six challenge
-iterations, the correct decomposition emerged:
+`AtomSource` is the read-only super-trait that both `AtomRegistry` and
+`AtomStore` extend. This enables `AtomStore::ingest(&dyn AtomSource)` — the
+universal store-to-store transfer mechanism.
 
-1. The Atom protocol is **manifest-agnostic** (per v2 spec). It does not
-   dictate manifest format — cargo atoms use Cargo.toml, npm atoms use
-   package.json, ion atoms use ion.toml.
-2. Every atom ecosystem implementor specifies its own manifest and version
-   scheme. This is the point of the `VersionScheme` abstraction — and the
-   manifest follows the **same pattern**.
-3. atom-core defines a thin `Manifest` trait (metadata view: label, version,
-   description, dependency summary). This is the uniform interface that eos
-   and other consumers use to query any atom.
-4. Ion provides the concrete implementation: `ion.toml` parsing, `SemVer`
-   version scheme, cross-ecosystem dependency resolution, unified lock file.
-5. Eos reads manifests through the abstract trait for metadata queries and
-   dependency tree inspection. All deps are locked before reaching eos.
+### Store-to-Store Transfer
+
+Ion populates the `AtomStore` from multiple sources:
+
+- Published atoms: `store.ingest(&registry)` — pull from registries
+- Development atoms: `store.ingest(&dev_workspace)` — add local, unpublished atoms
+- Cross-store: `store.ingest(&other_store)` — transfer between stores
+
+Eos reads from the `AtomStore` to build. It never knows (or needs to know) whether
+an atom was published or being developed locally. One codepath handles both.
+
+**Deployment scenarios:**
+
+- **Embedded** (default): ion and eos share the SAME `AtomStore` instance. No transfer needed.
+- **Daemon**: ion transfers atoms from its store to eos's store before requesting builds.
+- **Remote**: same as daemon, over the network (future).
 
 ## Constraints
 
 - Atom, eos, and ion **MUST** be separate Cargo workspaces — no circular `Cargo.toml` dependencies
 - Dependency direction is strictly layered: ion → eos-core, ion → atom-core, eos → atom-core. Never upward.
-- Atom's public API is trait-based — implementations are swappable backends
-- Ion depends on atom-core traits; **never** on atom-git directly
 - `atom-core` has near-zero non-`std` deps — budget: ≤ 5 for atom-id, ≤ 10 for atom-core
+- The `VersionScheme` and `Manifest` traits are abstract — atom-core has no semver types, no ion.toml types
+- The `BuildEngine` trait uses associated types — each engine defines its own plan/output formats
+- Object safety is not needed — compile-time generics via feature flags resolve engine selection
 - Storage, identity, and signing will migrate to Cyphrpass — design seams, not implementations
-- Both eos and ion use `AtomStore` — eos owns the source-of-truth store, ion maintains a local cache. Both backed by Cyphrpass/git with cryptographic transaction logs.
-- The `VersionScheme` trait is non-negotiable — atom does not mandate semver
-- The `Manifest` trait follows the same pattern as `VersionScheme` — atom defines the abstraction, implementors (ion, cargo adapter, etc.) provide concrete formats
-- `serde` is decoupled from core types via feature flag or companion crate
-- Runtime operations (evaluate, build, query) belong in eos, not ion. Ion submits work; eos performs it.
-- The `BuildEngine` trait (eos-core) replaces the former `IonRuntime` concept
 - By the time work reaches eos, dependencies are locked — no resolution at the engine layer
-- Lock file format is per-tool; atom may know the format-type (TOML, JSON) but not the hard schema
+- Lock file format is per-tool; atom may know format-type but not the hard schema
+- `serde` is decoupled from core types via feature flag or companion crate
+- Runtime operations belong in eos, not ion. Ion submits work; eos performs it.
+- Embedded engine is the default deployment; daemon is opt-in for teams
 - Start all traits sync; async is an eos-internal concern deferred until distributed engine
+- `ekala.toml` is not an architectural pillar — may not survive Cyphrpass transition
 
 ## Decisions
 
-| ID    | Decision                   | Choice                                                                            | Rationale                                                                                                                                   |
-| :---- | :------------------------- | :-------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------ |
-| KD-1  | atom-core dependencies     | `std` only + atom-id + atom-uri; `serde` via feature; `nom` in atom-uri only      | Enforces protocol purity. Storage deps belong in atom-git.                                                                                  |
-| KD-2  | AtomDigest representation  | Hash-agnostic (`AsRef<[u8]>` or trait-based)                                      | Cyphrpass uses multi-algorithm digests. Hardcoding `[u8; 32]` (BLAKE3) precludes algorithm agility.                                         |
-| KD-3  | Version abstraction        | `trait VersionScheme` from day one                                                | Non-negotiable. Atom serves ecosystems beyond semver. Cost of late abstraction exceeds cost of early generics.                              |
-| KD-4  | Dependency resolution      | Lives in `ion-resolve`                                                            | Resolution algorithms are tooling-layer concerns, not protocol.                                                                             |
-| KD-5  | Manifest abstraction       | Thin `Manifest` trait in atom-core; concrete `ion.toml` in ion-manifest           | Same pattern as VersionScheme. Protocol is manifest-agnostic. Each ecosystem provides its own format. Eos reads through the abstract trait. |
-| KD-6  | Workspace separation       | Three independent Cargo workspaces in monorepo                                    | Mechanical enforcement. Prevents coupling between protocol (atom), engine (eos), and frontend (ion).                                        |
-| KD-7  | Runtime architecture       | `BuildEngine` trait in eos-core; `LocalEngine` impl in eos-local                  | Replaces former `IonRuntime`. Runtime is an engine concern, not a frontend concern. Local mode via feature flag on ion-cli.                 |
-| KD-8  | atom-core substance        | Contains core implementation + test vectors, not just types                       | Prevents the "ghost crate" failure mode. atom-core must be independently testable.                                                          |
-| KD-9  | Trait vocabulary           | Two-layer: `AtomBackend` (transaction verbs) + `AtomStore` (consumption verbs)    | Aligns publishing layer with Cyphrpass transaction grammar; store layer with Atom SPEC consumption model.                                   |
-| KD-10 | Store usage model          | Both eos and ion implement `AtomStore`. Eos = source of truth; ion = local cache. | Both cryptographically tracked via Cyphrpass transaction logs. Auditors can trace how atoms entered a store.                                |
-| KD-11 | Ion internal decomposition | Multi-crate: ion-cli, ion-resolve, ion-manifest (minimum)                         | Ion is the planner — CLI + resolution + concrete manifest format. ion-manifest implements the abstract Manifest trait from atom-core.       |
-| KD-12 | Eos internal decomposition | eos-core (trait + types) + eos-local (LocalEngine using snix)                     | Minimal initial surface. eos-eval, eos-store, eos-scheduler are future crate candidates as eos matures.                                     |
-| KD-13 | Embedded engine mode       | `embedded-engine` feature flag on ion-cli pulls in eos-local                      | Single-machine dev experience: ion ships with LocalEngine. Client mode: ion talks to eos daemon. Same `BuildEngine` trait either way.       |
-| KD-14 | Sync-first traits          | All traits start synchronous. Async is internal to eos implementations.           | Avoids forcing tokio into atom-core or ion. The async runtime is an eos concern (network, scheduling).                                      |
-| KD-15 | Lock file ownership        | Lock files are per-tool. atom knows format-type at most.                          | Ion produces a unified lock across all atom ecosystems via its generic resolver. The lock schema is ion-specific. Atom doesn't overspecify. |
+| ID    | Decision                   | Choice                                                                                     | Rationale                                                                                                                 |
+| :---- | :------------------------- | :----------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------ |
+| KD-1  | atom-core dependencies     | `std` only + atom-id + atom-uri; `serde` via feature; `nom` in atom-uri only               | Enforces protocol purity. Storage deps belong in atom-git.                                                                |
+| KD-2  | AtomDigest representation  | Hash-agnostic (`AsRef<[u8]>` or trait-based)                                               | Cyphrpass uses multi-algorithm digests.                                                                                   |
+| KD-3  | Version abstraction        | `trait VersionScheme` from day one                                                         | Non-negotiable. Atom serves ecosystems beyond semver.                                                                     |
+| KD-4  | Dependency resolution      | Lives in `ion-resolve`                                                                     | Resolution is tooling-layer, not protocol.                                                                                |
+| KD-5  | Manifest abstraction       | Thin `Manifest` trait in atom-core; concrete `ion.toml` in ion-manifest                    | Same pattern as VersionScheme. Protocol is manifest-agnostic.                                                             |
+| KD-6  | Workspace separation       | Three independent Cargo workspaces in monorepo                                             | Mechanical enforcement of layer separation.                                                                               |
+| KD-7  | Build engine design        | `BuildEngine` trait with plan/apply and associated types (Plan, Output)                    | Cache-skipping at every stage. Terraform-style plan/apply. Engine-specific plan formats via associated types.             |
+| KD-8  | atom-core substance        | Contains core implementation + test vectors, not just types                                | Prevents "ghost crate" failure. Must be independently testable.                                                           |
+| KD-9  | Store taxonomy             | AtomSource (read) + AtomRegistry (publish) + AtomStore (working) + ArtifactStore (outputs) | Four distinct concerns with different semantics. AtomSource is the unifying read super-trait.                             |
+| KD-10 | Store transfer             | `AtomStore::ingest(&dyn AtomSource)` — universal transfer                                  | Registries, other stores, and dev workspaces all implement AtomSource. One codepath for published and dev atoms.          |
+| KD-11 | Ion internal decomposition | ion-cli, ion-resolve, ion-manifest                                                         | ion-manifest implements Manifest. ion-resolve does cross-ecosystem SAT.                                                   |
+| KD-12 | Eos modularization         | eos-core (trait + plan types) + eos-store (ArtifactStore + snix wrapper) + eos (engine)    | Eos will be the largest component. Early modularization prevents monolith.                                                |
+| KD-13 | Embedded engine mode       | `embedded-engine` feature flag on ion-cli compiles in `eos` directly                       | Solo dev: `ion build` works immediately. Daemon: opt-in for teams. No process management overhead by default.             |
+| KD-14 | Sync-first traits          | All traits start synchronous. Async is internal to eos.                                    | Avoids forcing tokio into atom-core or ion.                                                                               |
+| KD-15 | Lock file ownership        | Per-tool. Ion produces a unified lock across atom ecosystems.                              | The lock schema is ion-specific. Atom doesn't overspecify.                                                                |
+| KD-16 | Derivation abstraction     | Associated type `BuildEngine::Plan` — not a concrete `Derivation` in eos-core              | Future-proofs against post-nix build formats (Guix G-expressions, hypothetical Bazel actions). Costs nothing.             |
+| KD-17 | ArtifactStore wrapping     | Thin wrapper in eos-store over snix BlobService/DirectoryService                           | Store interface is eos's contract, not snix's. snix is an implementation detail of the default backend.                   |
+| KD-18 | AtomBackend (adapter)      | Deferred. Future trait for package-format→atom adaptation (cargo→atom, npm→atom).          | Only ion exists as an implementor now. Cross-ecosystem adapters are future work. Manifest trait covers the metadata side. |
 
 ## Risks & Assumptions
 
-| ID   | Risk / Assumption                                   | Severity | Status    | Mitigation / Evidence                                                                                                                                                 |
-| :--- | :-------------------------------------------------- | :------- | :-------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| R-1  | Cyphrpass API mismatch invalidates trait signatures | MEDIUM   | Mitigated | Boundary correctness > API correctness. Transaction-centric vocabulary reduces divergence.                                                                            |
-| R-2  | Plugin seam never needed                            | LOW      | Accepted  | Plugin system (WASM) explicitly deferred. Runtime is now in eos. If never built, nothing wasted.                                                                      |
-| R-3  | Version abstraction kills productivity              | —        | CLOSED    | Non-negotiable per nrd. Cost accepted.                                                                                                                                |
-| R-4  | serde becomes a bottleneck at scale (eos)           | MEDIUM   | Mitigated | serde decoupled via feature flag or `atom-serde` crate. Core types are plain structs.                                                                                 |
-| R-5  | Three workspaces is overhead for solo dev           | —        | CLOSED    | Intentional design for team scalability. The friction is the feature.                                                                                                 |
-| R-6  | Trait design against evolving protocol              | MEDIUM   | Accepted  | Traits are narrow and operation-focused. ~30% chance of signature changes when Cyphrpass integrates.                                                                  |
-| R-7  | Dependency goalpost drift                           | —        | CLOSED    | Concrete budget: atom-id ≤ 5, atom-core ≤ 10 (all protocol-relevant, zero storage deps).                                                                              |
-| R-8  | atom-core scope creep                               | MEDIUM   | Mitigated | Hard rule: if a type requires `gix`, `tokio`, `resolvo`, or any storage/runtime dep, it does NOT belong in atom-core.                                                 |
-| R-9  | Premature eos abstraction                           | MEDIUM   | Mitigated | `BuildEngine` trait surface is small and well-understood from prior art (Bazel REAPI, Nix daemon, snix builder). Start with thin types; let them grow.                |
-| R-10 | Feature-flag complexity for embedded engine         | LOW      | Mitigated | One flag only: `embedded-engine`. Everything else unconditional.                                                                                                      |
-| R-11 | Manifest trait too thin / too thick                 | MEDIUM   | Mitigated | Start with minimal metadata view (label, version, deps). Grow from implementation experience. The VersionScheme pattern provides precedent for the right granularity. |
-| R-12 | Three workspaces too early — yagni                  | LOW      | Accepted  | Workspace boundary of eos is cheap to maintain (1-2 crates initially). The cost of NOT having the boundary is another rearchitecture exercise when eos matures.       |
-| A-1  | Atom will sit atop Cyphrpass                        | —        | Validated | nrd actively involved in Cyphrpass development. Legacy storage provides fallback.                                                                                     |
-| A-2  | Existing code has proven concepts worth porting     | —        | Validated | 2 years of working dep resolution, atom publishing, URI parsing, manifest management.                                                                                 |
-| A-3  | Runtimes are required, plugins are optional         | —        | Validated | Runtime is now an eos concern (BuildEngine), not an ion concern.                                                                                                      |
-| A-4  | Crate boundaries are mechanically necessary         | —        | Validated | For external contributors who lack maintainer context.                                                                                                                |
-| A-5  | Near-zero deps is achievable for atom-core          | —        | Validated | Full dependency audit completed. atom-id: 4-5 deps. atom-core: 8-10.                                                                                                  |
-| A-6  | Manifest is an abstract protocol concern            | —        | Validated | Atom v2 spec: "protocol does not dictate the manifest format." Manifest follows the VersionScheme pattern — abstract trait in atom, concrete impl in tooling.         |
-| A-7  | Store operations are cryptographically tracked      | —        | Validated | Both eos and ion use AtomStore backed by Cyphrpass/git transaction logs.                                                                                              |
-| A-8  | ekala.toml is not a central architectural pillar    | —        | Validated | May not survive Cyphrpass transition. Single source of truth may shift to transaction history. Not designed around.                                                   |
+| ID   | Risk / Assumption                                         | Severity | Status    | Mitigation / Evidence                                                                                                                      |
+| :--- | :-------------------------------------------------------- | :------- | :-------- | :----------------------------------------------------------------------------------------------------------------------------------------- |
+| R-1  | Cyphrpass API mismatch invalidates trait signatures       | MEDIUM   | Mitigated | Boundary correctness > API correctness. Transaction-centric vocabulary reduces divergence. ~30% chance of signature changes.               |
+| R-2  | Version abstraction kills productivity                    | —        | CLOSED    | Non-negotiable per nrd. Cost accepted.                                                                                                     |
+| R-3  | Three workspaces is overhead for solo dev                 | —        | CLOSED    | Intentional design for team scalability. The friction is the feature.                                                                      |
+| R-4  | Premature eos abstraction                                 | MEDIUM   | Mitigated | BuildEngine is thin (plan/apply + associated types). Prior art: Bazel REAPI, snix builder. Start thin, grow from experience.               |
+| R-5  | Manifest trait too thin / too thick                       | MEDIUM   | Mitigated | Start minimal (label, version, deps). VersionScheme pattern provides precedent. Grow from implementation.                                  |
+| R-6  | atom-core scope creep                                     | MEDIUM   | Mitigated | Hard rule: if a type requires `gix`, `tokio`, `resolvo`, or snix, it does NOT belong in atom-core.                                         |
+| R-7  | ArtifactStore wrapper diverges from snix                  | LOW      | Mitigated | Wrapper is deliberately thin: store, fetch, exists, substitute-check. snix is the reference backend.                                       |
+| R-8  | BuildEngine plan/apply is over-engineered                 | LOW      | Accepted  | The cache-skipping chain is the core value proposition. plan/apply makes it explicit and enables dry-run. Terraform validates the pattern. |
+| R-9  | eos-core + eos-store + eos is too many crates early on    | LOW      | Accepted  | Eos will grow. Early modularization is cheaper than late extraction. Each crate has a clear, distinct purpose.                             |
+| R-10 | atom-uri requires surgery                                 | MEDIUM   | Accepted  | `LocalAtom` moves to ion; `gix::Url` becomes generic.                                                                                      |
+| A-1  | Atom will sit atop Cyphrpass                              | —        | Validated | nrd actively involved in Cyphrpass development.                                                                                            |
+| A-2  | Existing code has proven concepts worth porting           | —        | Validated | 2 years of working dep resolution, publishing, URI parsing, manifests.                                                                     |
+| A-3  | Atom protocol is manifest-agnostic                        | —        | Validated | v2 spec: "protocol does not dictate the manifest format." KI confirms.                                                                     |
+| A-4  | The cryptographic chain (AtomId→Output) is the foundation | —        | Validated | Motivating principle from nrd. Every step is content-addressed and cacheable.                                                              |
+| A-5  | Store-to-store transfer unifies published + dev atoms     | —        | Validated | Current eka implementation uses internal AtomStore for exactly this purpose.                                                               |
+| A-6  | ekala.toml is not a central architectural pillar          | —        | Validated | May not survive Cyphrpass transition.                                                                                                      |
+| A-7  | Embedded engine is the right default                      | —        | Validated | Prior art: Cargo, single-user Nix, Go, Bazel local mode — none require daemons.                                                            |
 
 ## Open Questions
 
-All context gaps identified during CHALLENGE iterations have been filled:
+All major gaps have been filled through 9 challenge iterations:
 
-- **GAP-1** (Trait signatures): FILLED — `AtomBackend` for publishing, `AtomStore` for consumption.
-- **GAP-2** (Runtime shape): FILLED → **REVISED** — `IonRuntime` was wrong. Runtime operations belong in eos as `BuildEngine`.
-- **GAP-3** (Crate viability): FILLED — atom-id viable standalone. atom-uri viable with surgery. atom-core as aggregation.
+- **GAP-1** (Trait signatures): FILLED — AtomSource/AtomRegistry/AtomStore decomposition.
+- **GAP-2** (Runtime shape): FILLED → **REVISED** → **REVISED AGAIN** — BuildEngine plan/apply with associated types. Cache-skipping at every stage.
+- **GAP-3** (Crate viability): FILLED — all crates have clear purposes.
 - **GAP-4** (Dep budget): FILLED — concrete inventories enumerated.
-- **GAP-5** (Prior art): FILLED — gitoxide, iroh, sigstore-rs, Bazel REAPI, snix gRPC analyzed.
-- **GAP-6** (Manifest identity): FILLED → **REVISED** — manifest is NOT atom-level or "shared." It's an abstract trait in atom-core (like VersionScheme), with concrete formats per-ecosystem. ion.toml is ion's format.
-- **GAP-7** (Eos-atom interaction): FILLED — both eos and ion use `AtomStore`. Eos = source of truth; ion = local cache.
-- **GAP-8** (Async boundaries): DEFERRED — start sync. Async is eos-internal when distributed engine arrives.
+- **GAP-5** (Prior art): FILLED — Bazel REAPI, Terraform plan/apply, snix, gitoxide.
+- **GAP-6** (Manifest identity): FILLED — abstract trait in atom-core, concrete in ion-manifest.
+- **GAP-7** (Store taxonomy): FILLED — AtomSource + AtomRegistry + AtomStore + ArtifactStore.
+- **GAP-8** (Async boundaries): DEFERRED — start sync. Async is eos-internal.
+- **GAP-9** (Cryptographic chain): FILLED — AtomId→Version→Revision→Derivation→Output. Each step cacheable.
+- **GAP-10** (Dev atom flow): FILLED — DevWorkspace implements AtomSource. ingest() unifies codepaths.
 
-**Remaining**: Exact `Manifest` trait associated types and `BuildEngine` associated types will emerge from porting concrete code.
+**Remaining**: Exact trait associated types, method signatures, and error taxonomies will emerge from porting concrete code.
 
 ## Scope
 
 ### In Scope
 
 - Monorepo initialization (`axios/`) with three Cargo workspaces
-- atom workspace: `atom-id`, `atom-uri`, `atom-core`, `atom-git` crates
-- atom-core: thin `Manifest` trait, `VersionScheme` trait, `AtomStore`, `AtomBackend`
-- eos workspace: `eos-core` (BuildEngine trait + types), `eos-local` (LocalEngine via snix)
-- ion workspace: `ion-cli`, `ion-resolve`, `ion-manifest` crates
+- atom workspace: `atom-id`, `atom-uri`, `atom-core`, `atom-git`
+- atom-core: `AtomSource`, `AtomRegistry`, `AtomStore`, `Manifest`, `VersionScheme` traits
+- eos workspace: `eos-core` (BuildEngine plan/apply), `eos-store` (ArtifactStore), `eos` (engine impl)
+- ion workspace: `ion-cli`, `ion-resolve`, `ion-manifest`
 - ion-manifest: concrete `ion.toml` format implementing atom-core's `Manifest` trait
-- Core trait definitions: `AtomBackend`, `AtomStore`, `VersionScheme`, `Manifest`, `BuildEngine`
+- Core trait definitions with all trait surfaces described above
 - Porting proven types and logic from eka into the new structure
 - Test vectors for protocol-level types
-- `BuildEngine` trait with initial `LocalEngine` implementation (snix-based)
-- `embedded-engine` feature flag on ion-cli for single-machine usage
+- BuildEngine plan/apply implementation with `eos` (snix-based)
+- ArtifactStore with thin snix BlobService wrapper
+- `embedded-engine` feature flag on ion-cli
+- Store-to-store transfer via `AtomStore::ingest`
 
 ### Out of Scope
 
 - Finalizing the Atom Protocol SPEC (sections 4–9 remain drafts)
-- Implementing Cyphrpass integration (`atom-cyphr`)
+- Implementing Cyphrpass integration
 - Dynamic plugin system (WASM/RPC)
-- Multi-language implementations
-- Eos distributed engine / `RemoteEngine` / eos daemon / networking
+- Eos distributed engine / daemon / networking / `RemoteEngine`
 - Full feature parity with current eka CLI — incremental porting
-- `ion-workspace` crate (defer until workspace coordination patterns are stable)
-- Build scheduling, binary cache negotiation, multi-node coordination (future eos)
-- Async trait boundaries (defer until distributed eos)
-- Cross-ecosystem manifest adapters (cargo, npm — future work)
-- ekala.toml as an architectural pillar (may be replaced by Cyphrpass transaction history)
+- Cross-ecosystem adapters (cargo→atom, npm→atom adapters)
+- `AtomBackend` adapter trait (future, when cross-ecosystem support lands)
+- Async trait boundaries
+- Build scheduling, binary cache negotiation, multi-node coordination
+- Globally syndicated stores (long-term vision, but the trait surface supports it)
+- `ekala.toml` redesign
 
 ## Phases
 
@@ -199,196 +220,209 @@ Each phase is independently valuable and executable as a bounded `/core` invocat
 
 Establish the repository structure and all workspace roots.
 
-- Initialize `axios/` with top-level README explaining the monorepo structure and layer model
-- Create `atom/` workspace with `Cargo.toml` workspace root
-- Create `eos/` workspace with `Cargo.toml` workspace root
-- Create `ion/` workspace with `Cargo.toml` workspace root
-- Create skeleton crates in each workspace:
+- Initialize `axios/` with top-level README explaining the monorepo and layer model
+- Create `atom/`, `eos/`, `ion/` workspace roots with `Cargo.toml`
+- Create skeleton crates:
   - atom: `atom-id`, `atom-uri`, `atom-core`, `atom-git`
-  - eos: `eos-core`, `eos-local`
+  - eos: `eos-core`, `eos-store`, `eos`
   - ion: `ion-cli`, `ion-resolve`, `ion-manifest`
-- Wire up inter-workspace path dependencies:
-  - ion-cli → atom-core, eos-core, ion-resolve, ion-manifest
-  - ion-manifest → atom-core, atom-id
-  - eos-core → atom-core
-  - eos-local → eos-core
-  - ion-resolve → atom-core, ion-manifest
-  - atom-core → atom-id, atom-uri
-  - atom-git → atom-core
-- `embedded-engine` feature flag on ion-cli pulling in eos-local
+- Wire inter-workspace path dependencies (10 crates, strict layer ordering)
+- `embedded-engine` feature flag on ion-cli pulling in `eos`
 - Verify: `cargo check` passes in all three workspaces
 
 ### Phase 2: atom-id — Identity Primitives
 
 Port the protocol-level types that have zero storage coupling.
 
-- Port `Label`, `Tag`, `Identifier` with `VerifiedName` trait and validation logic
-- Port `AtomDigest` (generalize away from hardcoded BLAKE3 if feasible, otherwise newtype)
+- Port `Label`, `Tag`, `Identifier` with `VerifiedName` trait and validation
+- Port `AtomDigest` (generalize toward hash-agility if feasible)
 - Port `AtomId<R>` with `Compute` and `Genesis` traits
-- Remove the `crate::storage::git::Root` coupling leak — `AtomId<R>` is already generic
 - Port display implementations (`base32`, `FromStr`, `Display`)
-- Port existing unit tests from `id/mod/tests`
-- Add comprehensive test vectors for label validation edge cases
-- Dependency budget check: must be ≤ 5 non-std deps
-- Verify: `cargo test` in atom-id passes with full coverage of ported logic
+- Port existing unit tests + add edge-case test vectors
+- Dependency budget: ≤ 5 non-std deps
+- Verify: `cargo test` in atom-id
 
-### Phase 3: atom-core — Protocol Traits and Abstractions
+### Phase 3: atom-core — Protocol Traits
 
-Define the trait surface, including the thin Manifest abstraction.
+Define the full trait surface.
 
-- Define `AtomBackend` trait (claim, publish, resolve, discover)
-- Define `AtomStore` trait (ingest, query, fetch) — used by both eos and ion
-- Define `VersionScheme` trait — abstract version comparison and satisfaction
-- Define `Manifest` trait — thin metadata view:
-  - Associated type for version (constrained by `VersionScheme`)
-  - Label, version, description accessors
-  - Dependency summary (abstract — each format has its own dep syntax)
-  - The trait does NOT specify manifest file format, lock schema, or resolution
-- Define `AtomAddress`, `AtomContent`, `AtomEntry` placeholder types
-- Define atom-core's error taxonomy
+- Define `AtomSource` trait (resolve, discover) — read-only super-trait
+- Define `AtomRegistry` trait extending `AtomSource` (claim, publish)
+- Define `AtomStore` trait extending `AtomSource` (ingest, fetch, contains)
+- Define `VersionScheme` trait — abstract version comparison
+- Define `Manifest` trait — thin metadata view (label, version, description, deps)
+- Define common types: `AtomContent`, `AtomEntry`, `Anchor`, `Snapshot`
+- Define error taxonomy
 - Re-export all atom-id public types
-- Stub `atom-uri` integration
-- serde support behind `serde` feature flag
-- Dependency budget check: ≤ 10 total (including atom-id transitives)
-- Verify: `cargo check` and `cargo doc` produce clean documentation of the full trait surface
+- serde support behind feature flag
+- Dependency budget: ≤ 10 total
+- Verify: `cargo check`, `cargo doc` produces clean trait documentation
 
 ### Phase 4: atom-uri — URI Parsing
 
 Port URI handling with reduced coupling.
 
-- Port `Uri`, `LocalAtom` types
-- Replace `gix::Url` with generic URL handling where possible
-- Integrate with atom-id types (`Label`, `Tag`)
-- Port `nom`-based parsing logic
-- Port URI tests
-- Verify: `cargo test` in atom-uri passes
+- Port `Uri`, `LocalAtom` types (LocalAtom may move to ion)
+- Replace `gix::Url` with generic URL handling
+- Integrate with atom-id types
+- Port `nom`-based parsing logic and tests
+- Verify: `cargo test` in atom-uri
 
 ### Phase 5: atom-git — Bridge Implementation
 
 Port the git backend against atom-core traits.
 
-- Implement `AtomBackend` for git (wrapping existing `storage/git.rs` logic)
+- Implement `AtomRegistry` for git (claim→ref creation, publish→orphan commit, resolve→ref lookup, discover→ref enumeration)
+- Implement `AtomStore` for git (ingest, fetch, contains)
 - Port `Root` (genesis type for git — commit OID)
 - Port ref layout and transport logic
 - Port caching (`RemoteAtomCache`)
-- Port publishing logic from `package/publish/git/`
-- Port workspace management (`ekala.toml` / `EkalaManager`) as pragmatic shim (not a core interface)
+- Port workspace management (`ekala.toml` / `EkalaManager`) as pragmatic shim
 - Wire up `gix` + `snix-*` dependencies
-- Port existing integration tests
-- Verify: `cargo test` in atom-git validates the git backend against atom-core trait contracts
+- Port integration tests
+- Verify: `cargo test` validates git backend against atom-core trait contracts
 
 ### Phase 6: eos-core — Build Engine Trait
 
-Define the engine interface between ion and eos.
+Define the build engine interface with plan/apply and cache-skipping.
 
-- Define `BuildEngine` trait with sync interface:
-  - `evaluate(expr, args) → Result<Derivation>`
-  - `build(derivation) → Result<Vec<BuildOutput>>`
-  - `query(path) → Result<Option<PathInfo>>`
-  - `check_substitutes(paths) → Result<Vec<SubstituteResult>>`
-- BuildEngine is generic over atom-core's `Manifest` trait — eos can serve
-  metadata queries and inspect dependency trees for any atom ecosystem
-- Define common types: `StorePath`, `Derivation`, `BuildOutput`, `PathInfo`, `Expression`, `EvalArgs`
-- Define eos-core error taxonomy
-- eos-core depends on atom-core (for `Manifest` trait, `AtomStore` trait, `AtomId`, etc.)
-- Keep types thin and minimal — grow from implementation experience
-- Verify: `cargo check` in eos workspace; trait is implementable (mock impl in tests)
+- Define `BuildEngine` trait with associated types:
+  - `type Plan` — engine-specific build recipe (Derivation for snix)
+  - `type Output` — engine-specific build output
+  - `type Error`
+  - `fn plan(&self, atom: &AtomRef) → Result<BuildPlan<Self::Plan>>`
+  - `fn apply(&self, plan: &BuildPlan<Self::Plan>) → Result<Vec<Self::Output>>`
+- Define `BuildPlan<P>` enum: `Cached`, `NeedsBuild`, `NeedsEvaluation`
+- Define common types: `AtomRef`, `StorePath`
+- Define error taxonomy
+- eos-core depends on atom-core
+- Verify: `cargo check`; trait is implementable (mock impl in tests)
 
-### Phase 7: eos-local — Local Engine
+### Phase 7: eos-store — Artifact Storage
 
-Implement `BuildEngine` for single-machine local execution via snix.
+Define the artifact store interface + snix thin wrapper.
 
-- Implement `LocalEngine` struct satisfying `BuildEngine`
+- Define `ArtifactStore` trait: store, fetch, exists, check_substitute
+- Thin wrapper over snix BlobService/DirectoryService
+- Define output digest types (content-addressed)
+- eos-store depends on eos-core
+- Verify: `cargo check`; trait is implementable
+
+### Phase 8: eos — The Engine
+
+Implement `BuildEngine` for snix-based evaluation and building.
+
+- Implement the engine struct satisfying `BuildEngine`
 - Wire up snix dependencies (`snix-castore`, `snix-store`, `snix-glue`, `nix-compat`)
-- Implement evaluate → snix evaluation path
-- Implement build → snix build path
-- Implement query/check_substitutes against local store
-- Port nixec subprocess pattern as `NixCliEngine` fallback (optional, feature-gated)
-- Feature flag: `local-engine` on eos-core re-exports `LocalEngine`
-- Verify: `cargo test` with at least one evaluation and one build operation
+- Implement plan(): check artifact store → check derivation cache → full eval needed
+- Implement apply(): evaluate (if needed) → build (if needed) → store artifact
+- Implement `ArtifactStore` backend using snix BlobService
+- Engine reads atoms from `AtomStore` (passed at construction or via trait)
+- Verify: `cargo test` with at least one plan + apply cycle
 
-### Phase 8: ion-manifest — Concrete Manifest Implementation
+### Phase 9: ion-manifest — Concrete Manifest Implementation
 
-Port the ion.toml manifest format as atom-core's Manifest implementation.
+Port the ion.toml format as atom-core's `Manifest` implementation.
 
-- Implement atom-core's `Manifest` trait for the ion.toml format
+- Implement `Manifest` trait for ion.toml format
 - Port `Manifest`, `ValidManifest`, `Atom`, `Dependency`, `Compose` types
 - Port `AtomSet`, `SetMirror`, `AtomReq`, `ComposerSpec` types
 - Port TOML serialization/deserialization
-- Port validation logic (deny_unknown_fields, dependency-set consistency)
 - Port lock file types (`Lockfile`, `SetDetails`, `Dep`)
-- Ion-manifest depends on atom-id (Label, Tag), atom-core (Manifest trait)
-- Does NOT include IO-heavy operations (ManifestWriter, SetResolver — those port to atom-git or ion-resolve)
-- Port manifest unit tests
-- Verify: `cargo test` validates manifest round-tripping and Manifest trait satisfaction
+- ion-manifest depends on atom-id, atom-core
+- Verify: `cargo test` validates round-tripping and `Manifest` trait satisfaction
 
-### Phase 9: ion-resolve — Resolution Library
+### Phase 10: ion-resolve — Resolution Library
 
-Port the cross-ecosystem SAT resolver as a standalone library.
+Port the cross-ecosystem SAT resolver.
 
-- Port `AtomResolver` and SAT logic from `package/resolve/sat.rs`
-- Integrate with atom-core's `VersionScheme` trait — resolver is generic over version schemes
+- Port `AtomResolver` and SAT logic
+- Integrate with `VersionScheme` — resolver is generic over version schemes
 - Port `resolvo` integration
-- Port lock file writing / reconciliation (ManifestWriter logic)
-- Port set resolution logic (SetResolver — may stay here or in atom-git depending on deps)
-- Ion's resolver resolves deps across ecosystems into a unified lock
-- Port resolution tests
+- Port lock file writing / reconciliation
 - Verify: `cargo test` validates resolution against known dependency graphs
 
-### Phase 10: ion-cli — CLI Entrypoint
+### Phase 11: ion-cli — CLI Entrypoint
 
-Assemble ion as a working binary that dispatches to eos.
+Assemble ion as a working binary.
 
 - Port CLI argument parsing and subcommand dispatch
-- Port config handling from `crates/config/`
-- Wire up `BuildEngine` via eos-core — ion-cli takes a `Box<dyn BuildEngine>` or similar
-- `embedded-engine` feature: construct `LocalEngine` at startup
-- Future: client mode constructs `RemoteEngine` (not implemented, just the seam)
-- Wire up ion-manifest + ion-resolve as dependencies
-- Implement `AtomStore`-backed local atom cache
-- Verify: `ion --help` works, basic subcommands route to BuildEngine correctly
+- Port config handling
+- Wire up `BuildEngine` — ion-cli is generic over `E: BuildEngine`
+- `embedded-engine` feature: construct eos `Engine` directly
+- Implement `DevWorkspace` as `AtomSource` for local dev atoms
+- Wire up `AtomStore::ingest` for populating the store
+- Implement plan/apply dispatch (dry-run support)
+- Verify: `ion --help` works, basic subcommands function
 
-### Phase 11: Integration and Smoke Testing
+### Phase 12: Integration and Verification
 
 End-to-end validation across all three workspaces.
 
-- Verify atom-core → atom-git → eos-core → eos-local → ion-cli data flow
-- Document the trait boundaries:
-  - What ion imports from atom and eos
-  - How atom-git satisfies atom-core traits
-  - How eos-local satisfies BuildEngine
-  - How ion-manifest satisfies Manifest
-- Verify cross-workspace dependencies work via path
-- Write integration tests that cross workspace boundaries
-- Final dependency audit: confirm no leaking deps, no upward dependencies
-- Verify `embedded-engine` feature flag correctly includes/excludes eos-local
+- Verify the full data flow: ion.toml → resolve → ingest → plan → apply → artifact
+- Verify the cryptographic chain: AtomId→Version→Revision→Derivation→Output
+- Document trait boundaries and cross-workspace contracts
+- Final dependency audit: no leaking deps, no upward dependencies
+- Verify `embedded-engine` feature flag
+- Write integration tests crossing workspace boundaries
 
 ## Verification
 
-- [ ] `cargo check` passes cleanly in all three workspaces independently
+- [ ] `cargo check` passes in all three workspaces independently
 - [ ] `cargo test` passes in all crates
 - [ ] atom-id has ≤ 5 non-std dependencies
-- [ ] atom-core (aggregation) has ≤ 10 total dependencies
-- [ ] atom-git does NOT appear in ion's `Cargo.toml` or any ion crate's imports
-- [ ] atom-git does NOT appear in eos-core's dependencies (only atom-core)
-- [ ] `AtomBackend` and `AtomStore` traits are implementable outside the atom workspace
+- [ ] atom-core has ≤ 10 total dependencies
+- [ ] atom-git does NOT appear in ion's or eos-core's dependencies
+- [ ] `AtomSource`, `AtomRegistry`, `AtomStore` traits are implementable outside atom workspace
 - [ ] `VersionScheme` is abstract — no `semver` types in atom-core's public API
 - [ ] `Manifest` trait is abstract — no `ion.toml` types in atom-core's public API
-- [ ] `Manifest` trait is implementable by alternative ecosystems (cargo, npm adapters)
-- [ ] serde derives are behind feature flags, not unconditional
-- [ ] `BuildEngine` trait is in eos-core, NOT in any ion crate
-- [ ] `BuildEngine` is generic over `Manifest` — works with any ecosystem's format
-- [ ] ion-cli does not depend on snix directly — only transitively through eos-local when `embedded-engine` is enabled
+- [ ] `BuildEngine` uses associated types (Plan, Output) — no concrete Derivation in eos-core's public API
+- [ ] `BuildEngine::plan()` returns cache-aware `BuildPlan` enum
+- [ ] serde derives are behind feature flags
+- [ ] `BuildEngine` is in eos-core, NOT in any ion crate
+- [ ] ion-cli does not depend on snix directly
 - [ ] ion-manifest implements atom-core's `Manifest` trait
 - [ ] ion-resolve is usable as a library independent of ion-cli
-- [ ] No dependency flows upward (ion → eos → atom is the only direction)
-- [ ] `embedded-engine` feature flag on ion-cli correctly toggles eos-local inclusion
-- [ ] At least one end-to-end operation works through the full stack
+- [ ] `AtomStore::ingest(&dyn AtomSource)` works with registries, other stores, and dev workspaces
+- [ ] `ArtifactStore` wraps snix BlobService without leaking snix types
+- [ ] No dependency flows upward
+- [ ] `embedded-engine` feature flag correctly toggles eos inclusion
+- [ ] At least one end-to-end plan/apply operation works through the full stack
+
+## Confidence Assessment
+
+**CONFIDENCE: 0.92**
+
+Remaining uncertainties (why not 1.0):
+
+1. **Exact `Manifest` trait associated types** (MEDIUM): We know the trait is thin
+   (label, version, description, dep summary), but the exact types — especially
+   how the dependency summary is represented generically across ecosystems — will
+   only become clear when porting concrete ion.toml types. This may require
+   iterating the trait design during Phase 3/Phase 9.
+
+2. **`AtomStore::ingest` granularity** (LOW-MEDIUM): `ingest(&dyn AtomSource)` is
+   the right abstraction, but the method may need to be more targeted — e.g.,
+   `ingest_atom(source, id, version)` rather than bulk ingestion. The right
+   signature will emerge from implementing the dev workspace flow in Phase 11.
+
+3. **eos-store dependency direction** (LOW): eos-store is defined as depending
+   on eos-core, but it's unclear whether ArtifactStore actually NEEDS eos-core
+   types, or if it's fully self-contained. May end up depending only on atom-core
+   (for digest types) rather than eos-core. Minor wiring question, not architectural.
+
+4. **`BuildPlan` variants may need refinement** (LOW): The three variants
+   (Cached/NeedsBuild/NeedsEvaluation) capture the main cases, but partial
+   cache scenarios (some deps cached, some not) may require a richer structure.
+   This will be discovered during Phase 8 implementation.
+
+None of these uncertainties are architectural — they're all signature-level
+details that will resolve during implementation. The layer boundaries, trait
+decomposition, store taxonomy, and data flow are all settled.
 
 ## References
 
-- Sketch: `.sketches/2026-02-07-ion-atom-restructuring.md`
+- Sketch: `.sketches/2026-02-07-ion-atom-restructuring.md` (9 challenge iterations)
 - ADR: `docs/adr/0001-monorepo-workspace-architecture.md`
 - Atom Protocol SPEC: `atom/SPEC.md`
-- Atom Protocol v2 Vision: manifest agnosticism, version abstraction
-- Prior art: Bazel Remote Execution API, gitoxide (crate decomposition), iroh (protocol+CLI split), sigstore-rs (trait design), snix gRPC builder protocol
+- Prior art: Bazel REAPI, Terraform plan/apply, gitoxide, snix, sigstore-rs
