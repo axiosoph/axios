@@ -22,6 +22,33 @@ correct — implementations can be swapped without downstream breakage;
   claim before publish, resolve before plan before apply.
 - **Layer discipline** — strict downward dependency (ion → eos → atom).
 
+**Model Scope — what is and is not captured:**
+
+This model operates at the **logical trait boundary** level. It captures
+the behavioral contracts between workspaces as if callers invoke trait
+methods directly. This is sufficient for validating interface design,
+protocol ordering, and implementation interchangeability.
+
+| In Scope                                  | Out of Scope                              |
+| :---------------------------------------- | :---------------------------------------- |
+| Trait behavioral contracts (coalgebras)   | Transport mechanism (IPC, network, gRPC)  |
+| Protocol ordering (session types)         | Serialization / wire format               |
+| Store relationships (ingest homomorphism) | Authentication / authorization            |
+| Concurrency model (parallel builds)       | Git object internals (atom-git impl)      |
+| Error recovery asymmetry (plan vs apply)  | Nix/snix evaluation internals (eos impl)  |
+| Static ontology (olog)                    | Dependency resolution (SAT solver, locks) |
+| Scheduling correctness (bisimulation)     | Manifest format (ion.toml parsing)        |
+|                                           | Network topology (distributed eos, peers) |
+
+The model's coalgebras treat trait invocations as abstract observations
+regardless of whether the call is local, crosses a process boundary via
+IPC, or traverses a network. Bisimulation invariance guarantees this
+abstraction is safe: if two implementations produce the same
+observations, they are interchangeable — whether the observation
+arrives via a function return or a deserialized RPC response. Transport,
+serialization, and authentication are orthogonal concerns that layer
+_on top of_ the trait boundaries modeled here, not within them.
+
 ## Formalism Selection
 
 | Aspect                  | Detail                                                           |
