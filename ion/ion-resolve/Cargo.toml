@@ -1,0 +1,8 @@
+[package]
+edition = "2024"
+name    = "ion-resolve"
+version = "0.1.0"
+
+[dependencies]
+atom-core    = { path = "../../atom/atom-core" }
+ion-manifest = { path = "../ion-manifest" }

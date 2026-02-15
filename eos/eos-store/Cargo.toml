@@ -1,0 +1,7 @@
+[package]
+edition = "2024"
+name    = "eos-store"
+version = "0.1.0"
+
+[dependencies]
+eos-core = { path = "../eos-core" }

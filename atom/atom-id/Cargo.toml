@@ -1,0 +1,4 @@
+[package]
+edition = "2024"
+name    = "atom-id"
+version = "0.1.0"

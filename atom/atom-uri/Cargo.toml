@@ -1,0 +1,7 @@
+[package]
+edition = "2024"
+name    = "atom-uri"
+version = "0.1.0"
+
+[dependencies]
+atom-id = { path = "../atom-id" }

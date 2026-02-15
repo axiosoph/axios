@@ -1,3 +1,7 @@
 # SKETCH workflow storage
 # Private exploration history, tracked locally but not in main repo
 .sketches
+
+# Cargo build artifacts
+target/
+Cargo.lock

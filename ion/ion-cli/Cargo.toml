@@ -1,0 +1,14 @@
+[package]
+edition = "2024"
+name    = "ion-cli"
+version = "0.1.0"
+
+[dependencies]
+atom-core    = { path = "../../atom/atom-core" }
+eos-core     = { path = "../../eos/eos-core" }
+ion-manifest = { path = "../ion-manifest" }
+ion-resolve  = { path = "../ion-resolve" }
+
+[features]
+default         = ["embedded-engine"]
+embedded-engine = []

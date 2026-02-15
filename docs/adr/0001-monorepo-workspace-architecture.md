@@ -83,9 +83,13 @@ trait AtomRegistry: AtomSource {
 /// Working store — atoms collected from disparate sources
 trait AtomStore: AtomSource {
     fn ingest(&self, source: &dyn AtomSource) → ();
-    fn fetch(&self, id) → Path;
+    fn import_path(&self, path) → ();
     fn contains(&self, id, version) → bool;
 }
+// fetch(id) → Path removed: couples trait to local storage,
+// contradicts store-agnosticism. Content retrieval is covered
+// by AtomSource::resolve. import_path added per store transfer
+// design (see below).
 ```
 
 `AtomStore::ingest(&dyn AtomSource)` is the store-to-store transfer mechanism.

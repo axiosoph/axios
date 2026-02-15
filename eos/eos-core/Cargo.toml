@@ -1,0 +1,7 @@
+[package]
+edition = "2024"
+name    = "eos-core"
+version = "0.1.0"
+
+[dependencies]
+atom-core = { path = "../../atom/atom-core" }

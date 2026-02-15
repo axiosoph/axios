@@ -196,12 +196,12 @@ Each phase is independently valuable and can be executed as a bounded unit.
 
 Set up the repository structure and workspace roots.
 
-- Initialize `axios/` with a README explaining the monorepo and layer model
-- Create `atom/`, `eos/`, `ion/` workspace roots with `Cargo.toml`
-- Create skeleton crates (10 total, strict layer ordering)
-- Wire inter-workspace path dependencies
-- Add `embedded-engine` feature flag on ion-cli
-- Verify: `cargo check` passes in all three workspaces
+- [x] Initialize `axios/` with a README explaining the monorepo and layer model
+- [x] Create `atom/`, `eos/`, `ion/` workspace roots with `Cargo.toml`
+- [x] Create skeleton crates (10 total, strict layer ordering)
+- [x] Wire inter-workspace path dependencies
+- [x] Add `embedded-engine` feature flag on ion-cli
+- [x] Verify: `cargo check` passes in all three workspaces
 
 ### Phase 2 — atom-id: identity primitives
 
