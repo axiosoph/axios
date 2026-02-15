@@ -155,7 +155,7 @@ they're in the store.
 | A-2  | Existing code has proven concepts worth porting | —        | Validated | 2 years of working dep resolution, publishing, URI parsing, manifests.                            |
 | A-3  | Protocol is manifest-agnostic                   | —        | Validated | Per v2 spec.                                                                                      |
 | A-4  | Cryptographic chain is the foundation           | —        | Validated | Every step is content-addressed and cacheable.                                                    |
-| A-5  | Local atoms land in the same store as published  | —        | Validated | Current eka copies local atoms into the cache repo with a dev prerelease version.                 |
+| A-5  | Local atoms land in the same store as published | —        | Validated | Current eka copies local atoms into the cache repo with a dev prerelease version.                 |
 | A-6  | ekala.toml is not a central pillar              | —        | Validated | May not survive Cyphrpass transition.                                                             |
 | A-7  | Embedded engine is the right default            | —        | Validated | Prior art: Cargo, single-user Nix, Go.                                                            |
 

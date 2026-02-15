@@ -231,3 +231,25 @@ Both satisfy `BuildEngine`. Ion's code is generic: `fn run(engine: impl BuildEng
 **Single AtomStore trait for publishing and working**: One trait, role enum. Rejected — publishing (append-only, signed, distributed) and working (mutable, local, collected) have different operations and semantics.
 
 **eos as single crate**: Simpler initially. Rejected — eos will be the largest component. Early modularization prevents costly extraction later.
+
+## Formal backing
+
+The trait boundaries described in this ADR are formally validated in
+[publishing-stack-layers.md](../models/publishing-stack-layers.md)
+using coalgebras (behavioral observation), session types (protocol
+ordering), and an olog (domain ontology). Key validated properties:
+
+- **Implementation interchangeability:** Bisimulation on all trait
+  coalgebras guarantees that any two implementations producing the
+  same observations are interchangeable — formally justifying the
+  embedded/daemon/remote deployment modes.
+- **Operation ordering:** Session types enforce claim-before-publish,
+  plan-before-apply, and BuildPlan variant handling as protocol
+  invariants.
+- **Scheduling correctness:** Parallel builds are non-interfering
+  (plan is observation), work-stealing preserves session type safety,
+  and scheduling strategy is bisimulation-invariant.
+- **Error asymmetry:** Plan failure has no delegatable continuation;
+  apply failure does. Recovery strategy selection belongs to eos.
+- **Sync-first validation:** The coalgebra and session type structures
+  extend to async without modification, validating KD-14.
