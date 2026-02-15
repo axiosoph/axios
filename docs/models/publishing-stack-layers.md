@@ -43,6 +43,24 @@ correct — implementations can be swapped without downstream breakage;
 - **Hyperdoctrine:** No quantified predicates over type families
   needed — associated types are simple type-level programming.
 
+**Formalism Provenance:**
+
+The formalisms above were selected by applying the Decision Matrix to
+the domain (hidden state → coalgebra, sequenced protocols → session
+types, static ontology → olog) independently of the trait signatures in
+ADR-0001. The ADR traits and the coalgebras converge because Rust
+traits-as-interfaces and coalgebras-as-observers are the same concept
+in code and mathematics: both define observations on opaque state. This
+is structural correspondence, not a circular derivation.
+
+Operations with command-like character (`apply`, `store`, `ingest`)
+are modeled as observations because the model captures inter-layer
+boundaries — what the caller sees, not what happens internally. For
+internal eos verification (cache coherence, store invariants), a future
+refinement to **state-transformer coalgebras** (`c: X → F(X) × X'`)
+may be warranted. The boundary coalgebras embed into state-transformer
+coalgebras via projection, so the current model remains valid.
+
 ## Model
 
 ### 1. Olog — Domain Ontology
