@@ -391,6 +391,71 @@ not a limitation — the model extends to async without restructuring.
 | Minimality           | PASS    | No unused formalisms; each captures a distinct concern      |
 | External adequacy    | PASS    | Concurrency, errors, async modeled; SPEC §4–9 pending       |
 
+## Complexity Analysis
+
+Abstract complexity of each modeled operation, parameterized by
+domain-relevant quantities. Implementation-specific constants
+(hash function cost, network latency) are elided.
+
+### Coalgebra Observers
+
+| Observer                       | Complexity  | Parameters               | Notes                                        |
+| :----------------------------- | :---------- | :----------------------- | :------------------------------------------- |
+| AtomSource.resolve             | O(1)        | —                        | Hash-based lookup by atom-id                 |
+| AtomSource.discover            | O(n)        | n = atoms in store       | Scan; O(k) with index (k = result count)     |
+| AtomRegistry.claim             | O(1)        | —                        | czd computation + Ed25519 sign               |
+| AtomRegistry.publish           | O(1)        | —                        | Sign version transaction                     |
+| AtomStore.ingest               | O(\|S\|)    | \|S\| = atoms in source  | Iterates source; O(\|S∖W\|) with dedup check |
+| AtomStore.import_path          | O(1)        | —                        | Single atom; dominated by I/O                |
+| AtomStore.contains             | O(1)        | —                        | Hash-based membership test                   |
+| BuildEngine.plan               | O(1)–O(∞)   | Expression complexity    | Cached: O(1). Eval: Turing-complete (Nix)    |
+| BuildEngine.apply              | O(build)    | Plan-specific            | Dominated by actual build execution          |
+| ArtifactStore.fetch            | O(1)        | —                        | Content-addressed lookup; +latency if remote |
+| ArtifactStore.store            | O(\|blob\|) | \|blob\| = artifact size | Must hash entire blob                        |
+| ArtifactStore.exists           | O(1)        | —                        | Digest lookup                                |
+| ArtifactStore.check_substitute | O(k)        | k = number of digests    | Batch existence check                        |
+| Scheduler.schedule             | O(n log n)  | n = atoms in batch       | Priority-based; O(n) for round-robin         |
+| Scheduler.delegate             | O(1)        | —                        | Channel transfer                             |
+
+### Session Costs (End-to-End)
+
+| Session         | Best Case       | Typical Case               | Worst Case                       |
+| :-------------- | :-------------- | :------------------------- | :------------------------------- |
+| PublishSession  | O(1)            | O(1)                       | O(1) — bounded by crypto ops     |
+| BuildSession    | O(1) (Cached)   | O(build) (NeedsBuild)      | O(eval) + O(build) (NeedsEval)   |
+| BatchBuild      | O(1) (all hit)  | O(max(build_i)) wall-clock | O(Σ build_i) total work          |
+| PopulateSession | O(1) (one atom) | O(\|S\|) (full ingest)     | O(\|S\|) — linear in source size |
+| Delegation      | O(1)            | O(1)                       | O(1) — channel transfer          |
+
+### Performance Implications
+
+1. **The cache cliff is real and quantified.** BuildPlan's three
+   variants correspond to three distinct complexity classes:
+   Cached = O(1), NeedsBuild = O(build), NeedsEvaluation = O(eval) +
+   O(build). The jump from Cached to NeedsEvaluation can be orders of
+   magnitude. Cache hit rate is the dominant performance lever.
+
+2. **Ingest is the scaling bottleneck for store population.** O(|S|)
+   means ingesting a large registry is expensive. Incremental or lazy
+   ingestion (only ingest atoms actually needed for the current build)
+   should be a priority optimization. The dedup check (`contains`)
+   reduces this to O(|S∖W|) — atoms not already present.
+
+3. **Parallelism is the dominant scheduling lever.** BatchBuild wall-clock
+   is O(max(build_i)) with sufficient workers, vs O(Σ build_i) sequential.
+   The non-interference property guarantees this parallelism is correct.
+   Scheduling strategy affects constant factors, not asymptotic behavior.
+
+4. **Delegation is free.** O(1) channel transfer means work-stealing
+   has negligible overhead. The decision to delegate should be driven
+   by load balancing, not by delegation cost.
+
+5. **Plan is the variance hotspot.** `plan` ranges from O(1) (cache hit)
+   to O(∞) (Turing-complete evaluation). All optimization effort at the
+   eos layer should focus on maximizing plan cache hits and minimizing
+   evaluation cost. Apply is expensive but predictable; plan is the
+   wild card.
+
 ## Implications
 
 ### Architecture Validation
