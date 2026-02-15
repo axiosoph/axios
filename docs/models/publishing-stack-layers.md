@@ -389,7 +389,7 @@ not a limitation — the model extends to async without restructuring.
 | Formalism coverage   | PARTIAL | Manifest/VersionScheme are algebraic (constructors), not    |
 |                      |         | coalgebraic (observers) — correctly omitted from coalgebras |
 | Minimality           | PASS    | No unused formalisms; each captures a distinct concern      |
-| External adequacy    | PASS    | Concurrency, errors, async modeled; dev workspace deferred  |
+| External adequacy    | PASS    | Concurrency, errors, async modeled; SPEC §4–9 pending       |
 
 ## Implications
 
@@ -442,8 +442,5 @@ not a limitation — the model extends to async without restructuring.
 
 ### Remaining Gaps
 
-- **Dev workspace semantics:** `import_path` stamps dev prerelease
-  versions — a side effect not captured in the coalgebra. Implementation
-  concern, not architectural.
 - **Protocol specification:** When Atom SPEC §4–9 mature, a companion
   session type model should formalize the full interaction protocol.
