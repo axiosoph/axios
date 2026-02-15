@@ -30,9 +30,9 @@ correct — implementations can be swapped without downstream breakage;
 | **Supporting Tools**    | Session types (protocol ordering), Olog (domain ontology)        |
 | **Decision Matrix Row** | State + observation → Coalgebra; Protocol → Session types        |
 | **Rationale**           | Traits-as-observers is the dominant pattern; bisimulation is the |
-|                         | correct equivalence for implementation interchangeability.       |
-|                         | Session types capture the protocol ordering that coalgebra       |
-|                         | alone cannot express. Olog grounds the static ontology.          |
+| ...                     | correct equivalence for implementation interchangeability.       |
+| ...                     | Session types capture the protocol ordering that coalgebra       |
+| ...                     | alone cannot express. Olog grounds the static ontology.          |
 
 **Alternatives Considered:**
 
