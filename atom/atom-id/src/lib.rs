@@ -21,10 +21,10 @@
 //! digest ([`Czd`]) of a signed `atom/claim` transaction, paired with its
 //! algorithm ([`Alg`]).
 //!
-//! Serialized in Coz external digest format: `alg:b64ut`.
+//! Serialized as `alg.b64ut` (dot-delimited for git ref safety).
 //!
 //! ```text
-//! Ed25519:xrYMu87EXes58PnEACcDW1t0jF2ez4FCN-njTF0MHNo
+//! Ed25519.xrYMu87EXes58PnEACcDW1t0jF2ez4FCN-njTF0MHNo
 //! ```
 //!
 //! [Coz]: https://github.com/Cyphrme/Coz
@@ -78,19 +78,19 @@ impl AtomId {
     }
 }
 
-/// Display in Coz external digest format: `alg:b64ut`.
+/// Display as `alg.b64ut` (dot-delimited).
 impl fmt::Display for AtomId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}:{}", self.alg.name(), self.czd)
+        write!(f, "{}.{}", self.alg.name(), self.czd)
     }
 }
 
-/// Parse from Coz external digest format: `alg:b64ut`.
+/// Parse from `alg.b64ut` format (dot-delimited).
 impl FromStr for AtomId {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (alg_str, digest_str) = s.split_once(':').ok_or(Error::InvalidFormat)?;
+        let (alg_str, digest_str) = s.split_once('.').ok_or(Error::InvalidFormat)?;
 
         let alg = Alg::from_str(alg_str).ok_or(Error::UnknownAlgorithm)?;
 
@@ -145,8 +145,8 @@ pub enum Error {
     /// The name exceeds the maximum allowed length.
     #[error("cannot be more than {} bytes", NAME_MAX)]
     TooLong,
-    /// Atom ID string does not match `alg:b64ut` format.
-    #[error("invalid atom ID format, expected `alg:b64ut`")]
+    /// Atom ID string does not match `alg.b64ut` format.
+    #[error("invalid atom ID format, expected `alg.b64ut`")]
     InvalidFormat,
     /// Unrecognized algorithm in atom ID.
     #[error("unknown algorithm")]
