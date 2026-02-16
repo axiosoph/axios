@@ -2,3 +2,9 @@
 edition = "2024"
 name    = "atom-id"
 version = "0.1.0"
+
+[dependencies]
+serde                 = { version = "1", features = ["derive"] }
+thiserror             = "1"
+unicode-ident         = "1"
+unicode-normalization = "0.1"
