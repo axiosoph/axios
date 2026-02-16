@@ -97,127 +97,86 @@ mod sealed {
 }
 
 // ============================================================================
-// Identifier
+// Shared impls (macro)
+// ============================================================================
+
+/// Generate the common conversion impls for a [`VerifiedName`] newtype.
+macro_rules! verified_name_impls {
+    ($Type:ident) => {
+        impl sealed::Construct for $Type {
+            fn new(s: String) -> Self {
+                Self(s)
+            }
+        }
+
+        impl Deref for $Type {
+            type Target = str;
+
+            fn deref(&self) -> &str {
+                &self.0
+            }
+        }
+
+        impl AsRef<str> for $Type {
+            fn as_ref(&self) -> &str {
+                &self.0
+            }
+        }
+
+        impl fmt::Display for $Type {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str(&self.0)
+            }
+        }
+
+        impl FromStr for $Type {
+            type Err = Error;
+
+            fn from_str(s: &str) -> Result<Self, Self::Err> {
+                Self::validate(s)
+            }
+        }
+
+        impl TryFrom<&str> for $Type {
+            type Error = Error;
+
+            fn try_from(s: &str) -> Result<Self, Self::Error> {
+                Self::validate(s)
+            }
+        }
+
+        impl TryFrom<String> for $Type {
+            type Error = Error;
+
+            fn try_from(s: String) -> Result<Self, Self::Error> {
+                Self::validate(&s)
+            }
+        }
+
+        impl TryFrom<&OsStr> for $Type {
+            type Error = Error;
+
+            fn try_from(s: &OsStr) -> Result<Self, Self::Error> {
+                let s = s.to_str().ok_or(Error::InvalidUnicode)?;
+                Self::validate(s)
+            }
+        }
+    };
+}
+
+// ============================================================================
+// Per-type validation rules + shared impls
 // ============================================================================
 
 impl VerifiedName for Identifier {}
-
-impl sealed::Construct for Identifier {
-    fn new(s: String) -> Self {
-        Self(s)
-    }
-}
-
-impl Deref for Identifier {
-    type Target = str;
-
-    fn deref(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Display for Identifier {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl FromStr for Identifier {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::validate(s)
-    }
-}
-
-impl TryFrom<&str> for Identifier {
-    type Error = Error;
-
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
-        Self::validate(s)
-    }
-}
-
-impl TryFrom<String> for Identifier {
-    type Error = Error;
-
-    fn try_from(s: String) -> Result<Self, Self::Error> {
-        Self::validate(&s)
-    }
-}
-
-// ============================================================================
-// Label
-// ============================================================================
+verified_name_impls!(Identifier);
 
 impl VerifiedName for Label {
     fn is_valid_char(c: char) -> bool {
         unicode_ident::is_xid_continue(c) || c == '-'
     }
 }
-
-impl sealed::Construct for Label {
-    fn new(s: String) -> Self {
-        Self(s)
-    }
-}
-
-impl Deref for Label {
-    type Target = str;
-
-    fn deref(&self) -> &str {
-        &self.0
-    }
-}
-
-impl AsRef<str> for Label {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Display for Label {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl FromStr for Label {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::validate(s)
-    }
-}
-
-impl TryFrom<&str> for Label {
-    type Error = Error;
-
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
-        Self::validate(s)
-    }
-}
-
-impl TryFrom<String> for Label {
-    type Error = Error;
-
-    fn try_from(s: String) -> Result<Self, Self::Error> {
-        Self::validate(&s)
-    }
-}
-
-impl TryFrom<&OsStr> for Label {
-    type Error = Error;
-
-    fn try_from(s: &OsStr) -> Result<Self, Self::Error> {
-        let s = s.to_str().ok_or(Error::InvalidUnicode)?;
-        Self::validate(s)
-    }
-}
-
-// ============================================================================
-// Tag
-// ============================================================================
+verified_name_impls!(Label);
 
 impl VerifiedName for Tag {
     fn is_valid_char(c: char) -> bool {
@@ -231,56 +190,4 @@ impl VerifiedName for Tag {
         Ok(())
     }
 }
-
-impl sealed::Construct for Tag {
-    fn new(s: String) -> Self {
-        Self(s)
-    }
-}
-
-impl Deref for Tag {
-    type Target = str;
-
-    fn deref(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Display for Tag {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl FromStr for Tag {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::validate(s)
-    }
-}
-
-impl TryFrom<&str> for Tag {
-    type Error = Error;
-
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
-        Self::validate(s)
-    }
-}
-
-impl TryFrom<String> for Tag {
-    type Error = Error;
-
-    fn try_from(s: String) -> Result<Self, Self::Error> {
-        Self::validate(&s)
-    }
-}
-
-impl TryFrom<&OsStr> for Tag {
-    type Error = Error;
-
-    fn try_from(s: &OsStr) -> Result<Self, Self::Error> {
-        let s = s.to_str().ok_or(Error::InvalidUnicode)?;
-        Self::validate(s)
-    }
-}
+verified_name_impls!(Tag);
