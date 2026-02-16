@@ -1,7 +1,9 @@
-//! Tests for atom naming types.
+//! Tests for atom identity types.
+
+use std::str::FromStr;
 
 use crate::name::VerifiedName;
-use crate::{Error, Identifier, Label, Tag};
+use crate::{AtomId, Error, Identifier, Label, Tag};
 
 // ============================================================================
 // Label
@@ -174,4 +176,64 @@ fn tag_rejects_double_dot() {
 #[test]
 fn tag_rejects_invalid_start() {
     assert_eq!(Tag::try_from(".tag"), Err(Error::InvalidStart('.')),);
+}
+
+// ============================================================================
+// AtomId
+// ============================================================================
+
+#[test]
+fn atom_id_roundtrip() {
+    let input = "ES256:U5XUZots-WmQYcQWmsO751Xk0yeVi9XUKWQ2mGz6Aqg";
+    let id: AtomId = input.parse().expect("valid atom ID");
+    assert_eq!(id.to_string(), input);
+    assert_eq!(id.alg(), coz_rs::Alg::ES256);
+}
+
+#[test]
+fn atom_id_ed25519_roundtrip() {
+    // Ed25519 uses SHA-512, so czd is 64 bytes
+    let bytes = [0xABu8; 64];
+    let id = AtomId::new(
+        coz_rs::Alg::Ed25519,
+        coz_rs::Czd::from_bytes(bytes.to_vec()),
+    );
+    let s = id.to_string();
+    assert!(s.starts_with("Ed25519:"));
+    let parsed: AtomId = s.parse().unwrap();
+    assert_eq!(parsed, id);
+}
+
+#[test]
+fn atom_id_missing_colon() {
+    assert_eq!(
+        AtomId::from_str("ES256_U5XUZots"),
+        Err(Error::InvalidFormat),
+    );
+}
+
+#[test]
+fn atom_id_unknown_alg() {
+    assert_eq!(
+        AtomId::from_str("FAKE:U5XUZots"),
+        Err(Error::UnknownAlgorithm),
+    );
+}
+
+#[test]
+fn atom_id_bad_base64() {
+    assert_eq!(
+        AtomId::from_str("ES256:!!!invalid!!!"),
+        Err(Error::InvalidDigest),
+    );
+}
+
+#[test]
+fn atom_id_serde_roundtrip() {
+    let input = "ES384:U5XUZots-WmQYcQWmsO751Xk0yeVi9XUKWQ2mGz6Aqg";
+    let id: AtomId = input.parse().unwrap();
+    let json = serde_json::to_string(&id).unwrap();
+    assert_eq!(json, format!("\"{input}\""));
+    let back: AtomId = serde_json::from_str(&json).unwrap();
+    assert_eq!(back, id);
 }
