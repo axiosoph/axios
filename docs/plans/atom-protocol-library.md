@@ -175,7 +175,7 @@ _None remaining. All resolved — see Decisions table._
    - [x] `::` delimiter for `anchor_b64ut::label` format
    - [x] Display/FromStr/Serde implementations
    - [x] 39 tests (naming, anchor, atom-id structural equality)
-   - [ ] ≤ 5 non-std deps verified (blocked on serde feature-gating)
+   - [x] ≤ 5 non-std deps verified (4 required + 2 optional behind `serde` feature)
    - [x] `RawVersion` newtype — unparsed version string
          Marks a string as an unresolved version needing implementor parsing.
          Lives in atom-id alongside `VersionScheme`.
@@ -186,7 +186,7 @@ _None remaining. All resolved — see Decisions table._
      - `parse_requirement(raw: &str) → Result<Self::Requirement>`
      - `matches(version, req) → bool`
      - No concrete version types (semver stays in ion-manifest)
-   - [ ] Feature-gate serde behind `serde` crate feature
+   - [x] Feature-gate serde behind `serde` crate feature (default on)
    - [x] **Coz transaction payload types** (spec §Types)
      - `ClaimPayload` struct: `alg`, `anchor`, `label`, `now`, `owner`, `typ = "atom/claim"`
        `owner` is an opaque identity digest (spec `[owner-abstract]`).
@@ -376,6 +376,7 @@ _None remaining. All resolved — see Decisions table._
 | Payload types | REFINED  | Constructors take `AtomId` instead of separate `anchor`+`label`. Stronger type-level guarantee that identity pair is validated.                              |
 | Verification  | REFINED  | Returns `Result<Payload>` instead of `Result<AtomId>` — parsed payload is more useful, caller can extract AtomId trivially.                                  |
 | Verification  | EXPANDED | `serde_json` promoted from dev-dep to runtime dep. Required for `from_slice` in verification functions.                                                      |
+| Serde gate    | REFINED  | Verification functions also gated behind `serde` feature. Verification inherently depends on JSON deserialization.                                           |
 
 ## Retrospective
 

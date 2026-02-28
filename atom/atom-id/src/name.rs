@@ -8,6 +8,7 @@ use std::fmt;
 use std::ops::Deref;
 use std::str::FromStr;
 
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use unicode_normalization::UnicodeNormalization;
 
@@ -18,13 +19,15 @@ use crate::{Error, NAME_MAX};
 // ============================================================================
 
 /// A strict UAX #31 Unicode identifier (XID_Start + XID_Continue).
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(try_from = "String")]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(try_from = "String"))]
 pub struct Identifier(String);
 
 /// A validated atom label: UAX #31 plus hyphen (`-`).
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(try_from = "String")]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(try_from = "String"))]
 pub struct Label(String);
 
 /// A convenience alias for [`Label`].
@@ -33,8 +36,9 @@ pub type Name = Label;
 /// A metadata tag: labels plus separators (`:` and `.`).
 ///
 /// Consecutive dots (`..`) are disallowed.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(try_from = "String")]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(try_from = "String"))]
 pub struct Tag(String);
 
 // ============================================================================

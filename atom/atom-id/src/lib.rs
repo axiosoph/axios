@@ -38,7 +38,9 @@
 #![forbid(unsafe_code)]
 
 mod name;
+#[cfg(feature = "serde")]
 mod serde_alg;
+#[cfg(feature = "serde")]
 mod serde_b64;
 
 use std::fmt;
@@ -46,6 +48,7 @@ use std::str::FromStr;
 
 pub use coz_rs::{Alg, Cad, Czd, Thumbprint};
 pub use name::{Identifier, Label, Name, Tag};
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -115,6 +118,7 @@ impl From<Vec<u8>> for Anchor {
     }
 }
 
+#[cfg(feature = "serde")]
 impl Serialize for Anchor {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -124,6 +128,7 @@ impl Serialize for Anchor {
     }
 }
 
+#[cfg(feature = "serde")]
 impl<'de> Deserialize<'de> for Anchor {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -205,6 +210,7 @@ impl FromStr for AtomId {
     }
 }
 
+#[cfg(feature = "serde")]
 impl Serialize for AtomId {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -214,6 +220,7 @@ impl Serialize for AtomId {
     }
 }
 
+#[cfg(feature = "serde")]
 impl<'de> Deserialize<'de> for AtomId {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -235,10 +242,11 @@ impl<'de> Deserialize<'de> for AtomId {
 /// identity claim.
 ///
 /// Spec constraints: `[claim-typ]`, `[symmetric-payloads]`, `[owner-abstract]`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ClaimPayload {
     /// The signing algorithm.
-    #[serde(with = "serde_alg")]
+    #[cfg_attr(feature = "serde", serde(with = "serde_alg"))]
     pub alg: Alg,
     /// The atom-set anchor.
     pub anchor: Anchor,
@@ -249,7 +257,7 @@ pub struct ClaimPayload {
     /// Opaque identity digest of the owner (e.g., Coz thumbprint or Cyphr PR).
     ///
     /// Spec constraint: `[owner-abstract]`.
-    #[serde(with = "serde_b64")]
+    #[cfg_attr(feature = "serde", serde(with = "serde_b64"))]
     pub owner: Vec<u8>,
     /// Coz key thumbprint of the signing key.
     pub tmb: Thumbprint,
@@ -286,10 +294,11 @@ impl ClaimPayload {
 ///
 /// Spec constraints: `[publish-typ]`, `[symmetric-payloads]`,
 /// `[publish-chains-claim]`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct PublishPayload {
     /// The signing algorithm.
-    #[serde(with = "serde_alg")]
+    #[cfg_attr(feature = "serde", serde(with = "serde_alg"))]
     pub alg: Alg,
     /// The atom-set anchor.
     pub anchor: Anchor,
@@ -298,7 +307,7 @@ pub struct PublishPayload {
     /// Spec constraint: `[publish-chains-claim]`.
     pub claim: Czd,
     /// Atom snapshot hash (the published artifact).
-    #[serde(with = "serde_b64")]
+    #[cfg_attr(feature = "serde", serde(with = "serde_b64"))]
     pub dig: Vec<u8>,
     /// The atom label.
     pub label: Label,
@@ -307,7 +316,7 @@ pub struct PublishPayload {
     /// Subdirectory path in source content tree.
     pub path: String,
     /// Source revision hash (provenance).
-    #[serde(with = "serde_b64")]
+    #[cfg_attr(feature = "serde", serde(with = "serde_b64"))]
     pub src: Vec<u8>,
     /// Coz key thumbprint of the signing key.
     pub tmb: Thumbprint,
@@ -361,7 +370,8 @@ impl PublishPayload {
 /// [`as_str()`](RawVersion::as_str). This ensures that version strings
 /// cannot be silently used as plain strings; parsing is always explicit
 /// through a [`VersionScheme`].
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct RawVersion(String);
 
 impl RawVersion {
@@ -457,6 +467,7 @@ pub enum Error {
 }
 
 /// Errors produced by transaction verification.
+#[cfg(feature = "serde")]
 #[derive(Error, Debug)]
 pub enum VerifyError {
     /// The cryptographic signature is invalid for the given payload and key.
@@ -492,6 +503,7 @@ pub enum VerifyError {
 /// not this crate's concern.
 ///
 /// Spec constraints: `[sig-over-pay]`, `[claim-typ]`, `[claim-key-required]`.
+#[cfg(feature = "serde")]
 pub fn verify_claim(
     pay_json: &[u8],
     sig: &[u8],
@@ -516,6 +528,7 @@ pub fn verify_claim(
 /// on success.
 ///
 /// Spec constraints: `[sig-over-pay]`, `[publish-typ]`.
+#[cfg(feature = "serde")]
 pub fn verify_publish(
     pay_json: &[u8],
     sig: &[u8],
@@ -536,6 +549,7 @@ pub fn verify_publish(
 /// Verify a Coz signature over raw JSON payload bytes.
 ///
 /// Shared logic for [`verify_claim`] and [`verify_publish`].
+#[cfg(feature = "serde")]
 fn verify_signature(
     pay_json: &[u8],
     sig: &[u8],
