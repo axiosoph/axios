@@ -2,11 +2,12 @@
 
 <!--
   Source sketch: .sketches/2026-02-15-atom-protocol-plan.md
-  Plan stage: SCOPE (all phases defined, pending challenge pass)
-  Confidence: 0.85 — all phases scoped, Phase 1 mostly validated, atom-core
-              grounded in formal model, atom-git intentionally light
+  Plan stage: SCOPE (all phases defined, spec-driven)
+  Confidence: 0.92 — spec defines 40 normative constraints, 13 machine-verified
+              (TLA+ + Alloy). Phase items aligned with spec types and traits.
 
   Charter: Workstream 2 — Atom Protocol Library
+  Spec: docs/specs/atom-transactions.md
   Supersedes: phases 2–5 of docs/plans/ion-atom-restructuring.md
 -->
 
@@ -26,7 +27,9 @@ Atom identity and publishing are Coz cryptographic transactions:
 - **`atom/publish`** — declares a new version of a claimed atom.
 
 Each transaction is a Coz message (`{pay, sig}`) where `pay` contains
-`alg`, `tmb`, `typ`, and application-defined fields:
+`alg`, `owner`, `typ`, and application-defined fields:
+
+**Claim** — establishes identity (spec `[claim-typ]`):
 
 ```json
 {
@@ -34,32 +37,53 @@ Each transaction is a Coz message (`{pay, sig}`) where `pay` contains
     "alg": "Ed25519",
     "anchor": "<anchor-b64ut>",
     "label": "my-package",
-    "tmb": "<key-thumbprint>",
+    "now": "2026-02-28T12:00:00Z",
+    "owner": "<identity-digest>",
     "typ": "atom/claim"
   },
   "sig": "<signature-b64ut>"
 }
 ```
 
-Claims deliberately omit `now` — the payload must be reproducible so that
-the same (anchor, label, key) triple always produces the same czd. This
-prevents double-claiming the same label from the same source.
+**Publish** — declares a version (spec `[publish-typ]`):
+
+```json
+{
+  "pay": {
+    "alg": "Ed25519",
+    "anchor": "<anchor-b64ut>",
+    "claim": "<claim-czd>",
+    "dig": "<atom-snapshot-hash>",
+    "label": "my-package",
+    "now": "2026-02-28T12:01:00Z",
+    "owner": "<identity-digest>",
+    "path": "packages/my-package",
+    "src": "<source-revision-hash>",
+    "typ": "atom/publish",
+    "version": "1.0.0"
+  },
+  "sig": "<signature-b64ut>"
+}
+```
 
 `typ` uses bare paths (`atom/claim`, `atom/publish`) — no domain prefix.
 Domains imply centralization which conflicts with atom's decentralized model.
 
-All cryptographic operations (hashing, signing, verification) are handled
-by coz-rs. atom-id owns the payload struct definitions and verification
-logic. atom-core defines only protocol traits — no direct crypto dep.
+All cryptographic operations conform to the Coz specification semantics
+(spec `[crypto-via-coz]`). atom-id owns the payload struct definitions
+and verification logic. atom-core defines only protocol traits — no
+direct crypto dependency (spec `[crypto-layer-separation]`).
 
 ## Constraints
 
 - Atom, eos, and ion are separate Cargo workspaces. No circular deps.
-- Dependency direction: ion → eos → atom. Never upward.
+- All constraints from `docs/specs/atom-transactions.md` are normative (BCP 14).
+- Crypto flows through atom-id via Coz (spec `[crypto-layer-separation]`).
 - atom-id: ≤ 5 non-std deps. atom-core: ≤ 10 total.
-- All crypto (hashing, signing, verification) handled by coz-rs. No BLAKE3 or other standalone hash crates.
+- atom-core MUST NOT depend on any cryptographic crate (spec `[no-cross-layer-crypto]`).
 - `VersionScheme` and `Manifest` are abstract — no semver or ion.toml types in atom-core.
   Concrete implementations live in format-specific crates (ion-manifest, etc.).
+- `Manifest` requires exactly `label` and `version` (spec `[manifest-minimal]`).
 - Storage, identity, and signing will migrate to Cyphrpass. Design seams, not implementations.
   Cyphrpass uses Coz internally — coz-rs dependency is forward-compatible.
 - `serde` behind feature flag.
@@ -68,30 +92,31 @@ logic. atom-core defines only protocol traits — no direct crypto dep.
 
 ## Decisions
 
-| Decision                             | Choice                                                                                                                   | Rationale                                                                                       |
-| :----------------------------------- | :----------------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------- |
-| URI alias sigil                      | `+` prefix marks aliases                                                                                                 | Eliminates alias-vs-URL ambiguity — the root cause of parser bugs. See sketch Round 3–5.        |
-| Alias path delimiter                 | `/` (not `:`)                                                                                                            | Avoids all colon ambiguity. `+gh/owner/repo` not `+gh:owner/repo`.                              |
-| URL aliasing as separate crate       | `alurl` at `axios/alurl/`                                                                                                | URL aliasing is a general-purpose concern, not atom-specific. Reusable outside eka.             |
-| alurl structured output              | Depends on gix-url for URL classification                                                                                | gix-url handles SCP, scheme URLs, file paths, credentials. alurl doesn't replicate.             |
-| atom-uri preserved as own crate      | Depends on alurl + atom-id                                                                                               | Thin layer: `::` splitting, label validation, `@version` extraction.                            |
-| AliasResolver trait placement        | Defined in alurl                                                                                                         | The trait is part of the aliasing library's contract, not atom-specific.                        |
-| atom-id dot delimiter                | `label.tag` (dot-separated)                                                                                              | AtomId = `alg.b64ut` display format. See atom-id sketch.                                        |
-| atom-core = formal model coalgebras  | AtomSource, AtomRegistry, AtomStore                                                                                      | Directly derived from the formal layer model. No legacy traits ported. See sketch round 7.      |
-| Existing traits not protocol         | QueryStore, QueryVersion, UnpackRef, RemoteAtomCache, Init, EkalaStorage — all git internals or ion concerns             | Evaluated against formal model. None correspond to protocol-level concepts.                     |
-| No gix/semver in atom-core           | All trait signatures use associated types or atom-id abstractions                                                        | KD-1 + VersionScheme abstraction. Concrete types stay in atom-git/ion-manifest.                 |
-| All crypto in atom-id via coz-rs     | atom-id owns payload structs, verification, identity. atom-core has no crypto dep.                                       | All hashing and signing is Coz. No standalone hash crates (no BLAKE3).                          |
-| `typ` convention                     | `atom/claim`, `atom/publish` — bare paths, no domain prefix                                                              | Domains imply centralization. If canonical home needed, use a separate `pay` field like `src`.  |
-| Claim reproducibility                | `atom/claim` omits `now` — same (anchor, label, key) always yields same czd                                              | Prevents double-claiming the same label from the same source location.                          |
-| Publish uses `dig` (Coz standard)    | Content reference via Coz's `dig` field (`Vec<u8>`), not a custom `rev`                                                  | `dig` is the Coz-native content-addressed reference field. Backend-specific hash goes here.     |
-| `Manifest` trait in atom-core        | Trait abstracts label, version, deps. Concrete formats (ion.toml, Cargo.toml, etc.) implemented by downstream crates.    | Atom is a generic packaging protocol — every format needs a manifest, but the format is theirs. |
-| Key/identity management is Cyphrpass | atom-id provides verification function taking raw key bytes. Storage and discovery of public keys is not atom's concern. | No reason to duplicate. Cyphrpass is already all about key and identity management.             |
-| Minimal protocol types               | Only `Dependency` is concrete in atom-core. `Entry`, `Content`, `Error` are associated types on traits.                  | If something can be removed without losing expressive power, remove it.                         |
-| Recursive alias resolution           | alurl resolves recursively as library surface                                                                            | An alias can expand to another `+alias`. alurl handles the chain, not the caller.               |
-| alurl workspace independence         | Standalone crate at `axios/alurl/`, no top-level workspace                                                               | atom-uri depends on alurl via path dep. `cargo test` from `atom/` won't run alurl tests.        |
-| Session-type enforcement             | Natural data flow: `claim() → AtomId`, `publish(AtomId, ...)`                                                            | No typestate/builder needed. Can't publish without an id.                                       |
-| atom-git = implement, not port       | Fresh design informed by existing code, not mechanical porting                                                           | Existing traits shaped by monolithic crate. Decomposition changes the design constraints.       |
-| VersionScheme trait                  | In atom-id                                                                                                               | Identity-level abstraction. Version scheme is part of how atoms are named.                      |
+| Decision                             | Choice                                                                                                                   | Rationale                                                                                                    |
+| :----------------------------------- | :----------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------- |
+| URI alias sigil                      | `+` prefix marks aliases                                                                                                 | Eliminates alias-vs-URL ambiguity — the root cause of parser bugs. See sketch Round 3–5.                     |
+| Alias path delimiter                 | `/` (not `:`)                                                                                                            | Avoids all colon ambiguity. `+gh/owner/repo` not `+gh:owner/repo`.                                           |
+| URL aliasing as separate crate       | `alurl` at `axios/alurl/`                                                                                                | URL aliasing is a general-purpose concern, not atom-specific. Reusable outside eka.                          |
+| alurl structured output              | Depends on gix-url for URL classification                                                                                | gix-url handles SCP, scheme URLs, file paths, credentials. alurl doesn't replicate.                          |
+| atom-uri preserved as own crate      | Depends on alurl + atom-id                                                                                               | Thin layer: `::` splitting, label validation, `@version` extraction.                                         |
+| AliasResolver trait placement        | Defined in alurl                                                                                                         | The trait is part of the aliasing library's contract, not atom-specific.                                     |
+| atom-id dot delimiter                | `label.tag` (dot-separated)                                                                                              | AtomId = `alg.b64ut` display format. See atom-id sketch.                                                     |
+| atom-core = formal model coalgebras  | AtomSource, AtomRegistry, AtomStore                                                                                      | Directly derived from the formal layer model. No legacy traits ported. See sketch round 7.                   |
+| Existing traits not protocol         | QueryStore, QueryVersion, UnpackRef, RemoteAtomCache, Init, EkalaStorage — all git internals or ion concerns             | Evaluated against formal model. None correspond to protocol-level concepts.                                  |
+| No gix/semver in atom-core           | All trait signatures use associated types or atom-id abstractions                                                        | KD-1 + VersionScheme abstraction. Concrete types stay in atom-git/ion-manifest.                              |
+| All crypto in atom-id via Coz        | atom-id owns payload structs, verification, identity. atom-core has no crypto dep.                                       | All hashing and signing follows Coz specification semantics. No standalone hash crates.                      |
+| `typ` convention                     | `atom/claim`, `atom/publish` — bare paths, no domain prefix                                                              | Domains imply centralization. If canonical home needed, use a separate `pay` field like `src`.               |
+| Claim includes `now`                 | `atom/claim` includes `now` for fork disambiguation; czd incorporates timestamp                                          | Without `now`, identical (anchor, label, key) across forks would collide. Spec `[atomid-per-source-unique]`. |
+| Publish uses `dig` (Coz standard)    | Content reference via Coz's `dig` field (`Vec<u8>`), not a custom `rev`                                                  | `dig` is the Coz-native content-addressed reference field. Backend-specific hash goes here.                  |
+| `Manifest` trait in atom-core        | Trait abstracts label, version, deps. Concrete formats (ion.toml, Cargo.toml, etc.) implemented by downstream crates.    | Atom is a generic packaging protocol — every format needs a manifest, but the format is theirs.              |
+| Key/identity management is Cyphrpass | atom-id provides verification function taking raw key bytes. Storage and discovery of public keys is not atom's concern. | No reason to duplicate. Cyphrpass is already all about key and identity management.                          |
+| Minimal protocol types               | No concrete types in atom-core. `Entry`, `Content`, `Error` are associated types on traits.                              | Spec removed `Dependency` — dependency edges are a manifest/resolver concern, not protocol.                  |
+| Spec-driven implementation           | Types implement spec constraints directly; `cargo check` = constraint verification.                                      | 15 constraints verifiable by type system. See spec §Verification.                                            |
+| Recursive alias resolution           | alurl resolves recursively as library surface                                                                            | An alias can expand to another `+alias`. alurl handles the chain, not the caller.                            |
+| alurl workspace independence         | Standalone crate at `axios/alurl/`, no top-level workspace                                                               | atom-uri depends on alurl via path dep. `cargo test` from `atom/` won't run alurl tests.                     |
+| Session-type enforcement             | Natural data flow: `claim() → AtomId`, `publish(AtomId, ...)`                                                            | No typestate/builder needed. Can't publish without an id.                                                    |
+| atom-git = implement, not port       | Fresh design informed by existing code, not mechanical porting                                                           | Existing traits shaped by monolithic crate. Decomposition changes the design constraints.                    |
+| VersionScheme trait                  | In atom-id                                                                                                               | Identity-level abstraction. Version scheme is part of how atoms are named.                                   |
 
 ## Risks & Assumptions
 
@@ -158,12 +183,16 @@ _None remaining. All resolved — see Decisions table._
      - `matches(version, req) → bool`
      - No concrete version types (semver stays in ion-manifest)
    - [ ] Feature-gate serde behind `serde` crate feature
-   - [ ] **Coz transaction payload types**
-     - `ClaimPayload` struct: `alg`, `anchor`, `label`, `tmb`, `typ = "atom/claim"`
-       No `now` — payload must be reproducible (same inputs → same czd)
-     - `PublishPayload` struct: `alg`, `atom_id`, `dig`, `now`, `tmb`, `typ = "atom/publish"`, `version`
-       `dig` is the Coz standard field for content-addressed references (`Vec<u8>`).
-       `now` records publication time (atom commits use epoch for reproducibility).
+   - [ ] **Coz transaction payload types** (spec §Types)
+     - `ClaimPayload` struct: `alg`, `anchor`, `label`, `now`, `owner`, `typ = "atom/claim"`
+       `owner` is an opaque identity digest (spec `[owner-abstract]`).
+       `now` included for fork disambiguation (spec `[atomid-per-source-unique]`).
+     - `PublishPayload` struct: `alg`, `anchor`, `claim` (czd), `dig`, `label`,
+       `now`, `owner`, `path`, `src`, `typ = "atom/publish"`, `version`
+       `claim` chains to the authorizing claim czd (spec `[publish-chains-claim]`).
+       `dig` is the atom snapshot hash (spec `[dig-is-atom-snapshot]`).
+       `src` is the source revision hash (spec `[src-is-source-revision]`).
+       `path` is the subdirectory path (spec `[path-is-subdir]`).
      - `TYP_CLAIM` and `TYP_PUBLISH` constants (bare paths, no domain)
    - [ ] **Verification function** — takes `(pay_json, sig, pub_key, alg)`, returns `Result<AtomId>`
          Key bytes are provided by the caller. Key storage/discovery is Cyphrpass's concern.
@@ -203,31 +232,28 @@ _None remaining. All resolved — see Decisions table._
    verification logic lives in atom-id (which owns coz-rs). atom-core
    consumes atom-id's types (`AtomId`, `ClaimPayload`, etc.) without
    needing a direct coz-rs dependency.
-   - [ ] **`AtomSource` trait** — read-only observation (model §2.1)
+   - [ ] **`AtomSource` trait** — read-only observation (model §2.1, spec §Source/Store)
      - `type Entry` — backend-defined observation type
      - `type Error`
      - `resolve(&self, id: &AtomId) → Result<Option<Entry>, Error>`
      - `discover(&self, query) → Result<Vec<Entry>, Error>`
-   - [ ] **`AtomRegistry: AtomSource` trait** — claiming and publishing (model §2.2)
+   - [ ] **`AtomRegistry: AtomSource` trait** — claiming and publishing (model §2.2, spec §Source/Store)
      - `type Content` — backend-defined content reference (git: ObjectId, etc.)
-     - `claim(label: &Label) → Result<AtomId, Error>` — establish identity
-     - `publish(id: &AtomId, version: &RawVersion, content: &Self::Content) → Result<(), Error>`
-     - Session ordering enforced by data flow: can't publish without an `AtomId`
-   - [ ] **`AtomStore: AtomSource` trait** — working store (model §2.3)
+     - `claim(req: ClaimReq) → Result<Czd, Error>` — establish ownership
+     - `publish(req: PublishReq) → Result<(), Error>` — publish a version
+     - Session ordering enforced by data flow: can't publish without a claim czd
+   - [ ] **`AtomStore: AtomSource` trait** — working store (model §2.3, spec §Source/Store)
      - `ingest(&self, source: &dyn AtomSource) → Result<(), Error>`
-     - `import_path(path) → Result<AtomId, Error>`
+       Accumulation guarantee: store ⊇ source after ingest (spec `[ingest-preserves-identity]`)
      - `contains(id: &AtomId) → bool`
-   - [ ] **`Manifest` trait** — abstract metadata every package format must expose
+   - [ ] **`Manifest` trait** — minimal metadata (spec `[manifest-minimal]`)
      - `label() → &Label`
      - `version() → &RawVersion` — unparsed, implementor resolves via VersionScheme
-     - `dependencies() → &[Dependency]`
-     - `composer() → Option<&str>` — evaluation strategy hint
+     - No `dependencies()`, no `composer()` — these are ecosystem-specific concerns.
      - No serde, no TOML. Concrete formats (ion.toml, Cargo.toml, etc.) implement this.
-   - [ ] **`Dependency`** — the only concrete protocol type
-     - `label: Label` + `version: RawVersion`
    - [ ] **Error taxonomy** — per-trait error types via associated `type Error`
    - [ ] Re-export atom-id and atom-uri public types
-   - [ ] serde behind feature flag for Dependency and re-exported types
+   - [ ] serde behind feature flag for re-exported types
    - [ ] Crate-level documentation explaining the coalgebra-trait mapping
    - Deps: atom-id, atom-uri. No coz-rs, no gix, no semver, no tokio.
    - Verify: `cargo check`, `cargo doc --no-deps` clean, `cargo test`
@@ -270,14 +296,22 @@ _None remaining. All resolved — see Decisions table._
 - [x] Phase 1a: `cargo test` passes in atom/ workspace (31 tests) — VERIFIED
 - [ ] Phase 1b: `cargo test` with VersionScheme tests, serde feature-gated
 - [ ] Phase 1b: Payload round-trip test — construct ClaimPayload, sign, verify, extract AtomId
-- [ ] Phase 1b: Reproducibility test — same (anchor, label, key) → same czd
+- [ ] Phase 1b: Reproducibility test — same inputs → same czd
 - [ ] Phase 2: `cargo test` passes in alurl crate and atom/ workspace
 - [ ] Phase 2: Existing URI test vectors from `crates/atom/src/uri/tests/` adapted and passing
 - [ ] Phase 3: `cargo check`, `cargo doc --no-deps`, `cargo test` clean in atom/ workspace
 - [ ] Phase 3: Trait signatures compile without coz-rs/gix/semver/tokio in atom-core deps
+- [ ] Phase 3: `Manifest` has exactly `label` + `version` (spec `[manifest-minimal]`)
 - [ ] Phase 4: `cargo test` with git integration tests (tmpdir repos)
 - [ ] All phases: `cargo clippy` clean, no warnings
 - [ ] All phases: `cargo doc --no-deps` clean per-crate
+- [ ] All phases: spec constraint coverage — 15 `agent-check` constraints verified via type system
+
+### Formal Verification (complete)
+
+- [x] TLA+ temporal safety — 8 invariants, 2 configs (fork + distinct-anchor) — VERIFIED
+- [x] Alloy structural assertions — 5 assertions, scope 4 — VERIFIED
+- [x] Fork scenario satisfiable (Alloy SAT) — VERIFIED
 
 ## Technical Debt
 
@@ -303,6 +337,9 @@ _Not yet complete._
 ## References
 
 - Charter: [decentralized-publishing-stack](../charters/decentralized-publishing-stack.md)
+- Spec: [atom-transactions](../specs/atom-transactions.md) (40 constraints, BCP 14)
+- TLA+: [AtomTransactions](../specs/tla/AtomTransactions.tla) (temporal safety)
+- Alloy: [atom_structure](../specs/alloy/atom_structure.als) (structural assertions)
 - Sketch: [atom-protocol-plan](../../.sketches/2026-02-15-atom-protocol-plan.md)
 - Sketch: [formal-layer-model](../../.sketches/2026-02-15-formal-layer-model.md) (Coz payload design, crate responsibilities)
 - Sketch: [ion-atom-restructuring](../../.sketches/2026-02-07-ion-atom-restructuring.md) (trait design history, dep budgets, gap analysis)

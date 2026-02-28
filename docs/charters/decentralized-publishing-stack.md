@@ -72,12 +72,13 @@ that subsequent workstreams populate.
 
 1. **Formal Layer Model** — Formalize the trait boundaries between atom, eos, and ion using the SDMA toolkit before implementation begins. Surface structural issues that prose descriptions miss.
    - Spawns: `/model` cycle → `docs/models/publishing-stack-layers.md`
-   - Status: Not Started
+   - Status: **Complete**
 
 2. **Atom Protocol Library** — Establish the protocol foundation: identity primitives (atom-id), URI parsing (atom-uri), trait surface (atom-core), and the git bridge (atom-git). Everything else depends on this.
    - Spawns: `.sketches/atom-protocol.md`
    - Draws from: existing plan Phases 2–5, informed by the formal model
-   - Status: Not Started
+   - Specification: `docs/specs/atom-transactions.md` (40 constraints, 13 machine-verified)
+   - Status: **In Progress** — specification complete, implementation pending
 
 3. **Eos Runtime Engine** — Extract the evaluation/build/store layer: `BuildEngine` plan/apply, `ArtifactStore`, and snix integration. Decouples the build executor from the user frontend.
    - Spawns: `.sketches/eos-runtime.md`
@@ -115,7 +116,7 @@ sketch→plan cycles rather than executing stale assumptions.
 
 - **Full eka feature parity.** This is a port of proven concepts, not a 1:1 reimplementation. Some eka features may not survive the restructuring.
 
-- **Atom Protocol SPEC finalization.** Spec sections 4–9 remain stubs. Implementation proceeds against what is specified and designs trait boundaries that absorb future additions.
+- **Backend-agnostic transport specification.** The atom transaction protocol is backend-agnostic by design — traits define the extension surface. Specifying abstract transport or storage semantics beyond the trait signatures is deferred until a non-git backend surfaces concrete requirements.
 
 - **Cross-ecosystem adapters.** Concrete adapters for Cargo, npm, or other ecosystems arrive when concrete ecosystems want atom. The `Manifest` and `VersionScheme` traits provide the extension surface.
 
@@ -153,4 +154,9 @@ strategically:
 
 ### Downstream Artifacts
 
-_This section grows as workstreams activate._
+- Model: [publishing-stack-layers](../models/publishing-stack-layers.md) (olog + coalgebras + session types)
+- Spec: [atom-transactions](../specs/atom-transactions.md) (40 constraints, BCP 14)
+- TLA+: [AtomTransactions](../specs/tla/AtomTransactions.tla) (temporal safety, 2 configs)
+- Alloy: [atom_structure](../specs/alloy/atom_structure.als) (structural assertions, scope 4)
+- Sketch: [atom-protocol-plan](../../.sketches/2026-02-15-atom-protocol-plan.md)
+- Plan: [atom-protocol-library](../plans/atom-protocol-library.md)
