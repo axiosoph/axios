@@ -3,7 +3,7 @@
 use std::ffi::OsStr;
 use std::str::FromStr;
 
-use crate::{Anchor, AtomId, Error, Identifier, Label, NAME_MAX, Tag};
+use crate::{Anchor, AtomId, Error, Identifier, Label, NAME_MAX, RawVersion, Tag};
 
 // ============================================================================
 // Label
@@ -345,4 +345,54 @@ fn atom_id_serde_roundtrip() {
     let json = serde_json::to_string(&id).unwrap();
     let back: AtomId = serde_json::from_str(&json).unwrap();
     assert_eq!(back, id);
+}
+
+// ============================================================================
+// RawVersion
+// ============================================================================
+
+#[test]
+fn rawversion_any_string() {
+    // Empty, unicode, spaces — all valid
+    for s in ["", "1.0.0", "v2.3-rc1", "日本語", "with spaces", "🎉"] {
+        let v = RawVersion::new(s.to_owned());
+        assert_eq!(v.as_str(), s);
+    }
+}
+
+#[test]
+fn rawversion_display() {
+    let v = RawVersion::new("1.2.3".into());
+    assert_eq!(v.to_string(), "1.2.3");
+}
+
+#[test]
+fn rawversion_from_str() {
+    let v: RawVersion = "1.0.0".parse().unwrap();
+    assert_eq!(v.as_str(), "1.0.0");
+}
+
+#[test]
+fn rawversion_equality() {
+    let a = RawVersion::new("1.0".into());
+    let b = RawVersion::new("1.0".into());
+    let c = RawVersion::new("2.0".into());
+    assert_eq!(a, b);
+    assert_ne!(a, c);
+}
+
+#[test]
+fn rawversion_ordering() {
+    let a = RawVersion::new("1.0".into());
+    let b = RawVersion::new("2.0".into());
+    assert!(a < b, "lexicographic ordering via derived Ord");
+}
+
+#[test]
+fn rawversion_serde_roundtrip() {
+    let v = RawVersion::new("3.1.4-beta".into());
+    let json = serde_json::to_string(&v).unwrap();
+    assert_eq!(json, "\"3.1.4-beta\"");
+    let back: RawVersion = serde_json::from_str(&json).unwrap();
+    assert_eq!(back, v);
 }

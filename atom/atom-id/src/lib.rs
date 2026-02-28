@@ -210,6 +210,79 @@ impl<'de> Deserialize<'de> for AtomId {
 }
 
 // ============================================================================
+// RawVersion
+// ============================================================================
+
+/// An unparsed version string.
+///
+/// `RawVersion` is deliberately opaque — it does **not** implement `Deref`,
+/// `AsRef<str>`, or `Into<String>`. Access the inner value only via
+/// [`as_str()`](RawVersion::as_str). This ensures that version strings
+/// cannot be silently used as plain strings; parsing is always explicit
+/// through a [`VersionScheme`].
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct RawVersion(String);
+
+impl RawVersion {
+    /// Wrap a string as an unparsed version.
+    ///
+    /// No validation is performed — any string is a valid raw version.
+    /// Interpretation is deferred to a [`VersionScheme`] implementor.
+    pub fn new(s: String) -> Self {
+        Self(s)
+    }
+
+    /// The raw version string.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for RawVersion {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl FromStr for RawVersion {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self(s.to_owned()))
+    }
+}
+
+// ============================================================================
+// VersionScheme
+// ============================================================================
+
+/// Abstract version comparison scheme.
+///
+/// Concrete version formats (semver, calver, etc.) implement this trait
+/// to provide parsing and comparison for [`RawVersion`] strings. The
+/// `atom-id` crate defines no concrete schemes — those live in
+/// ecosystem-specific crates (e.g., `ion-manifest` for semver).
+pub trait VersionScheme {
+    /// A parsed, comparable version value.
+    type Version: fmt::Display + Ord;
+
+    /// A version constraint (e.g., `>=1.0, <2.0`).
+    type Requirement;
+
+    /// Errors produced during parsing.
+    type Error: std::error::Error;
+
+    /// Parse a raw version string into a structured version.
+    fn parse_version(&self, raw: &RawVersion) -> Result<Self::Version, Self::Error>;
+
+    /// Parse a version requirement string.
+    fn parse_requirement(&self, raw: &str) -> Result<Self::Requirement, Self::Error>;
+
+    /// Check whether a version satisfies a requirement.
+    fn matches(&self, version: &Self::Version, req: &Self::Requirement) -> bool;
+}
+
+// ============================================================================
 // Errors
 // ============================================================================
 
