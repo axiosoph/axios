@@ -314,8 +314,10 @@ protocol MUST NOT impose any interpretation on its contents — it is
 an opaque value whose meaning is determined by the identity framework
 in use. Known targets include Coz key thumbprints (`tmb`) and Cyphr
 Principal Roots (`PR`), but any identity system producing a stable
-cryptographic digest MAY be used.
-`VERIFIED: unverified`
+cryptographic digest MAY be used. The `owner` field is an abstract
+identifier, not tied to a specific implementation — any identity
+framework MAY be used.
+`VERIFIED: machine (Alloy)`
 
 **[owner-compatibility]**: For identity frameworks where a single-key
 identity degenerates to a key thumbprint (e.g., Cyphr Level 1:
@@ -400,7 +402,7 @@ the publisher.
 **[manifest-minimal]**: The `Manifest` trait MUST require exactly
 `label` and `version`. All other metadata is ecosystem-specific
 and MUST NOT be required by the protocol.
-`VERIFIED: unverified`
+`VERIFIED: machine (Alloy)`
 
 **[backend-bit-perfect]**: A backend MUST NOT alter the content
 of stored `CozMessage`s. Signed messages are immutable binary
@@ -602,50 +604,54 @@ content or the complete source history:
 
 **TLA+ model**: `docs/specs/tla/AtomTransactions.tla` verified by TLC
 across two configurations (fork scenario: 31,593 states; distinct-anchor:
-27,817 states). All safety-critical invariants pass.
+27,817 states). All safety-critical temporal invariants pass.
 
-| Constraint                 | Method        | Result   | Detail                                   |
-| :------------------------- | :------------ | :------- | :--------------------------------------- |
-| identity-content-addressed | agent-check   | pending  | Protocol rule: hash(anchor, label)       |
-| identity-stability         | machine (TLC) | **pass** | TLA+ `IdentityStability` — 2 configs     |
-| owner-abstract             | agent-check   | pending  | Opaque Vec<u8>, protocol-agnostic        |
-| owner-compatibility        | agent-check   | pending  | Identity framework upgrade safe          |
-| symmetric-payloads         | agent-check   | pending  | Structural: both carry anchor + label    |
-| publish-chains-claim       | machine (TLC) | **pass** | TLA+ `PublishChainsClaim` — 2 configs    |
-| claim-typ                  | agent-check   | pending  | String literal check                     |
-| publish-typ                | agent-check   | pending  | String literal check                     |
-| sig-over-pay               | agent-check   | pending  | Inherited from Coz v1.0                  |
-| dig-is-atom-snapshot       | agent-check   | pending  | Reproducible snapshot hash               |
-| src-is-source-revision     | agent-check   | pending  | Source provenance hash                   |
-| path-is-subdir             | agent-check   | pending  | Source content tree navigation           |
-| rawversion-opaque          | agent-check   | pending  | Newtype enforcement                      |
-| claim-key-required         | agent-check   | pending  | CozMessage structure                     |
-| publish-key-optional       | agent-check   | pending  | CozMessage structure                     |
-| crypto-layer-separation    | agent-check   | pending  | atom-core has no crypto dep              |
-| crypto-via-coz             | agent-check   | pending  | Coz specification semantics              |
-| key-management-deferred    | agent-check   | pending  | Architectural decision                   |
-| claim-transition           | agent-check   | pending  | Coz signing flow                         |
-| publish-transition         | agent-check   | pending  | Coz signing flow                         |
-| session-ordering           | machine (TLC) | **pass** | TLA+ `SessionOrdering` — 2 configs       |
-| no-unclaimed-publish       | machine (TLC) | **pass** | TLA+ `NoUnclaimedPublish` — 2 configs    |
-| no-duplicate-version       | machine (TLC) | **pass** | TLA+ `NoDuplicateVersion` — 2 configs    |
-| no-cross-layer-crypto      | agent-check   | pending  | Cargo.toml audit                         |
-| no-backdated-publish       | machine (TLC) | **pass** | TLA+ `NoBackdatedPublish` — 2 configs    |
-| verification-local         | agent-check   | pending  | Pipeline steps 1-8                       |
-| verification-provenance    | agent-check   | pending  | Pipeline steps 9-12                      |
-| atom-snapshot-reproducible | agent-check   | pending  | Deterministic metadata                   |
-| ingest-preserves-identity  | agent-check   | pending  | Model §2.3 ⊇ condition                   |
-| backend-agnostic-protocol  | agent-check   | pending  | Type system enforcement                  |
-| anchor-immutable           | agent-check   | pending  | Anchor property: permanent               |
-| anchor-content-addressed   | agent-check   | pending  | Anchor property: digest from content     |
-| anchor-discoverable        | agent-check   | pending  | Anchor property: independently derivable |
-| manifest-minimal           | agent-check   | pending  | Trait requires only label + version      |
-| backend-bit-perfect        | agent-check   | pending  | CozMessage preservation                  |
-| atomid-per-source-unique   | machine (TLC) | **pass** | TLA+ `AtomIdPerSourceUnique` — 2 configs |
-| publish-claim-coherence    | machine (TLC) | **pass** | TLA+ `PublishClaimCoherence` — 2 configs |
-| atom-detached              | agent-check   | pending  | Self-contained subtree, no history       |
-| uri-not-metadata           | agent-check   | pending  | URIs excluded from signed state          |
-| trait-signature-pure       | agent-check   | pending  | No backend types in protocol signatures  |
+**Alloy model**: `docs/specs/alloy/atom_structure.als` verified by Alloy
+Analyzer 6.2.0 at scope 4. All 5 structural assertions pass (UNSAT).
+Fork scenario confirmed satisfiable (SAT).
+
+| Constraint                 | Method          | Result   | Detail                                   |
+| :------------------------- | :-------------- | :------- | :--------------------------------------- |
+| identity-content-addressed | machine (Alloy) | **pass** | Alloy `identity_content_addressed`       |
+| identity-stability         | machine (TLC)   | **pass** | TLA+ `IdentityStability` — 2 configs     |
+| owner-abstract             | machine (Alloy) | **pass** | Alloy `ownership_independence`           |
+| owner-compatibility        | machine (Alloy) | **pass** | Alloy `ownership_independence`           |
+| symmetric-payloads         | agent-check     | pending  | Structural: both carry anchor + label    |
+| publish-chains-claim       | machine (TLC)   | **pass** | TLA+ `PublishChainsClaim` — 2 configs    |
+| claim-typ                  | agent-check     | pending  | String literal check                     |
+| publish-typ                | agent-check     | pending  | String literal check                     |
+| sig-over-pay               | agent-check     | pending  | Inherited from Coz v1.0                  |
+| dig-is-atom-snapshot       | agent-check     | pending  | Reproducible snapshot hash               |
+| src-is-source-revision     | agent-check     | pending  | Source provenance hash                   |
+| path-is-subdir             | agent-check     | pending  | Source content tree navigation           |
+| rawversion-opaque          | agent-check     | pending  | Newtype enforcement                      |
+| claim-key-required         | agent-check     | pending  | CozMessage structure                     |
+| publish-key-optional       | agent-check     | pending  | CozMessage structure                     |
+| crypto-layer-separation    | agent-check     | pending  | atom-core has no crypto dep              |
+| crypto-via-coz             | agent-check     | pending  | Coz specification semantics              |
+| key-management-deferred    | agent-check     | pending  | Architectural decision                   |
+| claim-transition           | agent-check     | pending  | Coz signing flow                         |
+| publish-transition         | agent-check     | pending  | Coz signing flow                         |
+| session-ordering           | machine (TLC)   | **pass** | TLA+ `SessionOrdering` — 2 configs       |
+| no-unclaimed-publish       | machine (TLC)   | **pass** | TLA+ `NoUnclaimedPublish` — 2 configs    |
+| no-duplicate-version       | machine (TLC)   | **pass** | TLA+ `NoDuplicateVersion` — 2 configs    |
+| no-cross-layer-crypto      | agent-check     | pending  | Cargo.toml audit                         |
+| no-backdated-publish       | machine (TLC)   | **pass** | TLA+ `NoBackdatedPublish` — 2 configs    |
+| verification-local         | agent-check     | pending  | Pipeline steps 1-8                       |
+| verification-provenance    | agent-check     | pending  | Pipeline steps 9-12                      |
+| atom-snapshot-reproducible | agent-check     | pending  | Deterministic metadata                   |
+| ingest-preserves-identity  | machine (Alloy) | **pass** | Alloy `ingest_preserves_identity`        |
+| backend-agnostic-protocol  | agent-check     | pending  | Type system enforcement                  |
+| anchor-immutable           | agent-check     | pending  | Anchor property: permanent               |
+| anchor-content-addressed   | agent-check     | pending  | Anchor property: digest from content     |
+| anchor-discoverable        | agent-check     | pending  | Anchor property: independently derivable |
+| manifest-minimal           | machine (Alloy) | **pass** | Alloy `manifest_properties` fact         |
+| backend-bit-perfect        | agent-check     | pending  | CozMessage preservation                  |
+| atomid-per-source-unique   | machine (TLC)   | **pass** | TLA+ `AtomIdPerSourceUnique` — 2 configs |
+| publish-claim-coherence    | machine (TLC)   | **pass** | TLA+ `PublishClaimCoherence` — 2 configs |
+| atom-detached              | agent-check     | pending  | Self-contained subtree, no history       |
+| uri-not-metadata           | agent-check     | pending  | URIs excluded from signed state          |
+| trait-signature-pure       | agent-check     | pending  | No backend types in protocol signatures  |
 
 ## Implications
 
