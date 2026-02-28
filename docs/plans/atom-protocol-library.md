@@ -196,6 +196,15 @@ _None remaining. All resolved — see Decisions table._
      - `TYP_CLAIM` and `TYP_PUBLISH` constants (bare paths, no domain)
    - [ ] **Verification function** — takes `(pay_json, sig, pub_key, alg)`, returns `Result<AtomId>`
          Key bytes are provided by the caller. Key storage/discovery is Cyphrpass's concern.
+   - **Spec constraints verified at Phase 1 completion:**
+     - rustc: `symmetric-payloads`, `claim-typ`, `publish-typ`, `path-is-subdir`,
+       `rawversion-opaque`, `claim-key-required`, `publish-key-optional`, `uri-not-metadata`
+     - cargo-dep: `crypto-via-coz` (atom-id depends on coz-rs)
+     - unit-test: `sig-over-pay`, `claim-transition`, `publish-transition`
+   - **Formal model informs implementation:**
+     - TLA+ `PublishChainsClaim`: publish must reference claim czd — enforces `claim` field
+     - TLA+ `SessionOrdering`: claim must precede publish — enforces data-flow API
+     - TLA+ `AtomIdPerSourceUnique`: czd includes `now` — enforces timestamp in claim
    - Verify: `cargo test` in atom/ workspace
 
 2. **Phase 2: alurl + atom-uri** — URL aliasing and atom URI grammar
@@ -256,6 +265,13 @@ _None remaining. All resolved — see Decisions table._
    - [ ] serde behind feature flag for re-exported types
    - [ ] Crate-level documentation explaining the coalgebra-trait mapping
    - Deps: atom-id, atom-uri. No coz-rs, no gix, no semver, no tokio.
+   - **Spec constraints verified at Phase 3 completion:**
+     - rustc: `backend-agnostic-protocol`, `trait-signature-pure`
+     - cargo-dep: `crypto-layer-separation`, `no-cross-layer-crypto`, `key-management-deferred`
+   - **Formal model informs implementation:**
+     - Alloy `ingest_preserves_identity`: store ⊇ source after ingest — shapes `AtomStore.ingest` contract
+     - Alloy `anchor_set_coherence`: shared anchor → shared atom-set — shapes `AtomSource.discover` semantics
+     - Alloy `manifest_properties`: label + version only — shapes `Manifest` trait
    - Verify: `cargo check`, `cargo doc --no-deps` clean, `cargo test`
 
 4. **Phase 4: atom-git** — Git backend
@@ -289,6 +305,15 @@ _None remaining. All resolved — see Decisions table._
    - [ ] **Tests**: integration tests exercising trait contracts
          (ideally against in-memory or tmpdir repos, not network)
    - Deps: atom-core, atom-id, gix, gix-protocol, coz-rs, tempfile
+   - **Spec constraints verified at Phase 4 completion:**
+     - unit-test: `dig-is-atom-snapshot`, `atom-snapshot-reproducible`
+     - integration-test: `src-is-source-revision`, `verification-local`,
+       `verification-provenance`, `anchor-immutable`, `anchor-content-addressed`,
+       `anchor-discoverable`, `backend-bit-perfect`, `atom-detached`
+   - **Formal model informs implementation:**
+     - TLA+ `NoDuplicateVersion`: reject duplicate version publish — shapes `GitRegistry.publish` guard
+     - TLA+ `NoBackdatedPublish`: version ordering — shapes publish validation
+     - TLA+ `NoUnclaimedPublish`: publish requires prior claim — shapes ref validation
    - Verify: `cargo test` in atom/ workspace
 
 ## Verification
