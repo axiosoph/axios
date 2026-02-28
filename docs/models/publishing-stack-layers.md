@@ -97,13 +97,14 @@ coalgebras via projection, so the current model remains valid.
 | Object   | Description                                               | Layer |
 | :------- | :-------------------------------------------------------- | :---- |
 | Atom     | Fundamental unit of publishing                            | L1    |
-| Atom-id  | Content-addressed digest: czd(anchor, label)              | L1    |
+| Atom-id  | Content-addressed digest: hash(anchor, label)             | L1    |
 | Label    | Human-readable name                                       | L1    |
-| Anchor   | Genesis commit hash establishing atom-set identity        | L1    |
+| Anchor   | Cryptographic commitment establishing atom-set identity   | L1    |
+| Owner    | Opaque identity digest (e.g., Coz tmb, Cyphr PR)          | L1    |
 | Atom-set | Collection of atoms sharing a common anchor               | L1    |
 | Version  | Abstract version (via VersionScheme — ecosystem-agnostic) | L1    |
 | Revision | A specific commit in source history                       | L1    |
-| Manifest | Metadata: label, version, deps, composer config           | L1    |
+| Manifest | Metadata: label + version (minimal trait surface)         | L1    |
 | Plan     | Engine-specific build recipe (associated type)            | L2    |
 | Output   | Engine-specific build result (associated type)            | L2    |
 | Artifact | Content-addressed blob in artifact store                  | L2    |
@@ -117,6 +118,7 @@ has_label:     Atom      → Label       (each atom has exactly one label)
 belongs_to:    Atom      → Atom-set    (each atom belongs to one set)
 identified_by: Atom-set  → Anchor      (each set has exactly one anchor)
 computed_from: Atom-id   → (Anchor × Label)
+claimed_by:    Atom      → Owner       (ownership via signed claim)
 pins:          Revision  → Version     (each revision pins one version)
 described_by:  Atom      → Manifest    (at a given version)
 derives:       Revision  → Plan        (given a build engine)
@@ -137,6 +139,16 @@ has_label) = has_id` commutes. Atom-id is computed from (anchor,
    label), neither of which changes across versions. _Formal statement
    that publishing new versions does not alter atom identity._
 
+3. **Ownership independence:** `claimed_by` is independent of `has_id`.
+   Ownership can change (claim revocation + reclaim) without altering
+   the atom-id. _Formal statement that identity and ownership are
+   separate concerns._
+
+4. **Verification chain:** Given a publish CozMessage referencing a
+   claim czd, `claim.anchor × claim.label → Atom-id` and
+   `publish.dig → Atom-commit → Tree` commute with verification.
+   _Formal statement that local verification is sufficient._
+
 ### 2. Coalgebras — Behavioral Observation
 
 Each trait defines a coalgebra c: X → F(X) where X is the state space
@@ -145,7 +157,7 @@ Each trait defines a coalgebra c: X → F(X) where X is the state space
 #### 2.1. AtomSource (atom-core, L1)
 
 ```
-F_source(S) = (AtomId → Option<AtomEntry>)    -- resolve
+F_source(S) = (AtomId → Option<AtomMeta>)      -- resolve (metadata, not entry)
             × (Query → Set<AtomId>)            -- discover
 ```
 
@@ -156,7 +168,8 @@ implementations containing the same atoms are interchangeable.
 
 ```
 F_registry(R) = F_source(R)                   -- inherits AtomSource
-              × (ClaimReq → Result<AtomId>)    -- claim
+              × (ClaimReq → Result<Czd>)       -- claim (AtomId is pre-computed;
+                                               --        returns claim czd)
               × (PublishReq → Result<()>)      -- publish
 ```
 
@@ -246,11 +259,15 @@ Convention: `!T` = send, `?T` = receive, `⊕` = internal choice
 #### 3.1. PublishSession (client → AtomRegistry)
 
 ```
-!ClaimReq . ?Result<AtomId> . !PublishReq . ?Result<()> . end
+!ClaimReq . ?Result<Czd> . !PublishReq . ?Result<()> . end
 ```
 
-Claim MUST succeed before publish. The session type enforces this —
-the client cannot send `PublishReq` without first receiving `AtomId`.
+AtomId = hash(anchor, label) is pre-computed by the client.
+ClaimReq carries (anchor, label, owner, key). On success, returns
+the claim's czd. PublishReq carries (anchor, label, claim_czd,
+dig, src, path, version). Claim MUST succeed before publish —
+the client cannot send `PublishReq` without first receiving the
+claim czd to embed in the publish payload.
 
 #### 3.2. BuildSession (ion → BuildEngine)
 
