@@ -3,7 +3,7 @@
 use std::ffi::OsStr;
 use std::str::FromStr;
 
-use crate::{AtomId, Error, Identifier, Label, NAME_MAX, Tag};
+use crate::{Anchor, AtomId, Error, Identifier, Label, NAME_MAX, Tag};
 
 // ============================================================================
 // Label
@@ -221,34 +221,96 @@ fn tag_serde_roundtrip() {
 }
 
 // ============================================================================
+// Anchor
+// ============================================================================
+
+#[test]
+fn anchor_display_b64ut() {
+    let anchor = Anchor::new(vec![0xAB, 0xCD, 0xEF]);
+    let s = anchor.to_string();
+    assert!(!s.contains('='), "b64ut should not contain padding");
+    assert!(!s.is_empty());
+}
+
+#[test]
+fn anchor_roundtrip() {
+    let bytes = vec![1, 2, 3, 4, 5, 6, 7, 8];
+    let anchor = Anchor::new(bytes.clone());
+    assert_eq!(anchor.as_bytes(), &bytes);
+}
+
+#[test]
+fn anchor_serde_roundtrip() {
+    let anchor = Anchor::new(vec![0xDE, 0xAD, 0xBE, 0xEF]);
+    let json = serde_json::to_string(&anchor).unwrap();
+    let back: Anchor = serde_json::from_str(&json).unwrap();
+    assert_eq!(back, anchor);
+}
+
+#[test]
+fn anchor_from_vec() {
+    let bytes = vec![1, 2, 3];
+    let anchor: Anchor = bytes.clone().into();
+    assert_eq!(anchor.as_bytes(), &bytes);
+}
+
+// ============================================================================
 // AtomId
 // ============================================================================
 
 #[test]
-fn atom_id_all_algs_roundtrip() {
-    let digest = [0xABu8; 32];
-    for (alg, name) in [
-        (crate::Alg::ES256, "ES256"),
-        (crate::Alg::ES384, "ES384"),
-        (crate::Alg::ES512, "ES512"),
-        (crate::Alg::Ed25519, "Ed25519"),
-    ] {
-        let id = AtomId::new(alg, crate::Czd::from_bytes(digest.to_vec()));
-        let s = id.to_string();
-        assert!(
-            s.starts_with(&format!("{name}.")),
-            "expected {name}. prefix"
-        );
-        let parsed: AtomId = s.parse().unwrap();
-        assert_eq!(parsed, id, "roundtrip failed for {name}");
-    }
+fn atom_id_same_inputs_same_id() {
+    let a1 = AtomId::new(Anchor::new(vec![1, 2, 3]), Label::try_from("pkg").unwrap());
+    let a2 = AtomId::new(Anchor::new(vec![1, 2, 3]), Label::try_from("pkg").unwrap());
+    assert_eq!(a1, a2, "same (anchor, label) must produce equal AtomId");
+}
+
+#[test]
+fn atom_id_different_labels() {
+    let a1 = AtomId::new(
+        Anchor::new(vec![1, 2, 3]),
+        Label::try_from("alpha").unwrap(),
+    );
+    let a2 = AtomId::new(Anchor::new(vec![1, 2, 3]), Label::try_from("beta").unwrap());
+    assert_ne!(a1, a2, "different labels must produce different AtomId");
+}
+
+#[test]
+fn atom_id_different_anchors() {
+    let a1 = AtomId::new(Anchor::new(vec![1, 2, 3]), Label::try_from("pkg").unwrap());
+    let a2 = AtomId::new(Anchor::new(vec![4, 5, 6]), Label::try_from("pkg").unwrap());
+    assert_ne!(a1, a2, "different anchors must produce different AtomId");
 }
 
 #[test]
 fn atom_id_accessors() {
-    let id = AtomId::new(crate::Alg::ES256, crate::Czd::from_bytes(vec![1, 2, 3]));
-    assert_eq!(id.alg(), crate::Alg::ES256);
-    assert_eq!(id.czd(), &crate::Czd::from_bytes(vec![1, 2, 3]));
+    let anchor = Anchor::new(vec![10, 20]);
+    let label = Label::try_from("myPkg").unwrap();
+    let id = AtomId::new(anchor.clone(), label.clone());
+    assert_eq!(id.anchor(), &anchor);
+    assert_eq!(id.label(), &label);
+}
+
+#[test]
+fn atom_id_display_format() {
+    let id = AtomId::new(
+        Anchor::new(vec![0xDE, 0xAD]),
+        Label::try_from("test").unwrap(),
+    );
+    let s = id.to_string();
+    assert!(s.contains("::"), "display must use :: delimiter");
+    assert!(s.ends_with("::test"), "display must end with ::label");
+}
+
+#[test]
+fn atom_id_roundtrip() {
+    let id = AtomId::new(
+        Anchor::new(vec![1, 2, 3, 4, 5, 6, 7, 8]),
+        Label::try_from("my-package").unwrap(),
+    );
+    let s = id.to_string();
+    let parsed: AtomId = s.parse().unwrap();
+    assert_eq!(parsed, id, "roundtrip must preserve identity");
 }
 
 #[test]
@@ -258,34 +320,29 @@ fn atom_id_empty_string() {
 
 #[test]
 fn atom_id_missing_delimiter() {
+    assert_eq!(AtomId::from_str("AQID.test"), Err(Error::InvalidFormat),);
+}
+
+#[test]
+fn atom_id_bad_anchor_encoding() {
     assert_eq!(
-        AtomId::from_str("ES256_U5XUZots"),
-        Err(Error::InvalidFormat),
+        AtomId::from_str("!!!invalid!!!::test"),
+        Err(Error::InvalidAnchor),
     );
 }
 
 #[test]
-fn atom_id_unknown_alg() {
-    assert_eq!(
-        AtomId::from_str("FAKE.U5XUZots"),
-        Err(Error::UnknownAlgorithm),
-    );
-}
-
-#[test]
-fn atom_id_bad_base64() {
-    assert_eq!(
-        AtomId::from_str("ES256.!!!invalid!!!"),
-        Err(Error::InvalidDigest),
-    );
+fn atom_id_bad_label() {
+    assert_eq!(AtomId::from_str("AQID::9invalid"), Err(Error::InvalidLabel),);
 }
 
 #[test]
 fn atom_id_serde_roundtrip() {
-    let input = "ES384.U5XUZots-WmQYcQWmsO751Xk0yeVi9XUKWQ2mGz6Aqg";
-    let id: AtomId = input.parse().unwrap();
+    let id = AtomId::new(
+        Anchor::new(vec![0xAB, 0xCD, 0xEF]),
+        Label::try_from("serde-test").unwrap(),
+    );
     let json = serde_json::to_string(&id).unwrap();
-    assert_eq!(json, format!("\"{input}\""));
     let back: AtomId = serde_json::from_str(&json).unwrap();
     assert_eq!(back, id);
 }

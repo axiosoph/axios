@@ -238,20 +238,37 @@ This principle means:
 
 ```
 TYPE  Alg         = ES256 | ES384 | ES512 | Ed25519              (coz-rs)
-TYPE  Czd         = Vec<u8>                                       (coz-rs)
+TYPE  Cad         = Vec<u8>                                       (coz-rs — canonical digest)
+TYPE  Czd         = Vec<u8>                                       (coz-rs — coz digest)
 TYPE  Tmb         = Vec<u8>                                       (coz-rs — key thumbprint)
 
 TYPE  Label       = String  { UAX #31 validated }                 (atom-id)
 TYPE  RawVersion  = String  { opaque, unparsed }                  (atom-id)
 
-TYPE  AtomId      = { alg: Alg, digest: Vec<u8> }                (atom-id)
-  where digest = hash(canonical(anchor || label))
-  -- Identity is content-addressed from anchor + label.
-  -- NOT derived from any signed message. Permanent.
+TYPE  Anchor      = Vec<u8>                                        (atom-id)
+  -- Opaque digest. Derivation is backend-specific.
+  -- See §Anchor for required properties.
+
+TYPE  AtomId      = { anchor: Anchor, label: Label }              (atom-id)
+  -- Protocol-level identity. Determined solely by the source's
+  -- anchor and the atom's label. Algorithm-free, permanent.
+  -- Two atoms with the same (anchor, label) ARE the same atom.
+  -- NOT a hash — this is the abstract identity pair.
+
+TYPE  AtomDigest  = { alg: Alg, cad: Cad }                        (atom-core)
+  where cad = canonical_hash_for_alg(
+    canonical({"anchor": <b64ut>, "label": <str>}, ["anchor", "label"]),
+    alg
+  )
+  -- Store-level multihash. A compact, self-describing digest of
+  -- the AtomId for indexing, git ref paths, and wire format.
+  -- The `alg` is chosen by the store/ingestor, NOT the protocol.
+  -- Multiple valid AtomDigests exist for the same AtomId — one
+  -- per algorithm. Display format: `alg.b64ut`.
 
 TYPE  ClaimPayload = {
         alg:    Alg,
-        anchor: Vec<u8>,
+        anchor: Anchor,
         label:  Label,
         now:    u64,
         owner:  Vec<u8>,   -- opaque identity digest
@@ -262,7 +279,7 @@ TYPE  ClaimPayload = {
 
 TYPE  PublishPayload = {
         alg:     Alg,
-        anchor:  Vec<u8>,
+        anchor:  Anchor,
         claim:   Czd,       -- czd of authorizing claim
         dig:     Vec<u8>,   -- atom snapshot hash (the published artifact)
         label:   Label,
@@ -276,10 +293,6 @@ TYPE  PublishPayload = {
   -- CozMessage MAY include `key` field (convenience for rotated keys).
 
 TYPE  CozMessage = { pay: JSON, sig: Vec<u8>, key?: PubKey }     (coz-rs)
-
-TYPE  Anchor     = Vec<u8>                                        (atom-id)
-  -- Opaque digest. Derivation is backend-specific.
-  -- See §Anchor for required properties.
 
 TYPE  Manifest   = trait {                                         (atom-core)
         fn label(&self)   -> &Label;
@@ -297,10 +310,13 @@ TYPE  VersionScheme = trait {                                      (atom-id)
 
 ### Invariants
 
-**[identity-content-addressed]**: An atom's `AtomId` MUST be derived solely
-from `hash(anchor, label)`. The `AtomId` MUST NOT depend on any key,
-signature, or signed message. Identity is permanent and content-addressed.
-`VERIFIED: unverified`
+**[identity-content-addressed]**: An atom's identity (`AtomId`) MUST be
+determined solely by the pair `(anchor, label)`. The `AtomId` MUST NOT
+depend on any key, signature, signed message, or hash algorithm. Identity
+is permanent and content-addressed. An `AtomDigest` MAY be derived from
+an `AtomId` for store indexing, but the digest is not the identity — it
+is a representation. Multiple valid digests exist for the same identity.
+`VERIFIED: machine (Alloy)`
 
 **[identity-stability]**: An atom's `AtomId` MUST NOT change across
 versions, ownership transfers, or key rotations. The `AtomId` is
@@ -328,7 +344,17 @@ framework MUST NOT alter the `AtomId`.
 
 **[symmetric-payloads]**: Both `ClaimPayload` and `PublishPayload`
 MUST carry raw `anchor` and `label` fields. A consumer MUST be able
-to re-derive the `AtomId` from either payload independently.
+to reconstruct the `AtomId` from either payload independently by
+extracting `(anchor, label)`.
+`VERIFIED: unverified`
+
+**[digest-algorithm-agile]**: An `AtomDigest` MUST be computed using
+Coz's `canonical_hash_for_alg` function with the field canon
+`["anchor", "label"]`. The input JSON MUST contain exactly these two
+fields with `anchor` encoded as b64ut and `label` as a UTF-8 string.
+The `alg` is chosen by the store or ingestor, NOT the protocol.
+Multiple valid `AtomDigest` values exist for the same `AtomId` —
+one per algorithm. No standalone hash crates are required.
 `VERIFIED: unverified`
 
 **[publish-chains-claim]**: The `claim` field in `PublishPayload` MUST
@@ -618,7 +644,7 @@ Fork scenario confirmed satisfiable (SAT).
 - `unit-test` — deterministic test in isolation
 - `integration-test` — end-to-end test requiring git backend
 
-**Coverage:** 13 formal (TLC/Alloy), 11 rustc, 4 cargo-dep, 5 unit-test, 8 integration-test = **41 total, 0 agent-check**.
+**Coverage:** 13 formal (TLC/Alloy), 11 rustc, 4 cargo-dep, 6 unit-test, 8 integration-test = **42 total, 0 agent-check**.
 
 | Constraint                 | Method           | Result   | Detail                                   | Phase |
 | :------------------------- | :--------------- | :------- | :--------------------------------------- | :---- |
@@ -627,6 +653,7 @@ Fork scenario confirmed satisfiable (SAT).
 | owner-abstract             | machine (Alloy)  | **pass** | Alloy `ownership_independence`           | —     |
 | owner-compatibility        | machine (Alloy)  | **pass** | Alloy `ownership_independence`           | —     |
 | symmetric-payloads         | rustc            | pending  | Both structs have `anchor` + `label`     | 1     |
+| digest-algorithm-agile     | unit-test        | pending  | Cad via canonical_hash_for_alg           | 3     |
 | publish-chains-claim       | machine (TLC)    | **pass** | TLA+ `PublishChainsClaim` — 2 configs    | —     |
 | claim-typ                  | rustc            | pending  | `TYP_CLAIM` const = `"atom/claim"`       | 1     |
 | publish-typ                | rustc            | pending  | `TYP_PUBLISH` const = `"atom/publish"`   | 1     |

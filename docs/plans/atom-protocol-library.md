@@ -167,10 +167,14 @@ _None remaining. All resolved — see Decisions table._
 
 1. **Phase 1: atom-id** — Identity primitives and crypto
    - [x] `Label`, `Tag`, `Identifier` with UAX #31 validation
-   - [x] `AtomId` as `czd(alg, digest)` — coz-native identity
-   - [x] Dot delimiter for `alg.b64ut` format
-   - [x] Display/FromStr implementations
-   - [x] 31 tests, macro dedup, snapshot tests
+   - [x] `AtomId` as `(Anchor, Label)` — protocol identity pair (spec revision 2026-02-28)
+         Replaced `AtomId { alg, czd }` with `AtomId { anchor, label }`.
+         Identity is the abstract pair, algorithm-free and permanent.
+         `AtomDigest { alg, cad }` (store-level multihash) deferred to Phase 3.
+   - [x] `Anchor` newtype — opaque `Vec<u8>` with b64ut Display/Serde
+   - [x] `::` delimiter for `anchor_b64ut::label` format
+   - [x] Display/FromStr/Serde implementations
+   - [x] 39 tests (naming, anchor, atom-id structural equality)
    - [ ] ≤ 5 non-std deps verified (blocked on serde feature-gating)
    - [ ] `RawVersion` newtype — unparsed version string
          Marks a string as an unresolved version needing implementor parsing.
@@ -260,14 +264,22 @@ _None remaining. All resolved — see Decisions table._
      - `version() → &RawVersion` — unparsed, implementor resolves via VersionScheme
      - No `dependencies()`, no `composer()` — these are ecosystem-specific concerns.
      - No serde, no TOML. Concrete formats (ion.toml, Cargo.toml, etc.) implement this.
+   - [ ] **`AtomDigest` type** — store-level multihash (spec §Types)
+     - `AtomDigest { alg: Alg, cad: Cad }` — compact, self-describing
+     - `compute(id: &AtomId, alg: Alg) -> AtomDigest` via `canonical_hash_for_alg`
+     - Display as `alg.b64ut`, used for git ref paths and store keys
+     - Multiple valid digests per AtomId (one per algorithm)
+     - **Debt**: verify `AtomId`'s derived `Hash` impl is consistent with
+       `AtomDigest.compute()` (structural hash vs content hash)
    - [ ] **Error taxonomy** — per-trait error types via associated `type Error`
    - [ ] Re-export atom-id and atom-uri public types
    - [ ] serde behind feature flag for re-exported types
    - [ ] Crate-level documentation explaining the coalgebra-trait mapping
-   - Deps: atom-id, atom-uri. No coz-rs, no gix, no semver, no tokio.
+   - Deps: atom-id, atom-uri, coz-rs (for Cad/canonical_hash_for_alg). No gix, no semver, no tokio.
    - **Spec constraints verified at Phase 3 completion:**
      - rustc: `backend-agnostic-protocol`, `trait-signature-pure`
      - cargo-dep: `crypto-layer-separation`, `no-cross-layer-crypto`, `key-management-deferred`
+     - unit-test: `digest-algorithm-agile`
    - **Formal model informs implementation:**
      - Alloy `ingest_preserves_identity`: store ⊇ source after ingest — shapes `AtomStore.ingest` contract
      - Alloy `anchor_set_coherence`: shared anchor → shared atom-set — shapes `AtomSource.discover` semantics
