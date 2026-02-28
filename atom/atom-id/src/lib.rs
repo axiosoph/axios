@@ -38,17 +38,32 @@
 #![forbid(unsafe_code)]
 
 mod name;
+mod serde_alg;
+mod serde_b64;
 
 use std::fmt;
 use std::str::FromStr;
 
-pub use coz_rs::{Alg, Cad, Czd};
+pub use coz_rs::{Alg, Cad, Czd, Thumbprint};
 pub use name::{Identifier, Label, Name, Tag};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// Maximum byte length for validated name types.
 pub const NAME_MAX: usize = 128;
+
+/// Transaction type for atom claims.
+///
+/// Spec constraint: `[claim-typ]`.
+pub const TYP_CLAIM: &str = "atom/claim";
+
+/// Transaction type for atom version publishes.
+///
+/// Spec constraint: `[publish-typ]`.
+pub const TYP_PUBLISH: &str = "atom/publish";
+
+/// Spec shorthand for [`Thumbprint`] (Coz key thumbprint).
+pub type Tmb = Thumbprint;
 
 // ============================================================================
 // Anchor
@@ -206,6 +221,132 @@ impl<'de> Deserialize<'de> for AtomId {
     {
         let s = String::deserialize(deserializer)?;
         s.parse().map_err(serde::de::Error::custom)
+    }
+}
+
+// ============================================================================
+// ClaimPayload
+// ============================================================================
+
+/// Payload for an `atom/claim` transaction.
+///
+/// Claims establish atom identity by binding an [`Anchor`] and [`Label`]
+/// to an owner. The resulting signed Coz message becomes the atom's
+/// identity claim.
+///
+/// Spec constraints: `[claim-typ]`, `[symmetric-payloads]`, `[owner-abstract]`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ClaimPayload {
+    /// The signing algorithm.
+    #[serde(with = "serde_alg")]
+    pub alg: Alg,
+    /// The atom-set anchor.
+    pub anchor: Anchor,
+    /// The atom label.
+    pub label: Label,
+    /// Timestamp (seconds since Unix epoch) for fork disambiguation.
+    pub now: u64,
+    /// Opaque identity digest of the owner (e.g., Coz thumbprint or Cyphr PR).
+    ///
+    /// Spec constraint: `[owner-abstract]`.
+    #[serde(with = "serde_b64")]
+    pub owner: Vec<u8>,
+    /// Coz key thumbprint of the signing key.
+    pub tmb: Thumbprint,
+    /// Transaction type — always [`TYP_CLAIM`].
+    pub typ: String,
+}
+
+impl ClaimPayload {
+    /// Construct a new claim payload.
+    ///
+    /// Takes an [`AtomId`] to ensure that the anchor and label come from
+    /// a validated identity pair. Sets `typ` to [`TYP_CLAIM`] automatically.
+    pub fn new(alg: Alg, id: AtomId, now: u64, owner: Vec<u8>, tmb: Thumbprint) -> Self {
+        Self {
+            alg,
+            anchor: id.anchor,
+            label: id.label,
+            now,
+            owner,
+            tmb,
+            typ: TYP_CLAIM.to_owned(),
+        }
+    }
+}
+
+// ============================================================================
+// PublishPayload
+// ============================================================================
+
+/// Payload for an `atom/publish` transaction.
+///
+/// Publishes bind a version of an atom to a content snapshot, chaining
+/// back to the authorizing claim via the `claim` field.
+///
+/// Spec constraints: `[publish-typ]`, `[symmetric-payloads]`,
+/// `[publish-chains-claim]`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PublishPayload {
+    /// The signing algorithm.
+    #[serde(with = "serde_alg")]
+    pub alg: Alg,
+    /// The atom-set anchor.
+    pub anchor: Anchor,
+    /// The [`Czd`] of the authorizing claim.
+    ///
+    /// Spec constraint: `[publish-chains-claim]`.
+    pub claim: Czd,
+    /// Atom snapshot hash (the published artifact).
+    #[serde(with = "serde_b64")]
+    pub dig: Vec<u8>,
+    /// The atom label.
+    pub label: Label,
+    /// Timestamp (seconds since Unix epoch).
+    pub now: u64,
+    /// Subdirectory path in source content tree.
+    pub path: String,
+    /// Source revision hash (provenance).
+    #[serde(with = "serde_b64")]
+    pub src: Vec<u8>,
+    /// Coz key thumbprint of the signing key.
+    pub tmb: Thumbprint,
+    /// The atom version (unparsed).
+    pub version: RawVersion,
+    /// Transaction type — always [`TYP_PUBLISH`].
+    pub typ: String,
+}
+
+impl PublishPayload {
+    /// Construct a new publish payload.
+    ///
+    /// Takes an [`AtomId`] to ensure that the anchor and label come from
+    /// a validated identity pair. Sets `typ` to [`TYP_PUBLISH`] automatically.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        alg: Alg,
+        id: AtomId,
+        claim: Czd,
+        dig: Vec<u8>,
+        now: u64,
+        path: String,
+        src: Vec<u8>,
+        tmb: Thumbprint,
+        version: RawVersion,
+    ) -> Self {
+        Self {
+            alg,
+            anchor: id.anchor,
+            claim,
+            dig,
+            label: id.label,
+            now,
+            path,
+            src,
+            tmb,
+            version,
+            typ: TYP_PUBLISH.to_owned(),
+        }
     }
 }
 

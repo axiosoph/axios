@@ -396,3 +396,144 @@ fn rawversion_serde_roundtrip() {
     let back: RawVersion = serde_json::from_str(&json).unwrap();
     assert_eq!(back, v);
 }
+
+// ============================================================================
+// ClaimPayload
+// ============================================================================
+
+fn test_anchor() -> Anchor {
+    Anchor::new(vec![1, 2, 3, 4])
+}
+
+fn test_label() -> Label {
+    Label::try_from("my-pkg").unwrap()
+}
+
+fn test_id() -> AtomId {
+    AtomId::new(test_anchor(), test_label())
+}
+
+fn test_tmb() -> crate::Thumbprint {
+    crate::Thumbprint::from_bytes(vec![10, 20, 30])
+}
+
+#[test]
+fn claim_payload_typ_constant() {
+    let claim = crate::ClaimPayload::new(crate::Alg::ES256, test_id(), 1000, vec![99], test_tmb());
+    assert_eq!(claim.typ, crate::TYP_CLAIM);
+    assert_eq!(claim.typ, "atom/claim");
+}
+
+#[test]
+fn publish_payload_typ_constant() {
+    let publish = crate::PublishPayload::new(
+        crate::Alg::ES256,
+        test_id(),
+        crate::Czd::from_bytes(vec![5, 6]),
+        vec![7, 8],
+        2000,
+        "src/lib".into(),
+        vec![9, 10],
+        test_tmb(),
+        crate::RawVersion::new("1.0.0".into()),
+    );
+    assert_eq!(publish.typ, crate::TYP_PUBLISH);
+    assert_eq!(publish.typ, "atom/publish");
+}
+
+#[test]
+fn claim_payload_has_anchor_label() {
+    let claim = crate::ClaimPayload::new(crate::Alg::ES256, test_id(), 1000, vec![99], test_tmb());
+    assert_eq!(claim.anchor, test_anchor());
+    assert_eq!(claim.label, test_label());
+}
+
+#[test]
+fn publish_payload_has_anchor_label() {
+    let publish = crate::PublishPayload::new(
+        crate::Alg::ES256,
+        test_id(),
+        crate::Czd::from_bytes(vec![5, 6]),
+        vec![7, 8],
+        2000,
+        "src/lib".into(),
+        vec![9, 10],
+        test_tmb(),
+        crate::RawVersion::new("1.0.0".into()),
+    );
+    assert_eq!(publish.anchor, test_anchor());
+    assert_eq!(publish.label, test_label());
+}
+
+#[test]
+fn claim_payload_serde_roundtrip() {
+    let claim = crate::ClaimPayload::new(crate::Alg::ES256, test_id(), 1000, vec![99], test_tmb());
+    let json = serde_json::to_string(&claim).unwrap();
+    let back: crate::ClaimPayload = serde_json::from_str(&json).unwrap();
+    assert_eq!(back, claim);
+}
+
+#[test]
+fn publish_payload_serde_roundtrip() {
+    let publish = crate::PublishPayload::new(
+        crate::Alg::ES256,
+        test_id(),
+        crate::Czd::from_bytes(vec![5, 6]),
+        vec![7, 8],
+        2000,
+        "src/lib".into(),
+        vec![9, 10],
+        test_tmb(),
+        crate::RawVersion::new("1.0.0".into()),
+    );
+    let json = serde_json::to_string(&publish).unwrap();
+    let back: crate::PublishPayload = serde_json::from_str(&json).unwrap();
+    assert_eq!(back, publish);
+}
+
+#[test]
+fn atom_id_from_claim() {
+    let claim = crate::ClaimPayload::new(crate::Alg::ES256, test_id(), 1000, vec![99], test_tmb());
+    let id = AtomId::new(claim.anchor.clone(), claim.label.clone());
+    assert_eq!(id, test_id());
+}
+
+#[test]
+fn atom_id_from_publish() {
+    let publish = crate::PublishPayload::new(
+        crate::Alg::ES256,
+        test_id(),
+        crate::Czd::from_bytes(vec![5, 6]),
+        vec![7, 8],
+        2000,
+        "src/lib".into(),
+        vec![9, 10],
+        test_tmb(),
+        crate::RawVersion::new("1.0.0".into()),
+    );
+    let id = AtomId::new(publish.anchor.clone(), publish.label.clone());
+    assert_eq!(id, test_id());
+}
+
+#[test]
+fn both_payloads_same_identity() {
+    let id = test_id();
+    let claim = crate::ClaimPayload::new(crate::Alg::ES256, id.clone(), 1000, vec![99], test_tmb());
+    let publish = crate::PublishPayload::new(
+        crate::Alg::ES256,
+        id.clone(),
+        crate::Czd::from_bytes(vec![5, 6]),
+        vec![7, 8],
+        2000,
+        "src/lib".into(),
+        vec![9, 10],
+        test_tmb(),
+        crate::RawVersion::new("1.0.0".into()),
+    );
+    let claim_id = AtomId::new(claim.anchor, claim.label);
+    let publish_id = AtomId::new(publish.anchor, publish.label);
+    assert_eq!(
+        claim_id, publish_id,
+        "same AtomId → same identity in both payloads"
+    );
+}

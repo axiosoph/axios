@@ -176,10 +176,10 @@ _None remaining. All resolved — see Decisions table._
    - [x] Display/FromStr/Serde implementations
    - [x] 39 tests (naming, anchor, atom-id structural equality)
    - [ ] ≤ 5 non-std deps verified (blocked on serde feature-gating)
-   - [ ] `RawVersion` newtype — unparsed version string
+   - [x] `RawVersion` newtype — unparsed version string
          Marks a string as an unresolved version needing implementor parsing.
          Lives in atom-id alongside `VersionScheme`.
-   - [ ] `VersionScheme` trait — abstract version comparison
+   - [x] `VersionScheme` trait — abstract version comparison
      - `type Version: Display + Ord` — parsed, comparable version
      - `type Requirement` — version constraint
      - `parse_version(raw: &RawVersion) → Result<Self::Version>`
@@ -187,7 +187,7 @@ _None remaining. All resolved — see Decisions table._
      - `matches(version, req) → bool`
      - No concrete version types (semver stays in ion-manifest)
    - [ ] Feature-gate serde behind `serde` crate feature
-   - [ ] **Coz transaction payload types** (spec §Types)
+   - [x] **Coz transaction payload types** (spec §Types)
      - `ClaimPayload` struct: `alg`, `anchor`, `label`, `now`, `owner`, `typ = "atom/claim"`
        `owner` is an opaque identity digest (spec `[owner-abstract]`).
        `now` included for fork disambiguation (spec `[atomid-per-source-unique]`).
@@ -198,6 +198,9 @@ _None remaining. All resolved — see Decisions table._
        `src` is the source revision hash (spec `[src-is-source-revision]`).
        `path` is the subdirectory path (spec `[path-is-subdir]`).
      - `TYP_CLAIM` and `TYP_PUBLISH` constants (bare paths, no domain)
+     - `Tmb` type alias → `coz_rs::Thumbprint` re-export
+     - `serde_alg` module — serde bridge for `Alg` via `name()`/`from_str()`
+     - `serde_b64` module — serde bridge for `Vec<u8>` via base64url-unpadded
    - [ ] **Verification function** — takes `(pay_json, sig, pub_key, alg)`, returns `Result<AtomId>`
          Key bytes are provided by the caller. Key storage/discovery is Cyphrpass's concern.
    - **Spec constraints verified at Phase 1 completion:**
@@ -354,6 +357,21 @@ _None remaining. All resolved — see Decisions table._
 
 | Item | Severity | Why Introduced | Follow-Up | Resolved |
 | :--- | :------- | :------------- | :-------- | :------: |
+
+## Technical Debt
+
+| Item                                                                       | Phase | Severity | Follow-up                                                                      |
+| :------------------------------------------------------------------------- | :---: | :------: | :----------------------------------------------------------------------------- |
+| `serde_alg` bridge should move upstream to coz-rs behind a `serde` feature |   1   |   Low    | Open issue/PR on coz-rs — every consumer needing Alg serde will duplicate this |
+| Verify `AtomId`'s derived `Hash` is consistent with `AtomDigest.compute()` |   3   |   Low    | Structural hash vs content hash — verify when implementing AtomDigest          |
+
+## Deviation Log
+
+| Commit        |  Delta   | Description                                                                                                                                                  |
+| :------------ | :------: | :----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Payload types | EXPANDED | Added `serde_alg.rs`, `serde_b64.rs` modules (not in plan). Required for correct Coz wire format — `Alg` lacks native serde, `Vec<u8>` needs b64ut encoding. |
+| Payload types | EXPANDED | Re-exported `Thumbprint` from coz-rs, added `Tmb` type alias. Spec uses `Tmb` shorthand.                                                                     |
+| Payload types | REFINED  | Constructors take `AtomId` instead of separate `anchor`+`label`. Stronger type-level guarantee that identity pair is validated.                              |
 
 ## Retrospective
 
