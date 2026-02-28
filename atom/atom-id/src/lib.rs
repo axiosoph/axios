@@ -456,6 +456,99 @@ pub enum Error {
     InvalidLabel,
 }
 
+/// Errors produced by transaction verification.
+#[derive(Error, Debug)]
+pub enum VerifyError {
+    /// The cryptographic signature is invalid for the given payload and key.
+    #[error("invalid signature")]
+    InvalidSignature,
+    /// The payload JSON could not be parsed into the expected type.
+    #[error("payload parse error: {0}")]
+    PayloadParse(#[from] serde_json::Error),
+    /// The signing algorithm is not supported by coz-rs.
+    #[error("unsupported algorithm: {0}")]
+    UnsupportedAlgorithm(String),
+    /// The `typ` field does not match the expected transaction type.
+    #[error("wrong typ: expected {expected}, got {actual}")]
+    WrongTyp {
+        /// The expected transaction type.
+        expected: &'static str,
+        /// The actual transaction type found in the payload.
+        actual: String,
+    },
+}
+
+// ============================================================================
+// Verification functions
+// ============================================================================
+
+/// Verify a signed `atom/claim` transaction.
+///
+/// Validates the Coz signature, deserializes the payload, and checks
+/// that `typ` is [`TYP_CLAIM`]. Returns the parsed [`ClaimPayload`]
+/// on success.
+///
+/// The caller provides raw key bytes — key storage and discovery is
+/// not this crate's concern.
+///
+/// Spec constraints: `[sig-over-pay]`, `[claim-typ]`, `[claim-key-required]`.
+pub fn verify_claim(
+    pay_json: &[u8],
+    sig: &[u8],
+    alg: &str,
+    pub_key: &[u8],
+) -> Result<ClaimPayload, VerifyError> {
+    verify_signature(pay_json, sig, alg, pub_key)?;
+    let payload: ClaimPayload = serde_json::from_slice(pay_json)?;
+    if payload.typ != TYP_CLAIM {
+        return Err(VerifyError::WrongTyp {
+            expected: TYP_CLAIM,
+            actual: payload.typ,
+        });
+    }
+    Ok(payload)
+}
+
+/// Verify a signed `atom/publish` transaction.
+///
+/// Validates the Coz signature, deserializes the payload, and checks
+/// that `typ` is [`TYP_PUBLISH`]. Returns the parsed [`PublishPayload`]
+/// on success.
+///
+/// Spec constraints: `[sig-over-pay]`, `[publish-typ]`.
+pub fn verify_publish(
+    pay_json: &[u8],
+    sig: &[u8],
+    alg: &str,
+    pub_key: &[u8],
+) -> Result<PublishPayload, VerifyError> {
+    verify_signature(pay_json, sig, alg, pub_key)?;
+    let payload: PublishPayload = serde_json::from_slice(pay_json)?;
+    if payload.typ != TYP_PUBLISH {
+        return Err(VerifyError::WrongTyp {
+            expected: TYP_PUBLISH,
+            actual: payload.typ,
+        });
+    }
+    Ok(payload)
+}
+
+/// Verify a Coz signature over raw JSON payload bytes.
+///
+/// Shared logic for [`verify_claim`] and [`verify_publish`].
+fn verify_signature(
+    pay_json: &[u8],
+    sig: &[u8],
+    alg: &str,
+    pub_key: &[u8],
+) -> Result<(), VerifyError> {
+    match coz_rs::verify_json(pay_json, sig, alg, pub_key) {
+        Some(true) => Ok(()),
+        Some(false) => Err(VerifyError::InvalidSignature),
+        None => Err(VerifyError::UnsupportedAlgorithm(alg.to_owned())),
+    }
+}
+
 // ============================================================================
 // Tests
 // ============================================================================

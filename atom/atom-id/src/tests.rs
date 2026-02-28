@@ -537,3 +537,102 @@ fn both_payloads_same_identity() {
         "same AtomId → same identity in both payloads"
     );
 }
+
+// ============================================================================
+// Verification
+// ============================================================================
+
+/// Helper: generate an Ed25519 key pair and return (prv_bytes, pub_bytes, thumbprint).
+fn gen_ed25519_key() -> (Vec<u8>, Vec<u8>, crate::Thumbprint) {
+    use coz_rs::Ed25519;
+
+    let sk = coz_rs::SigningKey::<Ed25519>::generate();
+    let prv = sk.private_key_bytes();
+    let pub_bytes = sk.verifying_key().public_key_bytes().to_vec();
+    let tmb = sk.thumbprint().clone();
+    (prv, pub_bytes, tmb)
+}
+
+#[test]
+fn verify_claim_roundtrip() {
+    let (prv, pub_bytes, tmb) = gen_ed25519_key();
+    let claim = crate::ClaimPayload::new(crate::Alg::Ed25519, test_id(), 1000, vec![99], tmb);
+    let pay_json = serde_json::to_vec(&claim).unwrap();
+    let (sig, _cad) = coz_rs::sign_json(&pay_json, "Ed25519", &prv, &pub_bytes).unwrap();
+
+    let result = crate::verify_claim(&pay_json, &sig, "Ed25519", &pub_bytes);
+    assert!(result.is_ok(), "valid claim should verify: {result:?}");
+    let verified = result.unwrap();
+    assert_eq!(verified.anchor, test_anchor());
+    assert_eq!(verified.label, test_label());
+    assert_eq!(verified.typ, crate::TYP_CLAIM);
+}
+
+#[test]
+fn verify_publish_roundtrip() {
+    let (prv, pub_bytes, tmb) = gen_ed25519_key();
+    let publish = crate::PublishPayload::new(
+        crate::Alg::Ed25519,
+        test_id(),
+        crate::Czd::from_bytes(vec![5, 6]),
+        vec![7, 8],
+        2000,
+        "src/lib".into(),
+        vec![9, 10],
+        tmb,
+        crate::RawVersion::new("1.0.0".into()),
+    );
+    let pay_json = serde_json::to_vec(&publish).unwrap();
+    let (sig, _cad) = coz_rs::sign_json(&pay_json, "Ed25519", &prv, &pub_bytes).unwrap();
+
+    let result = crate::verify_publish(&pay_json, &sig, "Ed25519", &pub_bytes);
+    assert!(result.is_ok(), "valid publish should verify: {result:?}");
+    let verified = result.unwrap();
+    assert_eq!(verified.anchor, test_anchor());
+    assert_eq!(verified.label, test_label());
+    assert_eq!(verified.typ, crate::TYP_PUBLISH);
+}
+
+#[test]
+fn verify_claim_wrong_sig() {
+    let (_prv, pub_bytes, tmb) = gen_ed25519_key();
+    let claim = crate::ClaimPayload::new(crate::Alg::Ed25519, test_id(), 1000, vec![99], tmb);
+    let pay_json = serde_json::to_vec(&claim).unwrap();
+    let bad_sig = vec![0u8; 64]; // garbage signature
+
+    let result = crate::verify_claim(&pay_json, &bad_sig, "Ed25519", &pub_bytes);
+    assert!(
+        matches!(result, Err(crate::VerifyError::InvalidSignature)),
+        "wrong sig should be InvalidSignature: {result:?}"
+    );
+}
+
+#[test]
+fn verify_claim_wrong_typ() {
+    let (prv, pub_bytes, tmb) = gen_ed25519_key();
+    // Build a claim but tamper with the typ field in the JSON
+    let claim = crate::ClaimPayload::new(crate::Alg::Ed25519, test_id(), 1000, vec![99], tmb);
+    let mut json_val: serde_json::Value = serde_json::to_value(&claim).unwrap();
+    json_val["typ"] = serde_json::Value::String("atom/publish".into());
+    let pay_json = serde_json::to_vec(&json_val).unwrap();
+    let (sig, _cad) = coz_rs::sign_json(&pay_json, "Ed25519", &prv, &pub_bytes).unwrap();
+
+    let result = crate::verify_claim(&pay_json, &sig, "Ed25519", &pub_bytes);
+    assert!(
+        matches!(result, Err(crate::VerifyError::WrongTyp { .. })),
+        "tampered typ should fail with WrongTyp: {result:?}"
+    );
+}
+
+#[test]
+fn verify_claim_unknown_alg() {
+    let (_prv, pub_bytes, tmb) = gen_ed25519_key();
+    let claim = crate::ClaimPayload::new(crate::Alg::Ed25519, test_id(), 1000, vec![99], tmb);
+    let pay_json = serde_json::to_vec(&claim).unwrap();
+
+    let result = crate::verify_claim(&pay_json, &[], "UNSUPPORTED", &pub_bytes);
+    assert!(
+        matches!(result, Err(crate::VerifyError::UnsupportedAlgorithm(_))),
+        "unknown alg should be UnsupportedAlgorithm: {result:?}"
+    );
+}

@@ -201,7 +201,8 @@ _None remaining. All resolved — see Decisions table._
      - `Tmb` type alias → `coz_rs::Thumbprint` re-export
      - `serde_alg` module — serde bridge for `Alg` via `name()`/`from_str()`
      - `serde_b64` module — serde bridge for `Vec<u8>` via base64url-unpadded
-   - [ ] **Verification function** — takes `(pay_json, sig, pub_key, alg)`, returns `Result<AtomId>`
+   - [x] **Verification function** — takes `(pay_json, sig, alg, pub_key)`, returns `Result<Payload, VerifyError>`
+         `verify_claim` → `Result<ClaimPayload>`, `verify_publish` → `Result<PublishPayload>`.
          Key bytes are provided by the caller. Key storage/discovery is Cyphrpass's concern.
    - **Spec constraints verified at Phase 1 completion:**
      - rustc: `symmetric-payloads`, `claim-typ`, `publish-typ`, `path-is-subdir`,
@@ -364,6 +365,7 @@ _None remaining. All resolved — see Decisions table._
 | :------------------------------------------------------------------------- | :---: | :------: | :----------------------------------------------------------------------------- |
 | `serde_alg` bridge should move upstream to coz-rs behind a `serde` feature |   1   |   Low    | Open issue/PR on coz-rs — every consumer needing Alg serde will duplicate this |
 | Verify `AtomId`'s derived `Hash` is consistent with `AtomDigest.compute()` |   3   |   Low    | Structural hash vs content hash — verify when implementing AtomDigest          |
+| `serde_json` promoted to runtime dep for verification; review dep budget   |   1   |   Low    | May need feature-gating if consumers want types without JSON parsing           |
 
 ## Deviation Log
 
@@ -372,6 +374,8 @@ _None remaining. All resolved — see Decisions table._
 | Payload types | EXPANDED | Added `serde_alg.rs`, `serde_b64.rs` modules (not in plan). Required for correct Coz wire format — `Alg` lacks native serde, `Vec<u8>` needs b64ut encoding. |
 | Payload types | EXPANDED | Re-exported `Thumbprint` from coz-rs, added `Tmb` type alias. Spec uses `Tmb` shorthand.                                                                     |
 | Payload types | REFINED  | Constructors take `AtomId` instead of separate `anchor`+`label`. Stronger type-level guarantee that identity pair is validated.                              |
+| Verification  | REFINED  | Returns `Result<Payload>` instead of `Result<AtomId>` — parsed payload is more useful, caller can extract AtomId trivially.                                  |
+| Verification  | EXPANDED | `serde_json` promoted from dev-dep to runtime dep. Required for `from_slice` in verification functions.                                                      |
 
 ## Retrospective
 
