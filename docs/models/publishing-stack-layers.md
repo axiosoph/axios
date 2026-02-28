@@ -97,7 +97,7 @@ coalgebras via projection, so the current model remains valid.
 | Object   | Description                                               | Layer |
 | :------- | :-------------------------------------------------------- | :---- |
 | Atom     | Fundamental unit of publishing                            | L1    |
-| Atom-id  | Content-addressed digest: hash(anchor, label)             | L1    |
+| Atom-id  | Protocol-level identity pair: (anchor, label)             | L1    |
 | Label    | Human-readable name                                       | L1    |
 | Anchor   | Cryptographic commitment establishing atom-set identity   | L1    |
 | Owner    | Opaque identity digest (e.g., Coz tmb, Cyphr PR)          | L1    |

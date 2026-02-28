@@ -192,7 +192,7 @@ _None remaining. All resolved — see Decisions table._
        `owner` is an opaque identity digest (spec `[owner-abstract]`).
        `now` included for fork disambiguation (spec `[atomid-per-source-unique]`).
      - `PublishPayload` struct: `alg`, `anchor`, `claim` (czd), `dig`, `label`,
-       `now`, `owner`, `path`, `src`, `typ = "atom/publish"`, `version`
+       `now`, `path`, `src`, `tmb`, `typ = "atom/publish"`, `version`
        `claim` chains to the authorizing claim czd (spec `[publish-chains-claim]`).
        `dig` is the atom snapshot hash (spec `[dig-is-atom-snapshot]`).
        `src` is the source revision hash (spec `[src-is-source-revision]`).
