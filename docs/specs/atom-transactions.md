@@ -306,7 +306,7 @@ signature, or signed message. Identity is permanent and content-addressed.
 versions, ownership transfers, or key rotations. The `AtomId` is
 determined by `anchor` and `label`, neither of which changes.
 (Model §1 olog: identity stability diagram.)
-`VERIFIED: unverified`
+`VERIFIED: machine (TLC)`
 
 **[owner-abstract]**: The `owner` field in `ClaimPayload` MUST be an
 opaque byte vector representing a cryptographic identity digest. The
@@ -329,10 +329,10 @@ MUST carry raw `anchor` and `label` fields. A consumer MUST be able
 to re-derive the `AtomId` from either payload independently.
 `VERIFIED: unverified`
 
-**[publish-chains-claim]**: A `PublishPayload` MUST carry a `claim`
-field containing the `czd` of the authorizing claim `CozMessage`.
-This creates a cryptographic chain from publish to claim.
-`VERIFIED: unverified`
+**[publish-chains-claim]**: The `claim` field in `PublishPayload` MUST
+contain the `czd` of a valid claim for the same `(anchor, label)`.
+This creates the cryptographic chain from publish back to claim.
+`VERIFIED: machine (TLC)`
 
 **[claim-typ]**: The `typ` field of a `ClaimPayload` MUST be the
 literal string `"atom/claim"`. The protocol is the authority.
@@ -411,7 +411,7 @@ blobs (cf. Coz bit-perfect preservation).
 MUST be unique — no two atoms in the same source MAY share the same
 label. `AtomId = hash(anchor, label)` guarantees this by construction.
 This prevents ambiguous references within a source.
-`VERIFIED: unverified`
+`VERIFIED: machine (TLC)`
 
 **[publish-claim-coherence]**: A publish's `claim` field MUST reference
 the `czd` of a valid claim whose `(anchor, label)` matches the
@@ -421,7 +421,7 @@ The publish→claim chain is the sole mechanism for binding a publish to
 a specific claim. Publishes from different claims MUST NOT
 cross-pollinate — a consumer selects which claim to trust based on
 the `owner`.
-`VERIFIED: unverified`
+`VERIFIED: machine (TLC)`
 
 **[atom-detached]**: An atom MUST be a self-contained, detached
 subtree. It MUST NOT carry source history. Provenance is recorded
@@ -493,7 +493,7 @@ Enforced by:
 (a) data flow — `publish` requires `claim` czd, which can only be
 obtained from a completed claim; (b) temporal ordering —
 `publish.now > claim.now` MUST hold.
-`VERIFIED: unverified`
+`VERIFIED: machine (TLC)`
 
 ### Forbidden States
 
@@ -501,13 +501,13 @@ obtained from a completed claim; (b) temporal ordering —
 an `AtomId` that has no corresponding claim. If a backend discovers
 a publish without a verifiable claim, it MUST treat the publish as
 invalid.
-`VERIFIED: unverified`
+`VERIFIED: machine (TLC)`
 
 **[no-duplicate-version]**: For a given `AtomId`, a backend MUST NOT
 store two publish transactions with the same `version` string.
 Republishing the same version MUST be rejected. Version
 immutability — once published, a version is sealed.
-`VERIFIED: unverified`
+`VERIFIED: machine (TLC)`
 
 **[no-cross-layer-crypto]**: atom-core MUST NOT import, depend on,
 or transitively require any cryptographic crate. All crypto flows
@@ -600,50 +600,52 @@ content or the complete source history:
 
 ## Verification
 
-<!-- Populated after full VERIFY step. All constraints currently UNVERIFIED. -->
+**TLA+ model**: `docs/specs/tla/AtomTransactions.tla` verified by TLC
+across two configurations (fork scenario: 31,593 states; distinct-anchor:
+27,817 states). All safety-critical invariants pass.
 
-| Constraint                 | Method      | Result  | Detail                                   |
-| :------------------------- | :---------- | :------ | :--------------------------------------- |
-| identity-content-addressed | agent-check | pending | Protocol rule: hash(anchor, label)       |
-| identity-stability         | agent-check | pending | Follows from content-addressed identity  |
-| owner-abstract             | agent-check | pending | Opaque Vec<u8>, protocol-agnostic        |
-| owner-compatibility        | agent-check | pending | Identity framework upgrade safe          |
-| symmetric-payloads         | agent-check | pending | Structural: both carry anchor + label    |
-| publish-chains-claim       | agent-check | pending | czd reference in publish payload         |
-| claim-typ                  | agent-check | pending | String literal check                     |
-| publish-typ                | agent-check | pending | String literal check                     |
-| sig-over-pay               | agent-check | pending | Inherited from Coz v1.0                  |
-| dig-is-atom-snapshot       | agent-check | pending | Reproducible snapshot hash               |
-| src-is-source-revision     | agent-check | pending | Source provenance hash                   |
-| path-is-subdir             | agent-check | pending | Source content tree navigation           |
-| rawversion-opaque          | agent-check | pending | Newtype enforcement                      |
-| claim-key-required         | agent-check | pending | CozMessage structure                     |
-| publish-key-optional       | agent-check | pending | CozMessage structure                     |
-| crypto-layer-separation    | agent-check | pending | atom-core has no crypto dep              |
-| crypto-via-coz             | agent-check | pending | Coz specification semantics              |
-| key-management-deferred    | agent-check | pending | Architectural decision                   |
-| claim-transition           | agent-check | pending | Coz signing flow                         |
-| publish-transition         | agent-check | pending | Coz signing flow                         |
-| session-ordering           | agent-check | pending | Data flow + temporal                     |
-| no-unclaimed-publish       | agent-check | pending | Inverse of session-ordering              |
-| no-duplicate-version       | agent-check | pending | Backend enforcement                      |
-| no-cross-layer-crypto      | agent-check | pending | Cargo.toml audit                         |
-| no-backdated-publish       | agent-check | pending | Temporal ordering check                  |
-| verification-local         | agent-check | pending | Pipeline steps 1-8                       |
-| verification-provenance    | agent-check | pending | Pipeline steps 9-12                      |
-| atom-snapshot-reproducible | agent-check | pending | Deterministic metadata                   |
-| ingest-preserves-identity  | agent-check | pending | Model §2.3 ⊇ condition                   |
-| backend-agnostic-protocol  | agent-check | pending | Type system enforcement                  |
-| anchor-immutable           | agent-check | pending | Anchor property: permanent               |
-| anchor-content-addressed   | agent-check | pending | Anchor property: digest from content     |
-| anchor-discoverable        | agent-check | pending | Anchor property: independently derivable |
-| manifest-minimal           | agent-check | pending | Trait requires only label + version      |
-| backend-bit-perfect        | agent-check | pending | CozMessage preservation                  |
-| atomid-per-source-unique   | agent-check | pending | hash(anchor, label) uniqueness           |
-| publish-claim-coherence    | agent-check | pending | Multiple claims, publish→claim binding   |
-| atom-detached              | agent-check | pending | Self-contained subtree, no history       |
-| uri-not-metadata           | agent-check | pending | URIs excluded from signed state          |
-| trait-signature-pure       | agent-check | pending | No backend types in protocol signatures  |
+| Constraint                 | Method        | Result   | Detail                                   |
+| :------------------------- | :------------ | :------- | :--------------------------------------- |
+| identity-content-addressed | agent-check   | pending  | Protocol rule: hash(anchor, label)       |
+| identity-stability         | machine (TLC) | **pass** | TLA+ `IdentityStability` — 2 configs     |
+| owner-abstract             | agent-check   | pending  | Opaque Vec<u8>, protocol-agnostic        |
+| owner-compatibility        | agent-check   | pending  | Identity framework upgrade safe          |
+| symmetric-payloads         | agent-check   | pending  | Structural: both carry anchor + label    |
+| publish-chains-claim       | machine (TLC) | **pass** | TLA+ `PublishChainsClaim` — 2 configs    |
+| claim-typ                  | agent-check   | pending  | String literal check                     |
+| publish-typ                | agent-check   | pending  | String literal check                     |
+| sig-over-pay               | agent-check   | pending  | Inherited from Coz v1.0                  |
+| dig-is-atom-snapshot       | agent-check   | pending  | Reproducible snapshot hash               |
+| src-is-source-revision     | agent-check   | pending  | Source provenance hash                   |
+| path-is-subdir             | agent-check   | pending  | Source content tree navigation           |
+| rawversion-opaque          | agent-check   | pending  | Newtype enforcement                      |
+| claim-key-required         | agent-check   | pending  | CozMessage structure                     |
+| publish-key-optional       | agent-check   | pending  | CozMessage structure                     |
+| crypto-layer-separation    | agent-check   | pending  | atom-core has no crypto dep              |
+| crypto-via-coz             | agent-check   | pending  | Coz specification semantics              |
+| key-management-deferred    | agent-check   | pending  | Architectural decision                   |
+| claim-transition           | agent-check   | pending  | Coz signing flow                         |
+| publish-transition         | agent-check   | pending  | Coz signing flow                         |
+| session-ordering           | machine (TLC) | **pass** | TLA+ `SessionOrdering` — 2 configs       |
+| no-unclaimed-publish       | machine (TLC) | **pass** | TLA+ `NoUnclaimedPublish` — 2 configs    |
+| no-duplicate-version       | machine (TLC) | **pass** | TLA+ `NoDuplicateVersion` — 2 configs    |
+| no-cross-layer-crypto      | agent-check   | pending  | Cargo.toml audit                         |
+| no-backdated-publish       | machine (TLC) | **pass** | TLA+ `NoBackdatedPublish` — 2 configs    |
+| verification-local         | agent-check   | pending  | Pipeline steps 1-8                       |
+| verification-provenance    | agent-check   | pending  | Pipeline steps 9-12                      |
+| atom-snapshot-reproducible | agent-check   | pending  | Deterministic metadata                   |
+| ingest-preserves-identity  | agent-check   | pending  | Model §2.3 ⊇ condition                   |
+| backend-agnostic-protocol  | agent-check   | pending  | Type system enforcement                  |
+| anchor-immutable           | agent-check   | pending  | Anchor property: permanent               |
+| anchor-content-addressed   | agent-check   | pending  | Anchor property: digest from content     |
+| anchor-discoverable        | agent-check   | pending  | Anchor property: independently derivable |
+| manifest-minimal           | agent-check   | pending  | Trait requires only label + version      |
+| backend-bit-perfect        | agent-check   | pending  | CozMessage preservation                  |
+| atomid-per-source-unique   | machine (TLC) | **pass** | TLA+ `AtomIdPerSourceUnique` — 2 configs |
+| publish-claim-coherence    | machine (TLC) | **pass** | TLA+ `PublishClaimCoherence` — 2 configs |
+| atom-detached              | agent-check   | pending  | Self-contained subtree, no history       |
+| uri-not-metadata           | agent-check   | pending  | URIs excluded from signed state          |
+| trait-signature-pure       | agent-check   | pending  | No backend types in protocol signatures  |
 
 ## Implications
 
