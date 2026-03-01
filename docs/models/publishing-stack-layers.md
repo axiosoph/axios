@@ -164,6 +164,11 @@ F_source(S) = (AtomId → Option<AtomMeta>)      -- resolve (metadata, not entry
 Bisimulation: s₁ ~ s₂ iff resolve and discover agree pointwise. Two
 implementations containing the same atoms are interchangeable.
 
+**Implementation note:** The implementation wraps both observers in
+`Result<_, Error>` to distinguish "not found" (`Ok(None)`) from backend
+failure. The coalgebra models the ideal behavior; error handling is
+orthogonal.
+
 #### 2.2. AtomRegistry (atom-core, L1)
 
 ```
@@ -181,7 +186,6 @@ the forgetful map dropping claim/publish observers.
 ```
 F_store(W) = F_source(W)                      -- inherits AtomSource
            × (dyn AtomSource → Result<()>)     -- ingest
-           × (Path → Result<AtomId>)           -- import_path
            × (AtomId → bool)                   -- contains
 ```
 
@@ -231,11 +235,11 @@ F_artifact(A) = (Digest → Option<Blob>)        -- fetch
 
 #### 2.6. Inter-Layer Morphisms
 
-| Morphism   | Type                       | Direction | Mechanism                                   |
-| :--------- | :------------------------- | :-------- | :------------------------------------------ |
-| atom → eos | Forget: F_store → F_source | Downward  | Eos reads AtomStore via AtomSource          |
-| ion → atom | Full: F_store              | Downward  | Ion exercises ingest, import_path, contains |
-| ion → eos  | Full: F_engine             | Downward  | Ion dispatches plan/apply                   |
+| Morphism   | Type                       | Direction | Mechanism                          |
+| :--------- | :------------------------- | :-------- | :--------------------------------- |
+| atom → eos | Forget: F_store → F_source | Downward  | Eos reads AtomStore via AtomSource |
+| ion → atom | Full: F_store              | Downward  | Ion exercises ingest, contains     |
+| ion → eos  | Full: F_engine             | Downward  | Ion dispatches plan/apply          |
 
 **Composition law:**
 
@@ -297,13 +301,12 @@ cache-skipping decision tree.
 ```
 ⊕ {
   from_registry:  !&dyn AtomSource . ?Result<()> . end,
-  from_path:      !Path . ?Result<AtomId> . end,
-  from_store:     !&dyn AtomSource . ?Result<()> . end
+  from_local:     !&dyn AtomSource . ?Result<()> . end
 }
 ```
 
-Ion selects which population method to use. `ingest` and `import_path`
-are alternative entry points, not sequential steps.
+Ion selects which population method to use. Both branches use `ingest`
+with different source implementations (remote registry vs local path).
 
 ### 4. Concurrency, Scheduling, and Error Recovery
 
@@ -468,7 +471,6 @@ domain-relevant quantities. Implementation-specific constants
 | AtomRegistry.claim             | O(1)        | —                        | czd computation + Ed25519 sign               |
 | AtomRegistry.publish           | O(1)        | —                        | Sign version transaction                     |
 | AtomStore.ingest               | O(\|S\|)    | \|S\| = atoms in source  | Iterates source; O(\|S∖W\|) with dedup check |
-| AtomStore.import_path          | O(1)        | —                        | Single atom; dominated by I/O                |
 | AtomStore.contains             | O(1)        | —                        | Hash-based membership test                   |
 | BuildEngine.plan               | O(1)–O(∞)   | Expression complexity    | Cached: O(1). Eval: Turing-complete (Nix)    |
 | BuildEngine.apply              | O(build)    | Plan-specific            | Dominated by actual build execution          |

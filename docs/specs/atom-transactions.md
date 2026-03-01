@@ -156,8 +156,10 @@ The protocol formalizes this topology through three roles
 
 **AtomSource** — read-only observation (the common interface):
 
-- `resolve(AtomId) → Option<Self::Entry>` — look up an atom
-- `discover(Query) → Set<AtomId>` — search for atoms
+- `resolve(AtomId) → Result<Option<Self::Entry>, Self::Error>` — look up an atom.
+  `Ok(None)` means the atom is not present; `Err` means the backend
+  failed (network, disk, permission, etc.).
+- `discover(Query) → Result<Vec<AtomId>, Self::Error>` — search for atoms
 
 **AtomRegistry** — extends AtomSource with write operations
 (publishing front, lives at the source):

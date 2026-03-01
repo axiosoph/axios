@@ -244,6 +244,11 @@ _None remaining. All resolved — see Decisions table._
 
 3. **Phase 3: atom-core** — Protocol trait surface
 
+   > **Authority**: The atom spec (`specs/atom-transactions.md`) is
+   > authoritative for trait signatures and type declarations. Where the
+   > formal model diverges (e.g. `import_path`, `AtomMeta` naming), the
+   > spec takes precedence and deviations are recorded in the deviation log.
+
    Directly derived from the formal layer model's L1 coalgebras. No
    legacy traits ported — the existing `QueryStore`, `QueryVersion`,
    `UnpackRef`, `Init`, `EkalaStorage`, etc. are git internals or ion
@@ -251,13 +256,17 @@ _None remaining. All resolved — see Decisions table._
 
    atom-core defines trait surfaces only. No crypto — all identity and
    verification logic lives in atom-id (which owns coz-rs). atom-core
-   consumes atom-id's types (`AtomId`, `ClaimPayload`, etc.) without
-   needing a direct coz-rs dependency.
+   consumes atom-id's types (`AtomId`, `ClaimPayload`, etc.) and
+   re-exported coz-rs primitives (`canonical_hash_for_alg`, `Cad`, `Alg`)
+   without needing a direct coz-rs dependency.
+   - [ ] **Re-export `canonical_hash_for_alg` from atom-id** — needed by
+         `AtomDigest::compute`. Add `pub use coz_rs::{canonical, canonical_hash_for_alg};`
+         to atom-id's re-exports so atom-core avoids a direct coz-rs dependency.
    - [ ] **`AtomSource` trait** — read-only observation (model §2.1, spec §Source/Store)
      - `type Entry` — backend-defined observation type
      - `type Error`
-     - `resolve(&self, id: &AtomId) → Result<Option<Entry>, Error>`
-     - `discover(&self, query) → Result<Vec<Entry>, Error>`
+     - `resolve(&self, id: &AtomId) → Result<Option<Entry>, Error>` — `Ok(None)` = not found; `Err` = backend failure (network, disk, etc.)
+     - `discover(&self, query) → Result<Vec<AtomId>, Error>` — returns identities per spec; `Entry` is for `resolve` only
    - [ ] **`AtomRegistry: AtomSource` trait** — claiming and publishing (model §2.2, spec §Source/Store)
      - `type Content` — backend-defined content reference (git: ObjectId, etc.)
      - `claim(req: ClaimReq) → Result<Czd, Error>` — establish ownership
@@ -267,6 +276,9 @@ _None remaining. All resolved — see Decisions table._
      - `ingest(&self, source: &dyn AtomSource) → Result<(), Error>`
        Accumulation guarantee: store ⊇ source after ingest (spec `[ingest-preserves-identity]`)
      - `contains(id: &AtomId) → bool`
+     - Note: model §2.3 includes `import_path` — this is subsumed by `ingest`
+       (local paths are just a source variant; dev atoms append qualifiers at
+       the implementation level). See deviation log.
    - [ ] **`Manifest` trait** — minimal metadata (spec `[manifest-minimal]`)
      - `label() → &Label`
      - `version() → &RawVersion` — unparsed, implementor resolves via VersionScheme
@@ -274,16 +286,17 @@ _None remaining. All resolved — see Decisions table._
      - No serde, no TOML. Concrete formats (ion.toml, Cargo.toml, etc.) implement this.
    - [ ] **`AtomDigest` type** — store-level multihash (spec §Types)
      - `AtomDigest { alg: Alg, cad: Cad }` — compact, self-describing
-     - `compute(id: &AtomId, alg: Alg) -> AtomDigest` via `canonical_hash_for_alg`
+     - `compute(id: &AtomId, alg: Alg) -> AtomDigest` via `canonical_hash_for_alg` (re-exported from atom-id)
      - Display as `alg.b64ut`, used for git ref paths and store keys
      - Multiple valid digests per AtomId (one per algorithm)
      - **Debt**: verify `AtomId`'s derived `Hash` impl is consistent with
        `AtomDigest.compute()` (structural hash vs content hash)
    - [ ] **Error taxonomy** — per-trait error types via associated `type Error`
-   - [ ] Re-export atom-id and atom-uri public types
+   - [ ] Re-export atom-id public types
    - [ ] serde behind feature flag for re-exported types
    - [ ] Crate-level documentation explaining the coalgebra-trait mapping
-   - Deps: atom-id, atom-uri, coz-rs (for Cad/canonical_hash_for_alg). No gix, no semver, no tokio.
+   - Deps: atom-id only. No atom-uri (client concern), no gix, no semver, no tokio.
+     crypto primitives flow through atom-id's coz-rs re-exports.
    - **Spec constraints verified at Phase 3 completion:**
      - rustc: `backend-agnostic-protocol`, `trait-signature-pure`
      - cargo-dep: `crypto-layer-separation`, `no-cross-layer-crypto`, `key-management-deferred`
@@ -384,6 +397,11 @@ _None remaining. All resolved — see Decisions table._
 | Verification  | REFINED  | Returns `Result<Payload>` instead of `Result<AtomId>` — parsed payload is more useful, caller can extract AtomId trivially.                                  |
 | Verification  | EXPANDED | `serde_json` promoted from dev-dep to runtime dep. Required for `from_slice` in verification functions.                                                      |
 | Serde gate    | REFINED  | Verification functions also gated behind `serde` feature. Verification inherently depends on JSON deserialization.                                           |
+| Phase 3 plan  | REDUCED  | `import_path` excluded from `AtomStore` — subsumed by `ingest` (local paths are a source variant). Model §2.3 diverges from spec; spec is authoritative.     |
+| Phase 3 plan  | REFINED  | `discover` returns `Vec<AtomId>` (per spec), not `Vec<Entry>` as originally planned. `Entry` is the `resolve` observation type only.                         |
+| Phase 3 plan  | REFINED  | `resolve` wrapped in `Result<Option<Entry>, Error>` — distinguishes not-found (`Ok(None)`) from backend failure (`Err`). Spec silent on fallibility.         |
+| Phase 3 plan  | REDUCED  | atom-uri dropped as atom-core dependency. URI resolution is a client concern (ion), not protocol surface.                                                    |
+| Phase 3 plan  | EXPANDED | New task: re-export `canonical_hash_for_alg` from atom-id so atom-core can compute `AtomDigest` without a direct coz-rs dependency.                          |
 
 ## Retrospective
 
