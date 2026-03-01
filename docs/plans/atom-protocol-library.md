@@ -259,7 +259,7 @@ _None remaining. All resolved — see Decisions table._
    consumes atom-id's types (`AtomId`, `ClaimPayload`, etc.) and
    re-exported coz-rs primitives (`canonical_hash_for_alg`, `Cad`, `Alg`)
    without needing a direct coz-rs dependency.
-   - [ ] **Re-export `canonical_hash_for_alg` from atom-id** — needed by
+   - [x] **Re-export `canonical_hash_for_alg` from atom-id** — needed by
          `AtomDigest::compute`. Add `pub use coz_rs::{canonical, canonical_hash_for_alg};`
          to atom-id's re-exports so atom-core avoids a direct coz-rs dependency.
    - [ ] **`AtomSource` trait** — read-only observation (model §2.1, spec §Source/Store)

@@ -46,10 +46,12 @@ mod serde_b64;
 use std::fmt;
 use std::str::FromStr;
 
-pub use coz_rs::{Alg, Cad, Czd, Thumbprint};
+pub use coz_rs::{Alg, Cad, Czd, Thumbprint, canonical, canonical_hash_for_alg};
 pub use name::{Identifier, Label, Name, Tag};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "serde")]
+pub use serde_json;
 use thiserror::Error;
 
 /// Maximum byte length for validated name types.
