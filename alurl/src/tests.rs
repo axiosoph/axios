@@ -383,3 +383,151 @@ fn spec_examples_table() {
         AliasedUrl::Raw(_)
     ));
 }
+
+// ============================================================================
+// Edge cases: alias name character validation
+// ============================================================================
+
+#[test]
+fn alias_name_hyphen_rejected() {
+    let map = aliases(&[("my-alias", "example.com")]);
+    let result = map.resolve("+my-alias/repo");
+    // Hyphen is not XID_Continue — validate_alias_name rejects "my-alias".
+    assert!(matches!(result, Err(ResolveError::InvalidAliasName(_))));
+}
+
+#[test]
+fn alias_name_dot_rejected() {
+    let map = aliases(&[("my.alias", "example.com")]);
+    // Dot is not XID_Continue — validate_alias_name rejects "my.alias".
+    let result = map.resolve("+my.alias/repo");
+    assert!(matches!(result, Err(ResolveError::InvalidAliasName(_))));
+}
+
+#[test]
+fn alias_name_underscore_accepted() {
+    let map = aliases(&[("my_alias", "example.com")]);
+    let result = map.resolve("+my_alias/repo").unwrap();
+    assert_eq!(result.url(), "example.com/repo");
+}
+
+// ============================================================================
+// Edge cases: scheme handling
+// ============================================================================
+
+#[test]
+fn scheme_with_plus_in_name() {
+    // svn+ssh:// has '+' in the scheme — must not be an alias sigil.
+    let map = aliases(&[("gh", "github.com")]);
+    let result = map.resolve("svn+ssh://+gh/owner/repo").unwrap();
+    assert_eq!(result.url(), "svn+ssh://github.com/owner/repo");
+}
+
+#[test]
+fn file_scheme_no_alias() {
+    let map = aliases(&[("gh", "github.com")]);
+    let result = map.resolve("file:///path/to/repo").unwrap();
+    assert_eq!(result, AliasedUrl::Raw("file:///path/to/repo".into()));
+}
+
+#[test]
+fn scheme_url_with_port_and_alias() {
+    // https://+gh:8080/repo — scheme present, so authority boundary is '/'.
+    // Authority = "+gh:8080", last '@' = none, host_pos = after scheme.
+    // '+' at host position → alias "gh", separator ':', suffix "8080/repo".
+    let map = aliases(&[("gh", "github.com")]);
+    let result = map.resolve("https://+gh:8080/repo").unwrap();
+    assert_eq!(result.url(), "https://github.com:8080/repo");
+}
+
+#[test]
+fn ssh_scheme_with_credentials_and_alias() {
+    let map = aliases(&[("gh", "github.com")]);
+    let result = map.resolve("ssh://git@+gh/owner/repo").unwrap();
+    assert_eq!(result.url(), "ssh://git@github.com/owner/repo");
+}
+
+#[test]
+fn ssh_scheme_with_scp_style_colon_separator() {
+    // Scheme present + credentials + ':' as separator (not port, not credential colon).
+    // Authority boundary = first '/' (scheme-present rule), so '@' is found correctly.
+    // Alias "gh" terminated by ':', suffix = "owner/repo".
+    let map = aliases(&[("gh", "github.com")]);
+    let result = map.resolve("ssh://git@+gh:owner/repo").unwrap();
+    assert_eq!(result.url(), "ssh://git@github.com:owner/repo");
+}
+
+// ============================================================================
+// Edge cases: @ handling
+// ============================================================================
+
+#[test]
+fn multiple_at_signs_last_wins() {
+    // user@proxy@+gh/repo — last '@' is before '+gh'.
+    let map = aliases(&[("gh", "github.com")]);
+    let result = map.resolve("user@proxy@+gh/repo").unwrap();
+    assert_eq!(result.url(), "user@proxy@github.com/repo");
+}
+
+// ============================================================================
+// Edge cases: boundary inputs
+// ============================================================================
+
+#[test]
+fn empty_input_is_raw() {
+    let map = AliasMap::new();
+    let result = map.resolve("").unwrap();
+    assert_eq!(result, AliasedUrl::Raw(String::new()));
+}
+
+#[test]
+fn just_plus_alone_is_invalid() {
+    let map = AliasMap::new();
+    let result = map.resolve("+");
+    assert!(matches!(result, Err(ResolveError::InvalidAliasName(_))));
+}
+
+#[test]
+fn colon_only_suffix_empty_rest() {
+    let map = aliases(&[("gh", "github.com")]);
+    let result = map.resolve("+gh:").unwrap();
+    assert_eq!(result.url(), "github.com:");
+}
+
+#[test]
+fn plus_in_url_path_not_host_position() {
+    // + appears after the first '/' — not at host position.
+    let map = aliases(&[("gh", "github.com")]);
+    let result = map.resolve("example.com/+gh/foo").unwrap();
+    assert_eq!(result, AliasedUrl::Raw("example.com/+gh/foo".into()));
+}
+
+// ============================================================================
+// Edge cases: recursion
+// ============================================================================
+
+#[test]
+fn three_level_recursive_chain() {
+    let map = aliases(&[
+        ("team", "+org/myteam"),
+        ("org", "+gh/myorg"),
+        ("gh", "github.com"),
+    ]);
+    let result = map.resolve("+team/project").unwrap();
+    assert_eq!(result.url(), "github.com/myorg/myteam/project");
+    match &result {
+        AliasedUrl::Expanded { alias, .. } => assert_eq!(alias, "team"),
+        other => panic!("expected Expanded, got {other:?}"),
+    }
+}
+
+#[test]
+fn self_referencing_alias_detected() {
+    let map = aliases(&[("loop", "+loop")]);
+    match map.resolve("+loop") {
+        Err(ResolveError::CycleDetected { chain }) => {
+            assert_eq!(chain, vec!["loop", "loop"]);
+        },
+        other => panic!("expected CycleDetected, got {other:?}"),
+    }
+}
