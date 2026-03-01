@@ -64,9 +64,12 @@ A repository MAY serve as both a registry and a store simultaneously
 
 The git backend uses four categories of git objects:
 
-1. **Genesis commit** — the first commit in the repository's history.
-   Its ObjectId is the anchor. Discoverable by walking the commit graph
-   to the oldest parentless commit from any ref (e.g., HEAD).
+1. **Genesis commit** — the oldest parentless commit in the
+   repository's history (by committer timestamp). Its ObjectId is the
+   anchor. Discoverable by walking the commit graph to find all
+   parentless commits and selecting the oldest. If multiple parentless
+   commits exist (e.g., merged independent histories, orphan branches),
+   the oldest is authoritative.
 
 2. **Claim commits** — empty commits in the main repository history
    whose `message` field contains a claim `CozMessage` (JSON). A claim
@@ -160,9 +163,12 @@ TYPE  PublishTagFormat = {
 ### Constants
 
 ```
-ATOM_AUTHOR    = "<> 0 +0000"           -- blank identity, epoch zero (matching POC)
+ATOM_AUTHOR    = "" <> 0 +0000             -- blank identity, epoch zero (matching POC)
 ATOM_TIMESTAMP = 0                      -- Unix epoch zero, UTC offset +0000
 ATOM_MESSAGE   = ""                     -- empty commit message
+-- Note: gix creates objects at the byte level, bypassing the git CLI's
+-- identity validation. git fsck may warn about empty idents but does
+-- not reject them. See Open Question #4 for alternatives.
 ```
 
 ### Invariants
@@ -499,12 +505,21 @@ MUST NOT share a label. This is enforced by the ref layout — two
 claim refs for the same label would conflict.
 `VERIFIED: unverified`
 
-**[no-multi-root-registry]**: A repository serving as an atom registry
-MUST NOT have multiple parentless commits reachable from its history.
-If merged independent histories create multiple roots, the repository
-MUST NOT be used as a registry until the ambiguity is resolved (e.g.,
-by grafting or using `git replace`).
+**[anchor-oldest-root]**: If multiple parentless commits exist in the
+repository's history (e.g., merged independent histories, orphan
+branches like `gh-pages`), the **oldest** parentless commit by
+committer timestamp MUST be selected as the anchor. This matches the
+POC implementation and ensures deterministic anchor discovery without
+rejecting repositories with legitimate orphan branches.
 `VERIFIED: unverified`
+
+**[claim-on-protected-branch]**: Claim commits SHOULD be made on
+branches that are protected from history rewrites (e.g., `main`,
+`master`). Standard `git rebase` operations silently drop empty
+commits by default, which would erase claim commits and render all
+associated publish tags as provenance-invalid orphans per
+`[no-orphan-publish]`. Clients MUST refuse to work with atoms whose
+provenance chain (anchor → claim → publish) cannot be fully verified.
 
 **[no-missing-store-claim]**: In a store, if a publish tag's
 `claim-commit` extra header references an ObjectId, that object MUST
@@ -593,7 +608,8 @@ ingested atom. (Model §2.3, ⊇ condition.)
 | no-orphan-publish            | integration-test | pending | Publish without claim rejected                  |
 | no-backdated-src             | integration-test | pending | src before claim commit rejected                |
 | no-label-collision-registry  | integration-test | pending | Duplicate label rejected                        |
-| no-multi-root-registry       | integration-test | pending | Multi-root repo rejected as registry            |
+| anchor-oldest-root           | integration-test | pending | Oldest parentless commit selected as anchor     |
+| claim-on-protected-branch    | agent-check      | pending | Rebase hazard documented, SHOULD enforced       |
 | no-missing-store-claim       | integration-test | pending | Dangling claim-commit reference detected        |
 | anchor-vector-authenticity   | integration-test | pending | Full 3-point vector: genesis → claim → src      |
 | ingestion-portable           | integration-test | pending | git fetch transfers all objects correctly       |
@@ -643,8 +659,9 @@ ingested atom. (Model §2.3, ⊇ condition.)
   atoms use genesis anchor, FS atoms use sentinel anchor).
 
 - **Anchor discovery**: Walk the commit graph from HEAD to find all
-  parentless commits. Reject repositories with multiple roots as
-  invalid registries.
+  parentless commits. Select the oldest by committer timestamp as
+  the anchor. Multiple roots are permitted — the oldest is
+  authoritative per `[anchor-oldest-root]`.
 
 ### Testing Strategy
 
@@ -673,8 +690,11 @@ ingested atom. (Model §2.3, ⊇ condition.)
 1. **Version string normalization**: `RawVersion` is opaque by protocol.
    Some values may contain characters invalid in git refnames (e.g., `~`,
    `^`, `:`, `..`). A normalization scheme for version-to-refname mapping
-   MAY be needed. Consider percent-encoding or a restricted character set
-   for the ref segment.
+   MAY be needed. gix provides ref normalization facilities that SHOULD
+   be leveraged. Consider percent-encoding or a restricted character set
+   for the ref segment. Slash (`/`) in version strings would cause
+   directory/file conflicts in the refname filesystem (e.g., publishing
+   `1.0` then `1.0/beta`).
 
 2. **Tag extra header support in gix**: The spec assumes gix supports
    extra headers on tag objects (analogous to commit extra headers). This
@@ -689,3 +709,13 @@ ingested atom. (Model §2.3, ⊇ condition.)
    ingestion interface) needs formal specification in atom-transactions.md.
    The POC implementation provides a reference. This spec assumes that
    contract exists and specifies only the git ingestion side.
+
+4. **ATOM_AUTHOR identity**: The current blank identity (`"" <> 0 +0000`)
+   works with gix but may trigger `git fsck` warnings. For good git
+   citizenship, consider alternatives that preserve determinism:
+   (a) a static sentinel like `"atom" <atom-protocol> 0 +0000`,
+   (b) the `src` commit's author (deterministic since `src` hash is an
+   input, but adds a read dependency), or (c) a protocol-derived
+   constant like the CozMessage `typ` value (e.g., `"atom/publish"`).
+   The choice does not affect protocol correctness — only git tooling
+   ergonomics.
