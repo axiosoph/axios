@@ -331,18 +331,49 @@ determined by `anchor` and `label`, neither of which changes.
 opaque byte vector representing a cryptographic identity digest. The
 protocol MUST NOT impose any interpretation on its contents — it is
 an opaque value whose meaning is determined by the identity framework
-in use. Known targets include Coz key thumbprints (`tmb`) and Cyphr
-Principal Roots (`PR`), but any identity system producing a stable
-cryptographic digest MAY be used. The `owner` field is an abstract
-identifier, not tied to a specific implementation — any identity
-framework MAY be used.
+in use. Any identity system producing a stable cryptographic digest
+MAY be used.
+
+Different identity frameworks offer different **capabilities** along
+the owner abstraction:
+
+- **Single-key** (e.g., raw Coz `tmb`): owner = key thumbprint.
+  Compromise requires reclaiming all atoms.
+- **Hierarchical keys** (e.g., OpenPGP master + subkeys): owner =
+  master key fingerprint. Subkeys are authorized via binding
+  signatures from the master key. Subkeys can be rotated; compromise
+  of a subkey is local, not catastrophic.
+- **Rooted identity** (e.g., Cyphrpass Principal Root): owner = PR
+  digest. Supports key rotation, delegation, and sub-identities
+  natively. PR identity survives key transitions.
+
+The protocol is agnostic to which tier is in use. The `owner` value
+is stable across key rotations, upgrades, and delegation — only the
+authorization semantics of "signing key authorized by owner" vary.
 `VERIFIED: machine (Alloy)`
 
-**[owner-compatibility]**: For identity frameworks where a single-key
-identity degenerates to a key thumbprint (e.g., Cyphr Level 1:
-`PR = tmb`), the `owner` field MAY be used interchangeably with a
-raw key thumbprint. Upgrading from a simpler to a richer identity
-framework MUST NOT alter the `AtomId`.
+**[owner-authorization-delegated]**: The meaning of "signing key
+MUST be authorized by the claim's `owner`" (as required by
+`[publish-transition]`) is **delegated to the identity framework**.
+The protocol defines the requirement but not the mechanism:
+
+- Single-key: authorized iff `publish.tmb == claim.owner`
+- Hierarchical: authorized iff the signing subkey has a valid binding
+  signature from the master key whose fingerprint matches `claim.owner`
+- Rooted identity: authorized iff the signing key is derivable from
+  the Principal Root whose digest matches `claim.owner`
+
+This delegation is intentional — it allows the protocol to benefit
+from richer identity frameworks without coupling to any specific one.
+`VERIFIED: unverified`
+
+**[owner-compatibility]**: Upgrading from a simpler to a richer
+identity framework (e.g., raw key → GPG master → Cyphrpass PR)
+MUST NOT alter the `AtomId`. The `AtomId` is derived from
+`(anchor, label)`, which is independent of the owner. A claim
+replacement (`[claim-replacement-transition]`) MAY update the
+`owner` to a new identity system without changing the atom's
+identity.
 `VERIFIED: unverified`
 
 **[symmetric-payloads]**: Both `ClaimPayload` and `PublishPayload`
@@ -689,51 +720,52 @@ Fork scenario confirmed satisfiable (SAT).
 > Phase 1 items promoted to **pass** on 2026-02-28 based on atom-id
 > implementation review (59 tests, clippy clean).
 
-| Constraint                 | Method           | Result   | Detail                                     | Phase |
-| :------------------------- | :--------------- | :------- | :----------------------------------------- | :---- |
-| identity-content-addressed | machine (Alloy)  | **pass** | Alloy `identity_content_addressed`         | —     |
-| identity-stability         | machine (TLC)    | **pass** | TLA+ `IdentityStability` — 2 configs       | —     |
-| owner-abstract             | machine (Alloy)  | **pass** | Alloy `ownership_independence`             | —     |
-| owner-compatibility        | machine (Alloy)  | **pass** | Alloy `ownership_independence`             | —     |
-| symmetric-payloads         | rustc            | **pass** | Both structs have `anchor` + `label`       | 1     |
-| digest-algorithm-agile     | unit-test        | pending  | Cad via canonical_hash_for_alg             | 3     |
-| publish-chains-claim       | machine (TLC)    | **pass** | TLA+ `PublishChainsClaim` — 2 configs      | —     |
-| claim-typ                  | rustc            | **pass** | `TYP_CLAIM` const = `"atom/claim"`         | 1     |
-| publish-typ                | rustc            | **pass** | `TYP_PUBLISH` const = `"atom/publish"`     | 1     |
-| sig-over-pay               | unit-test        | **pass** | sign→verify roundtrip in atom-id tests     | 1     |
-| dig-is-atom-snapshot       | unit-test        | pending  | Snapshot hash matches `dig` field          | 4     |
-| src-is-source-revision     | integration-test | pending  | Git revision hash matches `src` field      | 4     |
-| path-is-subdir             | rustc            | **pass** | `path` field type constrains to subdir     | 1     |
-| rawversion-opaque          | rustc            | **pass** | Newtype, no `Deref`/`AsRef`/`Into`         | 1     |
-| claim-key-required         | unit-test        | **pass** | CozMessage key — tested in claim roundtrip | 1     |
-| publish-key-optional       | unit-test        | **pass** | CozMessage key — optional per Coz format   | 1     |
-| crypto-layer-separation    | cargo-dep        | pending  | atom-core Cargo.toml has no coz-rs         | 3     |
-| crypto-via-coz             | cargo-dep        | **pass** | atom-id Cargo.toml depends on coz-rs       | 1     |
-| key-management-deferred    | cargo-dep        | pending  | No key storage crate in atom workspace     | 3     |
-| claim-transition           | unit-test        | **pass** | `verify_claim_roundtrip` sign→verify       | 1     |
-| publish-transition         | unit-test        | **pass** | `verify_publish_roundtrip` sign→verify     | 1     |
-| session-ordering           | machine (TLC)    | **pass** | TLA+ `SessionOrdering` — 2 configs         | —     |
-| no-unclaimed-publish       | machine (TLC)    | **pass** | TLA+ `NoUnclaimedPublish` — 2 configs      | —     |
-| no-duplicate-version       | machine (TLC)    | **pass** | TLA+ `NoDuplicateVersion` — 2 configs      | —     |
-| no-cross-layer-crypto      | cargo-dep        | pending  | atom-core has zero crypto deps             | 3     |
-| no-backdated-publish       | machine (TLC)    | **pass** | TLA+ `NoBackdatedPublish` — 2 configs      | —     |
-| verification-local         | integration-test | pending  | Pipeline steps 1–8 offline                 | 4     |
-| verification-provenance    | integration-test | pending  | Pipeline steps 9–12 with source access     | 4     |
-| atom-snapshot-reproducible | unit-test        | pending  | Same inputs → same snapshot hash           | 4     |
-| ingest-preserves-identity  | machine (Alloy)  | **pass** | Alloy `ingest_preserves_identity`          | —     |
-| backend-agnostic-protocol  | rustc            | pending  | Trait sigs use only associated types       | 3     |
-| anchor-immutable           | integration-test | pending  | Anchor unchanged across operations         | 4     |
-| anchor-content-addressed   | integration-test | pending  | Anchor = hash(genesis content)             | 4     |
-| anchor-discoverable        | integration-test | pending  | Anchor derivable from source alone         | 4     |
-| manifest-minimal           | machine (Alloy)  | **pass** | Alloy `manifest_properties` fact           | —     |
-| backend-bit-perfect        | integration-test | pending  | CozMessage bytes unchanged after store     | 4     |
-| atomid-per-source-unique   | machine (TLC)    | **pass** | TLA+ `AtomIdPerSourceUnique` — 2 configs   | —     |
-| publish-claim-coherence    | machine (TLC)    | **pass** | TLA+ `PublishClaimCoherence` — 2 configs   | —     |
-| atom-detached              | integration-test | pending  | Atom subtree has no parent refs            | 4     |
-| uri-not-metadata           | rustc            | **pass** | URI type absent from payload structs       | 1     |
-| trait-signature-pure       | rustc            | pending  | No backend types in trait signatures       | 3     |
-| publish-payload-extensible | unit-test        | pending  | Extra fields in payload round-trip         | 3     |
-| fs-source-contract         | integration-test | pending  | FsSource discover+resolve, no claim/pub    | 4     |
+| Constraint                    | Method           | Result   | Detail                                     | Phase |
+| :---------------------------- | :--------------- | :------- | :----------------------------------------- | :---- |
+| identity-content-addressed    | machine (Alloy)  | **pass** | Alloy `identity_content_addressed`         | —     |
+| identity-stability            | machine (TLC)    | **pass** | TLA+ `IdentityStability` — 2 configs       | —     |
+| owner-abstract                | machine (Alloy)  | **pass** | Alloy `ownership_independence`             | —     |
+| owner-compatibility           | machine (Alloy)  | **pass** | Alloy `ownership_independence`             | —     |
+| owner-authorization-delegated | integration-test | pending  | Signing key auth varies by identity system | 4     |
+| symmetric-payloads            | rustc            | **pass** | Both structs have `anchor` + `label`       | 1     |
+| digest-algorithm-agile        | unit-test        | pending  | Cad via canonical_hash_for_alg             | 3     |
+| publish-chains-claim          | machine (TLC)    | **pass** | TLA+ `PublishChainsClaim` — 2 configs      | —     |
+| claim-typ                     | rustc            | **pass** | `TYP_CLAIM` const = `"atom/claim"`         | 1     |
+| publish-typ                   | rustc            | **pass** | `TYP_PUBLISH` const = `"atom/publish"`     | 1     |
+| sig-over-pay                  | unit-test        | **pass** | sign→verify roundtrip in atom-id tests     | 1     |
+| dig-is-atom-snapshot          | unit-test        | pending  | Snapshot hash matches `dig` field          | 4     |
+| src-is-source-revision        | integration-test | pending  | Git revision hash matches `src` field      | 4     |
+| path-is-subdir                | rustc            | **pass** | `path` field type constrains to subdir     | 1     |
+| rawversion-opaque             | rustc            | **pass** | Newtype, no `Deref`/`AsRef`/`Into`         | 1     |
+| claim-key-required            | unit-test        | **pass** | CozMessage key — tested in claim roundtrip | 1     |
+| publish-key-optional          | unit-test        | **pass** | CozMessage key — optional per Coz format   | 1     |
+| crypto-layer-separation       | cargo-dep        | pending  | atom-core Cargo.toml has no coz-rs         | 3     |
+| crypto-via-coz                | cargo-dep        | **pass** | atom-id Cargo.toml depends on coz-rs       | 1     |
+| key-management-deferred       | cargo-dep        | pending  | No key storage crate in atom workspace     | 3     |
+| claim-transition              | unit-test        | **pass** | `verify_claim_roundtrip` sign→verify       | 1     |
+| publish-transition            | unit-test        | **pass** | `verify_publish_roundtrip` sign→verify     | 1     |
+| session-ordering              | machine (TLC)    | **pass** | TLA+ `SessionOrdering` — 2 configs         | —     |
+| no-unclaimed-publish          | machine (TLC)    | **pass** | TLA+ `NoUnclaimedPublish` — 2 configs      | —     |
+| no-duplicate-version          | machine (TLC)    | **pass** | TLA+ `NoDuplicateVersion` — 2 configs      | —     |
+| no-cross-layer-crypto         | cargo-dep        | pending  | atom-core has zero crypto deps             | 3     |
+| no-backdated-publish          | machine (TLC)    | **pass** | TLA+ `NoBackdatedPublish` — 2 configs      | —     |
+| verification-local            | integration-test | pending  | Pipeline steps 1–8 offline                 | 4     |
+| verification-provenance       | integration-test | pending  | Pipeline steps 9–12 with source access     | 4     |
+| atom-snapshot-reproducible    | unit-test        | pending  | Same inputs → same snapshot hash           | 4     |
+| ingest-preserves-identity     | machine (Alloy)  | **pass** | Alloy `ingest_preserves_identity`          | —     |
+| backend-agnostic-protocol     | rustc            | pending  | Trait sigs use only associated types       | 3     |
+| anchor-immutable              | integration-test | pending  | Anchor unchanged across operations         | 4     |
+| anchor-content-addressed      | integration-test | pending  | Anchor = hash(genesis content)             | 4     |
+| anchor-discoverable           | integration-test | pending  | Anchor derivable from source alone         | 4     |
+| manifest-minimal              | machine (Alloy)  | **pass** | Alloy `manifest_properties` fact           | —     |
+| backend-bit-perfect           | integration-test | pending  | CozMessage bytes unchanged after store     | 4     |
+| atomid-per-source-unique      | machine (TLC)    | **pass** | TLA+ `AtomIdPerSourceUnique` — 2 configs   | —     |
+| publish-claim-coherence       | machine (TLC)    | **pass** | TLA+ `PublishClaimCoherence` — 2 configs   | —     |
+| atom-detached                 | integration-test | pending  | Atom subtree has no parent refs            | 4     |
+| uri-not-metadata              | rustc            | **pass** | URI type absent from payload structs       | 1     |
+| trait-signature-pure          | rustc            | pending  | No backend types in trait signatures       | 3     |
+| publish-payload-extensible    | unit-test        | pending  | Extra fields in payload round-trip         | 3     |
+| fs-source-contract            | integration-test | pending  | FsSource discover+resolve, no claim/pub    | 4     |
 
 ## Implications
 
