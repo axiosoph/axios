@@ -1,3 +1,3 @@
 //! Git backend for the Atom protocol.
 //!
-//! Implements [`AtomRegistry`] and [`AtomStore`] using git object storage.
+//! Implements `AtomRegistry` and `AtomStore` using git object storage.

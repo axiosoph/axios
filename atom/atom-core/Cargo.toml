@@ -1,7 +1,8 @@
 [package]
-edition = "2024"
-name    = "atom-core"
-version = "0.1.0"
+description = "Core protocol traits for the Atom ecosystem"
+edition     = "2024"
+name        = "atom-core"
+version     = "0.1.0"
 
 [dependencies]
 atom-id  = { path = "../atom-id" }

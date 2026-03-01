@@ -1,7 +1,8 @@
-/// Serde bridge for [`coz_rs::Alg`] via its string name.
-///
-/// `Alg` does not implement serde natively. This module serializes
-/// as `Alg::name()` and deserializes via `Alg::from_str()`.
+//! Serde bridge for [`coz_rs::Alg`] via its string name.
+//!
+//! `Alg` does not implement serde natively. This module serializes
+//! as `Alg::name()` and deserializes via `Alg::from_str()`.
+
 use coz_rs::Alg;
 use serde::{self, Deserialize, Deserializer, Serializer};
 

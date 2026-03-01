@@ -89,11 +89,13 @@ impl Anchor {
     }
 
     /// The raw anchor bytes.
+    #[must_use]
     pub fn as_bytes(&self) -> &[u8] {
         &self.0
     }
 
     /// Encode as a base64url-unpadded string.
+    #[must_use]
     pub fn to_b64(&self) -> String {
         use coz_rs::base64ct::{Base64UrlUnpadded, Encoding};
         Base64UrlUnpadded::encode_string(&self.0)
@@ -173,11 +175,13 @@ impl AtomId {
     }
 
     /// The anchor establishing atom-set identity.
+    #[must_use]
     pub fn anchor(&self) -> &Anchor {
         &self.anchor
     }
 
     /// The atom's label within its atom-set.
+    #[must_use]
     pub fn label(&self) -> &Label {
         &self.label
     }
@@ -384,6 +388,7 @@ impl RawVersion {
     }
 
     /// The raw version string.
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }

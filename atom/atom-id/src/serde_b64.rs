@@ -1,8 +1,9 @@
-/// Serde bridge for `Vec<u8>` via base64url-unpadded encoding.
-///
-/// Coz payloads encode binary fields as base64url strings.
-/// This module provides the `#[serde(with = "serde_b64")]` attribute
-/// for `Vec<u8>` fields.
+//! Serde bridge for `Vec<u8>` via base64url-unpadded encoding.
+//!
+//! Coz payloads encode binary fields as base64url strings.
+//! This module provides the `#[serde(with = "serde_b64")]` attribute
+//! for `Vec<u8>` fields.
+
 use coz_rs::base64ct::{Base64UrlUnpadded, Encoding};
 use serde::{self, Deserialize, Deserializer, Serializer};
 

@@ -372,6 +372,7 @@ _None remaining. All resolved — see Decisions table._
 | `serde_json` promoted to runtime dep for verification; review dep budget   |   1   |   Low    | May need feature-gating if consumers want types without JSON parsing           |
 | `Label` lacks `PartialEq<str>`, forcing `.to_string()` in assertions       |   2   |   Low    | Add `PartialEq<str>` / `PartialEq<&str>` to `Label` in atom-id                 |
 | atom-uri re-exports alurl types (`AliasMap`, `AliasedUrl`, `AliasSource`)  |   2   |   Low    | Revisit when atom-core defines resolution lifecycle and ownership              |
+| `PublishPayload::new()` takes 9 positional args (`#[allow]` suppresses)    |   1   |   Low    | Consider builder pattern when atom-core defines payload construction lifecycle |
 
 ## Deviation Log
 
