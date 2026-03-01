@@ -219,17 +219,17 @@ _None remaining. All resolved — see Decisions table._
 
    **Spec:** [aliased-url-resolution.md](file:///var/home/nrd/git/github.com/ekala-project/eka/axios/docs/specs/aliased-url-resolution.md)
    (19 normative constraints — all implementation MUST satisfy)
-   - [ ] **alurl crate** (`axios/alurl/`)
-     - [ ] Standalone Cargo crate with README, docs
-     - [ ] `AliasMap` newtype (`struct(HashMap<String, String>)`) with `resolve()` method
-     - [ ] `AliasSource` trait (abstract config-loading interface)
-     - [ ] Host-position detection: scheme `://`, credentials `@`, `+` sigil
-     - [ ] Structure-preserving alias expansion: `prefix + resolved + separator + suffix`
-     - [ ] Recursive resolution with cycle detection (`CycleDetected`)
-     - [ ] `AliasedUrl` enum: `Expanded { alias, url }` / `Raw(String)`
-     - [ ] `ResolveError`: `AliasNotFound`, `InvalidAliasName`, `CycleDetected`
-     - [ ] UAX #31 alias name validation via `unicode-ident`
-     - [ ] Unit tests covering all 19 spec constraints
+   - [x] **alurl crate** (`axios/alurl/`)
+     - [x] Standalone Cargo crate with README, docs
+     - [x] `AliasMap` newtype (`struct(HashMap<String, String>)`) with `resolve()` method
+     - [x] `AliasSource` trait (abstract config-loading interface)
+     - [x] Host-position detection: scheme `://`, credentials `@`, `+` sigil
+     - [x] Structure-preserving alias expansion: `prefix + resolved + separator + suffix`
+     - [x] Recursive resolution with cycle detection (`CycleDetected`)
+     - [x] `AliasedUrl` enum: `Expanded { alias, url }` / `Raw(String)`
+     - [x] `ResolveError`: `AliasNotFound`, `InvalidAliasName`, `CycleDetected`
+     - [x] UAX #31 alias name validation via `unicode-ident`
+     - [x] Unit tests covering all 19 spec constraints
    - [ ] **atom-uri updates** (`axios/atom/atom-uri/`)
      - [ ] Depend on alurl + atom-id
      - [ ] `::` delimiter: `rsplit_once("::")` → source vs atom-ref
