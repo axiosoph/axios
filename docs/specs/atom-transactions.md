@@ -596,6 +596,42 @@ associated types on traits.
 - **Type**: Safety
   `VERIFIED: unverified`
 
+**[publish-payload-extensible]**: The publish `CozMessage` payload
+MAY contain additional user-defined fields beyond the required set
+(`anchor`, `label`, `claim`, `dig`, `src`, `path`, `version`). For
+example, a reproducible-build artifact hash MAY be included to
+cryptographically tie the final build artifact to the source.
+Additional fields are signed as part of the `CozMessage` and
+therefore carry cryptographic assurance. Backends MUST preserve
+all payload fields, including unknown ones, when storing and
+retrieving publish transactions.
+
+- **Type**: Safety
+  `VERIFIED: unverified`
+
+**[fs-source-contract]**: An `AtomSource` implementation MAY exist
+for filesystem directories (paths without git history). Such a source:
+
+- MUST support `discover` (scan for manifests) and `resolve` (read
+  atom metadata)
+- MUST NOT support `claim` or `publish` (no VCS history means no
+  signed transactions)
+- MUST be ingestible into an `AtomStore` for consumption
+- MUST use a well-known constant sentinel value as its anchor, so
+  that AtomId (`hash(anchor, label)`) is derivable for all atoms.
+  The sentinel anchor distinguishes filesystem-sourced atoms from
+  git-sourced atoms and prevents them from being confused with
+  published atoms.
+
+This enables local development workflows where atoms are evaluated
+from the working tree without requiring publication. The `FsSource`
+implementation SHOULD reside in atom-core as a default degradation
+target, allowing any storage backend to serve as the `AtomStore` for
+ingested filesystem atoms.
+
+- **Type**: Safety
+  `VERIFIED: unverified`
+
 ## Verification Pipeline
 
 The following defines the normative verification steps for consumers.
@@ -696,6 +732,8 @@ Fork scenario confirmed satisfiable (SAT).
 | atom-detached              | integration-test | pending  | Atom subtree has no parent refs            | 4     |
 | uri-not-metadata           | rustc            | **pass** | URI type absent from payload structs       | 1     |
 | trait-signature-pure       | rustc            | pending  | No backend types in trait signatures       | 3     |
+| publish-payload-extensible | unit-test        | pending  | Extra fields in payload round-trip         | 3     |
+| fs-source-contract         | integration-test | pending  | FsSource discover+resolve, no claim/pub    | 4     |
 
 ## Implications
 
