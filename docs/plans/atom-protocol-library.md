@@ -216,16 +216,20 @@ _None remaining. All resolved — see Decisions table._
    - Verify: `cargo test` in atom/ workspace
 
 2. **Phase 2: alurl + atom-uri** — URL aliasing and atom URI grammar
+
+   **Spec:** [aliased-url-resolution.md](file:///var/home/nrd/git/github.com/ekala-project/eka/axios/docs/specs/aliased-url-resolution.md)
+   (19 normative constraints — all implementation MUST satisfy)
    - [ ] **alurl crate** (`axios/alurl/`)
      - [ ] Standalone Cargo crate with README, docs
-     - [ ] `AliasResolver` trait (abstract config interface)
-     - [ ] `+` sigil alias detection
-     - [ ] Alias expansion: `+name/path` → resolve(name) + `/` + path
-     - [ ] Recursive resolution: expanded result checked for `+` prefix, resolved again
-     - [ ] Structured output via gix-url (SCP, scheme, file, etc.)
-     - [ ] `AliasedUrl` enum: Expanded (with original alias + resolved URL) / Raw (pass-through)
-     - [ ] Error types for resolution failures
-     - [ ] Unit tests with HashMap-based mock resolver
+     - [ ] `AliasMap` newtype (`struct(HashMap<String, String>)`) with `resolve()` method
+     - [ ] `AliasSource` trait (abstract config-loading interface)
+     - [ ] Host-position detection: scheme `://`, credentials `@`, `+` sigil
+     - [ ] Structure-preserving alias expansion: `prefix + resolved + separator + suffix`
+     - [ ] Recursive resolution with cycle detection (`CycleDetected`)
+     - [ ] `AliasedUrl` enum: `Expanded { alias, url }` / `Raw(String)`
+     - [ ] `ResolveError`: `AliasNotFound`, `InvalidAliasName`, `CycleDetected`
+     - [ ] UAX #31 alias name validation via `unicode-ident`
+     - [ ] Unit tests covering all 19 spec constraints
    - [ ] **atom-uri updates** (`axios/atom/atom-uri/`)
      - [ ] Depend on alurl + atom-id
      - [ ] `::` delimiter: `rsplit_once("::")` → source vs atom-ref
@@ -234,9 +238,9 @@ _None remaining. All resolved — see Decisions table._
            parse via their `VersionScheme`. First: ion (semver).
      - [ ] `Label` validation via atom-id
      - [ ] `RawAtomUri` type (parsed, unresolved, version as `Option<RawVersion>`)
-     - [ ] `AtomUri` type (parsed, resolved via AliasResolver)
+     - [ ] `AtomUri` type (parsed, resolved via `AliasMap::resolve()`)
      - [ ] Port and adapt existing test vectors from `crates/atom/src/uri/tests/`
-   - Verify: `cargo test` in alurl and atom/ workspace
+   - Verify: `cargo test` in alurl and atom/ workspace; cross-check against spec verification matrix
 
 3. **Phase 3: atom-core** — Protocol trait surface
 
