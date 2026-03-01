@@ -262,39 +262,39 @@ _None remaining. All resolved — see Decisions table._
    - [x] **Re-export `canonical_hash_for_alg` from atom-id** — needed by
          `AtomDigest::compute`. Add `pub use coz_rs::{canonical, canonical_hash_for_alg};`
          to atom-id's re-exports so atom-core avoids a direct coz-rs dependency.
-   - [ ] **`AtomSource` trait** — read-only observation (model §2.1, spec §Source/Store)
+   - [x] **`AtomSource` trait** — read-only observation (model §2.1, spec §Source/Store)
      - `type Entry` — backend-defined observation type
      - `type Error`
      - `resolve(&self, id: &AtomId) → Result<Option<Entry>, Error>` — `Ok(None)` = not found; `Err` = backend failure (network, disk, etc.)
      - `discover(&self, query) → Result<Vec<AtomId>, Error>` — returns identities per spec; `Entry` is for `resolve` only
-   - [ ] **`AtomRegistry: AtomSource` trait** — claiming and publishing (model §2.2, spec §Source/Store)
+   - [x] **`AtomRegistry: AtomSource` trait** — claiming and publishing (model §2.2, spec §Source/Store)
      - `type Content` — backend-defined content reference (git: ObjectId, etc.)
      - `claim(req: ClaimReq) → Result<Czd, Error>` — establish ownership
      - `publish(req: PublishReq) → Result<(), Error>` — publish a version
      - Session ordering enforced by data flow: can't publish without a claim czd
-   - [ ] **`AtomStore: AtomSource` trait** — working store (model §2.3, spec §Source/Store)
+   - [x] **`AtomStore: AtomSource` trait** — working store (model §2.3, spec §Source/Store)
      - `ingest(&self, source: &dyn AtomSource) → Result<(), Error>`
        Accumulation guarantee: store ⊇ source after ingest (spec `[ingest-preserves-identity]`)
      - `contains(id: &AtomId) → bool`
      - Note: model §2.3 includes `import_path` — this is subsumed by `ingest`
        (local paths are just a source variant; dev atoms append qualifiers at
        the implementation level). See deviation log.
-   - [ ] **`Manifest` trait** — minimal metadata (spec `[manifest-minimal]`)
+   - [x] **`Manifest` trait** — minimal metadata (spec `[manifest-minimal]`)
      - `label() → &Label`
      - `version() → &RawVersion` — unparsed, implementor resolves via VersionScheme
      - No `dependencies()`, no `composer()` — these are ecosystem-specific concerns.
      - No serde, no TOML. Concrete formats (ion.toml, Cargo.toml, etc.) implement this.
-   - [ ] **`AtomDigest` type** — store-level multihash (spec §Types)
+   - [x] **`AtomDigest` type** — store-level multihash (spec §Types)
      - `AtomDigest { alg: Alg, cad: Cad }` — compact, self-describing
      - `compute(id: &AtomId, alg: Alg) -> AtomDigest` via `canonical_hash_for_alg` (re-exported from atom-id)
      - Display as `alg.b64ut`, used for git ref paths and store keys
      - Multiple valid digests per AtomId (one per algorithm)
      - **Debt**: verify `AtomId`'s derived `Hash` impl is consistent with
        `AtomDigest.compute()` (structural hash vs content hash)
-   - [ ] **Error taxonomy** — per-trait error types via associated `type Error`
-   - [ ] Re-export atom-id public types
-   - [ ] serde behind feature flag for re-exported types
-   - [ ] Crate-level documentation explaining the coalgebra-trait mapping
+   - [x] **Error taxonomy** — per-trait error types via associated `type Error`
+   - [x] Re-export atom-id public types
+   - [x] serde behind feature flag for re-exported types
+   - [x] Crate-level documentation explaining the coalgebra-trait mapping
    - Deps: atom-id only. No atom-uri (client concern), no gix, no semver, no tokio.
      crypto primitives flow through atom-id's coz-rs re-exports.
    - **Spec constraints verified at Phase 3 completion:**
@@ -386,6 +386,10 @@ _None remaining. All resolved — see Decisions table._
 | `Label` lacks `PartialEq<str>`, forcing `.to_string()` in assertions       |   2   |   Low    | Add `PartialEq<str>` / `PartialEq<&str>` to `Label` in atom-id                 |
 | atom-uri re-exports alurl types (`AliasMap`, `AliasedUrl`, `AliasSource`)  |   2   |   Low    | Revisit when atom-core defines resolution lifecycle and ownership              |
 | `PublishPayload::new()` takes 9 positional args (`#[allow]` suppresses)    |   1   |   Low    | Consider builder pattern when atom-core defines payload construction lifecycle |
+| `discover(query: &str)` — query type is concrete, not associated           |   3   |   Low    | Evolve to `type Query` when Phase 4 reveals real discovery patterns            |
+| `AtomStore` not object-safe (`ingest<S>` generic param)                    |   3   |   Low    | Revisit if downstream needs `&dyn AtomStore`; Phase 4 uses concrete types      |
+| `AtomRegistry::publish` has 7 parameters (`#[allow]` suppresses)           |   3   |   Low    | Consider request struct when atom-git implements the trait                     |
+| Full `serde_json` crate re-exported from atom-id (not narrowed)            |   3   |   Low    | Narrow to specific items once atom-core usage stabilizes                       |
 
 ## Deviation Log
 

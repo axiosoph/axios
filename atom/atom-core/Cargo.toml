@@ -4,5 +4,9 @@ edition     = "2024"
 name        = "atom-core"
 version     = "0.1.0"
 
+[features]
+default = ["serde"]
+serde   = ["atom-id/serde"]
+
 [dependencies]
 atom-id = { path = "../atom-id" }
