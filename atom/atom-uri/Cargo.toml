@@ -1,7 +1,10 @@
 [package]
-edition = "2024"
-name    = "atom-uri"
-version = "0.1.0"
+description = "Atom URI parsing and alias-aware resolution"
+edition     = "2024"
+license     = "MPL-2.0"
+name        = "atom-uri"
+version     = "0.1.0"
 
 [dependencies]
+alurl   = { path = "../../alurl" }
 atom-id = { path = "../atom-id" }

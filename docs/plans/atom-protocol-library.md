@@ -230,16 +230,16 @@ _None remaining. All resolved — see Decisions table._
      - [x] `ResolveError`: `AliasNotFound`, `InvalidAliasName`, `CycleDetected`
      - [x] UAX #31 alias name validation via `unicode-ident`
      - [x] Unit tests covering all 19 spec constraints
-   - [ ] **atom-uri updates** (`axios/atom/atom-uri/`)
-     - [ ] Depend on alurl + atom-id
-     - [ ] `::` delimiter: `rsplit_once("::")` → source vs atom-ref
-     - [ ] `@` version extraction: `rsplit_once("@")` → `RawVersion` (from atom-id)
+   - [x] **atom-uri updates** (`axios/atom/atom-uri/`)
+     - [x] Depend on alurl + atom-id
+     - [x] `::` delimiter: `rsplit_once("::")` → source vs atom-ref
+     - [x] `@` version extraction: `rsplit_once("@")` → `RawVersion` (from atom-id)
            Unparsed version wrapped in the `RawVersion` newtype. Implementors
            parse via their `VersionScheme`. First: ion (semver).
-     - [ ] `Label` validation via atom-id
-     - [ ] `RawAtomUri` type (parsed, unresolved, version as `Option<RawVersion>`)
-     - [ ] `AtomUri` type (parsed, resolved via `AliasMap::resolve()`)
-     - [ ] Port and adapt existing test vectors from `crates/atom/src/uri/tests/`
+     - [x] `Label` validation via atom-id
+     - [x] `RawAtomUri` type (parsed, unresolved, version as `Option<RawVersion>`)
+     - [x] `AtomUri` type (parsed, resolved via `AliasMap::resolve()`)
+     - [x] Port and adapt existing test vectors from `crates/atom/src/uri/tests/`
    - Verify: `cargo test` in alurl and atom/ workspace; cross-check against spec verification matrix
 
 3. **Phase 3: atom-core** — Protocol trait surface
@@ -370,6 +370,8 @@ _None remaining. All resolved — see Decisions table._
 | `serde_alg` bridge should move upstream to coz-rs behind a `serde` feature |   1   |   Low    | Open issue/PR on coz-rs — every consumer needing Alg serde will duplicate this |
 | Verify `AtomId`'s derived `Hash` is consistent with `AtomDigest.compute()` |   3   |   Low    | Structural hash vs content hash — verify when implementing AtomDigest          |
 | `serde_json` promoted to runtime dep for verification; review dep budget   |   1   |   Low    | May need feature-gating if consumers want types without JSON parsing           |
+| `Label` lacks `PartialEq<str>`, forcing `.to_string()` in assertions       |   2   |   Low    | Add `PartialEq<str>` / `PartialEq<&str>` to `Label` in atom-id                 |
+| atom-uri re-exports alurl types (`AliasMap`, `AliasedUrl`, `AliasSource`)  |   2   |   Low    | Revisit when atom-core defines resolution lifecycle and ownership              |
 
 ## Deviation Log
 
