@@ -98,6 +98,7 @@ pub trait AliasSource {
 
 impl AliasedUrl {
     /// Returns the resolved URL string, whether aliased or raw.
+    #[must_use]
     pub fn url(&self) -> &str {
         match self {
             Self::Expanded { url, .. } => url,
@@ -134,6 +135,12 @@ impl AliasMap {
     /// it is resolved again (with cycle detection).
     ///
     /// If no alias is present, the input is returned as [`AliasedUrl::Raw`].
+    ///
+    /// # Errors
+    ///
+    /// - [`ResolveError::AliasNotFound`] — `+` at host position but alias name not in map.
+    /// - [`ResolveError::InvalidAliasName`] — alias name fails UAX #31.
+    /// - [`ResolveError::CycleDetected`] — recursive resolution loops.
     pub fn resolve(&self, input: &str) -> Result<AliasedUrl, ResolveError> {
         let classified = parse::classify(input)?;
 
