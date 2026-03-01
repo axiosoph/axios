@@ -643,6 +643,24 @@ ingested atom. (Model §2.3, ⊇ condition.)
   updates, the tag targets the previous tag object (not the atom
   commit).
 
+- **Publish tag metadata**: Clients SHOULD leverage
+  `[publish-payload-extensible]` to provide programmatic lifecycle
+  metadata in the publish `CozMessage` payload. Recommended fields
+  for client implementors:
+  - `broken: true` — marks a version as yanked/broken; clients SHOULD
+    warn or refuse to resolve
+  - `security: "CVE-2026-XXXX"` — security advisory identifier
+  - `superseded-by: "1.2.3"` — recommended replacement version
+  - `deprecated: true` — marks version as deprecated
+  - `build-hash: "sha256:..."` — reproducible build artifact hash,
+    cryptographically tying the final artifact to the source
+  - `min-compatible: "1.0.0"` — minimum compatible version for
+    semver-unaware ecosystems
+    All additional fields are signed as part of the `CozMessage` and
+    carry cryptographic assurance. Publish tag updates
+    (`[publish-update-transition]`) enable retroactive advisory
+    annotation without altering the original publish.
+
 - **Tag peeling**: When resolving a version ref to its content, peel
   the tag chain to the final atom commit. The atom commit is always
   the terminal object (parentless commit with `src` header). gix
