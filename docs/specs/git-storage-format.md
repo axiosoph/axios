@@ -55,7 +55,7 @@ schemes, ref layouts, and invariants:
 | Collision-free | Labels unique per registry      | Claim czd unique globally (crypto-unique) |
 | Claim per atom | Exactly one active              | Multiple (from different sources/forks)   |
 | Anchor         | One anchor (genesis commit)     | Many anchors (one per ingested source)    |
-| Ref prefix     | `refs/atom/{pub,claims/pub}/..` | `refs/atom/{d,dev,claims/d}/...`          |
+| Ref prefix     | `refs/atom/{pub,claims/...}/..` | `refs/atom/{d,dev,claims/d}/...`          |
 
 A repository MAY serve as both a registry and a store simultaneously
 (e.g., a project that publishes its own atoms and ingests dependencies).
@@ -71,11 +71,11 @@ The git backend uses four categories of git objects:
    commits exist (e.g., merged independent histories, orphan branches),
    the oldest is authoritative.
 
-2. **Claim commits** — empty commits in the main repository history
-   whose `message` field contains a claim `CozMessage` (JSON). A claim
-   commit records the act of claiming an atom at a specific point in
-   the source history. All publishes for this atom MUST reference a
-   source revision at or after this commit.
+2. **Claim commits** — parentless, detached commits with an empty tree
+   whose `message` field contains a claim `CozMessage` (JSON) and
+   whose `src` extra header records the source revision at claim time.
+   Like atom commits, claims are standalone objects — they are NOT in
+   the main branch history. Their identity is the claim `czd`.
 
 3. **Atom commits** — parentless commits whose tree contains the atom's
    content subtree and whose `src` extra header records the source
@@ -133,13 +133,18 @@ TYPE  AtomSnapshot = {
       -- `src` field matches the atom commit's extra header.
 
 TYPE  ClaimCommitFormat = {
-        tree:      TreeId,                        -- same tree as parent (empty commit)
-        parent:    ObjectId,                      -- current HEAD or branch tip
-        author:    <real author>,                 -- the claimant
-        committer: <real committer>,              -- the claimant
-        timestamp: <real timestamp>,              -- time of claim
-        message:   CozMessage(ClaimPayload),      -- the signed claim, JSON
+        tree:          EMPTY_TREE,                  -- well-known empty tree hash
+        parent:        ∅,                           -- parentless (detached)
+        author:        ATOM_AUTHOR,                 -- constant: blank identity
+        committer:     ATOM_AUTHOR,                 -- constant: same as author
+        timestamp:     ATOM_TIMESTAMP,              -- epoch zero
+        extra_headers: { "src": ObjectId },         -- source revision at claim time
+        message:       CozMessage(ClaimPayload),    -- the signed claim, JSON
       }
+      -- Claim commits are detached and lightweight by design.
+      -- The empty tree and constant author ensure no incidental tree/blob
+      -- download. The `src` header records the historical position without
+      -- requiring the claim to be embedded in the branch DAG.
 
 TYPE  PublishTagFormat = {
         target:        AtomCommit | PublishTag,   -- atom commit (initial) or prev tag (update)
@@ -166,9 +171,10 @@ TYPE  PublishTagFormat = {
 ATOM_AUTHOR    = "" <> 0 +0000             -- blank identity, epoch zero (matching POC)
 ATOM_TIMESTAMP = 0                      -- Unix epoch zero, UTC offset +0000
 ATOM_MESSAGE   = ""                     -- empty commit message
--- Note: gix creates objects at the byte level, bypassing the git CLI's
--- identity validation. git fsck may warn about empty idents but does
--- not reject them. See Open Question #4 for alternatives.
+EMPTY_TREE     = 4b825dc...             -- well-known empty tree ObjectId
+-- Note: ATOM_AUTHOR/ATOM_TIMESTAMP apply to both atom commits AND claim
+-- commits. gix creates objects at the byte level, bypassing the git CLI's
+-- identity validation. See Open Question #4 for alternatives.
 ```
 
 ### Invariants
@@ -178,13 +184,20 @@ raw bytes of the repository's genesis commit ObjectId. The genesis commit
 is the unique commit with no parents reachable from the current history.
 
 **Discovery algorithm:** To derive the anchor, walk the commit graph from
-any starting ref (e.g., HEAD) following all parent edges to find all
-parentless commits. A registry MUST have exactly one parentless commit in
-its reachable history. If multiple parentless commits exist (e.g., merged
-independent histories), the repository MUST NOT be used as a registry
-until the ambiguity is resolved. The ObjectId's byte representation
-(20 bytes for SHA-1, 32 bytes for SHA-256) is used directly as the
-`Anchor` value.
+the claim's `src` header commit. The anchor must be the root
+of the claim's specific lineage, since a repository may have divergent
+branches with different roots. Follow all parent edges to find all
+parentless commits reachable from the claim's `src`. If multiple exist,
+the oldest by committer timestamp is authoritative per
+`[anchor-oldest-root]`. The ObjectId's byte representation (20 bytes
+for SHA-1, 32 bytes for SHA-256) is used directly as the `Anchor` value.
+
+**Verification frequency:** Anchor discovery MUST be performed per-claim,
+not cached per-registry. There is no cryptographic guarantee that all
+claims share the same anchor (e.g., grafted or replaced histories on
+specific branches). Per-claim verification is cheap with treeless
+fetching (`tree:0`) — if anchors are genuinely identical, the commit
+objects are already in the ODB from the first verification.
 `VERIFIED: unverified`
 
 **[anchor-hash-agile]**: The anchor MUST carry the bytes produced by
@@ -224,24 +237,33 @@ integrity check before performing full Coz signature verification.
 three-point temporal ordering — the **authenticity vector**:
 
 ```
-genesis commit (anchor) → claim commit → source revision (src)
+genesis commit (anchor) → claim src → publish src
 ```
 
-Specifically: (1) the claim commit MUST be a descendant of the genesis
-commit, AND (2) the source revision referenced by `src` in the publish
-payload MUST be at or after the claim commit in the repository's history
-(i.e., `src` is a descendant of, or equal to, the claim commit).
+Specifically: (1) the claim's `src` header MUST point to a commit that
+is a descendant of the genesis commit (verifiable by walking the DAG
+from the claim's `src` to genesis), AND (2) the source revision
+referenced by `src` in the publish payload MUST be at or after the
+claim's `src` in the repository's history (i.e., publish `src` is a
+descendant of, or equal to, the claim's `src`).
 
-An atom MAY be published from the claim commit itself (when no code
-changes are needed), but MUST NOT be published from a commit that
-precedes the claim. This ensures that a claim establishes a temporal
-floor — only content at or after the claim is publishable.
+An atom MAY be published from the claim's `src` commit itself (when no
+code changes are needed), but MUST NOT be published from a commit that
+precedes the claim's `src`. This ensures that a claim establishes a
+temporal floor — only content at or after the claim is publishable.
+
+**Per-publish verification:** To verify provenance of a published atom,
+the verifier MUST check that the publish's `src` is genuinely in the
+repository's history and is at or after the claim's `src`. This uses
+treeless commit-only fetching (`tree:0`) for efficiency.
 `VERIFIED: unverified`
 
-**[claim-is-empty]**: A claim commit MUST have the same tree as its
-parent commit. It MUST NOT introduce any file changes. The claim
-commit's sole purpose is to embed the claim `CozMessage` in the
-repository's history as a temporal anchor point.
+**[claim-detached]**: A claim commit MUST be parentless (no `parent`
+header) with the well-known empty tree as its `tree`. A claim commit
+MUST contain exactly one extra header: `src`, whose value is the
+hex-encoded ObjectId of the source revision at claim time. This design
+ensures claims are lightweight (no tree/blob download), immune to
+rebase hazards, and consistent with atom commit architecture.
 `VERIFIED: unverified`
 
 **[claim-message-is-coz]**: The commit message of a claim commit MUST
@@ -260,9 +282,9 @@ commit, tree, or blob.
 
 **[publish-tag-claim-header]**: A publish tag MUST include a
 `claim-commit` extra header containing the hex-encoded ObjectId of the
-claim commit in the source repository's history. This is unsigned
-metadata used for efficient claim lookup — the `claim` field in the
-publish payload (the czd) provides the cryptographic binding.
+claim commit. This is unsigned metadata used for efficient claim
+lookup — the `claim` field in the publish payload (the czd) provides
+the cryptographic binding.
 
 Tag extra headers are supported by gix and follow the same format as
 commit extra headers (key-value pairs before the blank line separating
@@ -317,14 +339,20 @@ storage.
 #### Registry Refs (source repository)
 
 ```
-refs/atom/claims/pub/{label}                       → claim commit (active claim)
+refs/atom/claims/pub/{label}                       → claim commit (active, mutable pointer)
+refs/atom/claims/d/{claim_czd}                     → claim commit (permanent, fetchable by czd)
 refs/atom/pub/{label}/{version}                  → publish tag [→ chain] → atom commit
+refs/atom/src/{oid}                              → src commit (provenance-protected)
 ```
 
-The `pub/` sub-prefix denotes registry-side claims (published atoms).
-This mirrors `refs/atom/pub/` for consistency and prevents namespace
-collision with digest-addressed claims (`claims/d/`) in repos that
-serve as both registry and store.
+The `pub/` sub-prefix under `claims/` is the mutable "which claim is
+active?" pointer. The `d/` sub-prefix is the permanent "fetch this
+specific claim" ref — it ensures all claims (including historical ones
+after key rotation) remain fetchable as ref tips, regardless of server
+`uploadpack.allowReachableSHA1InWant` policy. Both are written at claim
+time. `refs/atom/src/` protects source revision commits from GC if the
+originating branch is deleted. This mirrors the store's `claims/d/`
+layout for consistency.
 
 **[registry-ref-label-unique]**: Within a single registry, the `{label}`
 segment MUST be unique. No two atoms in the same registry MAY share a
@@ -353,9 +381,15 @@ or targets a previous tag in the update chain (updates). The
 refs/atom/d/{claim_czd}/{version}                → publish tag [→ chain] → atom commit
 refs/atom/claims/d/{claim_czd}                   → claim commit (shallow-fetched)
 
-# Development atoms (unsigned, digest-addressed by AtomId)
-refs/atom/dev/{atom_digest}                      → atom commit (no tags, no claims)
+# Development atoms (unsigned, digest-addressed by AtomId, versioned)
+refs/atom/dev/{atom_digest}/{dev_version}        → atom commit (no tags, no claims)
 ```
+
+Dev versions SHOULD include the tree object hash to avoid clobbering
+and ensure new dev versions are only created when content genuinely
+changes. For example: `{manifest_version}.dev-{tree_hash_prefix}`.
+The version string is opaque to the protocol — tooling MAY adopt any
+scheme that guarantees uniqueness per content snapshot.
 
 The `d/` sub-prefix under `claims/` denotes digest-addressed claims
 (store-side). This consolidates all claim refs under a single
@@ -386,20 +420,32 @@ published under the old claim remain under the old czd — they are
 still valid artifacts signed by the old claim.
 `VERIFIED: unverified`
 
+**[store-claim-cleanup]**: When the last version ref under a
+`refs/atom/d/{claim_czd}/` prefix is deleted (e.g., cache eviction),
+the backend SHOULD also delete the corresponding
+`refs/atom/claims/d/{claim_czd}` ref to prevent orphaned claim
+accumulation. Git has no cross-namespace reference counting, so
+this cleanup is the backend's responsibility.
+`VERIFIED: unverified`
+
 ### Transitions
 
 **[claim-transition-git]**: An atom MAY be claimed by creating a
-claim commit in the repository's history.
+detached claim commit.
 
 - **PRE**: The repository MUST have at least one commit. The genesis
   commit (parentless commit) MUST be derivable. No active claim for
   this label MUST exist (or the existing claim is being explicitly
   replaced). The claim `CozMessage` MUST be valid and include a
-  `key` field.
-- **POST**: A claim commit exists in the repository's history — an
-  empty commit (same tree as parent) with the claim `CozMessage` as
-  the commit message. The ref `refs/atom/claims/pub/{label}` points to
-  it. The claim commit is a descendant of the genesis commit.
+  `key` field. A source revision (`src`) for the claim point MUST
+  be provided.
+- **POST**: A claim commit exists as a detached, parentless commit
+  with the well-known empty tree and a `src` extra header pointing
+  to the claim-time revision. The ref `refs/atom/claims/pub/{label}`
+  points to it (mutable active pointer). A permanent ref
+  `refs/atom/claims/d/{claim_czd}` is written to ensure the claim
+  remains fetchable by czd. A protective ref `refs/atom/src/{src_oid}`
+  is written to prevent GC of the claim's source revision.
   `VERIFIED: unverified`
 
 **[publish-transition-git]**: A version MAY be published for a
@@ -409,13 +455,18 @@ publish tag.
 - **PRE**: An active claim for this label MUST exist in the registry
   (`refs/atom/claims/pub/{label}` is set). The source revision (`src`)
   from which the atom's content is extracted MUST be at or after the
-  claim commit in the repository's history (`[temporal-vector]`).
+  claim's `src` in the repository's history (`[temporal-vector]`).
   The atom commit MUST be deterministic per `[snapshot-deterministic]`.
   The publish `CozMessage` MUST reference the active claim's `czd`.
 - **POST**: An atom commit exists (parentless, deterministic, with
   `src` extra header). A publish tag points at it, with a
   `claim-commit` extra header and CozMessage as the message. The ref
   `refs/atom/pub/{label}/{version}` points to the publish tag.
+  A protective ref `refs/atom/src/{src_oid}` is written to prevent
+  GC of the source revision. The ref write SHOULD use a
+  compare-and-swap (CAS) on `refs/atom/claims/pub/{label}` to ensure
+  the claim has not been replaced between payload construction and
+  tag creation.
   `VERIFIED: unverified`
 
 **[ingest-transition]**: Atoms MAY be ingested from a registry (or
@@ -425,11 +476,16 @@ another store) into a store.
   store is a valid git repository.
 - **POST**: For each ingested atom: the atom commit exists in the
   store, the publish tag (and its chain) exists in the store, the
-  claim commit is shallow-fetched and referenced by
-  `refs/atom/claims/d/{claim_czd}`. Version refs follow the store
-  layout: `refs/atom/d/{claim_czd}/{version}`. AtomId is preserved
-  through ingestion. (Satisfies atom-transactions.md
-  `[ingest-preserves-identity]`.)
+  claim commit is fetched and referenced by
+  `refs/atom/claims/d/{claim_czd}`. Claim commits are lightweight
+  by design (detached, empty tree) and require no special filtering.
+  Version refs follow the store layout:
+  `refs/atom/d/{claim_czd}/{version}`. AtomId is preserved through
+  ingestion. Refs MUST NOT be committed until all cryptographic
+  verification (`[verification-local]`) passes — objects may exist
+  in the ODB during verification, but are invisible to consumers
+  until the refs transaction is committed. (Satisfies
+  atom-transactions.md `[ingest-preserves-identity]`.)
   `VERIFIED: unverified`
 
 **[claim-replacement-transition]**: An atom's active claim MAY be
@@ -459,6 +515,16 @@ chain.
   Git's tag-peeling resolves the chain to the underlying atom commit.
   `VERIFIED: unverified`
 
+**[tag-chain-semantic-immutable]**: All tags within a single publish
+update chain MUST contain identical values for the immutable payload
+fields: `(label, version, dig, src, path)`. Only signing metadata
+(`tmb`, `now`, `claim`), the `key` field, and extension fields
+(`meta`) MAY differ between tags in the same chain. Altering the
+artifact identity (`dig`), version string, or source revision
+requires a new atom commit and a new publish ref — not an update
+to an existing tag chain.
+`VERIFIED: unverified`
+
 **[fs-ingest-transition]**: Atoms from a filesystem `AtomSource` MAY
 be ingested into a git `AtomStore` without claims or publishes.
 
@@ -466,37 +532,52 @@ be ingested into a git `AtomStore` without claims or publishes.
   (as defined in atom-transactions.md). The store is a valid git
   AtomStore.
 - **POST**: Atom commits exist in the store for each discovered atom,
-  referenced by `refs/atom/dev/{atom_digest}`. No publish tags or claim
-  refs exist for dev atoms. The store MUST treat dev atoms as
-  unsigned/unclaimed. Every atom has an AtomId — git-sourced dev
-  atoms use the source repository's genesis commit as anchor;
-  filesystem-sourced atoms use a well-known constant sentinel anchor
-  (see atom-transactions.md `[fs-source-contract]`).
+  referenced by `refs/atom/dev/{atom_digest}/{dev_version}`. No publish
+  tags or claim refs exist for dev atoms. The store MUST treat dev atoms
+  as unsigned/unclaimed. The dev version string SHOULD incorporate the
+  tree object hash to prevent clobbering across concurrent evaluations.
+  Every atom has an AtomId — git-sourced dev atoms use the source
+  repository's genesis commit as anchor; filesystem-sourced atoms use
+  a well-known constant sentinel anchor (see atom-transactions.md
+  `[fs-source-contract]`). Note: the dev atom's `dig` will inherently
+  differ from the published `dig` because published atoms include a
+  real `src` extra header — this is by design.
   `VERIFIED: unverified`
 
-**[dev-atom-resolution]**: Tooling consuming atoms SHOULD follow a
-simple resolution algorithm: if the atom's source is the local
-repository, look up `refs/atom/dev/{atom_digest}`. Otherwise, fetch
-from the remote and look up `refs/atom/d/{claim_czd}/{version}`. This
-segregation prevents dev atoms from interfering with published atoms
-and simplifies lockfile semantics.
+**[dev-atom-resolution]**: Tooling consuming atoms from a store
+resolves through two namespaces in order of precedence:
+
+1. `refs/atom/dev/{atom_digest}/` — local development atoms (unsigned,
+   in-progress evaluations from filesystem or local git sources)
+2. `refs/atom/d/{claim_czd}/` — all ingested published atoms, regardless
+   of origin (local registry, remote registry, or mirror)
+
+Published atoms from the local registry are ingested into `d/` via
+the same `[ingest-transition]` as remote atoms — there is no special
+treatment. The `pub/` namespace is registry-write-time only; the
+resolver never queries it.
+
+Clients MAY provide a **release mode** which skips step 1, resolving
+only from `d/`. This ensures builds use exactly the ingested versions,
+matching what downstream consumers would see.
 
 ### Forbidden States
 
-**[no-non-empty-claim]**: A claim commit MUST NOT introduce tree
-changes. If a commit with tree modifications has a `CozMessage` in
-its message with `typ: "atom/claim"`, the backend MUST reject it as
+**[no-non-empty-claim]**: A claim commit MUST have the well-known
+empty tree as its `tree` and MUST be parentless. If a claim commit
+has a non-empty tree or any parent, the backend MUST reject it as
 malformed.
 `VERIFIED: unverified`
 
 **[no-orphan-publish]**: A publish tag MUST NOT exist in a registry
-without a corresponding active claim commit reachable from history.
+without a corresponding claim commit reachable via
+`refs/atom/claims/pub/{label}` or `refs/atom/claims/d/{claim_czd}`.
 (Satisfies atom-transactions.md `[no-unclaimed-publish]`.)
 `VERIFIED: unverified`
 
 **[no-backdated-src]**: A publish MUST NOT reference a source revision
-(`src`) that precedes the claim commit in the repository's history.
-The publish's `src` MUST be at or after the claim commit. This is the
+(`src`) that precedes the claim's `src` in the repository's history.
+The publish's `src` MUST be at or after the claim's `src`. This is the
 enforcement mechanism for `[temporal-vector]`.
 `VERIFIED: unverified`
 
@@ -512,14 +593,6 @@ committer timestamp MUST be selected as the anchor. This matches the
 POC implementation and ensures deterministic anchor discovery without
 rejecting repositories with legitimate orphan branches.
 `VERIFIED: unverified`
-
-**[claim-on-protected-branch]**: Claim commits SHOULD be made on
-branches that are protected from history rewrites (e.g., `main`,
-`master`). Standard `git rebase` operations silently drop empty
-commits by default, which would erase claim commits and render all
-associated publish tags as provenance-invalid orphans per
-`[no-orphan-publish]`. Clients MUST refuse to work with atoms whose
-provenance chain (anchor → claim → publish) cannot be fully verified.
 
 **[no-missing-store-claim]**: In a store, if a publish tag's
 `claim-commit` extra header references an ObjectId, that object MUST
@@ -575,47 +648,48 @@ ingested atom. (Model §2.3, ⊇ condition.)
 
 ## Verification
 
-| Constraint                   | Method           | Result  | Detail                                          |
-| :--------------------------- | :--------------- | :------ | :---------------------------------------------- |
-| anchor-is-genesis            | integration-test | pending | Root from genesis ObjectId bytes                |
-| anchor-hash-agile            | agent-check      | pending | gix ObjectId handles both SHA-1/SHA-256         |
-| snapshot-deterministic       | unit-test        | pending | Same (tree, src) → same commit hash             |
-| snapshot-parentless          | unit-test        | pending | Atom commit has zero parents                    |
-| snapshot-src-header          | unit-test        | pending | Atom commit has exactly one extra header `src`  |
-| temporal-vector              | integration-test | pending | anchor → claim → src ordering enforced          |
-| claim-is-empty               | integration-test | pending | Claim commit tree == parent tree                |
-| claim-message-is-coz         | integration-test | pending | Parse claim from commit message, verify         |
-| publish-tag-targets-correct  | integration-test | pending | Tag target is atom commit or previous tag       |
-| publish-tag-claim-header     | integration-test | pending | Extra header `claim-commit` present and valid   |
-| publish-tag-message-is-coz   | integration-test | pending | Tag message is valid CozMessage JSON            |
-| tag-chain-immutable          | integration-test | pending | Update creates chain, old tags persist          |
-| coz-bit-perfect              | integration-test | pending | Store → retrieve → byte-compare                 |
-| single-active-claim-registry | integration-test | pending | Second claim for same label replaces ref        |
-| store-claim-disambiguation   | integration-test | pending | Two claims, same AtomId, different ref paths    |
-| registry-ref-label-unique    | integration-test | pending | Conflicting labels rejected                     |
-| registry-ref-claim           | integration-test | pending | Ref points to active claim commit               |
-| registry-ref-version         | integration-test | pending | Ref points to publish tag tip                   |
-| store-ref-by-claim-czd       | integration-test | pending | Store refs use claim czd as key                 |
-| store-claim-ref              | integration-test | pending | Claim commit ref exists, GC-protected           |
-| store-ownership-migration    | integration-test | pending | New claim → new ref path                        |
-| claim-transition-git         | integration-test | pending | Claim creates empty commit with CozMessage      |
-| publish-transition-git       | integration-test | pending | Publish creates atom commit + tag               |
-| ingest-transition            | integration-test | pending | Full ingest cycle preserves identity            |
-| claim-replacement-transition | integration-test | pending | New claim replaces ref, old commit stays        |
-| publish-update-transition    | integration-test | pending | New tag chains to old tag, ref updated          |
-| fs-ingest-transition         | integration-test | pending | FS atoms ingested unsigned into store           |
-| no-non-empty-claim           | unit-test        | pending | Validation rejects claim with tree changes      |
-| no-orphan-publish            | integration-test | pending | Publish without claim rejected                  |
-| no-backdated-src             | integration-test | pending | src before claim commit rejected                |
-| no-label-collision-registry  | integration-test | pending | Duplicate label rejected                        |
-| anchor-oldest-root           | integration-test | pending | Oldest parentless commit selected as anchor     |
-| claim-on-protected-branch    | agent-check      | pending | Rebase hazard documented, SHOULD enforced       |
-| no-missing-store-claim       | integration-test | pending | Dangling claim-commit reference detected        |
-| anchor-vector-authenticity   | integration-test | pending | Full 3-point vector: genesis → claim → src      |
-| ingestion-portable           | integration-test | pending | git fetch transfers all objects correctly       |
-| update-chain-auditable       | integration-test | pending | Tag chain walkable, all CozMessages retrievable |
-| store-accumulates            | integration-test | pending | Post-ingest resolve ⊇ source resolve            |
-| dev-atom-resolution          | integration-test | pending | Local → dev/, remote → d/, no interference      |
+| Constraint                   | Method           | Result  | Detail                                            |
+| :--------------------------- | :--------------- | :------ | :------------------------------------------------ |
+| anchor-is-genesis            | integration-test | pending | Root from genesis ObjectId bytes                  |
+| anchor-hash-agile            | agent-check      | pending | gix ObjectId handles both SHA-1/SHA-256           |
+| snapshot-deterministic       | unit-test        | pending | Same (tree, src) → same commit hash               |
+| snapshot-parentless          | unit-test        | pending | Atom commit has zero parents                      |
+| snapshot-src-header          | unit-test        | pending | Atom commit has exactly one extra header `src`    |
+| temporal-vector              | integration-test | pending | anchor → claim src → publish src enforced         |
+| claim-detached               | unit-test        | pending | Claim commit parentless with empty tree           |
+| claim-message-is-coz         | integration-test | pending | Parse claim from commit message, verify           |
+| publish-tag-targets-correct  | integration-test | pending | Tag target is atom commit or previous tag         |
+| publish-tag-claim-header     | integration-test | pending | Extra header `claim-commit` present and valid     |
+| publish-tag-message-is-coz   | integration-test | pending | Tag message is valid CozMessage JSON              |
+| tag-chain-immutable          | integration-test | pending | Update creates chain, old tags persist            |
+| coz-bit-perfect              | integration-test | pending | Store → retrieve → byte-compare                   |
+| single-active-claim-registry | integration-test | pending | Second claim for same label replaces ref          |
+| store-claim-disambiguation   | integration-test | pending | Two claims, same AtomId, different ref paths      |
+| registry-ref-label-unique    | integration-test | pending | Conflicting labels rejected                       |
+| registry-ref-claim           | integration-test | pending | Ref points to active claim commit                 |
+| registry-ref-version         | integration-test | pending | Ref points to publish tag tip                     |
+| store-ref-by-claim-czd       | integration-test | pending | Store refs use claim czd as key                   |
+| store-claim-ref              | integration-test | pending | Claim commit ref exists, GC-protected             |
+| store-ownership-migration    | integration-test | pending | New claim → new ref path                          |
+| claim-transition-git         | integration-test | pending | Claim creates detached commit + 3 refs            |
+| publish-transition-git       | integration-test | pending | Publish creates atom commit + tag + src ref       |
+| ingest-transition            | integration-test | pending | Full ingest cycle preserves identity              |
+| claim-replacement-transition | integration-test | pending | New claim replaces ref, old commit stays          |
+| publish-update-transition    | integration-test | pending | New tag chains to old tag, ref updated            |
+| fs-ingest-transition         | integration-test | pending | FS atoms ingested unsigned into store             |
+| no-non-empty-claim           | unit-test        | pending | Validation rejects non-empty-tree claim           |
+| no-orphan-publish            | integration-test | pending | Publish without claim rejected                    |
+| no-backdated-src             | integration-test | pending | publish src before claim src rejected             |
+| no-label-collision-registry  | integration-test | pending | Duplicate label rejected                          |
+| anchor-oldest-root           | integration-test | pending | Oldest parentless commit selected as anchor       |
+| no-missing-store-claim       | integration-test | pending | Dangling claim-commit reference detected          |
+| anchor-vector-authenticity   | integration-test | pending | Full 3-point vector: genesis → claim src → src    |
+| ingestion-portable           | integration-test | pending | git fetch transfers all objects correctly         |
+| update-chain-auditable       | integration-test | pending | Tag chain walkable, all CozMessages retrievable   |
+| store-accumulates            | integration-test | pending | Post-ingest resolve ⊇ source resolve              |
+| dev-atom-resolution          | integration-test | pending | Local → dev/{digest}/{ver}, remote → d/           |
+| store-claim-cleanup          | integration-test | pending | Orphaned claim ref cleaned on version eviction    |
+| tag-chain-semantic-immutable | unit-test        | pending | Update tags preserve (label,version,dig,src,path) |
 
 ## Implications
 
@@ -634,9 +708,11 @@ ingested atom. (Model §2.3, ⊇ condition.)
   message, and a single `src` extra header. The `dig` field in
   PublishPayload is this commit's ObjectId.
 
-- **Claim commits**: Use gix to create commits with the same tree as
-  parent, with the CozMessage as commit message. These are "empty
-  commits" in git terminology.
+- **Claim commits**: Use gix to create parentless commits with the
+  well-known empty tree, a `src` extra header pointing to the
+  claim-time revision, ATOM_AUTHOR/ATOM_TIMESTAMP, and the
+  CozMessage as commit message. Write three refs: `claims/pub/{label}`,
+  `claims/d/{czd}`, and `src/{src_oid}`.
 
 - **Publish tags**: Use gix's tag object creation API with a
   `claim-commit` extra header and the CozMessage as tag message. For
@@ -645,18 +721,18 @@ ingested atom. (Model §2.3, ⊇ condition.)
 
 - **Publish tag metadata**: Clients SHOULD leverage
   `[publish-payload-extensible]` to provide programmatic lifecycle
-  metadata in the publish `CozMessage` payload. Recommended fields
-  for client implementors:
-  - `broken: true` — marks a version as yanked/broken; clients SHOULD
-    warn or refuse to resolve
-  - `security: "CVE-2026-XXXX"` — security advisory identifier
-  - `superseded-by: "1.2.3"` — recommended replacement version
-  - `deprecated: true` — marks version as deprecated
-  - `build-hash: "sha256:..."` — reproducible build artifact hash,
+  metadata in the publish `CozMessage` payload's `meta` object.
+  Recommended fields for client implementors (all nested under `meta`):
+  - `meta.broken: true` — marks a version as yanked/broken; clients
+    SHOULD warn or refuse to resolve
+  - `meta.security: "CVE-2026-XXXX"` — security advisory identifier
+  - `meta.superseded-by: "1.2.3"` — recommended replacement version
+  - `meta.deprecated: true` — marks version as deprecated
+  - `meta.build-hash: "sha256:..."` — reproducible build artifact hash,
     cryptographically tying the final artifact to the source
-  - `min-compatible: "1.0.0"` — minimum compatible version for
+  - `meta.min-compatible: "1.0.0"` — minimum compatible version for
     semver-unaware ecosystems
-    All additional fields are signed as part of the `CozMessage` and
+    All extension fields are signed as part of the `CozMessage` and
     carry cryptographic assurance. Publish tag updates
     (`[publish-update-transition]`) enable retroactive advisory
     annotation without altering the original publish.
@@ -672,14 +748,31 @@ ingested atom. (Model §2.3, ⊇ condition.)
   commits can be fetched shallowly (no need for their ancestry).
 
 - **Dev atom ingestion**: Create atom commits from filesystem content.
-  Reference under `refs/atom/dev/{atom_digest}`. No tags, no claims,
-  no verification ceremony. AtomId is derivable for all atoms (git
-  atoms use genesis anchor, FS atoms use sentinel anchor).
+  Reference under `refs/atom/dev/{atom_digest}/{dev_version}`. No
+  tags, no claims, no verification ceremony. Dev version SHOULD include
+  tree hash (e.g., `1.0.0.dev-{tree_hash_prefix}`) to avoid clobbering
+  across concurrent evaluations. AtomId is derivable for all atoms
+  (git atoms use genesis anchor, FS atoms use sentinel anchor).
 
-- **Anchor discovery**: Walk the commit graph from HEAD to find all
-  parentless commits. Select the oldest by committer timestamp as
-  the anchor. Multiple roots are permitted — the oldest is
-  authoritative per `[anchor-oldest-root]`.
+- **Anchor discovery**: Walk the commit graph from the claim's `src`
+  header to find all parentless commits reachable from that lineage.
+  Select the oldest by committer timestamp as the anchor. Multiple
+  roots are permitted — the oldest is authoritative per
+  `[anchor-oldest-root]`. Always walk from the claim's `src`, not
+  HEAD, to verify the anchor is the root of the claim's specific
+  lineage.
+
+- **Atomicity**: Multi-ref operations (claim + publish, ingestion of
+  many versions) MUST use `gix::refs::Transaction` to batch all
+  reference updates atomically. Remote pushes involving multiple refs
+  MUST use atomic push semantics (equivalent of `git push --atomic`)
+  to prevent torn states.
+
+- **Tree construction**: When building git tree objects from filesystem
+  content (`FsSource`), entries MUST follow Git's canonical byte-order
+  sorting (directories sort as if their names end with `/`). gix's
+  tree construction API handles this — implementations MUST NOT
+  manually sort entries using OS-level alphabetical ordering.
 
 ### Testing Strategy
 

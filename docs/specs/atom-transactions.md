@@ -637,6 +637,12 @@ therefore carry cryptographic assurance. Backends MUST preserve
 all payload fields, including unknown ones, when storing and
 retrieving publish transactions.
 
+**Root-level JSON keys are strictly reserved for current and future
+protocol fields.** All ecosystem-specific or user-defined extensions
+MUST be nested inside a dedicated `"meta"` object in the payload.
+This prevents forward-compatibility collisions if a future protocol
+version introduces new required fields.
+
 - **Type**: Safety
   `VERIFIED: unverified`
 
