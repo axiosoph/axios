@@ -72,10 +72,10 @@ The git backend uses four categories of git objects:
    the oldest is authoritative.
 
 2. **Claim commits** — parentless, detached commits with an empty tree
-   whose `message` field contains a claim `CozMessage` (JSON) and
-   whose `src` extra header records the source revision at claim time.
-   Like atom commits, claims are standalone objects — they are NOT in
-   the main branch history. Their identity is the claim `czd`.
+   whose `message` field contains a claim `CozMessage` (JSON). The
+   claim payload's `src` field records the source revision at claim
+   time. Like atom commits, claims are standalone objects — they are
+   NOT in the main branch history. Their identity is the claim `czd`.
 
 3. **Atom commits** — parentless commits whose tree contains the atom's
    content subtree and whose `src` extra header records the source
@@ -85,9 +85,9 @@ The git backend uses four categories of git objects:
 
 4. **Publish tags** — annotated tag objects pointing at atom commits
    (initial publish) or at a previous publish tag (updates). The tag's
-   `message` field contains the publish `CozMessage` (JSON). A
-   `claim-commit` extra header on the tag object references the claim
-   commit. Update tags form a chain: new → old → ... → atom commit.
+   `message` field contains the publish `CozMessage` (JSON). The
+   `claim` czd in the publish payload identifies the authorizing claim.
+   Update tags form a chain: new → old → ... → atom commit.
    Git's tag-peeling resolves the chain to the underlying atom commit.
 
 ### Filesystem Source Ingestion
@@ -138,25 +138,24 @@ TYPE  ClaimCommitFormat = {
         author:        ATOM_AUTHOR,                 -- constant: blank identity
         committer:     ATOM_AUTHOR,                 -- constant: same as author
         timestamp:     ATOM_TIMESTAMP,              -- epoch zero
-        extra_headers: { "src": ObjectId },         -- source revision at claim time
         message:       CozMessage(ClaimPayload),    -- the signed claim, JSON
       }
-      -- Claim commits are detached and lightweight by design.
-      -- The empty tree and constant author ensure no incidental tree/blob
-      -- download. The `src` header records the historical position without
-      -- requiring the claim to be embedded in the branch DAG.
+      -- Claim commits are detached and lightweight by design: no tree,
+      -- no parents, no extra headers. The `src` field in the signed
+      -- ClaimPayload (the commit message) ties the claim to its source
+      -- revision at both the cryptographic AND object hash level — the
+      -- message bytes contribute to the commit hash.
 
 TYPE  PublishTagFormat = {
         target:        AtomCommit | PublishTag,   -- atom commit (initial) or prev tag (update)
         tag:           String,                    -- git tag object `tag` header (metadata)
         tagger:        <real tagger>,             -- the publisher
         timestamp:     <real timestamp>,          -- time of publish
-        extra_headers: { "claim-commit": hex(ObjectId) },  -- ref to claim commit
         message:       CozMessage(PublishPayload),         -- the signed publish, JSON
       }
-      -- The `claim-commit` extra header is unsigned metadata enabling
-      -- efficient claim lookup. The `claim` field in the publish payload
-      -- provides the cryptographic binding (czd).
+      -- The `claim` czd in the publish payload provides the cryptographic
+      -- binding to the authorizing claim. Claims are looked up via
+      -- `refs/atom/claims/d/{czd}` or `refs/atom/claims/pub/{label}`.
       --
       -- Publish payloads MAY include additional user-defined fields beyond
       -- the required set. For example, a reproducible-build artifact hash
@@ -184,7 +183,7 @@ raw bytes of the repository's genesis commit ObjectId. The genesis commit
 is the unique commit with no parents reachable from the current history.
 
 **Discovery algorithm:** To derive the anchor, walk the commit graph from
-the claim's `src` header commit. The anchor must be the root
+the claim's payload `src` commit. The anchor must be the root
 of the claim's specific lineage, since a repository may have divergent
 branches with different roots. Follow all parent edges to find all
 parentless commits reachable from the claim's `src`. If multiple exist,
@@ -240,7 +239,7 @@ three-point temporal ordering — the **authenticity vector**:
 genesis commit (anchor) → claim src → publish src
 ```
 
-Specifically: (1) the claim's `src` header MUST point to a commit that
+Specifically: (1) the claim's payload `src` MUST point to a commit that
 is a descendant of the genesis commit (verifiable by walking the DAG
 from the claim's `src` to genesis), AND (2) the source revision
 referenced by `src` in the publish payload MUST be at or after the
@@ -259,11 +258,12 @@ treeless commit-only fetching (`tree:0`) for efficiency.
 `VERIFIED: unverified`
 
 **[claim-detached]**: A claim commit MUST be parentless (no `parent`
-header) with the well-known empty tree as its `tree`. A claim commit
-MUST contain exactly one extra header: `src`, whose value is the
-hex-encoded ObjectId of the source revision at claim time. This design
-ensures claims are lightweight (no tree/blob download), immune to
-rebase hazards, and consistent with atom commit architecture.
+header) with the well-known empty tree as its `tree` and no extra
+headers. The claim's `src` is carried in the signed `ClaimPayload`
+(the commit message), which contributes to the commit hash. This
+design ensures claims are maximally lightweight (no tree/blob download,
+no extra headers), immune to rebase hazards, and consistent with
+atom commit architecture.
 `VERIFIED: unverified`
 
 **[claim-message-is-coz]**: The commit message of a claim commit MUST
@@ -280,15 +280,11 @@ the same `(label, version)`. A publish tag MUST NOT target a regular
 commit, tree, or blob.
 `VERIFIED: unverified`
 
-**[publish-tag-claim-header]**: A publish tag MUST include a
-`claim-commit` extra header containing the hex-encoded ObjectId of the
-claim commit. This is unsigned metadata used for efficient claim
-lookup — the `claim` field in the publish payload (the czd) provides
-the cryptographic binding.
-
-Tag extra headers are supported by gix and follow the same format as
-commit extra headers (key-value pairs before the blank line separating
-headers from message).
+**[publish-tag-claim-binding]**: A publish tag's CozMessage payload
+MUST contain a `claim` field whose value is the czd of the authorizing
+claim. The claim commit is looked up via `refs/atom/claims/d/{czd}`
+(or `refs/atom/claims/pub/{label}` in the originating registry). No
+extra header is needed — the signed payload is the sole binding.
 `VERIFIED: unverified`
 
 **[publish-tag-message-is-coz]**: The message body of a publish tag
@@ -407,10 +403,9 @@ ref at `refs/atom/claims/d/{claim_czd}` pointing to the claim commit.
 The claim commit SHOULD be shallow-fetched from the source (no need
 to pull its ancestors). This ref serves two purposes: (1) protecting
 the claim commit from garbage collection, and (2) enabling efficient
-claim retrieval by czd for local verification. If a claim commit
-ObjectId is referenced by a publish tag's `claim-commit` header but
-no corresponding claim commit exists in the object store, this MUST
-be treated as an error.
+claim retrieval by czd for local verification. If a publish tag's
+payload references a claim czd but no corresponding claim commit
+exists in the object store, this MUST be treated as an error.
 `VERIFIED: unverified`
 
 **[store-ownership-migration]**: If the ownership of an atom changes
@@ -440,8 +435,8 @@ detached claim commit.
   `key` field. A source revision (`src`) for the claim point MUST
   be provided.
 - **POST**: A claim commit exists as a detached, parentless commit
-  with the well-known empty tree and a `src` extra header pointing
-  to the claim-time revision. The ref `refs/atom/claims/pub/{label}`
+  with the well-known empty tree and the CozMessage (containing `src`)
+  as the commit message. The ref `refs/atom/claims/pub/{label}`
   points to it (mutable active pointer). A permanent ref
   `refs/atom/claims/d/{claim_czd}` is written to ensure the claim
   remains fetchable by czd. A protective ref `refs/atom/src/{src_oid}`
@@ -459,8 +454,8 @@ publish tag.
   The atom commit MUST be deterministic per `[snapshot-deterministic]`.
   The publish `CozMessage` MUST reference the active claim's `czd`.
 - **POST**: An atom commit exists (parentless, deterministic, with
-  `src` extra header). A publish tag points at it, with a
-  `claim-commit` extra header and CozMessage as the message. The ref
+  `src` extra header). A publish tag points at it with the CozMessage
+  as the message (containing the `claim` czd binding). The ref
   `refs/atom/pub/{label}/{version}` points to the publish tag.
   A protective ref `refs/atom/src/{src_oid}` is written to prevent
   GC of the source revision. The ref write SHOULD use a
@@ -594,24 +589,23 @@ POC implementation and ensures deterministic anchor discovery without
 rejecting repositories with legitimate orphan branches.
 `VERIFIED: unverified`
 
-**[no-missing-store-claim]**: In a store, if a publish tag's
-`claim-commit` extra header references an ObjectId, that object MUST
-exist in the store's object database and MUST be reachable via
-`refs/atom/claims/d/{claim_czd}`. A dangling reference MUST be
-treated as ingestion corruption.
+**[no-missing-store-claim]**: In a store, if a publish tag's payload
+references a claim czd, the corresponding claim commit MUST exist in
+the store's object database and MUST be reachable via
+`refs/atom/claims/d/{claim_czd}`. A missing claim MUST be treated as
+ingestion corruption.
 `VERIFIED: unverified`
 
 ### Behavioral Properties
 
 **[anchor-vector-authenticity]**: Given a publish tag in a registry,
 the atom MUST be verifiable as authentic by checking the three-point
-vector: (1) the genesis commit (anchor) is derivable from the
-repository's history, (2) the publish tag's `claim-commit` header
-identifies a claim commit that is a descendant of the genesis commit,
+vector: (1) the genesis commit (anchor) is derivable from the claim's
+payload `src`, (2) the publish payload's `claim` czd resolves to a
+claim commit whose payload `src` is a descendant of the genesis commit,
 (3) the claim `CozMessage` in that commit's message is valid, AND
-(4) the publish's `src` (in the atom commit's extra header) is at or
-after the claim commit. This creates a "vector of authenticity":
-anchor → claim → src.
+(4) the publish's `src` is at or after the claim's `src`. This creates
+a "vector of authenticity": anchor → claim src → publish src.
 
 - **Type**: Safety
   `VERIFIED: unverified`
@@ -659,7 +653,7 @@ ingested atom. (Model §2.3, ⊇ condition.)
 | claim-detached               | unit-test        | pending | Claim commit parentless with empty tree           |
 | claim-message-is-coz         | integration-test | pending | Parse claim from commit message, verify           |
 | publish-tag-targets-correct  | integration-test | pending | Tag target is atom commit or previous tag         |
-| publish-tag-claim-header     | integration-test | pending | Extra header `claim-commit` present and valid     |
+| publish-tag-claim-binding    | integration-test | pending | Payload `claim` czd resolves to valid claim       |
 | publish-tag-message-is-coz   | integration-test | pending | Tag message is valid CozMessage JSON              |
 | tag-chain-immutable          | integration-test | pending | Update creates chain, old tags persist            |
 | coz-bit-perfect              | integration-test | pending | Store → retrieve → byte-compare                   |
@@ -682,7 +676,7 @@ ingested atom. (Model §2.3, ⊇ condition.)
 | no-backdated-src             | integration-test | pending | publish src before claim src rejected             |
 | no-label-collision-registry  | integration-test | pending | Duplicate label rejected                          |
 | anchor-oldest-root           | integration-test | pending | Oldest parentless commit selected as anchor       |
-| no-missing-store-claim       | integration-test | pending | Dangling claim-commit reference detected          |
+| no-missing-store-claim       | integration-test | pending | Missing claim for payload czd detected            |
 | anchor-vector-authenticity   | integration-test | pending | Full 3-point vector: genesis → claim src → src    |
 | ingestion-portable           | integration-test | pending | git fetch transfers all objects correctly         |
 | update-chain-auditable       | integration-test | pending | Tag chain walkable, all CozMessages retrievable   |
@@ -709,15 +703,15 @@ ingested atom. (Model §2.3, ⊇ condition.)
   PublishPayload is this commit's ObjectId.
 
 - **Claim commits**: Use gix to create parentless commits with the
-  well-known empty tree, a `src` extra header pointing to the
-  claim-time revision, ATOM_AUTHOR/ATOM_TIMESTAMP, and the
-  CozMessage as commit message. Write three refs: `claims/pub/{label}`,
-  `claims/d/{czd}`, and `src/{src_oid}`.
+  well-known empty tree, no extra headers, ATOM_AUTHOR/ATOM_TIMESTAMP,
+  and the CozMessage as commit message. The `src` in the payload ties
+  the commit hash to the source revision. Write three refs:
+  `claims/pub/{label}`, `claims/d/{czd}`, and `src/{src_oid}`.
 
-- **Publish tags**: Use gix's tag object creation API with a
-  `claim-commit` extra header and the CozMessage as tag message. For
-  updates, the tag targets the previous tag object (not the atom
-  commit).
+- **Publish tags**: Use gix's tag object creation API with the
+  CozMessage as tag message. The `claim` czd in the payload identifies
+  the authorizing claim. For updates, the tag targets the previous tag
+  object (not the atom commit).
 
 - **Publish tag metadata**: Clients SHOULD leverage
   `[publish-payload-extensible]` to provide programmatic lifecycle
@@ -754,8 +748,8 @@ ingested atom. (Model §2.3, ⊇ condition.)
   across concurrent evaluations. AtomId is derivable for all atoms
   (git atoms use genesis anchor, FS atoms use sentinel anchor).
 
-- **Anchor discovery**: Walk the commit graph from the claim's `src`
-  header to find all parentless commits reachable from that lineage.
+- **Anchor discovery**: Walk the commit graph from the claim's payload
+  `src` to find all parentless commits reachable from that lineage.
   Select the oldest by committer timestamp as the anchor. Multiple
   roots are permitted — the oldest is authoritative per
   `[anchor-oldest-root]`. Always walk from the claim's `src`, not
@@ -809,19 +803,18 @@ ingested atom. (Model §2.3, ⊇ condition.)
 
 2. **Tag extra header support in gix**: The spec assumes gix supports
    extra headers on tag objects (analogous to commit extra headers). This
-   has been preliminarily confirmed via web research but MUST be validated
-   with a gix API spike before the `[publish-tag-claim-header]` invariant
-   can be marked as verified. If gix does not support tag extra headers,
-   the `claim-commit` reference MUST be moved to a structured header
-   line in the tag message body.
+3. **Tag extra headers in gix**: Publish tags no longer require extra
+   headers (the `claim-commit` header has been removed in favor of
+   the signed payload's `claim` czd). This resolves the open question
+   about whether gix supports tag extra headers.
 
-3. **FsSource contract**: The abstract `AtomSource` contract for
+4. **FsSource contract**: The abstract `AtomSource` contract for
    filesystem directories (manifest discovery strategy, path resolution,
    ingestion interface) needs formal specification in atom-transactions.md.
    The POC implementation provides a reference. This spec assumes that
    contract exists and specifies only the git ingestion side.
 
-4. **ATOM_AUTHOR identity**: The current blank identity (`"" <> 0 +0000`)
+5. **ATOM_AUTHOR identity**: The current blank identity (`"" <> 0 +0000`)
    works with gix but may trigger `git fsck` warnings. For good git
    citizenship, consider alternatives that preserve determinism:
    (a) a static sentinel like `"atom" <atom-protocol> 0 +0000`,

@@ -275,10 +275,13 @@ TYPE  ClaimPayload = {
         label:  Label,
         now:    u64,
         owner:  Vec<u8>,   -- opaque identity digest
+        src:    Vec<u8>,   -- source revision hash at claim time (temporal floor)
         tmb:    Tmb,       -- standard Coz: signing key thumbprint
         typ:    "atom/claim"
       }                                                           (atom-id)
   -- CozMessage MUST include `key` field (public key for TOFU).
+  -- The `src` field cryptographically binds the claim to its temporal
+  -- position in history via the signed payload.
 
 TYPE  PublishPayload = {
         alg:     Alg,
