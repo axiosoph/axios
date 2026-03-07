@@ -275,6 +275,7 @@ TYPE  ClaimPayload = {
         label:  Label,
         now:    u64,
         owner:  Vec<u8>,   -- opaque identity digest
+        pkg:    String,    -- PURL type (e.g., "cargo", "npm", "pypi")
         src:    Vec<u8>,   -- source revision hash at claim time (temporal floor)
         tmb:    Tmb,       -- standard Coz: signing key thumbprint
         typ:    "atom/claim"
@@ -282,6 +283,14 @@ TYPE  ClaimPayload = {
   -- CozMessage MUST include `key` field (public key for TOFU).
   -- The `src` field cryptographically binds the claim to its temporal
   -- position in history via the signed payload.
+  -- The `pkg` field identifies the ecosystem. Implementations SHOULD
+  -- use PURL type strings (https://github.com/package-url/purl-spec)
+  -- where a matching type exists (e.g., "cargo", "npm", "pypi") for
+  -- interoperability with SBOM and supply-chain tooling. Custom type
+  -- strings MAY be used for ecosystems not yet in the PURL registry.
+  -- Manifest discovery is implicit — the ecosystem adapter infers it
+  -- from `pkg` (e.g., "cargo" → Cargo.toml at tree root). The
+  -- protocol does not prescribe manifest format or location.
 
 TYPE  PublishPayload = {
         alg:     Alg,
