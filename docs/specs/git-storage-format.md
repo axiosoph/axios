@@ -735,6 +735,35 @@ ingested atom. (Model §2.3, ⊇ condition.)
     (`[publish-update-transition]`) enable retroactive advisory
     annotation without altering the original publish.
 
+- **Claim metadata**: Clients SHOULD leverage
+  `[claim-payload-extensible]` to provide programmatic claim chain
+  transition metadata in replacement claims. When a new claim replaces
+  a previous one (via `[claim-replacement-transition]`), the new
+  claim's `meta` object communicates the intent to consumers who may
+  hold the old claim from a stale mirror.
+  Recommended fields for client implementors (all nested under `meta`):
+  - `meta.supersedes: "update" | "revoke"` — why the previous claim
+    was replaced. Two states with distinct trust implications:
+    `"update"`: the old key is no longer active but was valid at the
+    time \u2014 covers routine key rotation, ownership transfer, or any
+    benign transition; versions published under the old claim remain
+    trustworthy. `"revoke"`: the old key is considered compromised;
+    clients SHOULD warn users before consuming versions signed by
+    the old claim
+  - `meta.announcement: "https://..."` — link to an official
+    communication about the claim transition (e.g., compromise
+    disclosure, transfer announcement, rotation notice). Clients
+    SHOULD surface this URL when prompting users about claim changes
+  - `meta.effective-after: <timestamp>` — if set, only versions
+    published under the old claim AFTER this timestamp are considered
+    suspect; versions before it remain trusted. Limits blast radius
+    for targeted compromise windows. Only meaningful when
+    `supersedes` is `"revoke"`
+    All claim meta fields are signed as part of the `CozMessage` and
+    carry cryptographic assurance. Because the new claim chains to the
+    old one (parent commit), the meta is structurally bound to the
+    specific transition it describes.
+
 - **Tag peeling**: When resolving a version ref to its content, peel
   the tag chain to the final atom commit. The atom commit is always
   the terminal object (parentless commit with `src` header). gix

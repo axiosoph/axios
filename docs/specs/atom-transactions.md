@@ -658,6 +658,24 @@ version introduces new required fields.
 - **Type**: Safety
   `VERIFIED: unverified`
 
+**[claim-payload-extensible]**: A claim `CozMessage` payload MAY
+contain additional user-defined fields beyond the required set
+(`alg`, `anchor`, `label`, `now`, `owner`, `pkg`, `src`, `tmb`).
+Like publish payloads, all ecosystem-specific or user-defined
+extensions MUST be nested inside a dedicated `"meta"` object.
+Additional fields are signed as part of the `CozMessage` and
+therefore carry cryptographic assurance. Backends MUST preserve
+all payload fields, including unknown ones, when storing and
+retrieving claim transactions.
+
+Claim `meta` is particularly important for **claim chain
+transitions** — when a new claim replaces a previous one. The
+`meta` fields on the new claim communicate the intent and severity
+of the transition to consumers who may hold the old claim.
+
+- **Type**: Safety
+  `VERIFIED: unverified`
+
 **[fs-source-contract]**: An `AtomSource` implementation MAY exist
 for filesystem directories (paths without git history). Such a source:
 
