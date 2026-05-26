@@ -108,7 +108,7 @@ sketch→plan cycles rather than executing stale assumptions.
   A good strategic non-goal explains the reasoning, not just the exclusion.
 -->
 
-- **Cyphrpass integration.** Cyphrpass will eventually own identity, signing, and storage beneath atom. But its API surface isn't stable, and designing against a moving target wastes effort. This initiative designs _seams_ for Cyphrpass (trait boundaries, transaction-centric vocabulary) without building the integration.
+- **Cyphr integration.** Cyphr will eventually own identity, signing, and storage beneath atom. But its API surface isn't stable, and designing against a moving target wastes effort. This initiative designs _seams_ for Cyphr (trait boundaries, transaction-centric vocabulary) without building the integration.
 
 - **Dynamic plugin runtime.** Ion may someday support user-installable plugins for CLI extension. No concrete use case exists yet. Runtime backends (nix, snix) are architectural boundaries handled by `BuildEngine`, not plugins.
 

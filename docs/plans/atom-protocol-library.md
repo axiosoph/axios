@@ -84,8 +84,8 @@ direct crypto dependency (spec `[crypto-layer-separation]`).
 - `VersionScheme` and `Manifest` are abstract — no semver or ion.toml types in atom-core.
   Concrete implementations live in format-specific crates (ion-manifest, etc.).
 - `Manifest` requires exactly `label` and `version` (spec `[manifest-minimal]`).
-- Storage, identity, and signing will migrate to Cyphrpass. Design seams, not implementations.
-  Cyphrpass uses Coz internally — coz-rs dependency is forward-compatible.
+- Storage, identity, and signing will migrate to Cyphr. Design seams, not implementations.
+  Cyphr uses Coz internally — coz-rs dependency is forward-compatible.
 - `serde` behind feature flag.
 - All traits start synchronous. Async deferred.
 - Rust edition 2024, toolchain 1.90.0.
@@ -109,7 +109,7 @@ direct crypto dependency (spec `[crypto-layer-separation]`).
 | Claim includes `now`                 | `atom/claim` includes `now` for fork disambiguation; czd incorporates timestamp                                          | Without `now`, identical (anchor, label, key) across forks would collide. Spec `[atomid-per-source-unique]`. |
 | Publish uses `dig` (Coz standard)    | Content reference via Coz's `dig` field (`Vec<u8>`), not a custom `rev`                                                  | `dig` is the Coz-native content-addressed reference field. Backend-specific hash goes here.                  |
 | `Manifest` trait in atom-core        | Trait abstracts label, version, deps. Concrete formats (ion.toml, Cargo.toml, etc.) implemented by downstream crates.    | Atom is a generic packaging protocol — every format needs a manifest, but the format is theirs.              |
-| Key/identity management is Cyphrpass | atom-id provides verification function taking raw key bytes. Storage and discovery of public keys is not atom's concern. | No reason to duplicate. Cyphrpass is already all about key and identity management.                          |
+| Key/identity management is Cyphr | atom-id provides verification function taking raw key bytes. Storage and discovery of public keys is not atom's concern. | No reason to duplicate. Cyphr is already all about key and identity management.                          |
 | Minimal protocol types               | No concrete types in atom-core. `Entry`, `Content`, `Error` are associated types on traits.                              | Spec removed `Dependency` — dependency edges are a manifest/resolver concern, not protocol.                  |
 | Spec-driven implementation           | Types implement spec constraints directly; `cargo check` = constraint verification.                                      | 15 constraints verifiable by type system. See spec §Verification.                                            |
 | Recursive alias resolution           | alurl resolves recursively as library surface                                                                            | An alias can expand to another `+alias`. alurl handles the chain, not the caller.                            |
@@ -127,7 +127,7 @@ direct crypto dependency (spec `[crypto-layer-separation]`).
 | atom-uri "too thin" to justify a crate                | LOW      | Accepted  | It bridges alurl + atom-id. Thin is correct — it's a format adapter.                               |
 | atom-core trait surface premature                     | MEDIUM   | Mitigated | Grounded in formal model coalgebras. Sketch round 7 validated against existing code.               |
 | atom-git scope underestimated                         | MEDIUM   | Open      | Existing git code is 2000+ lines. Clean decomposition may surface surprises during implementation. |
-| Cyphrpass API mismatch breaks trait signatures        | MEDIUM   | Mitigated | Design seams, not implementations. ~30% chance of signature changes.                               |
+| Cyphr API mismatch breaks trait signatures        | MEDIUM   | Mitigated | Design seams, not implementations. ~30% chance of signature changes.                               |
 | gix-url as alurl dependency adds weight               | LOW      | Accepted  | gix-url is already needed transitively via atom-git. alurl uses it for structured output.          |
 | VersionScheme too abstract for practical use          | MEDIUM   | Open      | Must support semver + NixOS epoch scheme at minimum. Design shapes during Phase 1b.                |
 
@@ -148,8 +148,8 @@ _None remaining. All resolved — see Decisions table._
 
 ### Out of Scope
 
-- Cyphrpass integration (design seams only)
-- Public key storage and discovery (Cyphrpass's concern)
+- Cyphr integration (design seams only)
+- Public key storage and discovery (Cyphr's concern)
 - Atom Protocol SPEC sections 4–9
 - Ion-specific manifest implementation (ion-manifest)
 - Dependency resolution (ion-resolve)
@@ -203,7 +203,7 @@ _None remaining. All resolved — see Decisions table._
      - `serde_b64` module — serde bridge for `Vec<u8>` via base64url-unpadded
    - [x] **Verification function** — takes `(pay_json, sig, alg, pub_key)`, returns `Result<Payload, VerifyError>`
          `verify_claim` → `Result<ClaimPayload>`, `verify_publish` → `Result<PublishPayload>`.
-         Key bytes are provided by the caller. Key storage/discovery is Cyphrpass's concern.
+         Key bytes are provided by the caller. Key storage/discovery is Cyphr's concern.
    - **Spec constraints verified at Phase 1 completion:**
      - rustc: `symmetric-payloads`, `claim-typ`, `publish-typ`, `path-is-subdir`,
        `rawversion-opaque`, `claim-key-required`, `publish-key-optional`, `uri-not-metadata`

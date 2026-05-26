@@ -6,7 +6,7 @@ Cargo workspaces inside a shared monorepo.
 ## Layer model
 
 ```
-Cyphrpass (L0)  →  Atom (L1)  →  Eos (L2)  →  Ion (L3)  →  Plugins (L4)
+Cyphr (L0)  →  Atom (L1)  →  Eos (L2)  →  Ion (L3)  →  Plugins (L4)
 identity/signing   protocol       runtime       frontend     adapters
 ```
 

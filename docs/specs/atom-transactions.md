@@ -355,7 +355,7 @@ the owner abstraction:
   master key fingerprint. Subkeys are authorized via binding
   signatures from the master key. Subkeys can be rotated; compromise
   of a subkey is local, not catastrophic.
-- **Rooted identity** (e.g., Cyphrpass Principal Root): owner = PR
+- **Rooted identity** (e.g., Cyphr Principal Root): owner = PR
   digest. Supports key rotation, delegation, and sub-identities
   natively. PR identity survives key transitions.
 
@@ -380,7 +380,7 @@ from richer identity frameworks without coupling to any specific one.
 `VERIFIED: unverified`
 
 **[owner-compatibility]**: Upgrading from a simpler to a richer
-identity framework (e.g., raw key → GPG master → Cyphrpass PR)
+identity framework (e.g., raw key → GPG master → Cyphr PR)
 MUST NOT alter the `AtomId`. The `AtomId` is derived from
 `(anchor, label)`, which is independent of the owner. A claim
 replacement (`[claim-replacement-transition]`) MAY update the

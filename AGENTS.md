@@ -68,11 +68,11 @@ For architecture details, see:
 - The glossary governs **concept names** — code identifiers follow Rust convention
 - When generics are needed, prefer descriptive bounds: `D: Digest`, not `H` or `T`
 
-### Cyphrpass Transition
+### Cyphr Transition
 
 The atom protocol will eventually migrate identity, signing, and storage to
-[Cyphrpass](https://cyphrme.com/cyphrpass). Design **seams** (trait boundaries,
-generic parameters) — not concrete Cyphrpass types. Key mapping:
+[Cyphr](https://cyphrme.com/cyphr). Design **seams** (trait boundaries,
+generic parameters) — not concrete Cyphr types. Key mapping:
 
 | Current (atom-git) | Future (atom-cyphr) | Migration Surface        |
 | :----------------- | :------------------ | :----------------------- |

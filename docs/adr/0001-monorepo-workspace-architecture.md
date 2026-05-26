@@ -53,7 +53,7 @@ dependencies, so the lock file captures the full graph.
 Three independent Cargo workspaces in a monorepo, mapped to a 5-layer stack:
 
 ```
-Cyphrpass (L0) → Atom (L1) → Eos (L2) → Ion (L3) → Plugins (L4)
+Cyphr (L0) → Atom (L1) → Eos (L2) → Ion (L3) → Plugins (L4)
 ```
 
 ### `atom/` — Protocol workspace (L1)
@@ -74,7 +74,7 @@ trait AtomSource {
     fn discover(&self, anchor) → Vec<(Label, AtomId)>;
 }
 
-/// Publishing — registries, git backends, Cyphrpass
+/// Publishing — registries, git backends, Cyphr
 trait AtomRegistry: AtomSource {
     fn claim(&self, anchor, label) → AtomId;
     fn publish(&self, id, version, snapshot) → ();
@@ -219,7 +219,7 @@ Both satisfy `BuildEngine`. Ion's code is generic: `fn run(engine: impl BuildEng
 
 ### Risks accepted
 
-- ~30% chance of trait signature breakage when Cyphrpass integrates.
+- ~30% chance of trait signature breakage when Cyphr integrates.
 - BuildEngine plan/apply may need refinement as cache-skipping edge cases emerge.
 - ArtifactStore wrapper may diverge from snix as snix evolves.
 - atom-uri requires surgery: `LocalAtom` moves to ion, `gix::Url` gets genericized.

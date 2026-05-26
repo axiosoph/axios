@@ -19,7 +19,7 @@ Split the eka codebase into three independent Cargo workspaces inside a monorepo
 (`axios/`), each responsible for one layer of a 5-layer stack:
 
 ```
-Cyphrpass (L0)  →  Atom (L1)  →  Eos (L2)  →  Ion (L3)  →  Plugins (L4)
+Cyphr (L0)  →  Atom (L1)  →  Eos (L2)  →  Ion (L3)  →  Plugins (L4)
 identity/signing   protocol       runtime       frontend     adapters
 ```
 
@@ -105,21 +105,21 @@ they're in the store.
 - atom-id: ≤ 5 non-std deps. atom-core: ≤ 10 total.
 - `VersionScheme` and `Manifest` are abstract — no semver types or ion.toml types in atom-core.
 - `BuildEngine` uses associated types. Object safety is not needed — compile-time generics via feature flags.
-- Storage, identity, and signing will migrate to Cyphrpass. Design seams, not implementations.
+- Storage, identity, and signing will migrate to Cyphr. Design seams, not implementations.
 - Dependencies are locked before reaching eos. No resolution at the engine layer.
 - Lock file format is per-tool. Atom knows the format type but not the hard schema.
 - `serde` is behind a feature flag.
 - Runtime operations belong in eos. Ion submits work; eos performs it.
 - Embedded engine is the default. Daemon is opt-in.
 - All traits start synchronous. Async is eos-internal, deferred until the distributed engine.
-- `ekala.toml` may not survive the Cyphrpass transition.
+- `ekala.toml` may not survive the Cyphr transition.
 
 ## Decisions
 
 | ID    | Decision             | Choice                                                                                    | Rationale                                                                       |
 | :---- | :------------------- | :---------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------ |
 | KD-1  | atom-core deps       | `std` only + atom-id + atom-uri; `serde` via feature; `nom` in atom-uri only              | Protocol purity. Storage deps go in atom-git.                                   |
-| KD-2  | AtomDigest           | Hash-agnostic (`AsRef<[u8]>` or trait-based)                                              | Cyphrpass uses multi-algorithm digests.                                         |
+| KD-2  | AtomDigest           | Hash-agnostic (`AsRef<[u8]>` or trait-based)                                              | Cyphr uses multi-algorithm digests.                                         |
 | KD-3  | Version abstraction  | `trait VersionScheme` from day one                                                        | Non-negotiable. Atom serves ecosystems beyond semver.                           |
 | KD-4  | Dep resolution       | Lives in ion-resolve                                                                      | Resolution is tooling-layer, not protocol.                                      |
 | KD-5  | Manifest             | Thin `Manifest` trait in atom-core; concrete `ion.toml` in ion-manifest                   | Same pattern as VersionScheme.                                                  |
@@ -141,7 +141,7 @@ they're in the store.
 
 | ID   | Risk / Assumption                               | Severity | Status    | Mitigation                                                                                        |
 | :--- | :---------------------------------------------- | :------- | :-------- | :------------------------------------------------------------------------------------------------ |
-| R-1  | Cyphrpass API mismatch breaks trait signatures  | MEDIUM   | Mitigated | Boundary correctness > API correctness. ~30% chance of signature changes.                         |
+| R-1  | Cyphr API mismatch breaks trait signatures  | MEDIUM   | Mitigated | Boundary correctness > API correctness. ~30% chance of signature changes.                         |
 | R-2  | Version abstraction kills productivity          | —        | CLOSED    | Non-negotiable per nrd. Cost accepted.                                                            |
 | R-3  | Three workspaces is overhead for one person     | —        | CLOSED    | Intentional. The friction is the feature.                                                         |
 | R-4  | Premature eos abstraction                       | MEDIUM   | Mitigated | BuildEngine is thin (plan/apply). Prior art: Bazel REAPI, snix. Start thin, grow from experience. |
@@ -151,12 +151,12 @@ they're in the store.
 | R-8  | BuildEngine plan/apply is over-engineered       | LOW      | Accepted  | Cache-skipping is the core value. Terraform validates the pattern.                                |
 | R-9  | Three eos crates is too many up front           | LOW      | Accepted  | Early modularization is cheaper than late extraction.                                             |
 | R-10 | atom-uri requires surgery                       | MEDIUM   | Accepted  | `LocalAtom` moves to ion; `gix::Url` gets genericized.                                            |
-| A-1  | Atom sits atop Cyphrpass                        | —        | Validated | nrd is active in Cyphrpass development.                                                           |
+| A-1  | Atom sits atop Cyphr                        | —        | Validated | nrd is active in Cyphr development.                                                           |
 | A-2  | Existing code has proven concepts worth porting | —        | Validated | 2 years of working dep resolution, publishing, URI parsing, manifests.                            |
 | A-3  | Protocol is manifest-agnostic                   | —        | Validated | Per v2 spec.                                                                                      |
 | A-4  | Cryptographic chain is the foundation           | —        | Validated | Every step is content-addressed and cacheable.                                                    |
 | A-5  | Local atoms land in the same store as published | —        | Validated | Current eka copies local atoms into the cache repo with a dev prerelease version.                 |
-| A-6  | ekala.toml is not a central pillar              | —        | Validated | May not survive Cyphrpass transition.                                                             |
+| A-6  | ekala.toml is not a central pillar              | —        | Validated | May not survive Cyphr transition.                                                             |
 | A-7  | Embedded engine is the right default            | —        | Validated | Prior art: Cargo, single-user Nix, Go.                                                            |
 
 ## Scope
@@ -178,7 +178,7 @@ they're in the store.
 ### Out of scope
 
 - Finalizing Atom Protocol SPEC sections 4–9
-- Cyphrpass integration
+- Cyphr integration
 - Dynamic plugin system (WASM/RPC)
 - Distributed eos (daemon, networking, `RemoteEngine`)
 - Full feature parity with current eka CLI
