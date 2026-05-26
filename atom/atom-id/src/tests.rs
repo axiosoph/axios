@@ -419,7 +419,7 @@ fn test_tmb() -> crate::Thumbprint {
 
 #[test]
 fn claim_payload_typ_constant() {
-    let claim = crate::ClaimPayload::new(crate::Alg::ES256, test_id(), 1000, vec![99], test_tmb());
+    let claim = crate::ClaimPayload::new(crate::Alg::ES256, test_id(), 1000, vec![99], "cargo".to_string(), vec![0; 32], test_tmb());
     assert_eq!(claim.typ, crate::TYP_CLAIM);
     assert_eq!(claim.typ, "atom/claim");
 }
@@ -443,7 +443,7 @@ fn publish_payload_typ_constant() {
 
 #[test]
 fn claim_payload_has_anchor_label() {
-    let claim = crate::ClaimPayload::new(crate::Alg::ES256, test_id(), 1000, vec![99], test_tmb());
+    let claim = crate::ClaimPayload::new(crate::Alg::ES256, test_id(), 1000, vec![99], "cargo".to_string(), vec![0; 32], test_tmb());
     assert_eq!(claim.anchor, test_anchor());
     assert_eq!(claim.label, test_label());
 }
@@ -467,7 +467,7 @@ fn publish_payload_has_anchor_label() {
 
 #[test]
 fn claim_payload_serde_roundtrip() {
-    let claim = crate::ClaimPayload::new(crate::Alg::ES256, test_id(), 1000, vec![99], test_tmb());
+    let claim = crate::ClaimPayload::new(crate::Alg::ES256, test_id(), 1000, vec![99], "cargo".to_string(), vec![0; 32], test_tmb());
     let json = serde_json::to_string(&claim).unwrap();
     let back: crate::ClaimPayload = serde_json::from_str(&json).unwrap();
     assert_eq!(back, claim);
@@ -493,7 +493,7 @@ fn publish_payload_serde_roundtrip() {
 
 #[test]
 fn atom_id_from_claim() {
-    let claim = crate::ClaimPayload::new(crate::Alg::ES256, test_id(), 1000, vec![99], test_tmb());
+    let claim = crate::ClaimPayload::new(crate::Alg::ES256, test_id(), 1000, vec![99], "cargo".to_string(), vec![0; 32], test_tmb());
     let id = AtomId::new(claim.anchor.clone(), claim.label.clone());
     assert_eq!(id, test_id());
 }
@@ -518,7 +518,7 @@ fn atom_id_from_publish() {
 #[test]
 fn both_payloads_same_identity() {
     let id = test_id();
-    let claim = crate::ClaimPayload::new(crate::Alg::ES256, id.clone(), 1000, vec![99], test_tmb());
+    let claim = crate::ClaimPayload::new(crate::Alg::ES256, id.clone(), 1000, vec![99], "cargo".to_string(), vec![0; 32], test_tmb());
     let publish = crate::PublishPayload::new(
         crate::Alg::ES256,
         id.clone(),
@@ -556,7 +556,7 @@ fn gen_ed25519_key() -> (Vec<u8>, Vec<u8>, crate::Thumbprint) {
 #[test]
 fn verify_claim_roundtrip() {
     let (prv, pub_bytes, tmb) = gen_ed25519_key();
-    let claim = crate::ClaimPayload::new(crate::Alg::Ed25519, test_id(), 1000, vec![99], tmb);
+    let claim = crate::ClaimPayload::new(crate::Alg::Ed25519, test_id(), 1000, vec![99], "cargo".to_string(), vec![0; 32], tmb);
     let pay_json = serde_json::to_vec(&claim).unwrap();
     let (sig, _cad) = coz_rs::sign_json(&pay_json, "Ed25519", &prv, &pub_bytes).unwrap();
 
@@ -596,7 +596,7 @@ fn verify_publish_roundtrip() {
 #[test]
 fn verify_claim_wrong_sig() {
     let (_prv, pub_bytes, tmb) = gen_ed25519_key();
-    let claim = crate::ClaimPayload::new(crate::Alg::Ed25519, test_id(), 1000, vec![99], tmb);
+    let claim = crate::ClaimPayload::new(crate::Alg::Ed25519, test_id(), 1000, vec![99], "cargo".to_string(), vec![0; 32], tmb);
     let pay_json = serde_json::to_vec(&claim).unwrap();
     let bad_sig = vec![0u8; 64]; // garbage signature
 
@@ -611,7 +611,7 @@ fn verify_claim_wrong_sig() {
 fn verify_claim_wrong_typ() {
     let (prv, pub_bytes, tmb) = gen_ed25519_key();
     // Build a claim but tamper with the typ field in the JSON
-    let claim = crate::ClaimPayload::new(crate::Alg::Ed25519, test_id(), 1000, vec![99], tmb);
+    let claim = crate::ClaimPayload::new(crate::Alg::Ed25519, test_id(), 1000, vec![99], "cargo".to_string(), vec![0; 32], tmb);
     let mut json_val: serde_json::Value = serde_json::to_value(&claim).unwrap();
     json_val["typ"] = serde_json::Value::String("atom/publish".into());
     let pay_json = serde_json::to_vec(&json_val).unwrap();
@@ -627,7 +627,7 @@ fn verify_claim_wrong_typ() {
 #[test]
 fn verify_claim_unknown_alg() {
     let (_prv, pub_bytes, tmb) = gen_ed25519_key();
-    let claim = crate::ClaimPayload::new(crate::Alg::Ed25519, test_id(), 1000, vec![99], tmb);
+    let claim = crate::ClaimPayload::new(crate::Alg::Ed25519, test_id(), 1000, vec![99], "cargo".to_string(), vec![0; 32], tmb);
     let pay_json = serde_json::to_vec(&claim).unwrap();
 
     let result = crate::verify_claim(&pay_json, &[], "UNSUPPORTED", &pub_bytes);

@@ -92,15 +92,55 @@ pub trait Manifest {
 /// The common interface shared by sources and stores (model §2.1).
 /// Two implementations are interchangeable if `resolve` and `discover`
 /// agree pointwise (bisimulation equivalence).
+/// Trait representing an observed entry in an atom source.
+pub trait AtomEntry {
+    /// Concrete version observation type.
+    type Version: AtomVersion;
+
+    /// Iterator over the versions of this entry.
+    type VersionIter<'a>: Iterator<Item = &'a Self::Version> + 'a
+    where
+        Self: 'a;
+
+    /// The unique identity of the atom.
+    fn id(&self) -> &AtomId;
+
+    /// Iterate over all resolved versions of the atom.
+    fn versions(&self) -> Self::VersionIter<'_>;
+}
+
+/// Trait representing an observed version of an atom.
+pub trait AtomVersion {
+    /// The unparsed version string.
+    fn version(&self) -> &RawVersion;
+
+    /// Content snapshot digest.
+    fn dig(&self) -> &[u8];
+
+    /// Opaque Coz digest of the authorizing claim.
+    fn czd(&self) -> Option<&Czd>;
+
+    /// Raw claim Coz message envelope JSON string, if signed.
+    fn claim_msg(&self) -> Option<&str>;
+
+    /// Raw publish Coz message envelope JSON string, if signed.
+    fn publish_msg(&self) -> Option<&str>;
+}
+
+/// Read-only observation of an atom store or source.
+///
+/// The common interface shared by sources and stores (model §2.1).
+/// Two implementations are interchangeable if `resolve` and `discover`
+/// agree pointwise (bisimulation equivalence).
 ///
 /// Observations are wrapped in `Result` to distinguish "not found"
 /// (`Ok(None)`) from backend failure (`Err`).
-pub trait AtomSource {
+pub trait AtomSource: 'static {
     /// Backend-defined observation type returned by [`resolve`](Self::resolve).
-    type Entry;
+    type Entry: AtomEntry;
 
     /// Backend-specific error type.
-    type Error;
+    type Error: std::fmt::Debug + std::fmt::Display;
 
     /// Look up an atom by its identity.
     ///
@@ -113,6 +153,9 @@ pub trait AtomSource {
     /// Returns atom identities, not full entries — use
     /// [`resolve`](Self::resolve) for observation data.
     fn discover(&self, query: &str) -> Result<Vec<AtomId>, Self::Error>;
+
+    /// Downcast helper to support concrete backend operations.
+    fn as_any(&self) -> &dyn std::any::Any;
 }
 
 /// Claiming and publishing interface (source-side).

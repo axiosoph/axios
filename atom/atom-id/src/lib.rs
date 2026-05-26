@@ -265,6 +265,11 @@ pub struct ClaimPayload {
     /// Spec constraint: `[owner-abstract]`.
     #[cfg_attr(feature = "serde", serde(with = "serde_b64"))]
     pub owner: Vec<u8>,
+    /// PURL type identifying the package ecosystem (e.g., "cargo").
+    pub pkg: String,
+    /// Source revision hash at claim time (temporal floor).
+    #[cfg_attr(feature = "serde", serde(with = "serde_b64"))]
+    pub src: Vec<u8>,
     /// Coz key thumbprint of the signing key.
     pub tmb: Thumbprint,
     /// Transaction type — always [`TYP_CLAIM`].
@@ -276,13 +281,15 @@ impl ClaimPayload {
     ///
     /// Takes an [`AtomId`] to ensure that the anchor and label come from
     /// a validated identity pair. Sets `typ` to [`TYP_CLAIM`] automatically.
-    pub fn new(alg: Alg, id: AtomId, now: u64, owner: Vec<u8>, tmb: Thumbprint) -> Self {
+    pub fn new(alg: Alg, id: AtomId, now: u64, owner: Vec<u8>, pkg: String, src: Vec<u8>, tmb: Thumbprint) -> Self {
         Self {
             alg,
             anchor: id.anchor,
             label: id.label,
             now,
             owner,
+            pkg,
+            src,
             tmb,
             typ: TYP_CLAIM.to_owned(),
         }
