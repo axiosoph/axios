@@ -12,8 +12,8 @@ use gix::hash::ObjectId;
 use gix::objs::Exists;
 use gix::objs::tree::{Entry, EntryKind, EntryMode};
 use gix::prelude::{Find, Write};
-use gix::refs::{FullName, Target};
 use gix::refs::transaction::{Change, LogChange, PreviousValue, RefEdit, RefLog};
+use gix::refs::{FullName, Target};
 
 use crate::error::GitError;
 use crate::registry::GitRegistry;
@@ -137,10 +137,15 @@ impl AtomStore for GitStore {
         };
 
         // 2. Discover all atom identities in the source
-        let discovered_ids = source.discover("").map_err(|e| GitError::Validation(e.to_string()))?;
+        let discovered_ids = source
+            .discover("")
+            .map_err(|e| GitError::Validation(e.to_string()))?;
 
         for id in discovered_ids {
-            if let Some(entry) = source.resolve(&id).map_err(|e| GitError::Validation(e.to_string()))? {
+            if let Some(entry) = source
+                .resolve(&id)
+                .map_err(|e| GitError::Validation(e.to_string()))?
+            {
                 for v in entry.versions() {
                     let version = v.version();
                     let dig = v.dig();
@@ -173,7 +178,9 @@ impl AtomStore for GitStore {
                             .pay
                             .get("alg")
                             .and_then(|val| val.as_str())
-                            .ok_or_else(|| GitError::Validation("Claim alg is missing or invalid".into()))?;
+                            .ok_or_else(|| {
+                                GitError::Validation("Claim alg is missing or invalid".into())
+                            })?;
 
                         let claim_payload = atom_id::verify_claim(
                             &claim_pay_bytes,
@@ -183,22 +190,29 @@ impl AtomStore for GitStore {
                         )?;
 
                         // Verify claim-pubkey thumbprint matches payload tmb (Step 4)
-                        let computed_tmb = coz_rs::compute_thumbprint_for_alg(claim_alg_str, claim_pub_key).ok_or_else(|| {
-                            GitError::Validation("Failed to compute claim key thumbprint".into())
-                        })?;
+                        let computed_tmb =
+                            coz_rs::compute_thumbprint_for_alg(claim_alg_str, claim_pub_key)
+                                .ok_or_else(|| {
+                                    GitError::Validation(
+                                        "Failed to compute claim key thumbprint".into(),
+                                    )
+                                })?;
                         if computed_tmb != claim_payload.tmb {
                             return Err(GitError::Validation("Claim thumbprint mismatch".into()));
                         }
 
                         // Parse and verify publish coz message
-                        let publish_envelope: CozMessageEnvelope = serde_json::from_str(publish_msg)?;
+                        let publish_envelope: CozMessageEnvelope =
+                            serde_json::from_str(publish_msg)?;
                         let publish_pay_bytes = serde_json::to_vec(&publish_envelope.pay)?;
                         let pub_key = publish_envelope.key.as_ref().unwrap_or(claim_pub_key);
                         let publish_alg_str = publish_envelope
                             .pay
                             .get("alg")
                             .and_then(|val| val.as_str())
-                            .ok_or_else(|| GitError::Validation("Publish alg is missing or invalid".into()))?;
+                            .ok_or_else(|| {
+                                GitError::Validation("Publish alg is missing or invalid".into())
+                            })?;
 
                         let publish_payload = atom_id::verify_publish(
                             &publish_pay_bytes,
@@ -217,21 +231,37 @@ impl AtomStore for GitStore {
                         // Verify temporal ordering (Step 6)
                         if publish_payload.now <= claim_payload.now {
                             return Err(GitError::Validation(
-                                "Temporal ordering violation: publish timestamp not after claim".into(),
+                                "Temporal ordering violation: publish timestamp not after claim"
+                                    .into(),
                             ));
                         }
 
-                        let claim_oid = ObjectId::from_bytes_or_panic(publish_payload.claim.as_bytes());
+                        let claim_oid =
+                            ObjectId::from_bytes_or_panic(publish_payload.claim.as_bytes());
                         let claim_czd_hex = claim_oid.to_hex().to_string();
 
                         // Look up the version reference in the source repository to find the publish tag OID
-                        let tag_ref_name = if source_repo.try_find_reference(&format!("refs/atom/pub/{}/{}", id.label(), version.as_str()))?.is_some() {
+                        let tag_ref_name = if source_repo
+                            .try_find_reference(&format!(
+                                "refs/atom/pub/{}/{}",
+                                id.label(),
+                                version.as_str()
+                            ))?
+                            .is_some()
+                        {
                             format!("refs/atom/pub/{}/{}", id.label(), version.as_str())
                         } else {
                             format!("refs/atom/d/{}/{}", claim_czd_hex, version.as_str())
                         };
-                        let tag_ref = source_repo.try_find_reference(&tag_ref_name)?
-                            .ok_or_else(|| GitError::Validation(format!("Could not find version reference {} in source repository", tag_ref_name)))?;
+                        let tag_ref =
+                            source_repo
+                                .try_find_reference(&tag_ref_name)?
+                                .ok_or_else(|| {
+                                    GitError::Validation(format!(
+                                        "Could not find version reference {} in source repository",
+                                        tag_ref_name
+                                    ))
+                                })?;
                         let tag_oid = tag_ref.id().detach();
 
                         // 3. Transfer Git objects from source ODB to store ODB
@@ -251,7 +281,8 @@ impl AtomStore for GitStore {
 
                         // 4. Update the references in store layout
                         let store_claim_ref = format!("refs/atom/claims/d/{}", claim_czd_hex);
-                        let store_version_ref = format!("refs/atom/d/{}/{}", claim_czd_hex, version.as_str());
+                        let store_version_ref =
+                            format!("refs/atom/d/{}/{}", claim_czd_hex, version.as_str());
 
                         let mut edits = Vec::new();
 
@@ -271,14 +302,16 @@ impl AtomStore for GitStore {
                             deref: false,
                         });
 
-                        let version_ref_fullname = FullName::try_from(store_version_ref.as_str())
-                            .map_err(|e| GitError::Validation(e.to_string()))?;
+                        let version_ref_fullname =
+                            FullName::try_from(store_version_ref.as_str())
+                                .map_err(|e| GitError::Validation(e.to_string()))?;
                         edits.push(RefEdit {
                             change: Change::Update {
                                 log: LogChange {
                                     mode: RefLog::AndReference,
                                     force_create_reflog: false,
-                                    message: format!("Ingest version tag {}", version.as_str()).into(),
+                                    message: format!("Ingest version tag {}", version.as_str())
+                                        .into(),
                                 },
                                 expected: PreviousValue::Any,
                                 new: Target::Object(tag_oid),
@@ -300,10 +333,13 @@ impl AtomStore for GitStore {
 
                         // Compute dev digest using ES256
                         let digest = atom_core::AtomDigest::compute(&id, coz_rs::Alg::ES256)
-                            .ok_or_else(|| GitError::Validation("Failed to compute atom digest".into()))?;
+                            .ok_or_else(|| {
+                                GitError::Validation("Failed to compute atom digest".into())
+                            })?;
                         let digest_str = digest.to_string();
 
-                        let dev_ref_name = format!("refs/atom/dev/{}/{}", digest_str, version.as_str());
+                        let dev_ref_name =
+                            format!("refs/atom/dev/{}/{}", digest_str, version.as_str());
                         let dev_ref_fullname = FullName::try_from(dev_ref_name.as_str())
                             .map_err(|e| GitError::Validation(e.to_string()))?;
 
@@ -340,10 +376,7 @@ impl AtomStore for GitStore {
 }
 
 /// Recursively write directory tree entries from a path to a Git ODB.
-fn write_tree_recursive(
-    repo: &gix::Repository,
-    path: &Path,
-) -> Result<ObjectId, GitError> {
+fn write_tree_recursive(repo: &gix::Repository, path: &Path) -> Result<ObjectId, GitError> {
     let mut entries = Vec::new();
 
     for entry_res in fs::read_dir(path)? {
@@ -368,9 +401,11 @@ fn write_tree_recursive(
         } else if metadata.is_symlink() {
             let target = fs::read_link(&entry_path)?;
             let target_str = target.to_string_lossy();
-            let blob_oid = repo.write_object(gix::objs::Blob {
-                data: target_str.as_bytes().to_vec(),
-            })?.detach();
+            let blob_oid = repo
+                .write_object(gix::objs::Blob {
+                    data: target_str.as_bytes().to_vec(),
+                })?
+                .detach();
             entries.push(Entry {
                 mode: EntryMode::from(EntryKind::Link),
                 filename: gix::objs::bstr::BString::from(file_name_str.to_string()),
@@ -378,9 +413,9 @@ fn write_tree_recursive(
             });
         } else if metadata.is_file() {
             let content = fs::read(&entry_path)?;
-            let blob_oid = repo.write_object(gix::objs::Blob {
-                data: content,
-            })?.detach();
+            let blob_oid = repo
+                .write_object(gix::objs::Blob { data: content })?
+                .detach();
 
             #[cfg(unix)]
             let is_exec = {
@@ -422,8 +457,15 @@ fn copy_object(
     }
 
     let mut buf = Vec::new();
-    if let Some(obj) = src_repo.objects.try_find(&oid, &mut buf).map_err(|e| GitError::Validation(e.to_string()))? {
-        dest_repo.objects.write_buf(obj.kind, &buf).map_err(|e| GitError::Validation(e.to_string()))?;
+    if let Some(obj) = src_repo
+        .objects
+        .try_find(&oid, &mut buf)
+        .map_err(|e| GitError::Validation(e.to_string()))?
+    {
+        dest_repo
+            .objects
+            .write_buf(obj.kind, &buf)
+            .map_err(|e| GitError::Validation(e.to_string()))?;
     }
     Ok(())
 }
@@ -467,18 +509,18 @@ fn copy_tag_chain(
             gix::object::Kind::Tag => {
                 let tag = obj.try_into_tag()?;
                 current_oid = tag.target_id()?.detach();
-            }
+            },
             gix::object::Kind::Commit => {
                 let commit = obj.try_into_commit()?;
                 copy_tree_recursive(src_repo, dest_repo, commit.tree_id()?.detach())?;
                 return Ok(current_oid);
-            }
+            },
             _ => {
                 return Err(GitError::Validation(format!(
                     "Unexpected object kind {} in tag chain",
                     obj.kind
                 )));
-            }
+            },
         }
     }
 }

@@ -8,8 +8,8 @@ use std::time::SystemTime;
 use atom_core::{AtomId, AtomRegistry, AtomSource, Czd, RawVersion};
 use atom_id::{Anchor, ClaimPayload, PublishPayload};
 use gix::hash::ObjectId;
-use gix::refs::{FullName, Target};
 use gix::refs::transaction::{Change, LogChange, PreviousValue, RefEdit, RefLog};
+use gix::refs::{FullName, Target};
 
 use crate::error::GitError;
 use crate::source::{CozMessageEnvelope, GitEntry, GitSource};
@@ -71,7 +71,8 @@ impl AtomSource for GitRegistry {
 impl AtomRegistry for GitRegistry {
     fn claim(&self, id: &AtomId, owner: &[u8]) -> Result<Czd, Self::Error> {
         let repo = &self.source.repo;
-        let head_oid = repo.head_id()
+        let head_oid = repo
+            .head_id()
             .map_err(|e| GitError::Init(format!("Failed to resolve HEAD: {}", e)))?
             .detach();
 
@@ -87,13 +88,13 @@ impl AtomRegistry for GitRegistry {
 
         // 2. Determine claim chain parenting
         let claim_ref_name = format!("refs/atom/claims/pub/{}", id.label());
-        let parent_oid = repo.try_find_reference(&claim_ref_name)?
+        let parent_oid = repo
+            .try_find_reference(&claim_ref_name)?
             .map(|claim_ref| claim_ref.id().detach());
 
         // 3. Construct ClaimPayload
-        let tmb = coz_rs::compute_thumbprint_for_alg(self.alg.name(), &self.pub_key).ok_or_else(|| {
-            GitError::Coz("Failed to compute key thumbprint".into())
-        })?;
+        let tmb = coz_rs::compute_thumbprint_for_alg(self.alg.name(), &self.pub_key)
+            .ok_or_else(|| GitError::Coz("Failed to compute key thumbprint".into()))?;
 
         let now = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -112,12 +113,17 @@ impl AtomRegistry for GitRegistry {
 
         // 4. Serialize, sign, and envelope
         let pay_val = serde_json::to_value(&claim_payload)?;
-        let pay_map: indexmap::IndexMap<String, serde_json::Value> = serde_json::from_value(pay_val)?;
+        let pay_map: indexmap::IndexMap<String, serde_json::Value> =
+            serde_json::from_value(pay_val)?;
         let pay_bytes = serde_json::to_vec(&pay_map)?;
 
-        let (sig, _cad) = coz_rs::sign_json(&pay_bytes, self.alg.name(), &self.signing_key, &self.pub_key).ok_or_else(|| {
-            GitError::Coz("Failed to sign claim JSON".into())
-        })?;
+        let (sig, _cad) = coz_rs::sign_json(
+            &pay_bytes,
+            self.alg.name(),
+            &self.signing_key,
+            &self.pub_key,
+        )
+        .ok_or_else(|| GitError::Coz("Failed to sign claim JSON".into()))?;
 
         let envelope = CozMessageEnvelope {
             pay: pay_map,
@@ -187,7 +193,8 @@ impl AtomRegistry for GitRegistry {
 
         // 1. Resolve and verify the active claim
         let claim_ref_name = format!("refs/atom/claims/pub/{}", id.label());
-        let claim_ref = repo.try_find_reference(&claim_ref_name)?
+        let claim_ref = repo
+            .try_find_reference(&claim_ref_name)?
             .ok_or_else(|| GitError::NoActiveClaim(id.label().to_string()))?;
         let claim_oid = claim_ref.id().detach();
 
@@ -207,10 +214,9 @@ impl AtomRegistry for GitRegistry {
 
         let claim_envelope: CozMessageEnvelope = serde_json::from_str(&claim_msg_str)?;
         let claim_pay_bytes = serde_json::to_vec(&claim_envelope.pay)?;
-        let claim_pub_key = claim_envelope
-            .key
-            .as_ref()
-            .ok_or_else(|| GitError::Validation("Claim CozMessage is missing the key field".into()))?;
+        let claim_pub_key = claim_envelope.key.as_ref().ok_or_else(|| {
+            GitError::Validation("Claim CozMessage is missing the key field".into())
+        })?;
 
         let claim_alg_str = claim_envelope
             .pay
@@ -218,7 +224,12 @@ impl AtomRegistry for GitRegistry {
             .and_then(|v| v.as_str())
             .ok_or_else(|| GitError::Validation("Claim alg field is missing or invalid".into()))?;
 
-        let claim_payload = atom_id::verify_claim(&claim_pay_bytes, &claim_envelope.sig, claim_alg_str, claim_pub_key)?;
+        let claim_payload = atom_id::verify_claim(
+            &claim_pay_bytes,
+            &claim_envelope.sig,
+            claim_alg_str,
+            claim_pub_key,
+        )?;
 
         // 3. Verify temporal vector (publish src must be a descendant of claim src)
         let publish_src_oid = ObjectId::from_bytes_or_panic(src);
@@ -233,21 +244,30 @@ impl AtomRegistry for GitRegistry {
 
         // 4. Create the deterministic, parentless atom commit
         let tree_oid = ObjectId::from_bytes_or_panic(dig);
-        let atom_commit_oid = crate::gix_util::write_deterministic_commit(repo, tree_oid, publish_src_oid)?;
+        let atom_commit_oid =
+            crate::gix_util::write_deterministic_commit(repo, tree_oid, publish_src_oid)?;
 
         // 5. Determine version reference state and update tag target
         let version_ref_name = format!("refs/atom/pub/{}/{}", id.label(), version.as_str());
-        let (target_oid, target_kind, version_ref_constraint) = if let Some(version_ref) = repo.try_find_reference(&version_ref_name)? {
-            let prev_tag_oid = version_ref.id().detach();
-            (prev_tag_oid, gix::object::Kind::Tag, PreviousValue::MustExistAndMatch(Target::Object(prev_tag_oid)))
-        } else {
-            (atom_commit_oid, gix::object::Kind::Commit, PreviousValue::MustNotExist)
-        };
+        let (target_oid, target_kind, version_ref_constraint) =
+            if let Some(version_ref) = repo.try_find_reference(&version_ref_name)? {
+                let prev_tag_oid = version_ref.id().detach();
+                (
+                    prev_tag_oid,
+                    gix::object::Kind::Tag,
+                    PreviousValue::MustExistAndMatch(Target::Object(prev_tag_oid)),
+                )
+            } else {
+                (
+                    atom_commit_oid,
+                    gix::object::Kind::Commit,
+                    PreviousValue::MustNotExist,
+                )
+            };
 
         // 6. Construct PublishPayload
-        let tmb = coz_rs::compute_thumbprint_for_alg(self.alg.name(), &self.pub_key).ok_or_else(|| {
-            GitError::Coz("Failed to compute key thumbprint".into())
-        })?;
+        let tmb = coz_rs::compute_thumbprint_for_alg(self.alg.name(), &self.pub_key)
+            .ok_or_else(|| GitError::Coz("Failed to compute key thumbprint".into()))?;
 
         let current_time = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -275,12 +295,17 @@ impl AtomRegistry for GitRegistry {
 
         // 7. Serialize, sign, and envelope
         let pay_val = serde_json::to_value(&publish_payload)?;
-        let pay_map: indexmap::IndexMap<String, serde_json::Value> = serde_json::from_value(pay_val)?;
+        let pay_map: indexmap::IndexMap<String, serde_json::Value> =
+            serde_json::from_value(pay_val)?;
         let pay_bytes = serde_json::to_vec(&pay_map)?;
 
-        let (sig, _cad) = coz_rs::sign_json(&pay_bytes, self.alg.name(), &self.signing_key, &self.pub_key).ok_or_else(|| {
-            GitError::Coz("Failed to sign publish JSON".into())
-        })?;
+        let (sig, _cad) = coz_rs::sign_json(
+            &pay_bytes,
+            self.alg.name(),
+            &self.signing_key,
+            &self.pub_key,
+        )
+        .ok_or_else(|| GitError::Coz("Failed to sign publish JSON".into()))?;
 
         let envelope = CozMessageEnvelope {
             pay: pay_map,

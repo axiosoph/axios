@@ -1,10 +1,10 @@
-use std::collections::{HashSet, VecDeque};
-use gix::hash::ObjectId;
-use gix::objs::{Commit, Tag};
-use gix::objs::bstr::BString;
-use gix::date::Time;
-use gix::actor::Signature;
 use crate::error::GitError;
+use gix::actor::Signature;
+use gix::date::Time;
+use gix::hash::ObjectId;
+use gix::objs::bstr::BString;
+use gix::objs::{Commit, Tag};
+use std::collections::{HashSet, VecDeque};
 
 /// The blank author/committer identity used for deterministic protocol commits.
 pub fn blank_signature() -> Signature {
@@ -34,7 +34,7 @@ pub fn derive_anchor(repo: &gix::Repository, src_oid: ObjectId) -> Result<Object
     while let Some(oid) = queue.pop_front() {
         let obj = repo.find_object(oid)?;
         let commit = obj.try_into_commit()?;
-        
+
         let parent_ids: Vec<ObjectId> = commit.parent_ids().map(|p| p.detach()).collect();
         if parent_ids.is_empty() {
             roots.push(oid);
@@ -59,10 +59,10 @@ pub fn derive_anchor(repo: &gix::Repository, src_oid: ObjectId) -> Result<Object
         let obj = repo.find_object(oid)?;
         let commit = obj.try_into_commit()?;
         let committer = commit.committer()?;
-        let decoded_time = committer.time().map_err(|e| {
-            GitError::Validation(format!("Failed to parse committer time: {}", e))
-        })?;
-        
+        let decoded_time = committer
+            .time()
+            .map_err(|e| GitError::Validation(format!("Failed to parse committer time: {}", e)))?;
+
         let seconds = decoded_time.seconds as u64;
         if seconds < oldest_time {
             oldest_time = seconds;
@@ -91,9 +91,12 @@ pub fn write_deterministic_commit(
         committer: blank,
         encoding: None,
         message: BString::from(""),
-        extra_headers: vec![(BString::from("src"), BString::from(src_oid.to_hex().to_string()))],
+        extra_headers: vec![(
+            BString::from("src"),
+            BString::from(src_oid.to_hex().to_string()),
+        )],
     };
-    
+
     let oid = repo.write_object(commit)?.detach();
     Ok(oid)
 }
@@ -110,7 +113,9 @@ pub fn write_claim_commit(
     parent_oid: Option<ObjectId>,
 ) -> Result<ObjectId, GitError> {
     // Write an empty tree to obtain the correct OID for the active hash algorithm
-    let empty_tree = gix::objs::Tree { entries: Vec::new() };
+    let empty_tree = gix::objs::Tree {
+        entries: Vec::new(),
+    };
     let tree_oid = repo.write_object(empty_tree)?.detach();
 
     let blank = blank_signature();

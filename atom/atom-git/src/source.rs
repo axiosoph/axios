@@ -4,10 +4,10 @@ use coz_rs::Czd;
 use gix::hash::ObjectId;
 use serde::{Deserialize, Serialize};
 
-use atom_core::{AtomSource, AtomId, RawVersion};
-use atom_id::{ClaimPayload, PublishPayload};
 use crate::error::GitError;
 use crate::gix_util::is_descendant;
+use atom_core::{AtomId, AtomSource, RawVersion};
+use atom_id::{ClaimPayload, PublishPayload};
 
 /// Opaque module for custom base64 serialization.
 mod option_b64 {
@@ -122,19 +122,25 @@ impl AtomSource for GitSource {
             // Parse claim envelope
             let claim_envelope: CozMessageEnvelope = serde_json::from_str(&claim_msg_str)?;
             let claim_pay_bytes = serde_json::to_vec(&claim_envelope.pay)?;
-            let claim_pub_key = claim_envelope
-                .key
-                .as_ref()
-                .ok_or_else(|| GitError::Validation("Claim CozMessage is missing the key field".into()))?;
+            let claim_pub_key = claim_envelope.key.as_ref().ok_or_else(|| {
+                GitError::Validation("Claim CozMessage is missing the key field".into())
+            })?;
 
             // Verify claim signature
             let alg_str = claim_envelope
                 .pay
                 .get("alg")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| GitError::Validation("Claim alg field is missing or invalid".into()))?;
+                .ok_or_else(|| {
+                    GitError::Validation("Claim alg field is missing or invalid".into())
+                })?;
 
-            let claim_payload = atom_id::verify_claim(&claim_pay_bytes, &claim_envelope.sig, alg_str, claim_pub_key)?;
+            let claim_payload = atom_id::verify_claim(
+                &claim_pay_bytes,
+                &claim_envelope.sig,
+                alg_str,
+                claim_pub_key,
+            )?;
 
             // Verify that anchor matches
             if claim_payload.anchor == *id.anchor() {
@@ -161,16 +167,16 @@ impl AtomSource for GitSource {
                                 let tag_decoded = tag.decode()?;
                                 tag_messages.push((current_oid, tag_decoded.message.to_string()));
                                 current_oid = tag.target_id()?.detach();
-                            }
+                            },
                             gix::object::Kind::Commit => {
                                 break current_oid;
-                            }
+                            },
                             _ => {
                                 return Err(GitError::Validation(format!(
                                     "Invalid object kind {} in tag chain for version {}",
                                     obj.kind, version_str
                                 )));
-                            }
+                            },
                         }
                     };
 
@@ -184,11 +190,15 @@ impl AtomSource for GitSource {
                         .find(|(k, _)| *k == "src")
                         .map(|(_, v)| v.to_string())
                         .ok_or_else(|| {
-                            GitError::Validation(format!("Atom commit {} is missing 'src' header", dig_oid))
+                            GitError::Validation(format!(
+                                "Atom commit {} is missing 'src' header",
+                                dig_oid
+                            ))
                         })?;
-                    let atom_src_oid = ObjectId::from_hex(atom_src_val.as_bytes()).map_err(|e| {
-                        GitError::Validation(format!("Invalid src header OID: {}", e))
-                    })?;
+                    let atom_src_oid =
+                        ObjectId::from_hex(atom_src_val.as_bytes()).map_err(|e| {
+                            GitError::Validation(format!("Invalid src header OID: {}", e))
+                        })?;
 
                     // Verify the publish coz messages (from tip to oldest)
                     let mut prev_publish_payload: Option<PublishPayload> = None;
@@ -207,9 +217,18 @@ impl AtomSource for GitSource {
                             .pay
                             .get("alg")
                             .and_then(|v| v.as_str())
-                            .ok_or_else(|| GitError::Validation("Publish alg field is missing or invalid".into()))?;
+                            .ok_or_else(|| {
+                                GitError::Validation(
+                                    "Publish alg field is missing or invalid".into(),
+                                )
+                            })?;
 
-                        let pub_payload = atom_id::verify_publish(&pub_pay_bytes, &pub_envelope.sig, pub_alg_str, pub_key_bytes)?;
+                        let pub_payload = atom_id::verify_publish(
+                            &pub_pay_bytes,
+                            &pub_envelope.sig,
+                            pub_alg_str,
+                            pub_key_bytes,
+                        )?;
 
                         // Invariant [tag-chain-semantic-immutable]: immutable fields must match across updates
                         if prev_publish_payload.as_ref().is_some_and(|prev| {
@@ -220,7 +239,7 @@ impl AtomSource for GitSource {
                                 || pub_payload.path != prev.path
                         }) {
                             return Err(GitError::Validation(
-                                "Semantic immutability violation in update tag chain".into()
+                                "Semantic immutability violation in update tag chain".into(),
                             ));
                         }
 
@@ -228,7 +247,8 @@ impl AtomSource for GitSource {
                         let pub_src_oid = ObjectId::from_bytes_or_panic(&pub_payload.src);
                         if pub_src_oid != atom_src_oid {
                             return Err(GitError::Validation(
-                                "Publish payload src does not match atom commit extra header".into(),
+                                "Publish payload src does not match atom commit extra header"
+                                    .into(),
                             ));
                         }
 
@@ -252,7 +272,10 @@ impl AtomSource for GitSource {
                     let czd = Czd::from_bytes(claim_oid.as_bytes().to_vec());
 
                     let pub_payload = prev_publish_payload.ok_or_else(|| {
-                        GitError::Validation(format!("No publish tag found for version {}", version_str))
+                        GitError::Validation(format!(
+                            "No publish tag found for version {}",
+                            version_str
+                        ))
                     })?;
 
                     versions.push(GitVersionEntry {
@@ -292,18 +315,24 @@ impl AtomSource for GitSource {
             // Parse claim envelope
             let claim_envelope: CozMessageEnvelope = serde_json::from_str(&claim_msg_str)?;
             let claim_pay_bytes = serde_json::to_vec(&claim_envelope.pay)?;
-            let claim_pub_key = claim_envelope
-                .key
-                .as_ref()
-                .ok_or_else(|| GitError::Validation("Claim CozMessage is missing the key field".into()))?;
+            let claim_pub_key = claim_envelope.key.as_ref().ok_or_else(|| {
+                GitError::Validation("Claim CozMessage is missing the key field".into())
+            })?;
 
             let alg_str = claim_envelope
                 .pay
                 .get("alg")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| GitError::Validation("Claim alg field is missing or invalid".into()))?;
+                .ok_or_else(|| {
+                    GitError::Validation("Claim alg field is missing or invalid".into())
+                })?;
 
-            let claim_payload = atom_id::verify_claim(&claim_pay_bytes, &claim_envelope.sig, alg_str, claim_pub_key)?;
+            let claim_payload = atom_id::verify_claim(
+                &claim_pay_bytes,
+                &claim_envelope.sig,
+                alg_str,
+                claim_pub_key,
+            )?;
 
             // If the claim matches this anchor and label
             if claim_payload.anchor == *id.anchor() && claim_payload.label == *id.label() {
@@ -330,16 +359,16 @@ impl AtomSource for GitSource {
                                 let tag_decoded = tag.decode()?;
                                 tag_messages.push((current_oid, tag_decoded.message.to_string()));
                                 current_oid = tag.target_id()?.detach();
-                            }
+                            },
                             gix::object::Kind::Commit => {
                                 break current_oid;
-                            }
+                            },
                             _ => {
                                 return Err(GitError::Validation(format!(
                                     "Invalid object kind {} in tag chain for version {}",
                                     obj.kind, version_str
                                 )));
-                            }
+                            },
                         }
                     };
 
@@ -353,11 +382,15 @@ impl AtomSource for GitSource {
                         .find(|(k, _)| *k == "src")
                         .map(|(_, v)| v.to_string())
                         .ok_or_else(|| {
-                            GitError::Validation(format!("Atom commit {} is missing 'src' header", dig_oid))
+                            GitError::Validation(format!(
+                                "Atom commit {} is missing 'src' header",
+                                dig_oid
+                            ))
                         })?;
-                    let atom_src_oid = ObjectId::from_hex(atom_src_val.as_bytes()).map_err(|e| {
-                        GitError::Validation(format!("Invalid src header OID: {}", e))
-                    })?;
+                    let atom_src_oid =
+                        ObjectId::from_hex(atom_src_val.as_bytes()).map_err(|e| {
+                            GitError::Validation(format!("Invalid src header OID: {}", e))
+                        })?;
 
                     // Verify the publish coz messages (from tip to oldest)
                     let mut prev_publish_payload: Option<PublishPayload> = None;
@@ -376,9 +409,18 @@ impl AtomSource for GitSource {
                             .pay
                             .get("alg")
                             .and_then(|v| v.as_str())
-                            .ok_or_else(|| GitError::Validation("Publish alg field is missing or invalid".into()))?;
+                            .ok_or_else(|| {
+                                GitError::Validation(
+                                    "Publish alg field is missing or invalid".into(),
+                                )
+                            })?;
 
-                        let pub_payload = atom_id::verify_publish(&pub_pay_bytes, &pub_envelope.sig, pub_alg_str, pub_key_bytes)?;
+                        let pub_payload = atom_id::verify_publish(
+                            &pub_pay_bytes,
+                            &pub_envelope.sig,
+                            pub_alg_str,
+                            pub_key_bytes,
+                        )?;
 
                         // Invariant [tag-chain-semantic-immutable]: immutable fields must match across updates
                         if prev_publish_payload.as_ref().is_some_and(|prev| {
@@ -389,7 +431,7 @@ impl AtomSource for GitSource {
                                 || pub_payload.path != prev.path
                         }) {
                             return Err(GitError::Validation(
-                                "Semantic immutability violation in update tag chain".into()
+                                "Semantic immutability violation in update tag chain".into(),
                             ));
                         }
 
@@ -397,7 +439,8 @@ impl AtomSource for GitSource {
                         let pub_src_oid = ObjectId::from_bytes_or_panic(&pub_payload.src);
                         if pub_src_oid != atom_src_oid {
                             return Err(GitError::Validation(
-                                "Publish payload src does not match atom commit extra header".into(),
+                                "Publish payload src does not match atom commit extra header"
+                                    .into(),
                             ));
                         }
 
@@ -418,7 +461,10 @@ impl AtomSource for GitSource {
                     let czd = Czd::from_bytes(claim_czd_oid.as_bytes().to_vec());
 
                     let pub_payload = prev_publish_payload.ok_or_else(|| {
-                        GitError::Validation(format!("No publish tag found for version {}", version_str))
+                        GitError::Validation(format!(
+                            "No publish tag found for version {}",
+                            version_str
+                        ))
                     })?;
 
                     versions.push(GitVersionEntry {
@@ -440,7 +486,12 @@ impl AtomSource for GitSource {
 
         // 3. DEV RESOLUTION: refs/atom/dev/{atom_digest}/{dev_version}
         // Scan for dev versions for each of the 4 supported algorithms
-        for alg in [coz_rs::Alg::ES256, coz_rs::Alg::ES384, coz_rs::Alg::ES512, coz_rs::Alg::Ed25519] {
+        for alg in [
+            coz_rs::Alg::ES256,
+            coz_rs::Alg::ES384,
+            coz_rs::Alg::ES512,
+            coz_rs::Alg::Ed25519,
+        ] {
             if let Some(digest) = atom_core::AtomDigest::compute(id, alg) {
                 let digest_str = digest.to_string();
                 let dev_prefix = format!("refs/atom/dev/{}/", digest_str);
@@ -504,17 +555,23 @@ impl AtomSource for GitSource {
 
             let claim_envelope: CozMessageEnvelope = serde_json::from_str(&claim_msg_str)?;
             let claim_pay_bytes = serde_json::to_vec(&claim_envelope.pay)?;
-            let claim_pub_key = claim_envelope
-                .key
-                .as_ref()
-                .ok_or_else(|| GitError::Validation("Claim CozMessage is missing the key field".into()))?;
+            let claim_pub_key = claim_envelope.key.as_ref().ok_or_else(|| {
+                GitError::Validation("Claim CozMessage is missing the key field".into())
+            })?;
             let alg_str = claim_envelope
                 .pay
                 .get("alg")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| GitError::Validation("Claim alg field is missing or invalid".into()))?;
+                .ok_or_else(|| {
+                    GitError::Validation("Claim alg field is missing or invalid".into())
+                })?;
 
-            let claim_payload = atom_id::verify_claim(&claim_pay_bytes, &claim_envelope.sig, alg_str, claim_pub_key)?;
+            let claim_payload = atom_id::verify_claim(
+                &claim_pay_bytes,
+                &claim_envelope.sig,
+                alg_str,
+                claim_pub_key,
+            )?;
             ids.insert(AtomId::new(claim_payload.anchor, claim_payload.label));
         }
 
@@ -536,17 +593,23 @@ impl AtomSource for GitSource {
 
             let claim_envelope: CozMessageEnvelope = serde_json::from_str(&claim_msg_str)?;
             let claim_pay_bytes = serde_json::to_vec(&claim_envelope.pay)?;
-            let claim_pub_key = claim_envelope
-                .key
-                .as_ref()
-                .ok_or_else(|| GitError::Validation("Claim CozMessage is missing the key field".into()))?;
+            let claim_pub_key = claim_envelope.key.as_ref().ok_or_else(|| {
+                GitError::Validation("Claim CozMessage is missing the key field".into())
+            })?;
             let alg_str = claim_envelope
                 .pay
                 .get("alg")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| GitError::Validation("Claim alg field is missing or invalid".into()))?;
+                .ok_or_else(|| {
+                    GitError::Validation("Claim alg field is missing or invalid".into())
+                })?;
 
-            let claim_payload = atom_id::verify_claim(&claim_pay_bytes, &claim_envelope.sig, alg_str, claim_pub_key)?;
+            let claim_payload = atom_id::verify_claim(
+                &claim_pay_bytes,
+                &claim_envelope.sig,
+                alg_str,
+                claim_pub_key,
+            )?;
             if claim_payload.label.contains(query) {
                 ids.insert(AtomId::new(claim_payload.anchor, claim_payload.label));
             }
@@ -562,7 +625,8 @@ impl AtomSource for GitSource {
 
 impl atom_core::AtomEntry for GitEntry {
     type Version = GitVersionEntry;
-    type VersionIter<'a> = std::slice::Iter<'a, GitVersionEntry>
+    type VersionIter<'a>
+        = std::slice::Iter<'a, GitVersionEntry>
     where
         Self: 'a;
 
@@ -596,4 +660,3 @@ impl atom_core::AtomVersion for GitVersionEntry {
         self.publish_msg.as_deref()
     }
 }
-

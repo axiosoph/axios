@@ -1,14 +1,16 @@
 use std::fs;
 use tempfile::TempDir;
 
+use gix::actor::SignatureRef;
 use gix::hash::ObjectId;
 use gix::objs::tree::{Entry, EntryKind};
 use gix::objs::{Blob, Tree};
-use gix::actor::SignatureRef;
 
-use coz_rs::{Alg, Ed25519, SigningKey};
-use atom_core::{AtomEntry, AtomId, AtomRegistry, AtomSource, AtomStore, AtomVersion, Label, RawVersion};
+use atom_core::{
+    AtomEntry, AtomId, AtomRegistry, AtomSource, AtomStore, AtomVersion, Label, RawVersion,
+};
 use atom_git::{GitError, GitRegistry, GitSource, GitStore};
+use coz_rs::{Alg, Ed25519, SigningKey};
 
 /// Helper to set up a test Git repository with user config and a genesis commit
 fn setup_test_repo() -> (TempDir, gix::Repository, ObjectId) {
@@ -16,11 +18,20 @@ fn setup_test_repo() -> (TempDir, gix::Repository, ObjectId) {
     let repo = gix::init(dir.path()).unwrap();
 
     let sig = SignatureRef::default();
-    let empty_tree = Tree { entries: Vec::new() };
+    let empty_tree = Tree {
+        entries: Vec::new(),
+    };
     let tree_oid = repo.write_object(empty_tree).unwrap().detach();
 
     let genesis_oid = repo
-        .commit_as(sig, sig, "refs/heads/master", "genesis commit", tree_oid, Vec::<ObjectId>::new())
+        .commit_as(
+            sig,
+            sig,
+            "refs/heads/master",
+            "genesis commit",
+            tree_oid,
+            Vec::<ObjectId>::new(),
+        )
         .unwrap()
         .detach();
 
@@ -31,8 +42,19 @@ fn setup_test_repo() -> (TempDir, gix::Repository, ObjectId) {
 }
 
 /// Helper to create a commit with a single file to simulate workspace changes
-fn create_commit(repo: &gix::Repository, message: &str, file_name: &str, file_content: &[u8], parents: Vec<ObjectId>) -> ObjectId {
-    let blob_oid = repo.write_object(Blob { data: file_content.to_vec() }).unwrap().detach();
+fn create_commit(
+    repo: &gix::Repository,
+    message: &str,
+    file_name: &str,
+    file_content: &[u8],
+    parents: Vec<ObjectId>,
+) -> ObjectId {
+    let blob_oid = repo
+        .write_object(Blob {
+            data: file_content.to_vec(),
+        })
+        .unwrap()
+        .detach();
 
     let entry = Entry {
         mode: EntryKind::Blob.into(),
@@ -40,7 +62,9 @@ fn create_commit(repo: &gix::Repository, message: &str, file_name: &str, file_co
         oid: blob_oid,
     };
 
-    let tree = Tree { entries: vec![entry] };
+    let tree = Tree {
+        entries: vec![entry],
+    };
     let tree_oid = repo.write_object(tree).unwrap().detach();
 
     let sig = SignatureRef::default();
@@ -66,18 +90,27 @@ fn test_anchor_discovery() {
 fn test_deterministic_commits() {
     let (_dir, repo, genesis_oid) = setup_test_repo();
 
-    let blob_oid = repo.write_object(Blob { data: b"file data".to_vec() }).unwrap().detach();
+    let blob_oid = repo
+        .write_object(Blob {
+            data: b"file data".to_vec(),
+        })
+        .unwrap()
+        .detach();
     let entry = Entry {
         mode: EntryKind::Blob.into(),
         filename: "test.txt".into(),
         oid: blob_oid,
     };
-    let tree = Tree { entries: vec![entry] };
+    let tree = Tree {
+        entries: vec![entry],
+    };
     let tree_oid = repo.write_object(tree).unwrap().detach();
 
     // Write deterministic commit twice with same input
-    let commit1_oid = atom_git::gix_util::write_deterministic_commit(&repo, tree_oid, genesis_oid).unwrap();
-    let commit2_oid = atom_git::gix_util::write_deterministic_commit(&repo, tree_oid, genesis_oid).unwrap();
+    let commit1_oid =
+        atom_git::gix_util::write_deterministic_commit(&repo, tree_oid, genesis_oid).unwrap();
+    let commit2_oid =
+        atom_git::gix_util::write_deterministic_commit(&repo, tree_oid, genesis_oid).unwrap();
 
     assert_eq!(commit1_oid, commit2_oid);
 }
@@ -107,8 +140,16 @@ fn test_claim_and_key_rotation() {
     let claim_czd = registry.claim(&id, &pub_key).unwrap();
 
     // Verify claim reference was created
-    let claim_ref = registry.source.repo.try_find_reference("refs/atom/claims/pub/my-package").unwrap().unwrap();
-    assert_eq!(claim_ref.id().detach(), ObjectId::from_bytes_or_panic(claim_czd.as_bytes()));
+    let claim_ref = registry
+        .source
+        .repo
+        .try_find_reference("refs/atom/claims/pub/my-package")
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        claim_ref.id().detach(),
+        ObjectId::from_bytes_or_panic(claim_czd.as_bytes())
+    );
 
     // Key rotation / parented claim update
     let next_sk = SigningKey::<Ed25519>::generate();
@@ -127,10 +168,17 @@ fn test_claim_and_key_rotation() {
     assert_ne!(claim_czd, next_claim_czd);
 
     // Check that the next claim has the previous claim as a parent (claim rotation chain)
-    let claim_commit_obj = registry_rotated.source.repo.find_object(ObjectId::from_bytes_or_panic(next_claim_czd.as_bytes())).unwrap();
+    let claim_commit_obj = registry_rotated
+        .source
+        .repo
+        .find_object(ObjectId::from_bytes_or_panic(next_claim_czd.as_bytes()))
+        .unwrap();
     let claim_commit = claim_commit_obj.try_into_commit().unwrap();
     assert_eq!(claim_commit.parent_ids().count(), 1);
-    assert_eq!(claim_commit.parent_ids().next().unwrap().detach(), ObjectId::from_bytes_or_panic(claim_czd.as_bytes()));
+    assert_eq!(
+        claim_commit.parent_ids().next().unwrap().detach(),
+        ObjectId::from_bytes_or_panic(claim_czd.as_bytes())
+    );
 }
 
 #[test]
@@ -157,25 +205,63 @@ fn test_publish_and_tag_chain() {
     let claim_czd = registry.claim(&id, &pub_key).unwrap();
 
     // Create a version workspace state tree
-    let ver_commit_oid = create_commit(&registry.source.repo, "v1.0.0 src", "lib.rs", b"fn test() {}", vec![genesis_oid]);
-    let ver_commit_obj = registry.source.repo.find_object(ver_commit_oid).unwrap().try_into_commit().unwrap();
+    let ver_commit_oid = create_commit(
+        &registry.source.repo,
+        "v1.0.0 src",
+        "lib.rs",
+        b"fn test() {}",
+        vec![genesis_oid],
+    );
+    let ver_commit_obj = registry
+        .source
+        .repo
+        .find_object(ver_commit_oid)
+        .unwrap()
+        .try_into_commit()
+        .unwrap();
     let ver_tree_oid = ver_commit_obj.tree_id().unwrap();
 
     // 2. Publish package version 1.0.0
     let ver_1 = RawVersion::new("1.0.0".to_string());
-    registry.publish(&id, &claim_czd, &ver_1, ver_tree_oid.as_bytes(), ver_commit_oid.as_bytes(), "Cargo.toml").unwrap();
+    registry
+        .publish(
+            &id,
+            &claim_czd,
+            &ver_1,
+            ver_tree_oid.as_bytes(),
+            ver_commit_oid.as_bytes(),
+            "Cargo.toml",
+        )
+        .unwrap();
 
     // Verify tag exists
-    let tag_ref = registry.source.repo.try_find_reference("refs/atom/pub/my-package/1.0.0").unwrap().unwrap();
+    let tag_ref = registry
+        .source
+        .repo
+        .try_find_reference("refs/atom/pub/my-package/1.0.0")
+        .unwrap()
+        .unwrap();
     let tag_oid = tag_ref.id().detach();
 
     // Peel publish reference back to the deterministic commit
-    let peeled = registry.source.repo.find_object(tag_oid).unwrap().peel_to_kind(gix::object::Kind::Commit).unwrap();
-    
+    let peeled = registry
+        .source
+        .repo
+        .find_object(tag_oid)
+        .unwrap()
+        .peel_to_kind(gix::object::Kind::Commit)
+        .unwrap();
+
     // Verify it carries the src header matching our workspace commit OID
     let commit = peeled.try_into_commit().unwrap();
     let commit_decoded = commit.decode().unwrap();
-    let src_header = commit_decoded.extra_headers.iter().find(|(k, _)| *k == "src").unwrap().1.to_string();
+    let src_header = commit_decoded
+        .extra_headers
+        .iter()
+        .find(|(k, _)| *k == "src")
+        .unwrap()
+        .1
+        .to_string();
     assert_eq!(src_header, ver_commit_oid.to_hex().to_string());
 }
 
@@ -202,12 +288,33 @@ fn test_local_ingest() {
 
     let claim_czd = registry.claim(&id, &pub_key).unwrap();
 
-    let ver_commit_oid = create_commit(&registry.source.repo, "v1.0.0 src", "src/main.rs", b"main", vec![reg_genesis_oid]);
-    let ver_commit_obj = registry.source.repo.find_object(ver_commit_oid).unwrap().try_into_commit().unwrap();
+    let ver_commit_oid = create_commit(
+        &registry.source.repo,
+        "v1.0.0 src",
+        "src/main.rs",
+        b"main",
+        vec![reg_genesis_oid],
+    );
+    let ver_commit_obj = registry
+        .source
+        .repo
+        .find_object(ver_commit_oid)
+        .unwrap()
+        .try_into_commit()
+        .unwrap();
     let ver_tree_oid = ver_commit_obj.tree_id().unwrap();
 
     let ver = RawVersion::new("1.0.0".to_string());
-    registry.publish(&id, &claim_czd, &ver, ver_tree_oid.as_bytes(), ver_commit_oid.as_bytes(), "Cargo.toml").unwrap();
+    registry
+        .publish(
+            &id,
+            &claim_czd,
+            &ver,
+            ver_tree_oid.as_bytes(),
+            ver_commit_oid.as_bytes(),
+            "Cargo.toml",
+        )
+        .unwrap();
 
     // 2. Create store repository and ingest from registry source
     let (_store_dir, store_repo, _store_genesis_oid) = setup_test_repo();
@@ -217,14 +324,29 @@ fn test_local_ingest() {
     store.ingest(&registry.source).unwrap();
 
     // 3. Verify store references are written by claim czd (Step 5)
-    let claim_czd_hex = ObjectId::from_bytes_or_panic(claim_czd.as_bytes()).to_hex().to_string();
+    let claim_czd_hex = ObjectId::from_bytes_or_panic(claim_czd.as_bytes())
+        .to_hex()
+        .to_string();
     let store_claim_ref_name = format!("refs/atom/claims/d/{}", claim_czd_hex);
     let store_version_ref_name = format!("refs/atom/d/{}/1.0.0", claim_czd_hex);
 
-    let store_claim_ref = store.source.repo.try_find_reference(&store_claim_ref_name).unwrap().unwrap();
-    let _store_version_ref = store.source.repo.try_find_reference(&store_version_ref_name).unwrap().unwrap();
+    let store_claim_ref = store
+        .source
+        .repo
+        .try_find_reference(&store_claim_ref_name)
+        .unwrap()
+        .unwrap();
+    let _store_version_ref = store
+        .source
+        .repo
+        .try_find_reference(&store_version_ref_name)
+        .unwrap()
+        .unwrap();
 
-    assert_eq!(store_claim_ref.id().detach(), ObjectId::from_bytes_or_panic(claim_czd.as_bytes()));
+    assert_eq!(
+        store_claim_ref.id().detach(),
+        ObjectId::from_bytes_or_panic(claim_czd.as_bytes())
+    );
 
     // Verify resolving the store source yields the correct package info
     let query_source = GitSource::new(gix::open(store.source.repo.path()).unwrap());
@@ -257,10 +379,21 @@ fn test_fs_dev_ingest() {
     let digest = atom_core::AtomDigest::compute(&dev_id, coz_rs::Alg::ES256).unwrap();
     let digest_str = digest.to_string();
     let dev_ref_name = format!("refs/atom/dev/{}/0.1.0-dev", digest_str);
-    let dev_ref = store.source.repo.try_find_reference(&dev_ref_name).unwrap().unwrap();
+    let dev_ref = store
+        .source
+        .repo
+        .try_find_reference(&dev_ref_name)
+        .unwrap()
+        .unwrap();
 
     // The ref should point to a commit carrying our files
-    let peeled = store.source.repo.find_object(dev_ref.id().detach()).unwrap().peel_to_kind(gix::object::Kind::Commit).unwrap();
+    let peeled = store
+        .source
+        .repo
+        .find_object(dev_ref.id().detach())
+        .unwrap()
+        .peel_to_kind(gix::object::Kind::Commit)
+        .unwrap();
     let commit = peeled.try_into_commit().unwrap();
     let tree = commit.tree().unwrap();
     let decoded_tree = tree.decode().unwrap();
@@ -291,8 +424,15 @@ fn test_failures_and_forbidden_states() {
     // 1. Attempting to publish without active claim should fail
     let claim_czd = coz_rs::Czd::from_bytes(vec![0; 32]);
     let ver = RawVersion::new("1.0.0".to_string());
-    
-    let res = registry.publish(&id, &claim_czd, &ver, &[0; 20], genesis_oid.as_bytes(), "Cargo.toml");
+
+    let res = registry.publish(
+        &id,
+        &claim_czd,
+        &ver,
+        &[0; 20],
+        genesis_oid.as_bytes(),
+        "Cargo.toml",
+    );
     assert!(matches!(res, Err(GitError::NoActiveClaim(_))));
 
     // Now establish a claim
@@ -301,13 +441,36 @@ fn test_failures_and_forbidden_states() {
     // 2. Attempting to publish with a backdated src commit (not a descendant of claim src) should fail
     // We create an independent root (another genesis) in the same repo to act as a non-descendant src OID
     let other_sig = SignatureRef::default();
-    let empty_tree = Tree { entries: Vec::new() };
-    let other_tree_oid = registry.source.repo.write_object(empty_tree).unwrap().detach();
-    let other_genesis_oid = registry.source.repo
-        .commit_as(other_sig, other_sig, "refs/heads/other-root", "other genesis", other_tree_oid, Vec::<ObjectId>::new())
+    let empty_tree = Tree {
+        entries: Vec::new(),
+    };
+    let other_tree_oid = registry
+        .source
+        .repo
+        .write_object(empty_tree)
+        .unwrap()
+        .detach();
+    let other_genesis_oid = registry
+        .source
+        .repo
+        .commit_as(
+            other_sig,
+            other_sig,
+            "refs/heads/other-root",
+            "other genesis",
+            other_tree_oid,
+            Vec::<ObjectId>::new(),
+        )
         .unwrap()
         .detach();
 
-    let res = registry.publish(&id, &real_claim_czd, &ver, &[0; 20], other_genesis_oid.as_bytes(), "Cargo.toml");
+    let res = registry.publish(
+        &id,
+        &real_claim_czd,
+        &ver,
+        &[0; 20],
+        other_genesis_oid.as_bytes(),
+        "Cargo.toml",
+    );
     assert!(matches!(res, Err(GitError::InvalidTemporalVector { .. })));
 }
