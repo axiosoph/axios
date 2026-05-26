@@ -1,3 +1,5 @@
 [workspace]
 members  = ["atom-id", "atom-uri", "atom-core", "atom-git"]
+exclude  = ["fuzz"]
 resolver = "2"
+

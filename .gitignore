@@ -5,3 +5,7 @@
 # Cargo build artifacts
 target/
 Cargo.lock
+
+# Proptest regressions
+*proptest-regressions*
+

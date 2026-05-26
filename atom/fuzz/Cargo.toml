@@ -1,0 +1,29 @@
+[package]
+name = "atom-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+serde_json = "1"
+
+atom-id = { path = "../atom-id" }
+atom-uri = { path = "../atom-uri" }
+
+[[bin]]
+name = "uri_parser"
+path = "fuzz_targets/uri_parser.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "coz_verification"
+path = "fuzz_targets/coz_verification.rs"
+test = false
+doc = false
+bench = false
