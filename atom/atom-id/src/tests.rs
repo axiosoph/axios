@@ -708,3 +708,118 @@ fn verify_claim_unknown_alg() {
         "unknown alg should be UnsupportedAlgorithm: {result:?}"
     );
 }
+
+#[cfg(test)]
+mod proptests {
+    use super::*;
+    use crate::{Alg, Anchor, AtomId, ClaimPayload, PublishPayload, RawVersion, Czd};
+    use coz_rs::SigningKey;
+    use proptest::prelude::*;
+
+    fn arb_label() -> impl Strategy<Value = String> {
+        let start = "[a-zA-Z]";
+        let cont = "[a-zA-Z0-9_-]*";
+        (start, cont).prop_map(|(s, c)| format!("{}{}", s, c))
+    }
+
+    fn arb_bytes() -> impl Strategy<Value = Vec<u8>> {
+        proptest::collection::vec(any::<u8>(), 1..64)
+    }
+
+    fn arb_hash() -> impl Strategy<Value = Vec<u8>> {
+        proptest::collection::vec(any::<u8>(), 32)
+    }
+
+    proptest! {
+        #[test]
+        fn test_claim_payload_serde(
+            lbl in arb_label(),
+            anchor_bytes in arb_hash(),
+            now in any::<u64>(),
+            owner in arb_bytes(),
+            pkg in "[a-z]{3,10}",
+            src in arb_hash(),
+        ) {
+            let label = Label::try_from(lbl.as_str()).unwrap();
+            let anchor = Anchor::new(anchor_bytes);
+            let id = AtomId::new(anchor, label);
+            let tmb = coz_rs::Thumbprint::from_bytes(vec![0; 32]);
+            let original = ClaimPayload::new(Alg::Ed25519, id, now, owner, pkg, src, tmb);
+
+            let serialized = serde_json::to_string(&original).unwrap();
+            let deserialized: ClaimPayload = serde_json::from_str(&serialized).unwrap();
+            prop_assert_eq!(deserialized, original);
+        }
+
+        #[test]
+        fn test_publish_payload_serde(
+            lbl in arb_label(),
+            anchor_bytes in arb_hash(),
+            claim_bytes in arb_hash(),
+            dig_bytes in arb_hash(),
+            now in any::<u64>(),
+            path in "[a-zA-Z0-9/_-]{1,50}",
+            src in arb_hash(),
+            version_str in "[0-9]\\.[0-9]\\.[0-9]",
+        ) {
+            let label = Label::try_from(lbl.as_str()).unwrap();
+            let anchor = Anchor::new(anchor_bytes);
+            let id = AtomId::new(anchor, label);
+            let claim = Czd::from_bytes(claim_bytes);
+            let tmb = coz_rs::Thumbprint::from_bytes(vec![0; 32]);
+            let version = RawVersion::new(version_str);
+            let original = PublishPayload::new(Alg::Ed25519, id, claim, dig_bytes, now, path, src, tmb, version);
+
+            let serialized = serde_json::to_string(&original).unwrap();
+            let deserialized: PublishPayload = serde_json::from_str(&serialized).unwrap();
+            prop_assert_eq!(deserialized, original);
+        }
+
+        #[test]
+        fn test_verification_robustness(
+            lbl in arb_label(),
+            anchor_bytes in arb_hash(),
+            now in any::<u64>(),
+            owner in arb_bytes(),
+            pkg in "[a-z]{3,10}",
+            src in arb_hash(),
+            mutate_index in 0..64usize,
+            mutation in 1..255u8,
+        ) {
+            // Generate Ed25519 keypair
+            let sk = SigningKey::<coz_rs::Ed25519>::generate();
+            let prv = sk.private_key_bytes().to_vec();
+            let pub_bytes = sk.verifying_key().public_key_bytes().to_vec();
+            let tmb = coz_rs::compute_thumbprint_for_alg("Ed25519", &pub_bytes).unwrap();
+
+            let label = Label::try_from(lbl.as_str()).unwrap();
+            let anchor = Anchor::new(anchor_bytes);
+            let id = AtomId::new(anchor, label);
+            let claim = ClaimPayload::new(Alg::Ed25519, id, now, owner, pkg, src, tmb);
+            let pay_json = serde_json::to_vec(&claim).unwrap();
+
+            let (sig, _cad) = coz_rs::sign_json(&pay_json, "Ed25519", &prv, &pub_bytes).unwrap();
+
+            // Assert normal verification succeeds
+            let result = crate::verify_claim(&pay_json, &sig, "Ed25519", &pub_bytes);
+            prop_assert!(result.is_ok(), "Verification failed for valid claim: {:?}", result);
+
+            // Mutate a byte in the signature
+            let mut corrupted_sig = sig.clone();
+            if mutate_index < corrupted_sig.len() {
+                corrupted_sig[mutate_index] ^= mutation;
+                let result = crate::verify_claim(&pay_json, &corrupted_sig, "Ed25519", &pub_bytes);
+                prop_assert!(result.is_err(), "Verification should fail for corrupted signature");
+            }
+
+            // Mutate a byte in the verifying key
+            let mut corrupted_pub = pub_bytes.clone();
+            if mutate_index < corrupted_pub.len() {
+                corrupted_pub[mutate_index] ^= mutation;
+                let result = crate::verify_claim(&pay_json, &sig, "Ed25519", &corrupted_pub);
+                prop_assert!(result.is_err(), "Verification should fail for corrupted public key");
+            }
+        }
+    }
+}
+

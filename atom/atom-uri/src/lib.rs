@@ -510,4 +510,50 @@ mod tests {
         let resolved = uri.resolve(&map).unwrap();
         assert_eq!(resolved.to_string(), "github.com/owner/repo::my-atom@1.0");
     }
+
+    #[cfg(test)]
+    mod proptests {
+        use super::*;
+        use proptest::prelude::*;
+
+        fn arb_label() -> impl Strategy<Value = String> {
+            let start = "[a-zA-Z]";
+            let cont = "[a-zA-Z0-9_-]*";
+            (start, cont).prop_map(|(s, c)| format!("{}{}", s, c))
+        }
+
+        fn arb_source() -> impl Strategy<Value = String> {
+            let chars = "[a-zA-Z0-9_./+-]";
+            proptest::collection::vec(chars, 1..50).prop_map(|v| v.join(""))
+        }
+
+        fn arb_version() -> impl Strategy<Value = String> {
+            let chars = "[a-zA-Z0-9_.-]";
+            proptest::collection::vec(chars, 1..20).prop_map(|v| v.join(""))
+        }
+
+        proptest! {
+            #[test]
+            fn test_raw_atom_uri_roundtrip(
+                src in proptest::option::of(arb_source()),
+                lbl_str in arb_label(),
+                ver in proptest::option::of(arb_version()),
+            ) {
+                let label = Label::try_from(lbl_str.as_str()).unwrap();
+                let version = ver.map(RawVersion::new);
+
+                let original = RawAtomUri {
+                    source: src,
+                    label,
+                    version,
+                };
+
+                let serialized = original.to_string();
+                let parsed = RawAtomUri::from_str(&serialized);
+
+                prop_assert!(parsed.is_ok(), "Failed to parse serialized URI: '{}'", serialized);
+                prop_assert_eq!(parsed.unwrap(), original);
+            }
+        }
+    }
 }

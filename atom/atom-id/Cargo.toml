@@ -16,3 +16,7 @@ serde_json            = { version = "1", optional = true }
 thiserror             = "1"
 unicode-ident         = "1"
 unicode-normalization = "0.1"
+
+[dev-dependencies]
+proptest = "1.5"
+
