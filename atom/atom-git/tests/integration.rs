@@ -474,3 +474,147 @@ fn test_failures_and_forbidden_states() {
     );
     assert!(matches!(res, Err(GitError::InvalidTemporalVector { .. })));
 }
+
+#[test]
+fn test_differential_git_cli() {
+    let (dir, repo, genesis_oid) = setup_test_repo();
+
+    let blob_oid = repo
+        .write_object(Blob {
+            data: b"differential testing content".to_vec(),
+        })
+        .unwrap()
+        .detach();
+    let entry = Entry {
+        mode: EntryKind::Blob.into(),
+        filename: "diff.txt".into(),
+        oid: blob_oid,
+    };
+    let tree = Tree {
+        entries: vec![entry],
+    };
+    let tree_oid = repo.write_object(tree).unwrap().detach();
+
+    // 1. Write deterministic commit via gix
+    let commit_oid =
+        atom_git::gix_util::write_deterministic_commit(&repo, tree_oid, genesis_oid).unwrap();
+
+    // 2. Query the exact same commit using the canonical git binary
+    let output = std::process::Command::new("git")
+        .arg("cat-file")
+        .arg("-p")
+        .arg(commit_oid.to_hex().to_string())
+        .current_dir(dir.path())
+        .output()
+        .expect("failed to execute git command");
+
+    assert!(output.status.success());
+    let stdout_str = String::from_utf8(output.stdout).unwrap();
+
+    // Verify canonical git parses the tree correctly
+    assert!(stdout_str.contains(&format!("tree {}", tree_oid.to_hex())));
+
+    // Verify the extra header "src" is present and matches genesis_oid
+    assert!(stdout_str.contains(&format!("src {}", genesis_oid.to_hex())));
+
+    // Verify there are no author/committer names or timestamps
+    assert!(stdout_str.contains(" 0 +0000"));
+    assert!(stdout_str.contains("author "));
+    assert!(stdout_str.contains("committer "));
+}
+
+#[cfg(test)]
+mod proptests {
+    use proptest::prelude::*;
+    use tempfile::TempDir;
+    use gix::objs::{Tree, Commit};
+    use atom_git::gix_util;
+
+
+    proptest! {
+        #[test]
+        fn test_anchor_derivation_pbt(
+            root_count in 1..5usize,
+            extra_commits in 0..10usize,
+            oldest_root_index in 0..5usize,
+        ) {
+            let dir = TempDir::new().unwrap();
+            let repo = gix::init(dir.path()).unwrap();
+            let empty_tree_oid = repo.write_object(Tree { entries: Vec::new() }).unwrap().detach();
+
+            let actual_root_count = root_count;
+            let target_oldest_index = oldest_root_index % actual_root_count;
+
+            let mut roots = Vec::new();
+            for i in 0..actual_root_count {
+                let timestamp = if i == target_oldest_index {
+                    1000 // Oldest timestamp
+                } else {
+                    2000 + i as u32 * 100 // Newer timestamps
+                };
+
+                let sig = gix::actor::Signature {
+                    name: "test".into(),
+                    email: "test@example.com".into(),
+                    time: gix::date::Time {
+                        seconds: timestamp as i64,
+                        offset: 0,
+                    },
+                };
+
+                let root_commit = Commit {
+                    tree: empty_tree_oid,
+                    parents: Vec::new().into(),
+                    author: sig.clone(),
+                    committer: sig,
+                    encoding: None,
+                    message: "root commit".into(),
+                    extra_headers: Vec::new(),
+                };
+
+                let root_oid = repo.write_object(root_commit).unwrap().detach();
+                roots.push(root_oid);
+            }
+
+            // Create branch tips linking back to the roots
+            let mut branch_tips = roots.clone();
+            for i in 0..extra_commits {
+                let root_idx = i % branch_tips.len();
+                let parent = branch_tips[root_idx];
+                
+                let sig = gix_util::blank_signature();
+                let commit = Commit {
+                    tree: empty_tree_oid,
+                    parents: vec![parent].into(),
+                    author: sig.clone(),
+                    committer: sig,
+                    encoding: None,
+                    message: format!("commit {}", i).into(),
+                    extra_headers: Vec::new(),
+                };
+
+                let commit_oid = repo.write_object(commit).unwrap().detach();
+                branch_tips[root_idx] = commit_oid;
+            }
+
+            // Merge all branches to guarantee reachability from a single head
+            let sig = gix_util::blank_signature();
+            let final_merge_commit = Commit {
+                tree: empty_tree_oid,
+                parents: branch_tips.into(),
+                author: sig.clone(),
+                committer: sig,
+                encoding: None,
+                message: "final merge".into(),
+                extra_headers: Vec::new(),
+            };
+            let final_merge_oid = repo.write_object(final_merge_commit).unwrap().detach();
+
+            // Derive anchor from the final merge commit
+            let derived = atom_git::gix_util::derive_anchor(&repo, final_merge_oid).unwrap();
+            let expected_oldest_root = roots[target_oldest_index];
+            prop_assert_eq!(derived, expected_oldest_root);
+        }
+    }
+}
+
