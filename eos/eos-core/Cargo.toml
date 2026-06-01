@@ -1,7 +1,12 @@
 [package]
-edition = "2024"
 name    = "eos-core"
 version = "0.1.0"
+edition = "2024"
 
 [dependencies]
-atom-core = { path = "../../atom/atom-core" }
+atom-core      = { path = "../../atom/atom-core" }
+atom-id        = { path = "../../atom/atom-id" }
+trait-variant  = "0.1"
+futures-core   = "0.3"
+thiserror      = "2"
+bytes          = "1"
