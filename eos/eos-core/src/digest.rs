@@ -5,6 +5,7 @@
 
 use std::fmt;
 use std::str::FromStr;
+
 use thiserror::Error;
 
 /// Error returned when parsing a [`Blake3Digest`] from a string.
@@ -22,7 +23,9 @@ pub enum ParseBlake3DigestError {
 /// A generic content-addressed digest trait.
 ///
 /// Abstracts the stored value comparisons and serialization from the hashing computation.
-pub trait Digest: AsRef<[u8]> + Eq + std::hash::Hash + Clone + Send + Sync + fmt::Debug + fmt::Display + 'static {
+pub trait Digest:
+    AsRef<[u8]> + Eq + std::hash::Hash + Clone + Send + Sync + fmt::Debug + fmt::Display + 'static
+{
     /// Returns the algorithm identifier (e.g., "blake3").
     fn algorithm(&self) -> &str;
 
@@ -31,6 +34,12 @@ pub trait Digest: AsRef<[u8]> + Eq + std::hash::Hash + Clone + Send + Sync + fmt
 
     /// Returns the byte length of the digest.
     fn len(&self) -> usize;
+
+    /// Returns true if the digest has a length of 0.
+    #[inline]
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 /// A 32-byte BLAKE3 content digest.
@@ -153,4 +162,3 @@ mod tests {
         assert!(err_hex.parse::<Blake3Digest>().is_err());
     }
 }
-

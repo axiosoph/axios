@@ -2,9 +2,16 @@
 //!
 //! Provides the [`BuildEngine`] and [`ArtifactStore`] implementation via Snix.
 
+// pub mod build;
 pub mod convert;
 pub mod error;
 pub mod eval;
+pub mod sandbox;
+pub mod store;
+
+pub use sandbox::{select_sandbox, SandboxConfig};
+pub use store::SnixStore;
+
 
 use std::sync::Arc;
 
@@ -100,9 +107,13 @@ impl BuildEngine for SnixEngine {
         })
     }
 
-    async fn lookup_cached(&self, _plan: &Self::Plan) -> Result<Option<Self::Output>, Self::Error> {
+    async fn lookup_cached(
+        &self,
+        _plan: &Self::Plan,
+    ) -> Result<Option<Self::Output>, Self::Error> {
         Ok(None)
     }
+
 
     fn plan_digest(&self, plan: &Self::Plan) -> Self::Digest {
         let bytes = plan.to_aterm_bytes();
