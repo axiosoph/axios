@@ -4,5 +4,6 @@
 //! Connects [`BuildEngine`] with [`ArtifactStore`] to turn locked
 //! dependencies into build outputs.
 pub mod fetch;
+pub mod index;
 pub mod lock;
 pub mod orchestrator;
