@@ -32,6 +32,7 @@ pub struct JobState {
 pub struct Scheduler {
     config: Arc<DaemonConfig>,
     engine: Arc<SnixEngine>,
+    index: Arc<eos::index::LockFileIndex>,
     jobs: Arc<Mutex<HashMap<Blake3Digest, JobState>>>,
     semaphore: Arc<Semaphore>,
 }
@@ -39,11 +40,16 @@ pub struct Scheduler {
 impl Scheduler {
     /// Creates a new `Scheduler`.
     #[must_use]
-    pub fn new(config: Arc<DaemonConfig>, engine: Arc<SnixEngine>) -> Self {
+    pub fn new(
+        config: Arc<DaemonConfig>,
+        engine: Arc<SnixEngine>,
+        index: Arc<eos::index::LockFileIndex>,
+    ) -> Self {
         let max_concurrency = config.max_concurrency;
         Self {
             config,
             engine,
+            index,
             jobs: Arc::new(Mutex::new(HashMap::new())),
             semaphore: Arc::new(Semaphore::new(max_concurrency)),
         }
@@ -90,6 +96,7 @@ impl Scheduler {
         let abort_handle_clone = job_state.abort_handle.clone();
         let sender = tx.clone();
         let job_id = JobId(plan_digest);
+        let index = self.index.clone();
 
         let join_handle = tokio::spawn(async move {
             // Send initial queued status
@@ -165,6 +172,26 @@ impl Scheduler {
                     return;
                 },
             };
+
+            // Populate AtomIndex with atoms from lock file
+            if let Ok(lock_file) = eos::lock::LockFile::parse(&lock_content) {
+                use eos_core::AtomIndex;
+                for dep in lock_file.deps {
+                    if let eos::lock::Dependency::Atom(atom_dep) = dep {
+                        let meta = eos_core::index::AtomMeta {
+                            id: atom_dep.id,
+                            label: atom_dep.label,
+                            versions: vec![eos_core::index::VersionInfo {
+                                version: atom_dep.version.clone(),
+                                rev: atom_dep.rev.unwrap_or_default(),
+                                set: atom_dep.set.clone(),
+                            }],
+                            sets: vec![atom_dep.set],
+                        };
+                        let _ = index.ingest(meta).await;
+                    }
+                }
+            }
 
             // Run build orchestration pipeline
             match eos::orchestrator::run_orchestrated_build(

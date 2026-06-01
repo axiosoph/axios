@@ -83,8 +83,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     ));
 
     // 4. Initialize Scheduler and Index
-    let scheduler = Arc::new(Scheduler::new(config.clone(), engine));
     let index = Arc::new(LockFileIndex::new());
+    let scheduler = Arc::new(Scheduler::new(config.clone(), engine, index.clone()));
 
     // Ensure parent directory of socket exists
     if let Some(parent) = socket_path.parent() {
