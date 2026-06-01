@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 eos-core      = { path = "../eos-core" }
 eos-store     = { path = "../eos-store" }
+# Snix crates — path deps to local checkout
 snix-eval     = { path = "/var/home/nrd/git/git.snix.dev/snix/snix/snix/eval" }
 snix-build    = { path = "/var/home/nrd/git/git.snix.dev/snix/snix/snix/build" }
 snix-castore  = { path = "/var/home/nrd/git/git.snix.dev/snix/snix/snix/castore" }
@@ -15,6 +16,14 @@ nix-compat    = { path = "/var/home/nrd/git/git.snix.dev/snix/snix/snix/nix-comp
 tokio         = { version = "1", features = ["rt-multi-thread", "sync", "macros"] }
 thiserror     = "2"
 tracing       = "0.1"
+rustc-hash    = "2"
+smol_str      = "0.2"
+bstr          = "1"
+url           = "2"
+blake3        = "1"
+clap          = { version = "4", features = ["derive"] }
+
+
 
 [target.'cfg(target_os = "macos")'.dependencies]
 birdcage = "0.8"

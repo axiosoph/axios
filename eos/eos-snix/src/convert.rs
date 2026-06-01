@@ -1,0 +1,41 @@
+//! Conversions between `eos-core` and Snix types.
+
+use eos_core::digest::Blake3Digest;
+use eos_core::store::StorePath;
+use nix_compat::store_path::StorePath as NixStorePath;
+use snix_castore::B3Digest;
+
+use crate::error::SnixError;
+
+/// Converts a `Blake3Digest` to a Snix `B3Digest`.
+#[inline]
+pub fn blake3_to_b3(digest: Blake3Digest) -> B3Digest {
+    B3Digest::from(&digest.0)
+}
+
+/// Converts a Snix `B3Digest` to a `Blake3Digest`.
+#[inline]
+pub fn b3_to_blake3(digest: B3Digest) -> Blake3Digest {
+    Blake3Digest(<[u8; 32]>::from(digest))
+}
+
+/// Converts a `StorePath` to a Snix `StorePath<String>`.
+pub fn store_path_to_nix(path: StorePath) -> Result<NixStorePath<String>, SnixError> {
+    NixStorePath::from_absolute_path(path.0.as_bytes()).map_err(|err| SnixError::ConversionError {
+        from: "StorePath",
+        to: "nix_compat::store_path::StorePath<String>",
+        detail: err.to_string(),
+    })
+}
+
+/// Converts a Snix `StorePath<String>` to a `StorePath`.
+#[inline]
+pub fn nix_to_store_path(path: NixStorePath<String>) -> StorePath {
+    StorePath(path.to_absolute_path())
+}
+
+/// Converts a reference to a Snix `StorePath<String>` to a `StorePath`.
+#[inline]
+pub fn nix_ref_to_store_path(path: &NixStorePath<String>) -> StorePath {
+    StorePath(path.to_absolute_path())
+}
