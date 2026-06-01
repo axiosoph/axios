@@ -194,13 +194,13 @@ impl LockFile {
         // Collect all atoms in deps by id
         let mut atoms = HashMap::new();
         for dep in &self.deps {
-            if let Dependency::Atom(atom_dep) = dep {
-                if atoms.insert(atom_dep.id.clone(), atom_dep).is_some() {
-                    return Err(format!(
-                        "Duplicate atom dependency with id: {}",
-                        atom_dep.id
-                    ));
-                }
+            if let Dependency::Atom(atom_dep) = dep
+                && atoms.insert(atom_dep.id.clone(), atom_dep).is_some()
+            {
+                return Err(format!(
+                    "Duplicate atom dependency with id: {}",
+                    atom_dep.id
+                ));
             }
         }
 
@@ -229,29 +229,30 @@ impl LockFile {
 
         // Check owner closure for non-atom deps
         for dep in &self.deps {
-            if let Some(owner) = dep.owner() {
-                if !atoms.contains_key(owner) {
-                    return Err(format!(
-                        "Dependency {} owned by missing atom: {}",
-                        dep.name(),
-                        owner
-                    ));
-                }
+            if let Some(owner) = dep.owner()
+                && !atoms.contains_key(owner)
+            {
+                return Err(format!(
+                    "Dependency {} owned by missing atom: {}",
+                    dep.name(),
+                    owner
+                ));
             }
         }
 
         // Check compose.use closure if it's an atom-id
-        if let Some(ref use_str) = self.compose.r#use {
-            if use_str != "nix" && use_str != "static" {
-                let compose_atom_id = use_str
-                    .parse::<AtomId>()
-                    .map_err(|e| format!("Invalid atom ID in compose.use: {}", e))?;
-                if !atoms.contains_key(&compose_atom_id) {
-                    return Err(format!(
-                        "Composer atom {} specified in compose.use is missing from deps",
-                        compose_atom_id
-                    ));
-                }
+        if let Some(ref use_str) = self.compose.r#use
+            && use_str != "nix"
+            && use_str != "static"
+        {
+            let compose_atom_id = use_str
+                .parse::<AtomId>()
+                .map_err(|e| format!("Invalid atom ID in compose.use: {}", e))?;
+            if !atoms.contains_key(&compose_atom_id) {
+                return Err(format!(
+                    "Composer atom {} specified in compose.use is missing from deps",
+                    compose_atom_id
+                ));
             }
         }
 
@@ -289,10 +290,10 @@ impl LockFile {
         }
 
         for atom_id in atoms.keys() {
-            if !visited.contains(atom_id) {
-                if has_cycle(atom_id, &atoms, &mut visited, &mut rec_stack) {
-                    return Err("Dependency graph contains cycles".to_string());
-                }
+            if !visited.contains(atom_id)
+                && has_cycle(atom_id, &atoms, &mut visited, &mut rec_stack)
+            {
+                return Err("Dependency graph contains cycles".to_string());
             }
         }
 

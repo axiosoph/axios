@@ -149,7 +149,7 @@ fn verify_file_hash(path: &Path, expected_sri: &str) -> Result<(), String> {
     }
     let actual_bytes = hasher.finalize();
 
-    if &actual_bytes[..] != expected_bytes {
+    if actual_bytes[..] != expected_bytes[..] {
         return Err(format!(
             "Hash mismatch for {:?}: expected {}, got sha256-{}",
             path,
