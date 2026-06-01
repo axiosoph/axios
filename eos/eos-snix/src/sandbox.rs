@@ -77,7 +77,8 @@ pub async fn select_sandbox(
             platform: "macos",
             source: Box::new(std::io::Error::new(
                 std::io::ErrorKind::Unsupported,
-                "macOS local sandboxing via birdcage is not fully implemented; use a remote builder",
+                "macOS local sandboxing via birdcage is not fully implemented; use a remote \
+                 builder",
             )),
         })
     }

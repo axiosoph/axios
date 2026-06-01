@@ -4,5 +4,25 @@ name    = "eos"
 version = "0.1.0"
 
 [dependencies]
-eos-core  = { path = "../eos-core" }
-eos-store = { path = "../eos-store" }
+eos-core   = { path = "../eos-core" }
+eos-store  = { path = "../eos-store" }
+atom-core  = { path = "../../atom/atom-core" }
+atom-id    = { path = "../../atom/atom-id" }
+serde      = { version = "1", features = ["derive"] }
+toml       = "0.8"
+thiserror  = "2"
+blake3     = "1"
+futures    = "0.3"
+tracing    = "0.1"
+base64     = "0.22"
+hex        = "0.4"
+tokio      = { version = "1", features = ["sync", "rt", "macros", "process"] }
+snix-castore  = { path = "/var/home/nrd/git/git.snix.dev/snix/snix/snix/castore" }
+snix-store    = { path = "/var/home/nrd/git/git.snix.dev/snix/snix/snix/store" }
+nix-compat    = { path = "/var/home/nrd/git/git.snix.dev/snix/snix/snix/nix-compat" }
+eos-snix      = { path = "../eos-snix" }
+sha2          = "0.10"
+
+
+
+

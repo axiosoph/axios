@@ -9,22 +9,20 @@ pub mod eval;
 pub mod sandbox;
 pub mod store;
 
-pub use sandbox::{select_sandbox, SandboxConfig};
-pub use store::SnixStore;
-
-
 use std::sync::Arc;
 
 use eos_core::digest::Blake3Digest;
 use eos_core::engine::BuildEngine;
 use eos_core::eval::EvalRequest;
 use nix_compat::derivation::Derivation;
+pub use sandbox::{SandboxConfig, select_sandbox};
 use snix_build::buildservice::BuildService;
 use snix_castore::Node;
 use snix_castore::blobservice::BlobService;
 use snix_castore::directoryservice::DirectoryService;
 use snix_store::nar::NarCalculationService;
 use snix_store::pathinfoservice::{PathInfo, PathInfoService};
+pub use store::SnixStore;
 use tokio::runtime::Handle;
 
 use crate::error::SnixError;
@@ -101,13 +99,9 @@ impl BuildEngine for SnixEngine {
         build::do_engine_build(self, plan).await
     }
 
-    async fn lookup_cached(
-        &self,
-        plan: &Self::Plan,
-    ) -> Result<Option<Self::Output>, Self::Error> {
+    async fn lookup_cached(&self, plan: &Self::Plan) -> Result<Option<Self::Output>, Self::Error> {
         build::do_engine_lookup_cached(self, plan).await
     }
-
 
     fn plan_digest(&self, plan: &Self::Plan) -> Self::Digest {
         let bytes = plan.to_aterm_bytes();

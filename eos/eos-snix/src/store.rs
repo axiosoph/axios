@@ -66,23 +66,21 @@ impl ArtifactStore for SnixStore {
     ) -> Result<Option<ArtifactInfo<Self::Digest>>, Self::Error> {
         let mut key = [0u8; 20];
         key.copy_from_slice(&digest.0[..20]);
-        let maybe_info = self
-            .path_info_service
-            .get(key)
-            .await
-            .map_err(|e| SnixError::StoreError {
-                operation: "get_info",
-                source: e,
-            })?;
+        let maybe_info =
+            self.path_info_service
+                .get(key)
+                .await
+                .map_err(|e| SnixError::StoreError {
+                    operation: "get_info",
+                    source: e,
+                })?;
 
         match maybe_info {
             None => Ok(None),
             Some(info) => {
                 let node_digest = match &info.node {
                     snix_castore::Node::File { digest, .. } => Some(b3_to_blake3(*digest)),
-                    snix_castore::Node::Directory { digest, .. } => {
-                        Some(b3_to_blake3(*digest))
-                    }
+                    snix_castore::Node::Directory { digest, .. } => Some(b3_to_blake3(*digest)),
                     snix_castore::Node::Symlink { .. } => None,
                 };
 
@@ -101,7 +99,7 @@ impl ArtifactStore for SnixStore {
                     references: info.references.into_iter().map(nix_to_store_path).collect(),
                     deriver,
                 }))
-            }
+            },
         }
     }
 
@@ -131,13 +129,14 @@ impl ArtifactStore for SnixStore {
         })?;
 
         let ca_hash = CAHash::Nar(nix_compat::nixhash::NixHash::Sha256(nar_sha256));
-        let store_path = build_ca_path(&name, &ca_hash, Vec::<String>::new(), false).map_err(
-            |e| SnixError::ConversionError {
-                from: "ca_hash",
-                to: "StorePath",
-                detail: e.to_string(),
-            },
-        )?;
+        let store_path =
+            build_ca_path(&name, &ca_hash, Vec::<String>::new(), false).map_err(|e| {
+                SnixError::ConversionError {
+                    from: "ca_hash",
+                    to: "StorePath",
+                    detail: e.to_string(),
+                }
+            })?;
 
         let path_info = PathInfo {
             store_path: store_path.clone(),
@@ -164,11 +163,13 @@ impl ArtifactStore for SnixStore {
             snix_castore::Node::Symlink { .. } => None,
         };
 
-        let info_digest = node_digest.or_else(|| expected.copied()).unwrap_or_else(|| {
-            let mut h = [0u8; 32];
-            h[..20].copy_from_slice(store_path.digest());
-            Blake3Digest(h)
-        });
+        let info_digest = node_digest
+            .or_else(|| expected.copied())
+            .unwrap_or_else(|| {
+                let mut h = [0u8; 32];
+                h[..20].copy_from_slice(store_path.digest());
+                Blake3Digest(h)
+            });
 
         if expected.is_some_and(|&expected_dig| expected_dig != info_digest) {
             return Err(SnixError::ConversionError {
@@ -176,7 +177,8 @@ impl ArtifactStore for SnixStore {
                 to: "expected_digest",
                 detail: format!(
                     "digest mismatch: expected {}, got {}",
-                    expected.unwrap(), info_digest
+                    expected.unwrap(),
+                    info_digest
                 ),
             });
         }
@@ -200,9 +202,7 @@ impl ArtifactStore for SnixStore {
             Ok(info) => {
                 let node_digest = match &info.node {
                     snix_castore::Node::File { digest, .. } => Some(b3_to_blake3(*digest)),
-                    snix_castore::Node::Directory { digest, .. } => {
-                        Some(b3_to_blake3(*digest))
-                    }
+                    snix_castore::Node::Directory { digest, .. } => Some(b3_to_blake3(*digest)),
                     snix_castore::Node::Symlink { .. } => None,
                 };
 
@@ -225,7 +225,7 @@ impl ArtifactStore for SnixStore {
                     references: info.references.into_iter().map(nix_to_store_path).collect(),
                     deriver,
                 })
-            }
+            },
         });
         Box::pin(mapped)
     }

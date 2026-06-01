@@ -9,8 +9,8 @@ use futures::stream::TryStreamExt;
 use nix_compat::derivation::Derivation;
 use nix_compat::nixhash::CAHash;
 use nix_compat::store_path::StorePath as NixStorePath;
-use snix_castore::blobservice::BlobService;
 use snix_castore::Node;
+use snix_castore::blobservice::BlobService;
 use snix_glue::known_paths::KnownPaths;
 use snix_store::pathinfoservice::{PathInfo, PathInfoService};
 
@@ -26,10 +26,12 @@ async fn read_store_path_bytes(
         .get(*store_path.digest())
         .await
         .map_err(std::io::Error::other)?
-        .ok_or_else(|| std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            format!("PathInfo not found: {}", store_path.to_absolute_path()),
-        ))?;
+        .ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("PathInfo not found: {}", store_path.to_absolute_path()),
+            )
+        })?;
 
     let Node::File { digest, .. } = info.node else {
         return Err(std::io::Error::new(
@@ -41,10 +43,7 @@ async fn read_store_path_bytes(
     let mut reader = blob_service
         .open_read(&digest)
         .await?
-        .ok_or_else(|| std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            "blob not found",
-        ))?;
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "blob not found"))?;
 
     let mut bytes = Vec::new();
     tokio::io::copy(&mut reader, &mut bytes).await?;
@@ -71,11 +70,12 @@ async fn populate_known_paths(
             })?;
 
         // Parse derivation
-        let input_drv = Derivation::from_aterm_bytes(&bytes).map_err(|e| SnixError::ConversionError {
-            from: "ATerm",
-            to: "Derivation",
-            detail: format!("{:?}", e),
-        })?;
+        let input_drv =
+            Derivation::from_aterm_bytes(&bytes).map_err(|e| SnixError::ConversionError {
+                from: "ATerm",
+                to: "Derivation",
+                detail: format!("{:?}", e),
+            })?;
 
         // Recurse for the input derivation's own input derivations
         Box::pin(populate_known_paths(
@@ -144,18 +144,18 @@ pub async fn do_engine_build(
         })?;
 
     // Synthesize the build request
-    let build_request = snix_glue::builder::derivation_into_build_request(
-        plan.clone(),
-        &resolved_inputs,
-    )
-    .map_err(|e| SnixError::ConversionError {
-        from: "Derivation",
-        to: "BuildRequest",
-        detail: e.to_string(),
-    })?;
+    let build_request =
+        snix_glue::builder::derivation_into_build_request(plan.clone(), &resolved_inputs).map_err(
+            |e| SnixError::ConversionError {
+                from: "Derivation",
+                to: "BuildRequest",
+                detail: e.to_string(),
+            },
+        )?;
 
     // Assemble needle mapping table
-    let mut output_paths: Vec<NixStorePath<String>> = Vec::with_capacity(build_request.outputs.len());
+    let mut output_paths: Vec<NixStorePath<String>> =
+        Vec::with_capacity(build_request.outputs.len());
     let all_possible_refs: Vec<NixStorePath<String>> = build_request
         .outputs
         .iter()
@@ -189,28 +189,35 @@ pub async fn do_engine_build(
         })?;
 
     // Calculate deriver store path
-    let name_bytes = plan.environment.get("name").ok_or_else(|| SnixError::ConversionError {
-        from: "Derivation",
-        to: "drv_path",
-        detail: "missing 'name' environment variable in derivation".to_string(),
-    })?;
+    let name_bytes = plan
+        .environment
+        .get("name")
+        .ok_or_else(|| SnixError::ConversionError {
+            from: "Derivation",
+            to: "drv_path",
+            detail: "missing 'name' environment variable in derivation".to_string(),
+        })?;
     let name_str = std::str::from_utf8(name_bytes).map_err(|e| SnixError::ConversionError {
         from: "name bytes",
         to: "str",
         detail: e.to_string(),
     })?;
-    let drv_path = plan.calculate_derivation_path(name_str).map_err(|e| SnixError::ConversionError {
-        from: "Derivation",
-        to: "drv_path",
-        detail: e.to_string(),
-    })?;
+    let drv_path =
+        plan.calculate_derivation_path(name_str)
+            .map_err(|e| SnixError::ConversionError {
+                from: "Derivation",
+                to: "drv_path",
+                detail: e.to_string(),
+            })?;
 
     let mut main_output = None;
-    let mut ca = plan.fod_digest().map(|fod_digest| {
-        CAHash::Nar(nix_compat::nixhash::NixHash::Sha256(fod_digest))
-    });
+    let mut ca = plan
+        .fod_digest()
+        .map(|fod_digest| CAHash::Nar(nix_compat::nixhash::NixHash::Sha256(fod_digest)));
 
-    let main_out_path = plan.outputs.get("out")
+    let main_out_path = plan
+        .outputs
+        .get("out")
         .or_else(|| plan.outputs.values().next())
         .and_then(|output| output.path.as_ref());
 
@@ -249,14 +256,13 @@ pub async fn do_engine_build(
             signatures: vec![],
             deriver: Some(
                 NixStorePath::from_name_and_digest_fixed(
-                    drv_path
-                        .name()
-                        .strip_suffix(".drv")
-                        .ok_or_else(|| SnixError::ConversionError {
+                    drv_path.name().strip_suffix(".drv").ok_or_else(|| {
+                        SnixError::ConversionError {
                             from: "drv_path",
                             to: "deriver",
                             detail: "missing .drv suffix".to_string(),
-                        })?,
+                        }
+                    })?,
                     *drv_path.digest(),
                 )
                 .map_err(|e| SnixError::ConversionError {
@@ -269,7 +275,8 @@ pub async fn do_engine_build(
         };
 
         // Persist PathInfo
-        engine.path_info_service
+        engine
+            .path_info_service
             .put(path_info.clone())
             .await
             .map_err(|e| SnixError::StoreError {
@@ -298,12 +305,15 @@ pub async fn do_engine_lookup_cached(
     engine: &SnixEngine,
     plan: &Derivation,
 ) -> Result<Option<SnixOutput>, SnixError> {
-    let main_out_path = plan.outputs.get("out")
+    let main_out_path = plan
+        .outputs
+        .get("out")
         .or_else(|| plan.outputs.values().next())
         .and_then(|output| output.path.as_ref());
 
     if let Some(out_path) = main_out_path {
-        let info = engine.path_info_service
+        let info = engine
+            .path_info_service
             .get(*out_path.digest())
             .await
             .map_err(|e| SnixError::StoreError {
