@@ -10,8 +10,8 @@ use std::time::SystemTime;
 use eos_core::digest::Blake3Digest;
 use eos_core::job::{JobId, JobStatus, ProgressEvent};
 use eos_snix::SnixEngine;
-use tokio::sync::{broadcast, Semaphore};
-use tracing::{info, error};
+use tokio::sync::{Semaphore, broadcast};
+use tracing::{error, info};
 
 use crate::config::DaemonConfig;
 
@@ -118,7 +118,7 @@ impl Scheduler {
                     };
                     let _ = sender.send(event);
                     return;
-                }
+                },
             };
 
             // Transition status to Evaluating
@@ -133,10 +133,10 @@ impl Scheduler {
             let _ = sender.send(event.clone());
 
             // Update status in jobs map
-            if let Ok(mut guard) = jobs_map.lock() {
-                if let Some(j) = guard.get_mut(&plan_digest) {
-                    j.status = event.status;
-                }
+            if let Ok(mut guard) = jobs_map.lock()
+                && let Some(j) = guard.get_mut(&plan_digest)
+            {
+                j.status = event.status;
             }
 
             // Resolve lock path on host
@@ -145,10 +145,7 @@ impl Scheduler {
             let lock_content = match tokio::fs::read_to_string(&lock_path).await {
                 Ok(content) => content,
                 Err(e) => {
-                    let err_msg = format!(
-                        "Failed to read lock file at {:?}: {}",
-                        lock_path, e
-                    );
+                    let err_msg = format!("Failed to read lock file at {:?}: {}", lock_path, e);
                     error!("{}", err_msg);
                     let event = ProgressEvent {
                         job_id,
@@ -160,13 +157,13 @@ impl Scheduler {
                         log_line: None,
                     };
                     let _ = sender.send(event.clone());
-                    if let Ok(mut guard) = jobs_map.lock() {
-                        if let Some(j) = guard.get_mut(&plan_digest) {
-                            j.status = event.status;
-                        }
+                    if let Ok(mut guard) = jobs_map.lock()
+                        && let Some(j) = guard.get_mut(&plan_digest)
+                    {
+                        j.status = event.status;
                     }
                     return;
-                }
+                },
             };
 
             // Run build orchestration pipeline
@@ -184,15 +181,16 @@ impl Scheduler {
                 Ok(outputs) => {
                     info!("Job {} completed successfully: {:?}", plan_digest, outputs);
                     // Update final state in jobs map
-                    if let Ok(mut guard) = jobs_map.lock() {
-                        if let Some(j) = guard.get_mut(&plan_digest) {
-                            // Find the completed event from sender history or construct it
-                            // To be simple, retrieve final status from SnixOutput mappings
-                            // Note: run_orchestrated_build broadcasts status updates, so status in jobs map is updated by it.
-                            j.status = JobStatus::Completed { outputs: vec![] };
-                        }
+                    if let Ok(mut guard) = jobs_map.lock()
+                        && let Some(j) = guard.get_mut(&plan_digest)
+                    {
+                        // Find the completed event from sender history or construct it
+                        // To be simple, retrieve final status from SnixOutput mappings
+                        // Note: run_orchestrated_build broadcasts status updates, so status in
+                        // jobs map is updated by it.
+                        j.status = JobStatus::Completed { outputs: vec![] };
                     }
-                }
+                },
                 Err(e) => {
                     error!("Job {} failed: {}", plan_digest, e);
                     let event = ProgressEvent {
@@ -205,12 +203,12 @@ impl Scheduler {
                         log_line: None,
                     };
                     let _ = sender.send(event.clone());
-                    if let Ok(mut guard) = jobs_map.lock() {
-                        if let Some(j) = guard.get_mut(&plan_digest) {
-                            j.status = event.status;
-                        }
+                    if let Ok(mut guard) = jobs_map.lock()
+                        && let Some(j) = guard.get_mut(&plan_digest)
+                    {
+                        j.status = event.status;
                     }
-                }
+                },
             }
         });
 
@@ -227,7 +225,10 @@ impl Scheduler {
     /// # Errors
     ///
     /// Returns an error if the internal jobs lock is poisoned.
-    pub fn get_status(&self, plan_digest: &Blake3Digest) -> Result<Option<JobStatus<Blake3Digest>>, String> {
+    pub fn get_status(
+        &self,
+        plan_digest: &Blake3Digest,
+    ) -> Result<Option<JobStatus<Blake3Digest>>, String> {
         let guard = self.jobs.lock().map_err(|e| e.to_string())?;
         Ok(guard.get(plan_digest).map(|j| j.status.clone()))
     }
@@ -243,8 +244,8 @@ impl Scheduler {
             match j.status {
                 JobStatus::Completed { .. } | JobStatus::Failed { .. } | JobStatus::Cancelled => {
                     return Ok(false);
-                }
-                _ => {}
+                },
+                _ => {},
             }
 
             j.status = JobStatus::Cancelled;
@@ -257,10 +258,10 @@ impl Scheduler {
             let _ = j.sender.send(event);
 
             // Abort background task
-            if let Ok(mut handle_guard) = j.abort_handle.lock() {
-                if let Some(ref handle) = *handle_guard {
-                    handle.abort();
-                }
+            if let Ok(handle_guard) = j.abort_handle.lock()
+                && let Some(ref handle) = *handle_guard
+            {
+                handle.abort();
             }
             Ok(true)
         } else {

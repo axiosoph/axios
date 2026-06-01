@@ -13,14 +13,18 @@ capnp-rpc = "0.20"
 clap = { version = "4", features = ["derive"] }
 eos = { path = "../eos" }
 eos-core = { path = "../eos-core" }
+atom-id = { path = "../../atom/atom-id" }
 eos-proto = { path = "../eos-proto" }
 eos-snix = { path = "../eos-snix" }
 eos-store = { path = "../eos-store" }
+snix-store = { path = "/var/home/nrd/git/git.snix.dev/snix/snix/snix/store" }
+snix-castore = { path = "/var/home/nrd/git/git.snix.dev/snix/snix/snix/castore" }
 tokio = { version = "1", features = [
   "rt-multi-thread",
   "net",
   "signal",
   "macros",
 ] }
+tokio-util = { version = "0.7", features = ["compat"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

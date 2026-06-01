@@ -1,6 +1,7 @@
 //! Daemon configuration.
 
 use std::path::PathBuf;
+
 use clap::Parser;
 
 /// Configuration settings for the Eos daemon.
@@ -13,15 +14,27 @@ pub struct DaemonConfig {
     pub socket_path: Option<PathBuf>,
 
     /// Address for the blob service.
-    #[arg(long, env = "BLOB_SERVICE_ADDR", default_value = "objectstore+file:/var/lib/snix-castore/blobs")]
+    #[arg(
+        long,
+        env = "BLOB_SERVICE_ADDR",
+        default_value = "objectstore+file:/var/lib/snix-castore/blobs"
+    )]
     pub blob_service_addr: String,
 
     /// Address for the directory service.
-    #[arg(long, env = "DIRECTORY_SERVICE_ADDR", default_value = "redb:/var/lib/snix-castore/directories.redb")]
+    #[arg(
+        long,
+        env = "DIRECTORY_SERVICE_ADDR",
+        default_value = "redb:/var/lib/snix-castore/directories.redb"
+    )]
     pub directory_service_addr: String,
 
     /// Address for the path info service.
-    #[arg(long, env = "PATH_INFO_SERVICE_ADDR", default_value = "redb:/var/lib/snix-store/pathinfo.redb")]
+    #[arg(
+        long,
+        env = "PATH_INFO_SERVICE_ADDR",
+        default_value = "redb:/var/lib/snix-store/pathinfo.redb"
+    )]
     pub path_info_service_addr: String,
 
     /// Maximum number of concurrent builds to execute locally.
@@ -33,7 +46,11 @@ pub struct DaemonConfig {
     pub sandbox_workdir: PathBuf,
 
     /// Path to the local workspace git repository for resolving local "::" mirrors.
-    #[arg(long, env = "EOS_WORKSPACE_DIR", default_value = "/var/home/nrd/git/github.com/axiosoph/axios")]
+    #[arg(
+        long,
+        env = "EOS_WORKSPACE_DIR",
+        default_value = "/var/home/nrd/git/github.com/axiosoph/axios"
+    )]
     pub workspace_dir: PathBuf,
 
     /// Directory where lock files are stored.
@@ -51,31 +68,35 @@ impl DaemonConfig {
         if let Some(ref path) = self.socket_path {
             return Ok(path.clone());
         }
-        if let Ok(path_str) = std::env::var("EOS_SOCKET") {
-            if !path_str.is_empty() {
-                return Ok(PathBuf::from(path_str));
-            }
+        if let Ok(path_str) = std::env::var("EOS_SOCKET")
+            && !path_str.is_empty()
+        {
+            return Ok(PathBuf::from(path_str));
         }
-        if let Ok(xdg_runtime) = std::env::var("XDG_RUNTIME_DIR") {
-            if !xdg_runtime.is_empty() {
-                return Ok(PathBuf::from(xdg_runtime).join("eos").join("eos.sock"));
-            }
+        if let Ok(xdg_runtime) = std::env::var("XDG_RUNTIME_DIR")
+            && !xdg_runtime.is_empty()
+        {
+            return Ok(PathBuf::from(xdg_runtime).join("eos").join("eos.sock"));
         }
-        Err("Could not resolve socket path: neither --socket-path, $EOS_SOCKET, nor $XDG_RUNTIME_DIR was set".to_string())
+        Err(
+            "Could not resolve socket path: neither --socket-path, $EOS_SOCKET, nor \
+             $XDG_RUNTIME_DIR was set"
+                .to_string(),
+        )
     }
 
     /// Resolves the locks directory path.
     #[must_use]
     pub fn resolve_locks_dir(&self) -> PathBuf {
-        if let Ok(locks_env) = std::env::var("EOS_LOCKS_DIR") {
-            if !locks_env.is_empty() {
-                return PathBuf::from(locks_env);
-            }
+        if let Ok(locks_env) = std::env::var("EOS_LOCKS_DIR")
+            && !locks_env.is_empty()
+        {
+            return PathBuf::from(locks_env);
         }
-        if let Ok(xdg_runtime) = std::env::var("XDG_RUNTIME_DIR") {
-            if !xdg_runtime.is_empty() {
-                return PathBuf::from(xdg_runtime).join("eos").join("locks");
-            }
+        if let Ok(xdg_runtime) = std::env::var("XDG_RUNTIME_DIR")
+            && !xdg_runtime.is_empty()
+        {
+            return PathBuf::from(xdg_runtime).join("eos").join("locks");
         }
         self.locks_dir.clone()
     }
