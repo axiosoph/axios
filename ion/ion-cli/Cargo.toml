@@ -8,6 +8,9 @@ atom-core    = { path = "../../atom/atom-core" }
 eos-core     = { path = "../../eos/eos-core" }
 ion-manifest = { path = "../ion-manifest" }
 ion-resolve  = { path = "../ion-resolve" }
+ion-eos      = { path = "../ion-eos" }
+tokio        = { version = "1", features = ["rt-multi-thread", "macros", "fs"] }
+clap         = { version = "4", features = ["derive"] }
 
 [features]
 default         = ["embedded-engine"]
