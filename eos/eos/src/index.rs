@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::sync::Mutex;
+
 use atom_id::AtomId;
 use eos_core::index::{AtomIndex, AtomMeta, AtomQuery};
 
@@ -40,15 +41,19 @@ impl AtomIndex for LockFileIndex {
 
         for atom in guard.values() {
             // Match label pattern (case-insensitive substring)
-            if !atom.label.to_lowercase().contains(&query.label_pattern.to_lowercase()) {
+            if !atom
+                .label
+                .to_lowercase()
+                .contains(&query.label_pattern.to_lowercase())
+            {
                 continue;
             }
 
             // Check set filter if provided
-            if let Some(ref set_filter) = query.set_filter {
-                if !atom.sets.contains(set_filter) {
-                    continue;
-                }
+            if let Some(ref set_filter) = query.set_filter
+                && !atom.sets.contains(set_filter)
+            {
+                continue;
             }
 
             results.push(atom.clone());
