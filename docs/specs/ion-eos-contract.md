@@ -220,6 +220,16 @@ and `exitCode` (int32) fields. Extended metadata is encoded in the
 schema versions via Cap'n Proto's append-only field numbering.
 `VERIFIED: unverified`
 
+**[discovery-read-only]**: Ion MUST NOT use the `AtomDiscovery`
+capability to mutate eos state. Discovery is observation-only — it
+exposes read-only queries over eos's knowledge of available atoms.
+Ion MUST NOT invoke any `AtomDiscovery` method with the expectation
+of altering the underlying atom store, index, or daemon state. If
+future `AtomDiscovery` extensions add write-like operations (e.g.,
+pinning hints), they MUST be gated behind a separate, explicitly
+requested capability.
+`VERIFIED: unverified`
+
 ---
 
 ### Daemon Discovery
@@ -274,6 +284,55 @@ This error is reported via the `BuildStatus.failed` variant with an
 error category of `fetch failure` and the unsupported type tag in the
 error message.
 `VERIFIED: unverified`
+
+---
+
+### Discovery Query
+
+Ion queries eos for atom metadata — available packages, version
+ranges, label searches — through the `AtomDiscovery` capability.
+This is a read-only observation interface, distinct from the build
+submission path.
+
+**Capability Acquisition**: After connecting and obtaining the
+`EosDaemon` bootstrap capability (per `[daemon-connect]`), ion
+invokes `EosDaemon.discover()` to receive an `AtomDiscovery`
+capability. This is a lightweight call that does not initiate a
+build or alter daemon state.
+
+**Query Operations**: The `AtomDiscovery` capability exposes three
+operations:
+
+| Method | Signature | Purpose |
+|:-------|:----------|:--------|
+| `resolve(id)` | `AtomId → Option<AtomMeta>` | Look up specific atom metadata (label, version, set, mirrors) by content-addressed identifier |
+| `contains(id)` | `AtomId → Bool` | Existence check — returns whether eos has knowledge of the given atom |
+| `search(query)` | `SearchQuery → List<AtomMeta>` | Find atoms matching a label pattern, atom-set filter, version range, or combination thereof |
+
+**Use Cases**:
+
+- **Dependency discovery**: Ion's resolution pipeline queries
+  available atoms before constructing a lock file, enabling
+  interactive version selection and constraint satisfaction.
+- **Version browsing**: Users inspect available versions of a
+  dependency without initiating a build (`ion list --versions`).
+- **Available package listing**: Ion presents a catalogue of atoms
+  known to the connected eos daemon (`ion search <pattern>`).
+
+**Backing Store Evolution**:
+
+- **v1**: Discovery results are backed by processed lock files and
+  the local artifact store. The daemon indexes atoms it has
+  previously fetched and verified. Coverage is limited to the
+  daemon's local history.
+- **vN**: Discovery is backed by peer gossip and a distributed
+  index. The daemon participates in an atom discovery network,
+  returning results from peers it has not directly fetched from.
+  The `AtomDiscovery` interface remains identical; only the backing
+  data source changes.
+
+`AtomDiscovery` is subject to `[discovery-read-only]` — all
+operations are pure queries with no side effects on daemon state.
 
 ---
 
@@ -352,6 +411,20 @@ composer.
   The backend evaluator produces a `Plan` (e.g., Nix derivation).
   Eos then executes the plan via `BuildEngine.build()`, producing
   outputs reported via the `BuildJob` capability.
+  `VERIFIED: unverified`
+
+**[query-discovery]**: Ion obtains the discovery capability and
+issues read-only queries.
+
+- **PRE**: Ion holds an `EosDaemon` capability (established via
+  `[daemon-connect]`).
+- **POST**: Ion invokes `EosDaemon.discover()` and receives an
+  `AtomDiscovery` capability. Ion MAY then issue any combination of
+  `resolve(id)`, `contains(id)`, and `search(query)` calls. These
+  are read-only operations — they do not affect build state, daemon
+  configuration, or the artifact store. The `AtomDiscovery`
+  capability remains valid for the lifetime of the underlying
+  `EosDaemon` connection.
   `VERIFIED: unverified`
 
 ---
@@ -603,6 +676,8 @@ This returns the current `BuildStatus` as a snapshot value.
 | `plugin-type-extensibility` | Extension test | UNVERIFIED | Add unknown type, verify clean rejection |
 | `idempotent-submission` | Repeat submission test | UNVERIFIED | Same lock twice → same `JobId`, no duplicate work |
 | `progress-liveness` | Integration test | UNVERIFIED | Attach → verify all state transitions delivered |
+| `discovery-read-only` | Code audit | UNVERIFIED | No mutating code paths reachable via `AtomDiscovery` |
+| `query-discovery` | Integration test | UNVERIFIED | Obtain `AtomDiscovery`, issue resolve/contains/search |
 
 ---
 

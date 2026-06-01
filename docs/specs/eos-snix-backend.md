@@ -50,9 +50,13 @@ TYPE SnixStore : ArtifactStore
   delegates to BlobService + DirectoryService + PathInfoService
 
 -- Primitive type mappings (bidirectional From/Into)
+-- eos_core::Digest is a trait; eos-snix selects the concrete implementation.
 
-MAP eos_core::Digest              ↔  snix_castore::B3Digest
-    -- Both 32-byte BLAKE3. Conversion is a memcpy.
+TYPE Blake3Digest : Digest          -- [u8; 32] newtype, Copy, #[repr(transparent)]
+  where eos-snix sets `type Digest = Blake3Digest`
+
+MAP Blake3Digest                   ↔  snix_castore::B3Digest
+    -- Both [u8; 32] newtypes, #[repr(transparent)]. Zero-cost conversion.
 
 MAP eos_core::StorePath           ↔  nix_compat::store_path::StorePath<String>
     -- eos_core::StorePath wraps a String; nix_compat::StorePath
@@ -77,9 +81,10 @@ TYPE BuildRequestAdapter          -- Derivation → BuildRequest converter
 
 | `eos-core` Type | Snix Type | Conversion | Notes |
 | :-------------- | :-------- | :--------- | :---- |
-| `Digest` | `snix_castore::B3Digest` | `From`/`Into` (zero-cost, both `[u8; 32]`) | `B3Digest` is `Copy`; `Digest` SHOULD also be `Copy` |
+| `Digest` (trait) | `snix_castore::B3Digest` | `From`/`Into` on `Blake3Digest` (zero-cost, both `[u8; 32]` newtypes via `#[repr(transparent)]`) | `eos-snix` binds `type Digest = Blake3Digest`. `Blake3Digest` implements `Copy` because BLAKE3 output is always 32 bytes. |
 | `StorePath` | `nix_compat::store_path::StorePath<String>` | `TryFrom`/`Into` (`TryFrom` validates format) | Snix `StorePath` enforces the `<hash>-<name>` structure |
 | `BuildEngine::Plan` | `nix_compat::derivation::Derivation` | Identity (associated type binding) | `Derivation` is `Send + Sync + Clone + Debug` |
+| `BuildEngine::plan_digest()` | — | `SnixEngine::plan_digest()` computes `Blake3Digest` of the `Derivation`'s ATerm serialization | This mirrors Nix/Snix derivation hashing: `BLAKE3(derivation.to_aterm_bytes())` |
 | `BuildEngine::Output` | `PathInfo` + `Node` | Wrapped in `SnixOutput` struct | `PathInfo` carries NAR hash, references; `Node` carries castore root |
 | `ArtifactInfo::digest` | `B3Digest` | `From`/`Into` | Store-level content identifier |
 | `ArtifactInfo::references` | `Vec<StorePath<String>>` | Element-wise `Into` | Transitive closure of runtime references |
@@ -111,7 +116,7 @@ TYPE BuildRequestAdapter          -- Derivation → BuildRequest converter
 **[snix-store-service-consistency]**: Operations that span multiple Snix services (e.g., `import` writes blobs via `BlobService`, constructs directory trees via `DirectoryService`, then registers metadata via `PathInfoService`) MUST execute in dependency order. If any intermediate step fails, subsequent steps MUST NOT proceed and previously-written data SHOULD be treated as orphaned (eligible for garbage collection).
 `VERIFIED: unverified`
 
-**[snix-store-digest-fidelity]**: The `From<B3Digest>` and `Into<B3Digest>` conversions between `eos_core::Digest` and `snix_castore::B3Digest` MUST be lossless. Both types represent a 32-byte BLAKE3 hash. No truncation, re-encoding, or algorithm substitution is permitted.
+**[snix-store-digest-fidelity]**: The `From<B3Digest>` and `Into<B3Digest>` conversions between `Blake3Digest` (the `eos_core::Digest` impl) and `snix_castore::B3Digest` MUST be lossless. Both types are `#[repr(transparent)]` `[u8; 32]` newtypes representing a BLAKE3 hash. No truncation, re-encoding, or algorithm substitution is permitted.
 `VERIFIED: unverified`
 
 #### Build Execution
@@ -469,10 +474,13 @@ The `SnixStore` implementation maps `ArtifactStore` operations to Snix's three-s
 All three Snix store service traits require `Send + Sync`:
 
 ```rust
-#[async_trait] pub trait BlobService: Send + Sync { ... }
-#[async_trait] pub trait DirectoryService: Send + Sync { ... }
-#[async_trait] pub trait PathInfoService: Send + Sync { ... }
+// Snix uses native async fn in traits via trait_variant::make
+#[trait_variant::make(Send)] pub trait BlobService: Sync { ... }
+#[trait_variant::make(Send)] pub trait DirectoryService: Sync { ... }
+#[trait_variant::make(Send)] pub trait PathInfoService: Sync { ... }
 ```
+
+> **Note:** Snix uses `trait_variant::make` (not `#[async_trait]`) for native `async fn` in trait definitions. The `#[trait_variant::make(Send)]` attribute generates a `Send`-bounded variant of the trait automatically.
 
 Available backend implementations: in-memory, gRPC (remote), `object_store` (S3/GCS/Azure), `redb` (embedded database), Bigtable, and cache combinators (layered caching). The `SnixStore` SHOULD be configurable to use any combination of these backends, selected at daemon startup.
 

@@ -43,14 +43,41 @@ The following types model the Eos behavioral contract at the `eos-core` layer. T
 ```
 -- Core identity types (eos-core)
 
-TYPE Digest = [u8; 32]                             -- Algorithm-agile content digest
-                                                   -- (currently BLAKE3, future: Coz digest)
+-- Digest is a TRAIT, not a fixed type. It abstracts the *stored value*
+-- (what gets compared, serialized, used as map keys) separately from
+-- the *hasher* (computation, which lives downstream in eos-store).
+-- This separation enables the BLAKE3 → Coz migration: callers bound by
+-- `D: Digest` never change; only the associated type binding does.
+
+TRAIT Digest: AsRef<[u8]> + Eq + Hash + Clone + Send + Sync + 'static
+    fn algorithm(&self) -> &str              -- Algorithm identifier ("blake3", "ES256")
+    fn as_bytes(&self) -> &[u8]              -- Raw digest bytes, without framing
+    fn len(&self) -> usize                   -- Byte length of the digest
+
+-- Concrete v1 implementation (lives in eos-core alongside the trait)
+
+TYPE Blake3Digest = #[repr(transparent)] [u8; 32]  -- Fixed-size BLAKE3 content digest
+                                                   -- Copy because always 32 bytes
+    IMPL Digest for Blake3Digest:
+        algorithm() => "blake3"
+
+-- Migration path: add `CozDigest { alg: Alg, bytes: Vec<u8> }` impl of
+-- Digest. Callers using `D: Digest` bounds don't change. Only the
+-- associated type binding `type Digest = Blake3Digest` becomes
+-- `type Digest = CozDigest`.
+
 TYPE StorePath = opaque String                     -- Immutable path in ArtifactStore
                                                    -- (backend validates format internally)
-TYPE AtomRef = { id: AtomId, digest: Digest }      -- Cryptographic snapshot reference
+TYPE AtomRef<D: Digest> = { id: AtomId, digest: D }  -- Cryptographic snapshot reference
+                                                      -- Generic over digest algorithm
 
 -- Build engine associated types (generic over backend)
+-- Note: eos uses native async fn in traits (edition 2024, toolchain
+-- 1.90.0) with `trait_variant::make` for Send-bound variants.
+-- No `#[async_trait]` / `Box<dyn Future>` overhead.
 
+TYPE BuildEngine::Digest: crate::Digest            -- Digest algorithm for this backend
+                                                   -- (Snix: Blake3Digest)
 TYPE BuildEngine::Plan                             -- Backend-specific build recipe
                                                    -- (Snix: nix_compat::derivation::Derivation)
 TYPE BuildEngine::Output                           -- Backend-specific build result
@@ -58,14 +85,29 @@ TYPE BuildEngine::Output                           -- Backend-specific build res
 TYPE BuildEngine::Error                            -- Structured error type
                                                    -- (Snix: SnixError)
 
+-- Build engine methods (beyond evaluate/apply)
+
+FN BuildEngine::plan_digest(&self, plan: &Self::Plan) -> Self::Digest
+    -- Compute the content-addressed digest of a plan for deduplication.
+    -- This closes the gap between the trait surface and the
+    -- `JobId = hash(plan)` invariant. The backend knows how to
+    -- canonically serialize its plan type; this method makes that
+    -- knowledge available to the daemon without leaking serialization
+    -- details. Synchronous, pure — no async needed.
+
 -- Evaluation request (frontend → daemon)
+-- Note: EvalRequest and other message structs use `#[non_exhaustive]`
+-- for forward compatibility. Fields may be added in future versions
+-- without breaking downstream consumers. Constructors must use
+-- struct update syntax or builder patterns.
 
 TYPE EvalTarget =
     File(PathBuf)                                  -- Evaluate a file path
   | Expression(String)                             -- Evaluate a string expression
 
 TYPE ResolvedInput = {
-    digest: Digest,                                -- Content-addressed digest of this input
+    digest: D,                                     -- Content-addressed digest of this input
+                                                   -- (generic over Digest impl)
     store_path: StorePath                          -- Store path where input is materialized
 }
 
@@ -75,7 +117,7 @@ TYPE ComposerConfig = {
     version: String                                -- Composer atom version
 }
 
-TYPE EvalRequest = {
+TYPE EvalRequest = #[non_exhaustive] {
     expression: EvalTarget,                        -- What to evaluate
     inputs: Map<String, ResolvedInput>,            -- Pre-resolved inputs (atoms, nix sources)
     composer: Option<ComposerConfig>,              -- Composer configuration (from [compose])
@@ -91,7 +133,7 @@ TYPE BuildPlan =
 
 -- Job management types (daemon-level)
 
-TYPE JobId = Digest                                -- Content-addressed: hash(plan)
+TYPE JobId = BuildEngine::Digest                   -- Content-addressed: plan_digest(plan)
                                                    -- Identical plans produce identical JobIds,
                                                    -- enabling deduplication
 
@@ -112,17 +154,17 @@ TYPE ProgressEvent = {
 
 -- Artifact metadata
 
-TYPE ArtifactInfo = {
-    digest: Digest,
+TYPE ArtifactInfo<D: Digest> = {
+    digest: D,
     store_path: StorePath,
     size: u64,
     references: Vec<StorePath>,                    -- Transitive runtime references
-    deriver: Option<Digest>                        -- Plan digest that produced this artifact
+    deriver: Option<D>                             -- Plan digest that produced this artifact
 }
 
 -- Cache keys
 
-TYPE EvalCacheKey = (Digest, Vec<(String, String)>) -- (snapshot digest, eval_args)
+TYPE EvalCacheKey<D: Digest> = (D, Vec<(String, String)>) -- (snapshot digest, eval_args)
 ```
 
 #### `EvalRequest` and `[compose.args]`
@@ -151,6 +193,39 @@ Eos does **not** own or implement an artifact store directly. The `ArtifactStore
 - **Future**: Cyphr/Coz store — content-addressed via Coz digests
 
 The `ArtifactStore` trait surface (`has`, `get_info`, `import`, `list`) is intentionally minimal. Backend crates provide the concrete wiring to underlying storage services.
+
+#### `AtomIndex` — Discovery Seam
+
+Every eos instance that processes atoms accumulates knowledge about their existence, versions, dependencies, and build status. The `AtomIndex` trait captures this accumulated knowledge as a queryable surface. It is an **eos-layer trait** (L2) that builds atop `AtomSource` reads — it is NOT a reimplementation of atom-core's `AtomStore`.
+
+This trait uses native async fn in traits (edition 2024, toolchain 1.90.0) with `trait_variant::make` for Send-bound variants — no `#[async_trait]` or `Box<dyn Future>` overhead.
+
+```
+TRAIT AtomIndex: Send + Sync + 'static
+    TYPE Error: std::error::Error + Send + Sync + 'static
+
+    async fn resolve(&self, id: &AtomId) -> Result<Option<AtomMeta>, Self::Error>
+        -- Look up metadata about a specific atom.
+
+    async fn contains(&self, id: &AtomId) -> Result<bool, Self::Error>
+        -- Fast existence check (avoids deserializing full metadata).
+        -- Mirrors the ArtifactStore::has() pattern.
+
+    async fn search(&self, query: &AtomQuery) -> Result<Vec<AtomMeta>, Self::Error>
+        -- Search for atoms matching a structured query.
+
+    async fn ingest(&self, meta: AtomMeta) -> Result<(), Self::Error>
+        -- Record that an atom has been observed/processed.
+```
+
+This maps to the formal model's `F_source` coalgebra: `F_source(S) = (AtomId → Option<AtomMeta>) × (Query → Set<AtomId>)`.
+
+The discovery chain evolves across versions:
+- **v1**: Backed by processed lock files + store queries (local daemon).
+- **v2**: Local index with gossip sync between eos peers.
+- **vN**: Distributed index (DHT) for decentralized package discovery.
+
+See the Cap'n Proto projection of this trait as the `AtomDiscovery` capability in [eos-network-protocol.md](eos-network-protocol.md).
 
 ---
 
@@ -190,6 +265,9 @@ The `ArtifactStore` trait surface (`has`, `get_info`, `import`, `list`) is inten
 `VERIFIED: unverified`
 
 **[eos-transitive-closure]**: The store path of any build output MUST be transitively self-contained. All dependencies of a store path MUST exist within the `ArtifactStore` and be immutable.
+`VERIFIED: unverified`
+
+**[eos-atom-index-ingest]**: Atoms that have been successfully processed (fetched, verified, evaluated, or built) MUST be ingested into the `AtomIndex` via `ingest()`. The daemon MUST NOT silently discard atom metadata after processing. This invariant ensures that every eos instance progressively accumulates discoverable knowledge about the atoms it has encountered.
 `VERIFIED: unverified`
 
 ---
@@ -254,6 +332,7 @@ The `ArtifactStore` trait surface (`has`, `get_info`, `import`, `list`) is inten
 | `eos-cache-determinism` | Cache hits test | UNVERIFIED | Property-based tests for build cache |
 | `eos-eval-cache-determinism` | Cache hits test | UNVERIFIED | Property-based tests for evaluation cache with `EvalCacheKey` |
 | `eos-transitive-closure` | Reference scanner test | UNVERIFIED | Store scanner reference tracing validation |
+| `eos-atom-index-ingest` | Integration tests | UNVERIFIED | Verify atoms are ingested into AtomIndex after processing |
 | `engine-plan` | State transition audit | UNVERIFIED | Unit tests for plan transitions via daemon protocol |
 | `engine-apply` | Sandbox execute tests | UNVERIFIED | Integration tests for builder execution via backend |
 | `engine-eval` | Sandbox eval tests | UNVERIFIED | Integration tests for evaluation via backend (see eos-snix-backend.md) |
@@ -268,13 +347,13 @@ The `ArtifactStore` trait surface (`has`, `get_info`, `import`, `list`) is inten
 ## Implications
 
 1. **Daemon-Served Trait Surface**:
-   The `BuildEngine` and `ArtifactStore` traits in `eos-core` are behavioral contracts — they specify what operations the daemon supports, what invariants hold, and what state transitions are permitted. Clients never invoke these traits directly. Instead, the Cap'n Proto protocol (see [eos-network-protocol.md](eos-network-protocol.md)) projects these contracts onto the wire as the `EosDaemon` and `BuildJob` capabilities. A `submitBuild` RPC corresponds to the `engine-plan` → `engine-eval` → `engine-apply` transition chain; `attachProgress` corresponds to `ProgressEvent` streaming.
+   The `BuildEngine`, `ArtifactStore`, and `AtomIndex` traits in `eos-core` are behavioral contracts — they specify what operations the daemon supports, what invariants hold, and what state transitions are permitted. Clients never invoke these traits directly. Instead, the Cap'n Proto protocol (see [eos-network-protocol.md](eos-network-protocol.md)) projects these contracts onto the wire as the `EosDaemon`, `BuildJob`, and `AtomDiscovery` capabilities. A `submitBuild` RPC corresponds to the `engine-plan` → `engine-eval` → `engine-apply` transition chain; `attachProgress` corresponds to `ProgressEvent` streaming; `resolve`/`search` queries correspond to `AtomDiscovery` methods.
 
 2. **Backend Abstraction via Associated Types**:
-   `BuildEngine::Plan`, `BuildEngine::Output`, and `BuildEngine::Error` are associated types, not concrete types. `eos-core` carries zero dependency on any backend crate. The Snix backend binds `Plan = Derivation`, `Output = PathInfo + Node`, and `Error = SnixError` (see [eos-snix-backend.md](eos-snix-backend.md) §Type Declarations). Future backends (subprocess, Guix, remote delegation) bind different concrete types while preserving the same behavioral invariants.
+   `BuildEngine::Digest`, `BuildEngine::Plan`, `BuildEngine::Output`, and `BuildEngine::Error` are associated types, not concrete types. `eos-core` carries zero dependency on any backend crate. The Snix backend binds `Digest = Blake3Digest`, `Plan = Derivation`, `Output = PathInfo + Node`, and `Error = SnixError` (see [eos-snix-backend.md](eos-snix-backend.md) §Type Declarations). Future backends (subprocess, Guix, remote delegation) bind different concrete types while preserving the same behavioral invariants. The `Digest` associated type is bounded by `crate::Digest`, ensuring all backends produce values that satisfy the trait's comparison and serialization requirements.
 
 3. **Evaluation Caching as Primary Optimization Boundary**:
-   Evaluation caching is the dominant cost-avoidance mechanism. The daemon MUST provide a storage-backed evaluation cache indexed by `EvalCacheKey` — the tuple of `(Digest, eval_args)`. This cache SHOULD be publishable and substitutable in the same manner as the build cache, enabling pre-computed plans to be distributed across nodes.
+   Evaluation caching is the dominant cost-avoidance mechanism. The daemon MUST provide a storage-backed evaluation cache indexed by `EvalCacheKey` — the tuple of `(BuildEngine::Digest, eval_args)`. This cache SHOULD be publishable and substitutable in the same manner as the build cache, enabling pre-computed plans to be distributed across nodes.
 
 4. **`EvalRequest` Carries `[compose.args]`**:
    The `eval_args` field in `EvalRequest` is the conduit through which frontend-specified configuration (target system, feature flags, override paths) reaches the evaluator. This field maps directly to the lock file's `[compose.args]` section. The daemon treats `eval_args` as opaque — it includes them in the `EvalCacheKey` for deterministic caching but does not interpret their contents. Backend implementations determine how `eval_args` influence evaluation (e.g., Snix injects them as Nix attrset overlays).
@@ -287,3 +366,9 @@ The `ArtifactStore` trait surface (`has`, `get_info`, `import`, `list`) is inten
 
 7. **Testing Strategy**:
    Write property-based tests for `BuildPlan` matching and transition permutations to verify that caching decisions are 100% deterministic. Mock `BuildEngine` implementations SHOULD be used to validate daemon-level invariants (deduplication, progress streaming, abort cleanup) independently of any concrete backend. Backend-specific invariants (eval threading, store mapping, sandbox isolation) are verified in their respective backend specs.
+
+8. **Async Trait Ergonomics (Edition 2024)**:
+   All async traits in `eos-core` (`BuildEngine`, `ArtifactStore`, `AtomIndex`) use native `async fn` in traits — no `#[async_trait]` macro. The `trait_variant::make` attribute generates both a `Local*` variant (non-Send, for single-threaded contexts like Cap'n Proto's `!Send` RPC loop) and a Send-bound variant (for the multi-threaded worker pool). This eliminates `Box<dyn Future>` heap allocation on every method call. Requires Rust edition 2024 (toolchain 1.90.0+).
+
+9. **`plan_digest()` Closes the Deduplication Seam**:
+   The `BuildEngine::plan_digest()` method is the sole bridge between a backend's opaque `Plan` type and the daemon's `JobId = hash(plan)` deduplication invariant. Without it, the daemon would need to know how to serialize backend-specific plan types — a layer violation. By making digest computation a trait method, the backend controls canonical serialization while the daemon operates purely on the resulting `Digest` value.

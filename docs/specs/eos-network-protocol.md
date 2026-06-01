@@ -107,12 +107,32 @@ interface EosDaemon {
     supportedBackends :List(Text),
     apiVersion :UInt32
   );
+  discover @3 () -> (discovery :AtomDiscovery);
 }
 
 interface BuildJob {
   attachProgress @0 (callback :ProgressStream) -> ();
   cancel @1 () -> ();
   getJobId @2 () -> (jobId :Data);
+}
+
+interface AtomDiscovery {
+  resolve @0 (id :AtomId) -> (meta :AtomMeta);
+  contains @1 (id :AtomId) -> (exists :Bool);
+  search @2 (query :AtomQuery) -> (results :List(AtomMeta));
+}
+
+struct AtomMeta {
+  id @0 :AtomId;
+  label @1 :Text;
+  versions @2 :List(VersionInfo);
+  sets @3 :List(Text);  # anchor hashes of sets containing this atom
+}
+
+struct AtomQuery {
+  labelPattern @0 :Text;    # glob or substring match
+  setFilter @1 :Text;       # optional: restrict to specific set
+  limit @2 :UInt32;         # max results
 }
 
 struct KeyValue {
@@ -133,6 +153,9 @@ types define the behavioral contract. Both MUST remain synchronized:
 | `ProgressStream` | `ProgressEvent` | Streaming status callback |
 | `EosDaemon` | Daemon entry point | Top-level RPC surface |
 | `BuildJob` | Job handle | Per-build capability |
+| `AtomDiscovery` | `AtomSource` (read-only) | Atom resolution and search |
+| `AtomMeta` | Atom metadata | Per-atom identity and version info |
+| `AtomQuery` | Search parameters | Discovery query constraints |
 | `KeyValue` | `(String, String)` | Evaluation arguments |
 
 ---
@@ -264,6 +287,14 @@ enabled, Eos MUST require that a substituted artifact carry attestations from
 at least *M* of *N* configured trusted builders (Web of Trust threshold)
 before accepting the artifact. The threshold values *M* and *N* are
 deployment-configurable.
+`VERIFIED: unverified`
+
+**[eos-discovery-read-only]**: The `AtomDiscovery` capability MUST NOT expose
+mutation operations. Discovery is strictly observation-only: `resolve`,
+`contains`, and `search` are pure reads with no side effects on daemon state.
+This is consistent with Eos consuming `AtomSource` (a read-only trait) per
+the formal model. Any future method added to `AtomDiscovery` MUST preserve
+this read-only invariant.
 `VERIFIED: unverified`
 
 ---
@@ -429,6 +460,11 @@ EosDaemon (bootstrap)
   │                        ├── attachProgress(callback) ──→ server holds ProgressStream ref
   │                        ├── cancel()
   │                        └── getJobId()
+  │
+  ├── discover() ──→ AtomDiscovery (read-only capability)
+  │                     ├── resolve(id) ──→ AtomMeta
+  │                     ├── contains(id) ──→ Bool
+  │                     └── search(query) ──→ List(AtomMeta)
   │
   ├── queryStatus(jobId) ──→ BuildStatus (value, not capability)
   │
@@ -716,6 +752,7 @@ Artifact transfer (for substitution and cache distribution) uses the
 | `eventual-cache-consistency` | Integration test | UNVERIFIED | Cache push → propagation delay → query verification |
 | `reproducible-build-consensus` | Consensus test | UNVERIFIED | Dual-build with injected non-determinism, verify detection |
 | `capability-cleanup-on-disconnect` | Stress test | UNVERIFIED | Rapid connect/disconnect cycles, verify no resource leaks |
+| `eos-discovery-read-only` | API audit | UNVERIFIED | Verify `AtomDiscovery` exposes no mutation operations |
 
 ---
 
