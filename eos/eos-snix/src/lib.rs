@@ -2,7 +2,7 @@
 //!
 //! Provides the [`BuildEngine`] and [`ArtifactStore`] implementation via Snix.
 
-// pub mod build;
+pub mod build;
 pub mod convert;
 pub mod error;
 pub mod eval;
@@ -97,21 +97,15 @@ impl BuildEngine for SnixEngine {
         rx.await.map_err(|_| SnixError::EvalThreadPanic)?
     }
 
-    async fn build(&self, _plan: &Self::Plan) -> Result<Self::Output, Self::Error> {
-        Err(SnixError::SandboxError {
-            platform: "unimplemented",
-            source: Box::new(std::io::Error::new(
-                std::io::ErrorKind::Unsupported,
-                "build is not yet implemented",
-            )),
-        })
+    async fn build(&self, plan: &Self::Plan) -> Result<Self::Output, Self::Error> {
+        build::do_engine_build(self, plan).await
     }
 
     async fn lookup_cached(
         &self,
-        _plan: &Self::Plan,
+        plan: &Self::Plan,
     ) -> Result<Option<Self::Output>, Self::Error> {
-        Ok(None)
+        build::do_engine_lookup_cached(self, plan).await
     }
 
 
