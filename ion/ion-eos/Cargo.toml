@@ -1,0 +1,11 @@
+[package]
+name    = "ion-eos"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+eos-proto = { path = "../../eos/eos-proto" }
+capnp     = "0.20"
+capnp-rpc = "0.20"
+tokio     = { version = "1", features = ["net", "rt"] }
+thiserror = "2"

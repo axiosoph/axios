@@ -1,0 +1,21 @@
+[package]
+name    = "eos-daemon"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "eosd"
+path = "src/main.rs"
+
+[dependencies]
+eos-core  = { path = "../eos-core" }
+eos-store = { path = "../eos-store" }
+eos-snix  = { path = "../eos-snix" }
+eos-proto = { path = "../eos-proto" }
+eos       = { path = "../eos" }
+capnp     = "0.20"
+capnp-rpc = "0.20"
+tokio     = { version = "1", features = ["rt-multi-thread", "net", "signal", "macros"] }
+tracing            = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+clap      = { version = "4", features = ["derive"] }

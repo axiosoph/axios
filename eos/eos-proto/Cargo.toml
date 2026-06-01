@@ -1,0 +1,12 @@
+[package]
+name    = "eos-proto"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+capnp         = "0.20"
+capnp-futures = "0.20"
+capnp-rpc     = "0.20"
+
+[build-dependencies]
+capnpc = "0.20"
