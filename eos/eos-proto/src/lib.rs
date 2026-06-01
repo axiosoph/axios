@@ -14,4 +14,3 @@ mod tests {
         let _option: Option<crate::eos_capnp::build_status::Reader<'static>> = None;
     }
 }
-

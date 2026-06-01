@@ -176,11 +176,11 @@ by ion core.
 **[plugin-lock-contract]**: A direct dependency plugin MUST produce
 lock entries containing at minimum:
 
-| Field  | Type   | Purpose                                 |
-| :----- | :----- | :-------------------------------------- |
-| `name` | String | Unique identifier within plugin scope   |
-| `url`  | URL    | Fetch target for the resolved resource  |
-| `hash` | String | Integrity verification digest           |
+| Field  | Type   | Purpose                                |
+| :----- | :----- | :------------------------------------- |
+| `name` | String | Unique identifier within plugin scope  |
+| `url`  | URL    | Fetch target for the resolved resource |
+| `hash` | String | Integrity verification digest          |
 
 The hash format is plugin-defined (e.g., NixHash for the nix plugin,
 SHA256 for others). Ion core does not interpret the hash — it captures
@@ -322,25 +322,25 @@ nixpkgs.version = ">=24.05"
 
 ## Verification
 
-| Constraint                  | Method      | Result | Detail                                                              |
-| :-------------------------- | :---------- | :----- | :------------------------------------------------------------------ |
-| manifest-required-sections  | agent-check | pass   | Two required sections, well-defined defaults for optional           |
-| package-identity-required   | agent-check | pass   | label + version are minimal identity; consistent with AtomId model  |
-| set-declaration-completeness| agent-check | pass   | Forward reference check; no contradiction with optional sets        |
-| set-mirror-minimum          | agent-check | pass   | Empty set is useless; at least one mirror is constructive           |
-| composer-set-reference      | agent-check | pass   | Composer must resolve; unresolvable composer is a fatal error       |
-| version-constraint-syntax   | agent-check | pass   | Uses semver crate grammar; well-defined and widely understood       |
-| deny-unknown-fields         | agent-check | pass   | Prevents misconfiguration; compatible with plugin extension         |
-| label-version-uniqueness    | agent-check | pass   | Restated from atom-transactions; no new constraint                  |
-| plugin-extension-point      | agent-check | pass   | Namespaced under deps.direct; no collision with core sections       |
-| plugin-lock-contract        | agent-check | pass   | Minimal (name, url, hash) is sufficient for fetch+verify            |
-| plugin-lock-type-tag        | agent-check | pass   | Enables eos dispatch without plugin knowledge                       |
-| plugin-owner-tracking       | agent-check | pass   | SHOULD, not MUST; backward compatible                               |
-| plugin-resolution-locality  | agent-check | pass   | Keeps eos clean; consistent with ion-as-adapter model               |
-| manifest-roundtrip          | agent-check | pass   | Standard serde/toml_edit property; no contradiction                 |
-| manifest-validation-total   | agent-check | pass   | Usability property; no safety contradiction                         |
-| plugin-isolation             | agent-check | pass   | Prevents plugin from corrupting core state                          |
-| no-self-dependency          | agent-check | pass   | Self-reference is always a cycle; trivially detectable              |
+| Constraint                   | Method      | Result | Detail                                                             |
+| :--------------------------- | :---------- | :----- | :----------------------------------------------------------------- |
+| manifest-required-sections   | agent-check | pass   | Two required sections, well-defined defaults for optional          |
+| package-identity-required    | agent-check | pass   | label + version are minimal identity; consistent with AtomId model |
+| set-declaration-completeness | agent-check | pass   | Forward reference check; no contradiction with optional sets       |
+| set-mirror-minimum           | agent-check | pass   | Empty set is useless; at least one mirror is constructive          |
+| composer-set-reference       | agent-check | pass   | Composer must resolve; unresolvable composer is a fatal error      |
+| version-constraint-syntax    | agent-check | pass   | Uses semver crate grammar; well-defined and widely understood      |
+| deny-unknown-fields          | agent-check | pass   | Prevents misconfiguration; compatible with plugin extension        |
+| label-version-uniqueness     | agent-check | pass   | Restated from atom-transactions; no new constraint                 |
+| plugin-extension-point       | agent-check | pass   | Namespaced under deps.direct; no collision with core sections      |
+| plugin-lock-contract         | agent-check | pass   | Minimal (name, url, hash) is sufficient for fetch+verify           |
+| plugin-lock-type-tag         | agent-check | pass   | Enables eos dispatch without plugin knowledge                      |
+| plugin-owner-tracking        | agent-check | pass   | SHOULD, not MUST; backward compatible                              |
+| plugin-resolution-locality   | agent-check | pass   | Keeps eos clean; consistent with ion-as-adapter model              |
+| manifest-roundtrip           | agent-check | pass   | Standard serde/toml_edit property; no contradiction                |
+| manifest-validation-total    | agent-check | pass   | Usability property; no safety contradiction                        |
+| plugin-isolation             | agent-check | pass   | Prevents plugin from corrupting core state                         |
+| no-self-dependency           | agent-check | pass   | Self-reference is always a cycle; trivially detectable             |
 
 All constraints are internally consistent. No contradictions detected
 with atom-sourcing.md, atom-transactions.md, or git-storage-format.md

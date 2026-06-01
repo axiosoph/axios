@@ -1,10 +1,12 @@
-use crate::error::GitError;
+use std::collections::{HashSet, VecDeque};
+
 use gix::actor::Signature;
 use gix::date::Time;
 use gix::hash::ObjectId;
 use gix::objs::bstr::BString;
 use gix::objs::{Commit, Tag};
-use std::collections::{HashSet, VecDeque};
+
+use crate::error::GitError;
 
 /// The blank author/committer identity used for deterministic protocol commits.
 pub fn blank_signature() -> Signature {

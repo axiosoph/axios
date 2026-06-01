@@ -25,6 +25,7 @@ The Snix ecosystem decomposes into six layers relevant to `eos-snix`: a Nix-comp
 The central impedance mismatch is the evaluator's `!Send`/`!Sync` threading model: `snix-eval` uses `Rc<Closure>` internally, rendering all evaluation types thread-local. The store and build services, conversely, are fully `async + Send + Sync`. The `eos-snix` bridge MUST reconcile this split without leaking the `!Send` constraint into the `eos-core` trait surface.
 
 **Model Reference:**
+
 - [eos-build-engine.md](eos-build-engine.md) — General `BuildEngine`/`ArtifactStore` trait contracts
 - [publishing-stack-layers.md](../models/publishing-stack-layers.md) — §2.4 (BuildEngine), §2.5 (ArtifactStore)
 
@@ -79,16 +80,16 @@ TYPE BuildRequestAdapter          -- Derivation → BuildRequest converter
 
 #### Type Mapping Table
 
-| `eos-core` Type | Snix Type | Conversion | Notes |
-| :-------------- | :-------- | :--------- | :---- |
-| `Digest` (trait) | `snix_castore::B3Digest` | `From`/`Into` on `Blake3Digest` (zero-cost, both `[u8; 32]` newtypes via `#[repr(transparent)]`) | `eos-snix` binds `type Digest = Blake3Digest`. `Blake3Digest` implements `Copy` because BLAKE3 output is always 32 bytes. |
-| `StorePath` | `nix_compat::store_path::StorePath<String>` | `TryFrom`/`Into` (`TryFrom` validates format) | Snix `StorePath` enforces the `<hash>-<name>` structure |
-| `BuildEngine::Plan` | `nix_compat::derivation::Derivation` | Identity (associated type binding) | `Derivation` is `Send + Sync + Clone + Debug` |
-| `BuildEngine::plan_digest()` | — | `SnixEngine::plan_digest()` computes `Blake3Digest` of the `Derivation`'s ATerm serialization | This mirrors Nix/Snix derivation hashing: `BLAKE3(derivation.to_aterm_bytes())` |
-| `BuildEngine::Output` | `PathInfo` + `Node` | Wrapped in `SnixOutput` struct | `PathInfo` carries NAR hash, references; `Node` carries castore root |
-| `ArtifactInfo::digest` | `B3Digest` | `From`/`Into` | Store-level content identifier |
-| `ArtifactInfo::references` | `Vec<StorePath<String>>` | Element-wise `Into` | Transitive closure of runtime references |
-| `EvalRequest` | `snix_eval::Evaluation` (configured via `EvaluationBuilder`) | Manual construction in `SnixEngine::evaluate()` | Not a mechanical mapping; involves `SnixStoreIO` wiring |
+| `eos-core` Type              | Snix Type                                                    | Conversion                                                                                       | Notes                                                                                                                     |
+| :--------------------------- | :----------------------------------------------------------- | :----------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------ |
+| `Digest` (trait)             | `snix_castore::B3Digest`                                     | `From`/`Into` on `Blake3Digest` (zero-cost, both `[u8; 32]` newtypes via `#[repr(transparent)]`) | `eos-snix` binds `type Digest = Blake3Digest`. `Blake3Digest` implements `Copy` because BLAKE3 output is always 32 bytes. |
+| `StorePath`                  | `nix_compat::store_path::StorePath<String>`                  | `TryFrom`/`Into` (`TryFrom` validates format)                                                    | Snix `StorePath` enforces the `<hash>-<name>` structure                                                                   |
+| `BuildEngine::Plan`          | `nix_compat::derivation::Derivation`                         | Identity (associated type binding)                                                               | `Derivation` is `Send + Sync + Clone + Debug`                                                                             |
+| `BuildEngine::plan_digest()` | —                                                            | `SnixEngine::plan_digest()` computes `Blake3Digest` of the `Derivation`'s ATerm serialization    | This mirrors Nix/Snix derivation hashing: `BLAKE3(derivation.to_aterm_bytes())`                                           |
+| `BuildEngine::Output`        | `PathInfo` + `Node`                                          | Wrapped in `SnixOutput` struct                                                                   | `PathInfo` carries NAR hash, references; `Node` carries castore root                                                      |
+| `ArtifactInfo::digest`       | `B3Digest`                                                   | `From`/`Into`                                                                                    | Store-level content identifier                                                                                            |
+| `ArtifactInfo::references`   | `Vec<StorePath<String>>`                                     | Element-wise `Into`                                                                              | Transitive closure of runtime references                                                                                  |
+| `EvalRequest`                | `snix_eval::Evaluation` (configured via `EvaluationBuilder`) | Manual construction in `SnixEngine::evaluate()`                                                  | Not a mechanical mapping; involves `SnixStoreIO` wiring                                                                   |
 
 ---
 
@@ -133,6 +134,7 @@ TYPE BuildRequestAdapter          -- Derivation → BuildRequest converter
 #### Sandbox
 
 **[snix-sandbox-platform-dispatch]**: `SnixEngine` MUST select the sandbox backend based on the host platform:
+
 - **Linux**: Snix's native `OCIBuildService` (using `crun` or `runc`) or `BubblewrapBuildService` (using `bwrap`). Both backends mount castore inputs via FUSE.
 - **macOS**: `birdcage`-based sandbox (ported from the eka PoC's `nixec` crate). Snix provides no macOS sandbox; only `DummyBuildService` (which returns an error) is available upstream.
 - **Other / remote**: `GRPCBuildService` delegating to a remote builder via the `snix.build.v1.BuildService` gRPC protocol.
@@ -151,24 +153,28 @@ Platform detection MUST occur at `SnixEngine` construction time, not per-build.
 ### Transitions
 
 **[snix-evaluate]**: Evaluate a Nix expression via the Snix evaluator to produce a `Derivation`.
+
 - **PRE**: All input atoms and plugin dependencies referenced by the `EvalRequest` are fetched, verified, and materialized as store paths. The `SnixStoreIO` is configured with valid `BlobService`, `DirectoryService`, `PathInfoService`, and `BuildService` handles. A Tokio runtime handle is available.
 - **POST**: A dedicated eval thread is spawned. `EvaluationBuilder` is configured with the `SnixStoreIO` as the `EvalIO` implementation. Derivation builtins, fetcher builtins, and import builtins are registered. The expression is evaluated, producing an `EvaluationResult`. If `value` is `Some` and no errors are present, the `Derivation` is extracted (from the `KnownPaths` accumulated during evaluation) and sent across the channel. If errors are present, a structured `SnixError::Evaluation` is returned. All `!Send` types are dropped on the eval thread.
-`VERIFIED: unverified`
+  `VERIFIED: unverified`
 
 **[snix-build]**: Execute a `Derivation` via the Snix build service.
+
 - **PRE**: The `Derivation` has been validated (`derivation.validate(true).is_ok()`). All transitive input store paths have resolved `Node` entries in the store. The platform-appropriate `BuildService` is initialized.
 - **POST**: The `Derivation` is converted to a `BuildRequest` (via `derivation_into_build_request` equivalent). `BuildService::do_build()` executes the build in a sandboxed environment. On success, `BuildResult.outputs` contains `BuildOutput` entries with `Node` (content-addressed filesystem root) and `output_needles` (reference scan indices). The outputs are registered in `PathInfoService`. On failure, the `io::Error` is wrapped in `SnixError::Build`.
-`VERIFIED: unverified`
+  `VERIFIED: unverified`
 
 **[snix-store-import]**: Import content into the Snix store.
+
 - **PRE**: Content is available as an `AsyncRead` stream. An expected digest MAY be provided for verification.
 - **POST**: Blob data is written via `BlobService::open_write()`. If the content represents a directory tree, it is ingested via `DirectoryService::put()`. Metadata is registered via `PathInfoService::put()`. The returned `ArtifactInfo` contains the verified digest, store path, size, and transitive references.
-`VERIFIED: unverified`
+  `VERIFIED: unverified`
 
 **[snix-store-lookup]**: Check for existing content in the Snix store.
+
 - **PRE**: A digest is provided.
 - **POST**: `BlobService::has()` or `PathInfoService::get()` is queried. Returns `true`/`Some` if the content exists, `false`/`None` otherwise. No mutation occurs.
-`VERIFIED: unverified`
+  `VERIFIED: unverified`
 
 ---
 
@@ -191,16 +197,19 @@ Platform detection MUST occur at `SnixEngine` construction time, not per-build.
 ### Behavioral Properties
 
 **[eval-thread-isolation]**: Concurrent calls to `SnixEngine::evaluate()` MUST each spawn an independent eval thread (or reuse threads from a dedicated pool). Evaluations MUST NOT share mutable state — each evaluation receives its own `SnixStoreIO` instance with its own `RefCell<KnownPaths>`. The `RefCell` provides interior mutability within a single-threaded context; sharing it across evaluations would cause `BorrowMutError` panics.
+
 - **Type**: Safety
-`VERIFIED: unverified`
+  `VERIFIED: unverified`
 
 **[store-service-thread-safety]**: The three Snix store services (`BlobService`, `DirectoryService`, `PathInfoService`) are `Send + Sync` by trait bound. Multiple concurrent evaluations and builds MAY share the same store service instances (via `Arc`). The eval thread accesses store services synchronously via `handle.block_on()`; build tasks access them asynchronously. These access patterns MUST NOT deadlock because the eval thread uses a separate Tokio runtime handle (not the same runtime's current-thread executor).
+
 - **Type**: Safety
-`VERIFIED: unverified`
+  `VERIFIED: unverified`
 
 **[build-service-semaphore-backpressure]**: The Snix `OCIBuildService` and `BubblewrapBuildService` limit concurrency via `tokio::sync::Semaphore`. When all permits are exhausted, `do_build()` suspends (`.await` on `semaphore.acquire()`). The eos scheduler MUST account for this backpressure — dispatching more builds than the semaphore capacity results in queued suspension, not rejection.
+
 - **Type**: Liveness
-`VERIFIED: unverified`
+  `VERIFIED: unverified`
 
 ---
 
@@ -208,22 +217,22 @@ Platform detection MUST occur at `SnixEngine` construction time, not per-build.
 
 The `eos-snix` crate depends on the following Snix workspace members:
 
-| Snix Crate | Version | Purpose in `eos-snix` |
-| :--------- | :------ | :-------------------- |
-| `nix-compat` | (workspace) | `StorePath`, `Derivation`, `NixHash`, derivation validation, store path computation. The protocol-level data types shared between evaluator and builder. |
-| `snix-castore` | (workspace) | `BlobService`, `DirectoryService`, `B3Digest`, `Node`, `Directory`, `Entry`. Content-addressed filesystem primitives underlying both the store and build inputs. |
-| `snix-store` | (workspace) | `PathInfoService`, `PathInfo`, `NarCalculationService`. Nix-specific store metadata layer mapping store paths to content-addressed nodes. |
-| `snix-build` | (workspace) | `BuildService` trait, `BuildRequest`, `BuildResult`, `BuildOutput`, `BuildConstraints`. The sandbox execution interface and its protobuf-defined gRPC variant for remote builders. |
-| `snix-eval` | (workspace) | `Evaluation`, `EvaluationBuilder`, `EvaluationResult`, `Value`, `EvalIO` trait. The Nix language evaluator. Used exclusively on the dedicated eval thread. |
-| `snix-glue` | (workspace) | `SnixStoreIO`, `KnownPaths`, `add_derivation_builtins()`, `add_fetcher_builtins()`, `add_import_builtins()`. Wires the evaluator to the store services and registers Nix built-in functions. |
+| Snix Crate     | Version     | Purpose in `eos-snix`                                                                                                                                                                        |
+| :------------- | :---------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `nix-compat`   | (workspace) | `StorePath`, `Derivation`, `NixHash`, derivation validation, store path computation. The protocol-level data types shared between evaluator and builder.                                     |
+| `snix-castore` | (workspace) | `BlobService`, `DirectoryService`, `B3Digest`, `Node`, `Directory`, `Entry`. Content-addressed filesystem primitives underlying both the store and build inputs.                             |
+| `snix-store`   | (workspace) | `PathInfoService`, `PathInfo`, `NarCalculationService`. Nix-specific store metadata layer mapping store paths to content-addressed nodes.                                                    |
+| `snix-build`   | (workspace) | `BuildService` trait, `BuildRequest`, `BuildResult`, `BuildOutput`, `BuildConstraints`. The sandbox execution interface and its protobuf-defined gRPC variant for remote builders.           |
+| `snix-eval`    | (workspace) | `Evaluation`, `EvaluationBuilder`, `EvaluationResult`, `Value`, `EvalIO` trait. The Nix language evaluator. Used exclusively on the dedicated eval thread.                                   |
+| `snix-glue`    | (workspace) | `SnixStoreIO`, `KnownPaths`, `add_derivation_builtins()`, `add_fetcher_builtins()`, `add_import_builtins()`. Wires the evaluator to the store services and registers Nix built-in functions. |
 
 ### External Dependencies (non-Snix)
 
-| Crate | Purpose |
-| :---- | :------ |
-| `tokio` | Async runtime, `Handle::clone()` for eval thread bridge, `sync::oneshot` for result channel, `sync::Semaphore` awareness |
-| `birdcage` | macOS sandbox (from eka PoC). Provides `Birdcage::new()` with capability-based filesystem and network restrictions |
-| `tonic` | gRPC client for `GRPCBuildService` remote builder communication (transitively, via `snix-build`) |
+| Crate      | Purpose                                                                                                                  |
+| :--------- | :----------------------------------------------------------------------------------------------------------------------- |
+| `tokio`    | Async runtime, `Handle::clone()` for eval thread bridge, `sync::oneshot` for result channel, `sync::Semaphore` awareness |
+| `birdcage` | macOS sandbox (from eka PoC). Provides `Birdcage::new()` with capability-based filesystem and network restrictions       |
+| `tonic`    | gRPC client for `GRPCBuildService` remote builder communication (transitively, via `snix-build`)                         |
 
 ---
 
@@ -253,12 +262,12 @@ The function `snix_glue::builder::derivation_into_build_request()` is declared `
 
 ### Dispatch Table
 
-| Platform | Sandbox Backend | Provider | Mount Strategy | Network Isolation |
-| :------- | :-------------- | :------- | :------------- | :---------------- |
-| Linux (with `crun`/`runc`) | `OCIBuildService` | `snix-build` | FUSE mount of castore inputs | OCI spec `network: none` namespace |
-| Linux (with `bwrap`) | `BubblewrapBuildService` | `snix-build` | FUSE mount of castore inputs | User namespace + network namespace |
-| macOS | Birdcage sandbox | `eos-snix` (ported from `eka/crates/nixec`) | Direct filesystem bind (no FUSE) | Birdcage network exception deny |
-| Other / Remote | `GRPCBuildService` | `snix-build` | Delegated to remote host | Delegated to remote host |
+| Platform                   | Sandbox Backend          | Provider                                    | Mount Strategy                   | Network Isolation                  |
+| :------------------------- | :----------------------- | :------------------------------------------ | :------------------------------- | :--------------------------------- |
+| Linux (with `crun`/`runc`) | `OCIBuildService`        | `snix-build`                                | FUSE mount of castore inputs     | OCI spec `network: none` namespace |
+| Linux (with `bwrap`)       | `BubblewrapBuildService` | `snix-build`                                | FUSE mount of castore inputs     | User namespace + network namespace |
+| macOS                      | Birdcage sandbox         | `eos-snix` (ported from `eka/crates/nixec`) | Direct filesystem bind (no FUSE) | Birdcage network exception deny    |
+| Other / Remote             | `GRPCBuildService`       | `snix-build`                                | Delegated to remote host         | Delegated to remote host           |
 
 ### Detection Logic
 
@@ -305,6 +314,7 @@ service BuildService {
 ```
 
 Where `BuildRequest` and `BuildResponse` are defined in `snix/build/protos/build.proto`. The `BuildRequest` message carries:
+
 - `repeated Entry inputs` — content-addressed input nodes
 - `repeated string command_args` — builder command and arguments
 - `string working_dir`, `string inputs_dir` — sandbox layout
@@ -350,6 +360,7 @@ The `snix_eval::io::EvalIO` trait defines synchronous methods (`path_exists`, `o
 ### G3: Hardcoded Concurrency Limits
 
 Both `OCIBuildService` and `BubblewrapBuildService` instantiate a `tokio::sync::Semaphore` with a fixed permit count:
+
 - `BubblewrapBuildService`: `Semaphore::new(2)`
 - `OCIBuildService`: `Semaphore::new(2)` (via `MAX_CONCURRENT_BUILDS = 2`)
 
@@ -451,6 +462,7 @@ evaluate(req) called
 ```
 
 Key properties of this design:
+
 - The `Rc`-containing types never cross the channel. Only the `Derivation` (which is `Send`) traverses the thread boundary.
 - Store services are `Arc`-wrapped and shared between the async caller and the sync eval thread.
 - The eval thread's `block_on()` calls operate on the caller's Tokio runtime via the cloned `Handle`, avoiding the need for a second runtime.
@@ -462,12 +474,12 @@ Key properties of this design:
 
 The `SnixStore` implementation maps `ArtifactStore` operations to Snix's three-service architecture:
 
-| `ArtifactStore` Method | Snix Service(s) Used | Operation |
-| :--------------------- | :------------------- | :-------- |
-| `has(digest)` | `PathInfoService::get(digest[..20])` | Checks existence by store path hash (first 20 bytes of digest serve as the path info lookup key) |
-| `get_info(digest)` | `PathInfoService::get(digest[..20])` → `PathInfo` | Retrieves store metadata: NAR hash, NAR size, reference set, deriver. Constructs `ArtifactInfo` from `PathInfo` fields |
+| `ArtifactStore` Method      | Snix Service(s) Used                                                               | Operation                                                                                                                                         |
+| :-------------------------- | :--------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `has(digest)`               | `PathInfoService::get(digest[..20])`                                               | Checks existence by store path hash (first 20 bytes of digest serve as the path info lookup key)                                                  |
+| `get_info(digest)`          | `PathInfoService::get(digest[..20])` → `PathInfo`                                  | Retrieves store metadata: NAR hash, NAR size, reference set, deriver. Constructs `ArtifactInfo` from `PathInfo` fields                            |
 | `import(content, expected)` | `BlobService::open_write()` → `DirectoryService::put()` → `PathInfoService::put()` | Streams content to blob storage, constructs directory tree if applicable, registers path metadata. Verifies digest against `expected` if provided |
-| `list()` | `PathInfoService::list()` | Returns a stream of all registered `PathInfo` entries, each mapped to `ArtifactInfo` |
+| `list()`                    | `PathInfoService::list()`                                                          | Returns a stream of all registered `PathInfo` entries, each mapped to `ArtifactInfo`                                                              |
 
 ### Service Trait Bounds
 
@@ -488,28 +500,28 @@ Available backend implementations: in-memory, gRPC (remote), `object_store` (S3/
 
 ## Verification
 
-| Constraint | Method | Result | Detail |
-| :--------- | :----- | :----- | :----- |
-| `snix-eval-dedicated-thread` | Thread identity assertion | UNVERIFIED | Assert `std::thread::current().id() != tokio_worker_id` on eval thread |
-| `snix-eval-channel-bridge` | Type-system enforcement | UNVERIFIED | Channel type `oneshot::Sender<Result<Derivation, SnixError>>` statically requires `Send` |
-| `snix-eval-runtime-handle` | Integration test | UNVERIFIED | Eval with store-backed IO that exercises `block_on()` path |
-| `snix-eval-no-send-leak` | Compile-time verification | UNVERIFIED | `BuildEngine` trait bound `Send + Sync` rejects `!Send` associated types |
-| `snix-store-three-service` | Unit test | UNVERIFIED | Construct `SnixStore` with mock services, verify delegation |
-| `snix-store-service-consistency` | Failure injection test | UNVERIFIED | Fail `DirectoryService::put()` after `BlobService` write, verify no `PathInfo` registered |
-| `snix-store-digest-fidelity` | Property-based test | UNVERIFIED | Round-trip `Digest ↔ B3Digest` for random 32-byte values |
-| `snix-build-request-conversion` | Equivalence test | UNVERIFIED | Compare eos-snix conversion output against upstream `derivation_into_build_request()` for corpus of real derivations |
-| `snix-build-inputs-resolved` | Assertion in conversion | UNVERIFIED | `debug_assert!` all input store paths have corresponding `Node` entries |
-| `snix-build-error-enrichment` | Unit test | UNVERIFIED | Inject various `io::Error` kinds, verify correct `SnixError` variant produced |
-| `snix-sandbox-platform-dispatch` | Conditional compilation test | UNVERIFIED | `#[cfg(target_os)]` gates + integration tests per platform |
-| `snix-sandbox-shell-path` | Build-system test | UNVERIFIED | CI matrix builds with and without `SNIX_BUILD_SANDBOX_SHELL` |
-| `snix-sandbox-concurrency-configurable` | Load test | UNVERIFIED | Submit > 2 concurrent builds, measure actual parallelism |
-| `no-eval-on-tokio-worker` | Thread assertion | UNVERIFIED | Panic guard at eval entry point checking thread identity |
-| `no-send-value-across-threads` | Compile-time | UNVERIFIED | `Value: !Send` enforced by compiler; channel type excludes it |
-| `no-unresolved-build-inputs` | Pre-build validation | UNVERIFIED | Input resolution check before `do_build()` call |
-| `no-macos-snix-sandbox` | Conditional compilation | UNVERIFIED | `#[cfg(not(target_os = "macos"))]` on OCI/Bwrap paths |
-| `eval-thread-isolation` | Concurrent eval test | UNVERIFIED | Spawn N concurrent evaluations, verify no `RefCell` panics |
-| `store-service-thread-safety` | Concurrent access test | UNVERIFIED | Eval + build accessing same `Arc<dyn BlobService>` concurrently |
-| `build-service-semaphore-backpressure` | Load test | UNVERIFIED | Submit builds exceeding semaphore capacity, verify queuing behavior |
+| Constraint                              | Method                       | Result     | Detail                                                                                                               |
+| :-------------------------------------- | :--------------------------- | :--------- | :------------------------------------------------------------------------------------------------------------------- |
+| `snix-eval-dedicated-thread`            | Thread identity assertion    | UNVERIFIED | Assert `std::thread::current().id() != tokio_worker_id` on eval thread                                               |
+| `snix-eval-channel-bridge`              | Type-system enforcement      | UNVERIFIED | Channel type `oneshot::Sender<Result<Derivation, SnixError>>` statically requires `Send`                             |
+| `snix-eval-runtime-handle`              | Integration test             | UNVERIFIED | Eval with store-backed IO that exercises `block_on()` path                                                           |
+| `snix-eval-no-send-leak`                | Compile-time verification    | UNVERIFIED | `BuildEngine` trait bound `Send + Sync` rejects `!Send` associated types                                             |
+| `snix-store-three-service`              | Unit test                    | UNVERIFIED | Construct `SnixStore` with mock services, verify delegation                                                          |
+| `snix-store-service-consistency`        | Failure injection test       | UNVERIFIED | Fail `DirectoryService::put()` after `BlobService` write, verify no `PathInfo` registered                            |
+| `snix-store-digest-fidelity`            | Property-based test          | UNVERIFIED | Round-trip `Digest ↔ B3Digest` for random 32-byte values                                                            |
+| `snix-build-request-conversion`         | Equivalence test             | UNVERIFIED | Compare eos-snix conversion output against upstream `derivation_into_build_request()` for corpus of real derivations |
+| `snix-build-inputs-resolved`            | Assertion in conversion      | UNVERIFIED | `debug_assert!` all input store paths have corresponding `Node` entries                                              |
+| `snix-build-error-enrichment`           | Unit test                    | UNVERIFIED | Inject various `io::Error` kinds, verify correct `SnixError` variant produced                                        |
+| `snix-sandbox-platform-dispatch`        | Conditional compilation test | UNVERIFIED | `#[cfg(target_os)]` gates + integration tests per platform                                                           |
+| `snix-sandbox-shell-path`               | Build-system test            | UNVERIFIED | CI matrix builds with and without `SNIX_BUILD_SANDBOX_SHELL`                                                         |
+| `snix-sandbox-concurrency-configurable` | Load test                    | UNVERIFIED | Submit > 2 concurrent builds, measure actual parallelism                                                             |
+| `no-eval-on-tokio-worker`               | Thread assertion             | UNVERIFIED | Panic guard at eval entry point checking thread identity                                                             |
+| `no-send-value-across-threads`          | Compile-time                 | UNVERIFIED | `Value: !Send` enforced by compiler; channel type excludes it                                                        |
+| `no-unresolved-build-inputs`            | Pre-build validation         | UNVERIFIED | Input resolution check before `do_build()` call                                                                      |
+| `no-macos-snix-sandbox`                 | Conditional compilation      | UNVERIFIED | `#[cfg(not(target_os = "macos"))]` on OCI/Bwrap paths                                                                |
+| `eval-thread-isolation`                 | Concurrent eval test         | UNVERIFIED | Spawn N concurrent evaluations, verify no `RefCell` panics                                                           |
+| `store-service-thread-safety`           | Concurrent access test       | UNVERIFIED | Eval + build accessing same `Arc<dyn BlobService>` concurrently                                                      |
+| `build-service-semaphore-backpressure`  | Load test                    | UNVERIFIED | Submit builds exceeding semaphore capacity, verify queuing behavior                                                  |
 
 ---
 

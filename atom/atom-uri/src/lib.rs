@@ -513,8 +513,9 @@ mod tests {
 
     #[cfg(test)]
     mod proptests {
-        use super::*;
         use proptest::prelude::*;
+
+        use super::*;
 
         fn arb_label() -> impl Strategy<Value = String> {
             let start = "[a-zA-Z]";

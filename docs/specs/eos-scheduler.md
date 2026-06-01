@@ -21,6 +21,7 @@
 To maximize network and storage efficiency, the scheduler operates under a lazy-fetching model: worker nodes do not download source code snapshots or build inputs until a task is explicitly scheduled on them.
 
 **Model Reference:**
+
 - [publishing-stack-layers.md](../models/publishing-stack-layers.md) — §4.1 (Parallel Build Composition), §4.2 (Session Delegation / Work-Stealing)
 - [eos-build-engine.md](eos-build-engine.md) — Plan and execute transitions
 - [eos-network-protocol.md](eos-network-protocol.md) — Cap'n Proto wire format, `NodeIdentity`, daemon lifecycle
@@ -120,34 +121,40 @@ The scheduler assigns, delegates, and monitors jobs identically regardless of wo
 ### Transitions
 
 **[submit-job]**: Add a new build task to the queue.
+
 - **PRE**: A client submits a build request containing an `EnginePlan`. The request arrives via `EosDaemon.submitBuild()` over the Cap'n Proto RPC surface (see [eos-network-protocol.md](eos-network-protocol.md) §submit-build).
 - **POST**: If a job with `JobId == hash(plan)` already exists, the client is added to `subscribers`. Otherwise, a new `Job` is created with state `QUEUED`, its `id` is set to `hash(plan)`, and it is added to the scheduler's queue.
-`VERIFIED: unverified`
+  `VERIFIED: unverified`
 
 **[assign-job]**: Dispatch a queued job to an available worker.
+
 - **PRE**: A job exists in the `QUEUED` state, and a healthy worker is available under concurrency limits.
 - **POST**: The scheduler selects the optimal worker via HRW hashing (per `[eos-scheduler-input-affinity]`). The job state transitions to `RUNNING`, `assigned_worker` is set to the worker's ID, a `Lease` is created with `granted_at = now` and `expires_at = now + lease_duration`, and the task execution is dispatched to the worker.
-`VERIFIED: unverified`
+  `VERIFIED: unverified`
 
 **[delegate-job]**: Steal/re-assign a running job to balance cluster load.
+
 - **PRE**: A job is in the `RUNNING` state, and another healthy worker is idle and has requested work.
 - **POST**: The job state transitions to `DELEGATED` and then back to `RUNNING` with `assigned_worker` updated to the target worker. The existing lease is revoked and a new `Lease` is issued for the target worker. The job's execution continuation is transferred to the new worker. For remote workers, delegation is abort-and-re-execute (safe due to input immutability); for local workers, thread-level continuation transfer MAY be used.
-`VERIFIED: unverified`
+  `VERIFIED: unverified`
 
 **[renew-lease]**: Extend the lease on a running job.
+
 - **PRE**: A job is in the `RUNNING` state with a valid (non-expired) `Lease`, and the assigned worker requests renewal.
 - **POST**: The lease's `expires_at` is updated to `now + lease_duration`. The job continues executing on the same worker.
-`VERIFIED: unverified`
+  `VERIFIED: unverified`
 
 **[complete-job]**: Mark execution as successfully finished.
+
 - **PRE**: A job is in the `RUNNING` state, and the assigned worker has completed execution and registered output store paths in the `ArtifactStore`.
 - **POST**: The job state transitions to `COMPLETED`, the lease is released, all subscribers are notified with the outputs, and the job is removed from the active queue.
-`VERIFIED: unverified`
+  `VERIFIED: unverified`
 
 **[fail-job]**: Handle task failures.
+
 - **PRE**: A job is in the `RUNNING` state, and execution failed or aborted.
 - **POST**: The job state transitions to `FAILED`, the lease is released, subscribers are notified of the error, and the job is removed from the active queue.
-`VERIFIED: unverified`
+  `VERIFIED: unverified`
 
 ---
 
@@ -164,36 +171,38 @@ The scheduler assigns, delegates, and monitors jobs identically regardless of wo
 ### Behavioral Properties
 
 **[eventual-progress]**: Every `QUEUED` job MUST eventually transition to either `COMPLETED` or `FAILED` under the assumption of fair scheduling and non-zero healthy worker capacity.
+
 - **Type**: Liveness
-`VERIFIED: unverified`
+  `VERIFIED: unverified`
 
 **[parallel-scheduling-non-interference]**: Scheduling independent jobs concurrently MUST yield a state equivalent to scheduling them sequentially in some order (concurrency safety).
+
 - **Type**: Safety
-`VERIFIED: unverified`
+  `VERIFIED: unverified`
 
 ---
 
 ## Verification
 
-| Constraint | Method | Result | Detail |
-| :--------- | :----- | :----- | :----- |
-| `eos-scheduler-lazy-fetching` | Simulation test | UNVERIFIED | Verify worker network logs during build |
-| `eos-scheduler-deduplication` | Integration test | UNVERIFIED | Concurrent build submissions test |
-| `eos-scheduler-input-affinity` | Metrics audit | UNVERIFIED | HRW score computation and cache hit rates across mock schedules |
-| `eos-scheduler-concurrency-limits` | Queue check | UNVERIFIED | Concurrency limits validation |
-| `eos-scheduler-state-isolation` | Dependency audit | UNVERIFIED | Check module boundaries |
-| `eos-scheduler-lease-expiry` | Timeout injection | UNVERIFIED | Withhold lease renewal, verify job returns to QUEUED |
-| `eos-scheduler-heartbeat-liveness` | Failure injection | UNVERIFIED | Suppress heartbeats from worker, verify health demotion and lease revocation |
-| `submit-job` | Unit test | UNVERIFIED | Submit transitions audit |
-| `assign-job` | Unit test | UNVERIFIED | Assign transitions audit with HRW selection verification |
-| `delegate-job` | Unit test | UNVERIFIED | Work-stealing delegation simulation |
-| `renew-lease` | Unit test | UNVERIFIED | Lease extension and expiry boundary test |
-| `complete-job` | Unit test | UNVERIFIED | Success cleanup check |
-| `fail-job` | Unit test | UNVERIFIED | Fail cleanup check |
-| `no-dangling-jobs` | Timeout audit | UNVERIFIED | Heartbeat + lease expiry failure injection test |
-| `no-duplicate-execution` | Mutual exclusion check | UNVERIFIED | Multi-worker execution logs audit |
-| `eventual-progress` | Liveness check | UNVERIFIED | Loop/starvation check |
-| `parallel-scheduling-non-interference` | Parity check | UNVERIFIED | Parallel vs sequential schedule output audit |
+| Constraint                             | Method                 | Result     | Detail                                                                       |
+| :------------------------------------- | :--------------------- | :--------- | :--------------------------------------------------------------------------- |
+| `eos-scheduler-lazy-fetching`          | Simulation test        | UNVERIFIED | Verify worker network logs during build                                      |
+| `eos-scheduler-deduplication`          | Integration test       | UNVERIFIED | Concurrent build submissions test                                            |
+| `eos-scheduler-input-affinity`         | Metrics audit          | UNVERIFIED | HRW score computation and cache hit rates across mock schedules              |
+| `eos-scheduler-concurrency-limits`     | Queue check            | UNVERIFIED | Concurrency limits validation                                                |
+| `eos-scheduler-state-isolation`        | Dependency audit       | UNVERIFIED | Check module boundaries                                                      |
+| `eos-scheduler-lease-expiry`           | Timeout injection      | UNVERIFIED | Withhold lease renewal, verify job returns to QUEUED                         |
+| `eos-scheduler-heartbeat-liveness`     | Failure injection      | UNVERIFIED | Suppress heartbeats from worker, verify health demotion and lease revocation |
+| `submit-job`                           | Unit test              | UNVERIFIED | Submit transitions audit                                                     |
+| `assign-job`                           | Unit test              | UNVERIFIED | Assign transitions audit with HRW selection verification                     |
+| `delegate-job`                         | Unit test              | UNVERIFIED | Work-stealing delegation simulation                                          |
+| `renew-lease`                          | Unit test              | UNVERIFIED | Lease extension and expiry boundary test                                     |
+| `complete-job`                         | Unit test              | UNVERIFIED | Success cleanup check                                                        |
+| `fail-job`                             | Unit test              | UNVERIFIED | Fail cleanup check                                                           |
+| `no-dangling-jobs`                     | Timeout audit          | UNVERIFIED | Heartbeat + lease expiry failure injection test                              |
+| `no-duplicate-execution`               | Mutual exclusion check | UNVERIFIED | Multi-worker execution logs audit                                            |
+| `eventual-progress`                    | Liveness check         | UNVERIFIED | Loop/starvation check                                                        |
+| `parallel-scheduling-non-interference` | Parity check           | UNVERIFIED | Parallel vs sequential schedule output audit                                 |
 
 ---
 

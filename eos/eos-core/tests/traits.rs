@@ -1,10 +1,11 @@
 //! Compilation and type-satisfiability tests for `eos-core` traits.
 
 use std::convert::Infallible;
+
 use atom_id::{Anchor, AtomId, Label};
 use eos_core::{
-    BuildEngine, ComposerConfig, EvalRequest, EvalTarget, JobId, ResolvedInput,
-    StorePath, Blake3Digest,
+    Blake3Digest, BuildEngine, ComposerConfig, EvalRequest, EvalTarget, JobId, ResolvedInput,
+    StorePath,
 };
 
 /// A compile-time assertion that a type implements a trait.
@@ -16,9 +17,9 @@ fn test_trait_bounds_satisfiable() {
     struct MockEngine;
     impl BuildEngine for MockEngine {
         type Digest = Blake3Digest;
-        type Plan = String;
-        type Output = Vec<StorePath>;
         type Error = Infallible;
+        type Output = Vec<StorePath>;
+        type Plan = String;
 
         async fn evaluate(
             &self,
@@ -73,7 +74,9 @@ fn test_eval_request_construction() {
     });
 
     // Populate eval args
-    request.eval_args.push(("system".to_string(), "x86_64-linux".to_string()));
+    request
+        .eval_args
+        .push(("system".to_string(), "x86_64-linux".to_string()));
 
     assert_eq!(request.eval_args[0].1, "x86_64-linux");
 }
@@ -82,5 +85,8 @@ fn test_eval_request_construction() {
 fn test_job_id_and_status() {
     let digest = Blake3Digest([3; 32]);
     let job_id = JobId(digest);
-    assert_eq!(job_id.to_string(), "0303030303030303030303030303030303030303030303030303030303030303");
+    assert_eq!(
+        job_id.to_string(),
+        "0303030303030303030303030303030303030303030303030303030303030303"
+    );
 }

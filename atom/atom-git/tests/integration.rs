@@ -1,16 +1,15 @@
 use std::fs;
-use tempfile::TempDir;
-
-use gix::actor::SignatureRef;
-use gix::hash::ObjectId;
-use gix::objs::tree::{Entry, EntryKind};
-use gix::objs::{Blob, Tree};
 
 use atom_core::{
     AtomEntry, AtomId, AtomRegistry, AtomSource, AtomStore, AtomVersion, Label, RawVersion,
 };
 use atom_git::{GitError, GitRegistry, GitSource, GitStore};
 use coz_rs::{Alg, Ed25519, SigningKey};
+use gix::actor::SignatureRef;
+use gix::hash::ObjectId;
+use gix::objs::tree::{Entry, EntryKind};
+use gix::objs::{Blob, Tree};
+use tempfile::TempDir;
 
 /// Helper to set up a test Git repository with user config and a genesis commit
 fn setup_test_repo() -> (TempDir, gix::Repository, ObjectId) {
@@ -438,8 +437,10 @@ fn test_failures_and_forbidden_states() {
     // Now establish a claim
     let real_claim_czd = registry.claim(&id, &pub_key).unwrap();
 
-    // 2. Attempting to publish with a backdated src commit (not a descendant of claim src) should fail
-    // We create an independent root (another genesis) in the same repo to act as a non-descendant src OID
+    // 2. Attempting to publish with a backdated src commit (not a descendant of claim src) should
+    //    fail
+    // We create an independent root (another genesis) in the same repo to act as a non-descendant
+    // src OID
     let other_sig = SignatureRef::default();
     let empty_tree = Tree {
         entries: Vec::new(),
@@ -525,11 +526,10 @@ fn test_differential_git_cli() {
 
 #[cfg(test)]
 mod proptests {
+    use atom_git::gix_util;
+    use gix::objs::{Commit, Tree};
     use proptest::prelude::*;
     use tempfile::TempDir;
-    use gix::objs::{Tree, Commit};
-    use atom_git::gix_util;
-
 
     proptest! {
         #[test]
@@ -581,7 +581,7 @@ mod proptests {
             for i in 0..extra_commits {
                 let root_idx = i % branch_tips.len();
                 let parent = branch_tips[root_idx];
-                
+
                 let sig = gix_util::blank_signature();
                 let commit = Commit {
                     tree: empty_tree_oid,
@@ -617,4 +617,3 @@ mod proptests {
         }
     }
 }
-

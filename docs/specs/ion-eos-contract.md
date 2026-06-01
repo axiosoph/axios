@@ -205,6 +205,7 @@ variant MUST include structured error diagnostics (see
 **[error-reporting-format]**: Build failures reported via
 `BuildStatus.failed` MUST include structured error information
 sufficient for ion to present actionable diagnostics. At minimum:
+
 - **Error category**: One of: evaluation failure, build failure,
   fetch failure, sandbox violation, verification failure.
 - **Human-readable message**: A descriptive string suitable for
@@ -236,6 +237,7 @@ requested capability.
 
 **[daemon-discovery-v1]**: In v1, ion discovers the eos daemon via a
 well-known Unix domain socket path. The resolution order is:
+
 1. The `$EOS_SOCKET` environment variable, if set. Its value MUST be
    an absolute path to an existing Unix domain socket file.
 2. `$XDG_RUNTIME_DIR/eos/eos.sock`, if `$XDG_RUNTIME_DIR` is set.
@@ -263,6 +265,7 @@ supported as the default fallback.
 receiving the `EosDaemon` bootstrap capability, ion SHOULD invoke
 `getCapabilities()` to discover the daemon's capabilities. The
 response includes:
+
 - **`supportedBackends`**: A list of backend identifiers the daemon
   can process (e.g., `"snix"`).
 - **`apiVersion`**: The protocol version the daemon implements.
@@ -303,11 +306,11 @@ build or alter daemon state.
 **Query Operations**: The `AtomDiscovery` capability exposes three
 operations:
 
-| Method | Signature | Purpose |
-|:-------|:----------|:--------|
-| `resolve(id)` | `AtomId → Option<AtomMeta>` | Look up specific atom metadata (label, version, set, mirrors) by content-addressed identifier |
-| `contains(id)` | `AtomId → Bool` | Existence check — returns whether eos has knowledge of the given atom |
-| `search(query)` | `SearchQuery → List<AtomMeta>` | Find atoms matching a label pattern, atom-set filter, version range, or combination thereof |
+| Method          | Signature                      | Purpose                                                                                       |
+| :-------------- | :----------------------------- | :-------------------------------------------------------------------------------------------- |
+| `resolve(id)`   | `AtomId → Option<AtomMeta>`    | Look up specific atom metadata (label, version, set, mirrors) by content-addressed identifier |
+| `contains(id)`  | `AtomId → Bool`                | Existence check — returns whether eos has knowledge of the given atom                         |
+| `search(query)` | `SearchQuery → List<AtomMeta>` | Find atoms matching a label pattern, atom-set filter, version range, or combination thereof   |
 
 **Use Cases**:
 
@@ -408,10 +411,10 @@ composer.
     paths)
   - The `ComposerConfig` derived from `[compose]`
   - The `eval_args` from `[compose.args]` (passed verbatim)
-  The backend evaluator produces a `Plan` (e.g., Nix derivation).
-  Eos then executes the plan via `BuildEngine.build()`, producing
-  outputs reported via the `BuildJob` capability.
-  `VERIFIED: unverified`
+    The backend evaluator produces a `Plan` (e.g., Nix derivation).
+    Eos then executes the plan via `BuildEngine.build()`, producing
+    outputs reported via the `BuildJob` capability.
+    `VERIFIED: unverified`
 
 **[query-discovery]**: Ion obtains the discovery capability and
 issues read-only queries.
@@ -546,12 +549,12 @@ carries the `[compose.args]` key-value pairs as a `List(KeyValue)`.
 For a `submitBuild` invocation to succeed, the lock content MUST
 include:
 
-| Section | Requirement | Reference |
-|:--------|:------------|:----------|
-| `version` | MUST be `0` (current schema version) | [lock-file-schema.md §lock-version-field](lock-file-schema.md) |
-| `[sets]` | MUST include entries for all anchors referenced by `type = "atom"` deps | [lock-file-schema.md §lock-set-referenced](lock-file-schema.md) |
-| `[compose]` | MUST be present; determines evaluation strategy | [lock-file-schema.md §[compose]](lock-file-schema.md) |
-| `[[deps]]` | MUST contain all transitive dependencies | [lock-file-schema.md §[[deps]]](lock-file-schema.md) |
+| Section     | Requirement                                                             | Reference                                                       |
+| :---------- | :---------------------------------------------------------------------- | :-------------------------------------------------------------- |
+| `version`   | MUST be `0` (current schema version)                                    | [lock-file-schema.md §lock-version-field](lock-file-schema.md)  |
+| `[sets]`    | MUST include entries for all anchors referenced by `type = "atom"` deps | [lock-file-schema.md §lock-set-referenced](lock-file-schema.md) |
+| `[compose]` | MUST be present; determines evaluation strategy                         | [lock-file-schema.md §[compose]](lock-file-schema.md)           |
+| `[[deps]]`  | MUST contain all transitive dependencies                                | [lock-file-schema.md §[[deps]]](lock-file-schema.md)            |
 
 ### Structural Validation
 
@@ -607,10 +610,10 @@ values. They are opaque to the protocol layer.
 Upon successful completion, eos reports results via the
 `BuildStatus.completed` variant, which MUST include:
 
-| Field | Type | Description |
-|:------|:-----|:------------|
-| `outputPaths` | `List(Text)` | Store paths of produced artifacts |
-| `outputDigest` | `Data` | BLAKE3 digest of the combined build output |
+| Field          | Type         | Description                                |
+| :------------- | :----------- | :----------------------------------------- |
+| `outputPaths`  | `List(Text)` | Store paths of produced artifacts          |
+| `outputDigest` | `Data`       | BLAKE3 digest of the combined build output |
 
 Ion receives these via the attached `ProgressStream` callback. The
 `ArtifactInfo` for each output — digest, store path, and size — is
@@ -621,21 +624,21 @@ available through the daemon's store query interface (see
 
 Upon failure, eos reports errors via the `BuildStatus.failed` variant:
 
-| Field | Type | Description |
-|:------|:-----|:------------|
-| `error` | `Text` | Human-readable error message with structured metadata |
-| `exitCode` | `Int32` | Process exit code (0 if not applicable) |
+| Field      | Type    | Description                                           |
+| :--------- | :------ | :---------------------------------------------------- |
+| `error`    | `Text`  | Human-readable error message with structured metadata |
+| `exitCode` | `Int32` | Process exit code (0 if not applicable)               |
 
 The `error` field carries sufficient context for ion to present
 diagnostics. Error categories and their typical causes:
 
-| Category | Phase | Typical Cause |
-|:---------|:------|:--------------|
-| Evaluation failure | `evaluating` | Nix expression error, missing import, type error |
-| Build failure | `building` | Builder process exited non-zero, timeout |
-| Fetch failure | `fetching` | Mirror unreachable, URL 404, network timeout |
-| Verification failure | `verifying` | Content digest mismatch, tampered artifact |
-| Sandbox violation | `building` | Attempted network access, disallowed filesystem write |
+| Category             | Phase        | Typical Cause                                         |
+| :------------------- | :----------- | :---------------------------------------------------- |
+| Evaluation failure   | `evaluating` | Nix expression error, missing import, type error      |
+| Build failure        | `building`   | Builder process exited non-zero, timeout              |
+| Fetch failure        | `fetching`   | Mirror unreachable, URL 404, network timeout          |
+| Verification failure | `verifying`  | Content digest mismatch, tampered artifact            |
+| Sandbox violation    | `building`   | Attempted network access, disallowed filesystem write |
 
 ### Job Status Query
 
@@ -647,44 +650,44 @@ This returns the current `BuildStatus` as a snapshot value.
 
 ## Verification
 
-| Constraint | Method | Result | Detail |
-|:-----------|:-------|:-------|:-------|
-| `handoff-lock-sufficiency` | Integration test | UNVERIFIED | Submit lock-only; verify eos never reads manifest |
-| `handoff-atom-fields` | Schema conformance | UNVERIFIED | Validate `rev`, `id`, `set`, `label`, `version` presence |
-| `handoff-plugin-fields` | Schema conformance | UNVERIFIED | Validate `type`, `name`, and fetch coordinates per type |
-| `eos-verification-obligation` | Fault injection | UNVERIFIED | Corrupt artifact, verify build abort |
-| `eos-backend-agnosticism` | Cross-backend test | UNVERIFIED | Same lock succeeds on different backend configs |
-| `compose-handoff` | Integration test | UNVERIFIED | Lock with composer → eos fetches composer first |
-| `compose-args-passthrough` | Unit test | UNVERIFIED | Verify args reach evaluator verbatim |
-| `daemon-connection-required` | Architecture audit | UNVERIFIED | No library-mode code paths exist |
-| `result-reporting` | Integration test | UNVERIFIED | Attach callback, verify `completed` with `ArtifactInfo` |
-| `error-reporting-format` | Fault injection | UNVERIFIED | Trigger each error category, verify structured output |
-| `daemon-discovery-v1` | Unit test | UNVERIFIED | Test socket resolution order |
-| `daemon-discovery-vN` | Design review | UNVERIFIED | Architectural property (future) |
-| `capability-negotiation` | Handshake test | UNVERIFIED | Query capabilities, verify response structure |
-| `capability-mismatch-handling` | Integration test | UNVERIFIED | Submit unsupported type, verify rejection message |
-| `daemon-connect` | Integration test | UNVERIFIED | Verify handshake and bootstrap cap |
-| `build-request` | Integration test | UNVERIFIED | Submit lock, receive `BuildJob` |
-| `attach-progress` | Integration test | UNVERIFIED | Attach callback, verify status delivery |
-| `fetch-verify-build` | Integration test | UNVERIFIED | End-to-end: fetch, verify, build |
-| `compose-evaluation` | Integration test | UNVERIFIED | Full composer with args → successful eval |
-| `concurrent-builds` | Dedup test | UNVERIFIED | Two clients, same lock, one execution |
-| `no-manifest-leakage` | Code audit | UNVERIFIED | No manifest-reading code in eos |
-| `no-unverified-execution` | Fault injection | UNVERIFIED | Bypass verification, verify rejection |
-| `no-daemon-bypass` | Architecture audit | UNVERIFIED | No direct backend invocation in ion |
-| `backend-substitutability` | Cross-backend test | UNVERIFIED | Same lock, different backend, no lock changes |
-| `plugin-type-extensibility` | Extension test | UNVERIFIED | Add unknown type, verify clean rejection |
-| `idempotent-submission` | Repeat submission test | UNVERIFIED | Same lock twice → same `JobId`, no duplicate work |
-| `progress-liveness` | Integration test | UNVERIFIED | Attach → verify all state transitions delivered |
-| `discovery-read-only` | Code audit | UNVERIFIED | No mutating code paths reachable via `AtomDiscovery` |
-| `query-discovery` | Integration test | UNVERIFIED | Obtain `AtomDiscovery`, issue resolve/contains/search |
+| Constraint                     | Method                 | Result     | Detail                                                   |
+| :----------------------------- | :--------------------- | :--------- | :------------------------------------------------------- |
+| `handoff-lock-sufficiency`     | Integration test       | UNVERIFIED | Submit lock-only; verify eos never reads manifest        |
+| `handoff-atom-fields`          | Schema conformance     | UNVERIFIED | Validate `rev`, `id`, `set`, `label`, `version` presence |
+| `handoff-plugin-fields`        | Schema conformance     | UNVERIFIED | Validate `type`, `name`, and fetch coordinates per type  |
+| `eos-verification-obligation`  | Fault injection        | UNVERIFIED | Corrupt artifact, verify build abort                     |
+| `eos-backend-agnosticism`      | Cross-backend test     | UNVERIFIED | Same lock succeeds on different backend configs          |
+| `compose-handoff`              | Integration test       | UNVERIFIED | Lock with composer → eos fetches composer first          |
+| `compose-args-passthrough`     | Unit test              | UNVERIFIED | Verify args reach evaluator verbatim                     |
+| `daemon-connection-required`   | Architecture audit     | UNVERIFIED | No library-mode code paths exist                         |
+| `result-reporting`             | Integration test       | UNVERIFIED | Attach callback, verify `completed` with `ArtifactInfo`  |
+| `error-reporting-format`       | Fault injection        | UNVERIFIED | Trigger each error category, verify structured output    |
+| `daemon-discovery-v1`          | Unit test              | UNVERIFIED | Test socket resolution order                             |
+| `daemon-discovery-vN`          | Design review          | UNVERIFIED | Architectural property (future)                          |
+| `capability-negotiation`       | Handshake test         | UNVERIFIED | Query capabilities, verify response structure            |
+| `capability-mismatch-handling` | Integration test       | UNVERIFIED | Submit unsupported type, verify rejection message        |
+| `daemon-connect`               | Integration test       | UNVERIFIED | Verify handshake and bootstrap cap                       |
+| `build-request`                | Integration test       | UNVERIFIED | Submit lock, receive `BuildJob`                          |
+| `attach-progress`              | Integration test       | UNVERIFIED | Attach callback, verify status delivery                  |
+| `fetch-verify-build`           | Integration test       | UNVERIFIED | End-to-end: fetch, verify, build                         |
+| `compose-evaluation`           | Integration test       | UNVERIFIED | Full composer with args → successful eval                |
+| `concurrent-builds`            | Dedup test             | UNVERIFIED | Two clients, same lock, one execution                    |
+| `no-manifest-leakage`          | Code audit             | UNVERIFIED | No manifest-reading code in eos                          |
+| `no-unverified-execution`      | Fault injection        | UNVERIFIED | Bypass verification, verify rejection                    |
+| `no-daemon-bypass`             | Architecture audit     | UNVERIFIED | No direct backend invocation in ion                      |
+| `backend-substitutability`     | Cross-backend test     | UNVERIFIED | Same lock, different backend, no lock changes            |
+| `plugin-type-extensibility`    | Extension test         | UNVERIFIED | Add unknown type, verify clean rejection                 |
+| `idempotent-submission`        | Repeat submission test | UNVERIFIED | Same lock twice → same `JobId`, no duplicate work        |
+| `progress-liveness`            | Integration test       | UNVERIFIED | Attach → verify all state transitions delivered          |
+| `discovery-read-only`          | Code audit             | UNVERIFIED | No mutating code paths reachable via `AtomDiscovery`     |
+| `query-discovery`              | Integration test       | UNVERIFIED | Obtain `AtomDiscovery`, issue resolve/contains/search    |
 
 ---
 
 ## Implications
 
 1. **Daemon Lifecycle Is External to This Contract.** This spec
-   governs what happens *after* ion connects to eos, not how the
+   governs what happens _after_ ion connects to eos, not how the
    daemon is started, stopped, or supervised. Daemon lifecycle is
    defined in
    [eos-network-protocol.md §Daemon Architecture](eos-network-protocol.md).

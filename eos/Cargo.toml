@@ -1,3 +1,10 @@
 [workspace]
-members  = ["eos-core", "eos-store", "eos-snix", "eos-proto", "eos-daemon", "eos"]
+members = [
+  "eos-core",
+  "eos-store",
+  "eos-snix",
+  "eos-proto",
+  "eos-daemon",
+  "eos",
+]
 resolver = "2"

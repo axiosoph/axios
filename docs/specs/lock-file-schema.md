@@ -30,6 +30,7 @@ serialization invariants, and extensibility model. The Rust types in
 representation; this document is the normative human-readable reference.
 
 **Model Reference:**
+
 - [publishing-stack-layers.md](../models/publishing-stack-layers.md) — §2.1 (Atom), §2.2 (AtomSet), §3.1 (Resolution)
 - [ion-eos-contract.md](ion-eos-contract.md) — Handoff boundaries (`handoff-lock-sufficiency`)
 - [ion-resolution.md](ion-resolution.md) — Lock file production pipeline
@@ -133,10 +134,11 @@ cryptographic authority; the anchor hash is the identity.
 
 **[lock-set-mirrors]**: The `mirrors` field MUST be a non-empty array of
 strings. Each entry is either:
+
 - A valid git URL (SSH, HTTPS, or file protocol), or
 - The sentinel string `"::"`, denoting a local-only atom-set with no
   remote mirror.
-`VERIFIED: unverified`
+  `VERIFIED: unverified`
 
 **[lock-set-mirror-local-sentinel]**: The `"::"` sentinel MUST appear as
 the sole entry in `mirrors` when an atom-set exists only on the local
@@ -179,6 +181,7 @@ TYPE Using =
 ```
 
 The `Using` enum is discriminated by the `use` field:
+
 - **`use = "<atom-id>"`** (untagged, matches an atom-id) → `Atom` variant
 - **`use = "nix"`** → `NixTrivial` variant
 - **`use = "static"`** (or absent, as default) → `Config` variant
@@ -225,6 +228,7 @@ emit `[compose.args]` for the `Config` variant. Consumers SHOULD ignore
 #### Examples
 
 **Full composer:**
+
 ```toml
 [compose]
 at = "0.4.5"
@@ -236,6 +240,7 @@ system = "x86_64-linux"
 ```
 
 **Trivial Nix import:**
+
 ```toml
 [compose]
 use = "nix"
@@ -243,6 +248,7 @@ entry = "default.nix"
 ```
 
 **Static configuration (explicit):**
+
 ```toml
 [compose]
 use = "static"
@@ -511,11 +517,12 @@ owner = "nei65m8kevs1l37b2eefu440k725fsj6pqj3mq3ob20sfhb64ud0"
 **`owner`** — Present on all non-atom dependency types (`nix`,
 `nix+git`, `nix+tar`, `nix+src`). OPTIONAL. When present, its value
 MUST be a valid atom-id referencing a `type = "atom"` entry's `id`
-field. It traces *provenance*: which atom's evaluation introduced this
+field. It traces _provenance_: which atom's evaluation introduced this
 external dependency into the graph. When absent, the dependency is a
 direct dependency of the root atom.
 
 The `owner` field serves two consumers:
+
 - **Ion**: Garbage collection — when an atom is removed from the
   manifest, its owned external dependencies can be pruned.
 - **Eos**: Dependency closure — eos can determine which external
@@ -532,10 +539,10 @@ MUST NOT share the same `name`.
 These two fields on `type = "atom"` entries serve fundamentally different
 purposes:
 
-- **`id`** (atom-id) is the *identity* — a BLAKE3 digest of
+- **`id`** (atom-id) is the _identity_ — a BLAKE3 digest of
   `(anchor, label)`, invariant across revisions. It is the stable
   cross-reference key used by `requires`, `owner`, and `[compose].use`.
-- **`rev`** (git digest) is the *coordinate* — a git commit hash
+- **`rev`** (git digest) is the _coordinate_ — a git commit hash
   identifying the exact source tree snapshot. It changes with every
   publish. Eos uses `rev` to fetch the correct source; `id` to verify
   identity.
@@ -555,7 +562,7 @@ depends on that atom." The complete dependency DAG is reconstructable by
 iterating `[[deps]]` entries of `type = "atom"` and building a
 `Map<AtomId, Vec<AtomId>>` from their `requires` fields.
 
-> **Note:** `requires` captures only *atom* dependencies. External
+> **Note:** `requires` captures only _atom_ dependencies. External
 > dependencies (nix, nix+git, etc.) introduced by an atom are traced
 > via the `owner` field on those entries, not via `requires`. To compute
 > the full fetch closure for an atom, consumers must union the
@@ -583,6 +590,7 @@ after `+` identifies the fetch strategy.
 
 **[lock-type-extension-mechanism]**: New dependency types are introduced
 by:
+
 1. Defining a new `type` tag value (e.g., `guix+git`).
 2. Adding a corresponding variant to the `Dep` enum in the Rust types.
 3. Implementing the fetch and verification strategy in the consuming
@@ -596,10 +604,11 @@ property from [ion-eos-contract.md](ion-eos-contract.md).
 **[lock-type-backend-dispatch]**: Eos uses the `type` field as the
 dispatch key for backend selection. The `type` prefix namespace
 determines which eos backend handles the entry:
+
 - `atom` → protocol-level atom fetcher (all backends)
 - `nix`, `nix+*` → Nix/Snix backend fetchers
 - `guix`, `guix+*` → Guix backend fetchers (future)
-`VERIFIED: unverified`
+  `VERIFIED: unverified`
 
 ---
 
@@ -607,13 +616,14 @@ determines which eos backend handles the entry:
 
 **[lock-deterministic-serialization]**: Two resolution passes over
 identical inputs MUST produce byte-identical lock files. This requires:
+
 - `BTreeMap` ordering for `[sets]` (keys sorted lexicographically).
 - `DepMap` ordering for `[[deps]]` (entries sorted by
   `Either<AtomId, Name>` in `BTreeMap` order).
 - Consistent field ordering within each TOML table (serde's default
   struct field order).
 - No trailing whitespace, consistent newline style (LF).
-`VERIFIED: unverified`
+  `VERIFIED: unverified`
 
 **[lock-serde-tag-dispatch]**: The Rust `Dep` enum MUST use
 `#[serde(tag = "type")]` for serialization. This produces internally-
@@ -638,11 +648,12 @@ representation flat and readable.
 **[lock-optional-field-elision]**: Optional fields (`requires`,
 `direct`, `owner`, `version` on `NixGitDep`) MUST be omitted from
 serialization when they carry their default value:
+
 - `requires`: omitted when empty (`skip_serializing_if = "Vec::is_empty"`)
 - `direct`: omitted when `true` (direct is the default)
 - `owner`: omitted when `None`
 - `version` on `NixGitDep`: omitted when `None`
-`VERIFIED: unverified`
+  `VERIFIED: unverified`
 
 ---
 
@@ -694,50 +705,50 @@ spec.
 
 ## Verification
 
-| Constraint | Method | Result | Detail |
-| :--------- | :----- | :----- | :----- |
-| `lock-version-field` | Unit tests | UNVERIFIED | Parse valid and invalid version values |
-| `lock-auto-generated-comment` | N/A (advisory) | UNVERIFIED | SHOULD-level; not enforceable |
-| `lock-set-key-format` | Regex validation | UNVERIFIED | Validate hex length and character set |
-| `lock-set-tag` | Deserialization tests | UNVERIFIED | Empty string rejection |
-| `lock-set-mirrors` | Deserialization tests | UNVERIFIED | Empty array rejection, URL validation |
-| `lock-set-mirror-local-sentinel` | Unit tests | UNVERIFIED | `"::"` as sole entry semantics |
-| `lock-set-referenced` | Cross-reference check | UNVERIFIED | Ensure all `set` fields resolve |
-| `lock-compose-atom-variant` | Deserialization tests | UNVERIFIED | Required field enforcement |
-| `lock-compose-nix-variant` | Deserialization tests | UNVERIFIED | Field presence constraints |
-| `lock-compose-config-variant` | Deserialization tests | UNVERIFIED | Field absence constraints |
-| `lock-compose-default` | Default value tests | UNVERIFIED | Absent `[compose]` → `Config` |
-| `lock-compose-args` | Deserialization tests | UNVERIFIED | Arbitrary key-value parsing |
-| `lock-compose-args-scope` | Validation logic | UNVERIFIED | Reject args on Config variant |
-| `lock-dep-type-dispatch` | Tagged enum tests | UNVERIFIED | All five type values parse correctly |
-| `lock-dep-no-unknown-fields` | `deny_unknown_fields` | UNVERIFIED | Unrecognized field rejection |
-| `lock-dep-ordering` | Serialization roundtrip | UNVERIFIED | Deterministic output comparison |
-| `lock-atom-label` | Label grammar tests | UNVERIFIED | Invalid label rejection |
-| `lock-atom-version` | Semver parsing | UNVERIFIED | Pre-release identifier support |
-| `lock-atom-set-ref` | Cross-reference check | UNVERIFIED | Dangling set reference rejection |
-| `lock-atom-rev` | Hex validation | UNVERIFIED | Length and character set |
-| `lock-atom-id` | Base32 validation | UNVERIFIED | Length and character set |
-| `lock-atom-requires` | Closure validation | UNVERIFIED | Dangling reference rejection |
-| `lock-atom-direct` | Default value tests | UNVERIFIED | Absent → true, explicit false |
-| `lock-atom-rev-optional` | Conditional presence | UNVERIFIED | Local vs remote enforcement |
-| `lock-nix-hash-format` | SRI parsing | UNVERIFIED | Algorithm prefix + encoding |
-| `lock-nix-git-rev` | Hex validation | UNVERIFIED | Same as `lock-atom-rev` |
-| `lock-nix-git-version` | Semver parsing | UNVERIFIED | Optional field handling |
-| `lock-type-namespace` | Pattern validation | UNVERIFIED | Compound identifier grammar |
-| `lock-type-extension-mechanism` | Design review | UNVERIFIED | Architectural property |
-| `lock-type-backend-dispatch` | Integration tests | UNVERIFIED | Eos backend routing |
-| `lock-deterministic-serialization` | Roundtrip tests | UNVERIFIED | Byte-identical output |
-| `lock-serde-tag-dispatch` | Serde attribute audit | UNVERIFIED | Code inspection |
-| `lock-serde-deny-unknown` | Serde attribute audit | UNVERIFIED | Code inspection |
-| `lock-depmap-values-only` | Serialization tests | UNVERIFIED | Array-of-tables output |
-| `lock-optional-field-elision` | Serialization tests | UNVERIFIED | Absent vs default equivalence |
-| `lock-sufficiency` | Integration tests | UNVERIFIED | Build from lock only |
-| `lock-hash-integrity` | Fetch + verify tests | UNVERIFIED | Content vs digest comparison |
-| `lock-dag-acyclicity` | Graph validation | UNVERIFIED | Cycle detection algorithm |
-| `lock-requires-closure` | Cross-reference check | UNVERIFIED | Dangling atom-id rejection |
-| `lock-owner-closure` | Cross-reference check | UNVERIFIED | Dangling owner rejection |
-| `lock-compose-closure` | Cross-reference check | UNVERIFIED | Dangling compose ref rejection |
-| `lock-version-compatibility` | Version gate tests | UNVERIFIED | Unknown version rejection |
+| Constraint                         | Method                  | Result     | Detail                                 |
+| :--------------------------------- | :---------------------- | :--------- | :------------------------------------- |
+| `lock-version-field`               | Unit tests              | UNVERIFIED | Parse valid and invalid version values |
+| `lock-auto-generated-comment`      | N/A (advisory)          | UNVERIFIED | SHOULD-level; not enforceable          |
+| `lock-set-key-format`              | Regex validation        | UNVERIFIED | Validate hex length and character set  |
+| `lock-set-tag`                     | Deserialization tests   | UNVERIFIED | Empty string rejection                 |
+| `lock-set-mirrors`                 | Deserialization tests   | UNVERIFIED | Empty array rejection, URL validation  |
+| `lock-set-mirror-local-sentinel`   | Unit tests              | UNVERIFIED | `"::"` as sole entry semantics         |
+| `lock-set-referenced`              | Cross-reference check   | UNVERIFIED | Ensure all `set` fields resolve        |
+| `lock-compose-atom-variant`        | Deserialization tests   | UNVERIFIED | Required field enforcement             |
+| `lock-compose-nix-variant`         | Deserialization tests   | UNVERIFIED | Field presence constraints             |
+| `lock-compose-config-variant`      | Deserialization tests   | UNVERIFIED | Field absence constraints              |
+| `lock-compose-default`             | Default value tests     | UNVERIFIED | Absent `[compose]` → `Config`          |
+| `lock-compose-args`                | Deserialization tests   | UNVERIFIED | Arbitrary key-value parsing            |
+| `lock-compose-args-scope`          | Validation logic        | UNVERIFIED | Reject args on Config variant          |
+| `lock-dep-type-dispatch`           | Tagged enum tests       | UNVERIFIED | All five type values parse correctly   |
+| `lock-dep-no-unknown-fields`       | `deny_unknown_fields`   | UNVERIFIED | Unrecognized field rejection           |
+| `lock-dep-ordering`                | Serialization roundtrip | UNVERIFIED | Deterministic output comparison        |
+| `lock-atom-label`                  | Label grammar tests     | UNVERIFIED | Invalid label rejection                |
+| `lock-atom-version`                | Semver parsing          | UNVERIFIED | Pre-release identifier support         |
+| `lock-atom-set-ref`                | Cross-reference check   | UNVERIFIED | Dangling set reference rejection       |
+| `lock-atom-rev`                    | Hex validation          | UNVERIFIED | Length and character set               |
+| `lock-atom-id`                     | Base32 validation       | UNVERIFIED | Length and character set               |
+| `lock-atom-requires`               | Closure validation      | UNVERIFIED | Dangling reference rejection           |
+| `lock-atom-direct`                 | Default value tests     | UNVERIFIED | Absent → true, explicit false          |
+| `lock-atom-rev-optional`           | Conditional presence    | UNVERIFIED | Local vs remote enforcement            |
+| `lock-nix-hash-format`             | SRI parsing             | UNVERIFIED | Algorithm prefix + encoding            |
+| `lock-nix-git-rev`                 | Hex validation          | UNVERIFIED | Same as `lock-atom-rev`                |
+| `lock-nix-git-version`             | Semver parsing          | UNVERIFIED | Optional field handling                |
+| `lock-type-namespace`              | Pattern validation      | UNVERIFIED | Compound identifier grammar            |
+| `lock-type-extension-mechanism`    | Design review           | UNVERIFIED | Architectural property                 |
+| `lock-type-backend-dispatch`       | Integration tests       | UNVERIFIED | Eos backend routing                    |
+| `lock-deterministic-serialization` | Roundtrip tests         | UNVERIFIED | Byte-identical output                  |
+| `lock-serde-tag-dispatch`          | Serde attribute audit   | UNVERIFIED | Code inspection                        |
+| `lock-serde-deny-unknown`          | Serde attribute audit   | UNVERIFIED | Code inspection                        |
+| `lock-depmap-values-only`          | Serialization tests     | UNVERIFIED | Array-of-tables output                 |
+| `lock-optional-field-elision`      | Serialization tests     | UNVERIFIED | Absent vs default equivalence          |
+| `lock-sufficiency`                 | Integration tests       | UNVERIFIED | Build from lock only                   |
+| `lock-hash-integrity`              | Fetch + verify tests    | UNVERIFIED | Content vs digest comparison           |
+| `lock-dag-acyclicity`              | Graph validation        | UNVERIFIED | Cycle detection algorithm              |
+| `lock-requires-closure`            | Cross-reference check   | UNVERIFIED | Dangling atom-id rejection             |
+| `lock-owner-closure`               | Cross-reference check   | UNVERIFIED | Dangling owner rejection               |
+| `lock-compose-closure`             | Cross-reference check   | UNVERIFIED | Dangling compose ref rejection         |
+| `lock-version-compatibility`       | Version gate tests      | UNVERIFIED | Unknown version rejection              |
 
 ---
 
@@ -906,7 +917,7 @@ pub struct DepMap(BTreeMap<Either<AtomId, Name>, Dep>);
 
 ## Implications
 
-1. **Lock File Placement**: This spec defines the *schema*, not the
+1. **Lock File Placement**: This spec defines the _schema_, not the
    file path convention. The conventional path is `atom.lock` adjacent
    to the root `atom.toml`. The lock file path is an ion concern; eos
    receives the lock content, not a path.

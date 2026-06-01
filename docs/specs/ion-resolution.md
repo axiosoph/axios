@@ -325,28 +325,28 @@ owner = "<atomdigest-of-owning-atom>"
 
 ## Verification
 
-| Constraint                     | Method      | Result | Detail                                                   |
-| :----------------------------- | :---------- | :----- | :------------------------------------------------------- |
-| version-semantics-semver       | agent-check | pass   | semver is well-defined; consistent with protocol          |
-| lock-schema-version            | agent-check | pass   | Prevents silent misinterpretation                         |
-| lock-sets-capture              | agent-check | pass   | Consistent with atom-sourcing lock-entry-sufficient       |
-| lock-atom-entry-fields         | agent-check | pass   | Contains all protocol LockEntry fields + ion extensions   |
-| lock-requires-graph            | agent-check | pass   | SHOULD level; enables graph reconstruction                |
-| lock-direct-flag               | agent-check | pass   | Informational; no safety implication                      |
-| lock-compose-capture           | agent-check | pass   | Composer is a dependency; lock captures it                |
-| lock-plugin-entries            | agent-check | pass   | Single array; type tag discriminates                      |
-| resolution-complete            | agent-check | pass   | Standard SAT property                                     |
-| resolution-deterministic       | agent-check | pass   | Required for reproducibility                               |
-| resolution-highest-match       | agent-check | pass   | SHOULD; allows flexibility for conflict resolution        |
-| resolution-unsolvable-diagnostic | agent-check | pass | Usability requirement; no safety contradiction            |
-| resolution-transitive          | agent-check | pass   | Standard DAG closure                                       |
-| no-partial-lock                | agent-check | pass   | All-or-nothing write prevents corruption                   |
-| no-stale-lock-entry            | agent-check | pass   | Consistent with sanitize-then-sync lifecycle              |
-| no-constraint-violation        | agent-check | pass   | Fundamental correctness                                    |
-| lock-reproducibility           | agent-check | pass   | Restated from protocol; content-addressed                  |
-| reconcile-idempotent           | agent-check | pass   | Follows from deterministic resolution                      |
-| plugin-dep-sanitization        | agent-check | pass   | Consistent with atom dep sanitization                      |
-| git-tag-version-inference      | agent-check | pass   | MAY; opt-in convenience                                    |
+| Constraint                       | Method      | Result | Detail                                                  |
+| :------------------------------- | :---------- | :----- | :------------------------------------------------------ |
+| version-semantics-semver         | agent-check | pass   | semver is well-defined; consistent with protocol        |
+| lock-schema-version              | agent-check | pass   | Prevents silent misinterpretation                       |
+| lock-sets-capture                | agent-check | pass   | Consistent with atom-sourcing lock-entry-sufficient     |
+| lock-atom-entry-fields           | agent-check | pass   | Contains all protocol LockEntry fields + ion extensions |
+| lock-requires-graph              | agent-check | pass   | SHOULD level; enables graph reconstruction              |
+| lock-direct-flag                 | agent-check | pass   | Informational; no safety implication                    |
+| lock-compose-capture             | agent-check | pass   | Composer is a dependency; lock captures it              |
+| lock-plugin-entries              | agent-check | pass   | Single array; type tag discriminates                    |
+| resolution-complete              | agent-check | pass   | Standard SAT property                                   |
+| resolution-deterministic         | agent-check | pass   | Required for reproducibility                            |
+| resolution-highest-match         | agent-check | pass   | SHOULD; allows flexibility for conflict resolution      |
+| resolution-unsolvable-diagnostic | agent-check | pass   | Usability requirement; no safety contradiction          |
+| resolution-transitive            | agent-check | pass   | Standard DAG closure                                    |
+| no-partial-lock                  | agent-check | pass   | All-or-nothing write prevents corruption                |
+| no-stale-lock-entry              | agent-check | pass   | Consistent with sanitize-then-sync lifecycle            |
+| no-constraint-violation          | agent-check | pass   | Fundamental correctness                                 |
+| lock-reproducibility             | agent-check | pass   | Restated from protocol; content-addressed               |
+| reconcile-idempotent             | agent-check | pass   | Follows from deterministic resolution                   |
+| plugin-dep-sanitization          | agent-check | pass   | Consistent with atom dep sanitization                   |
+| git-tag-version-inference        | agent-check | pass   | MAY; opt-in convenience                                 |
 
 All constraints are internally consistent. No contradictions with
 ion-manifest.md or atom-sourcing.md. Agent-level verification (Tier 1).

@@ -1,13 +1,13 @@
 //! Implementations of [`AtomSource`] and observation types.
 
+use atom_core::{AtomId, AtomSource, RawVersion};
+use atom_id::{ClaimPayload, PublishPayload};
 use coz_rs::Czd;
 use gix::hash::ObjectId;
 use serde::{Deserialize, Serialize};
 
 use crate::error::GitError;
 use crate::gix_util::is_descendant;
-use atom_core::{AtomId, AtomSource, RawVersion};
-use atom_id::{ClaimPayload, PublishPayload};
 
 /// Opaque module for custom base64 serialization.
 mod option_b64 {
@@ -210,7 +210,8 @@ impl AtomSource for GitSource {
                         let pub_envelope: CozMessageEnvelope = serde_json::from_str(msg_str)?;
                         let pub_pay_bytes = serde_json::to_vec(&pub_envelope.pay)?;
 
-                        // Use public key in publish tag if present, otherwise fall back to claim key
+                        // Use public key in publish tag if present, otherwise fall back to claim
+                        // key
                         let pub_key_bytes = pub_envelope.key.as_ref().unwrap_or(claim_pub_key);
 
                         let pub_alg_str = pub_envelope
@@ -230,7 +231,8 @@ impl AtomSource for GitSource {
                             pub_key_bytes,
                         )?;
 
-                        // Invariant [tag-chain-semantic-immutable]: immutable fields must match across updates
+                        // Invariant [tag-chain-semantic-immutable]: immutable fields must match
+                        // across updates
                         if prev_publish_payload.as_ref().is_some_and(|prev| {
                             pub_payload.label != prev.label
                                 || pub_payload.version != prev.version
@@ -402,7 +404,8 @@ impl AtomSource for GitSource {
                         let pub_envelope: CozMessageEnvelope = serde_json::from_str(msg_str)?;
                         let pub_pay_bytes = serde_json::to_vec(&pub_envelope.pay)?;
 
-                        // Use public key in publish tag if present, otherwise fall back to claim key
+                        // Use public key in publish tag if present, otherwise fall back to claim
+                        // key
                         let pub_key_bytes = pub_envelope.key.as_ref().unwrap_or(claim_pub_key);
 
                         let pub_alg_str = pub_envelope
@@ -422,7 +425,8 @@ impl AtomSource for GitSource {
                             pub_key_bytes,
                         )?;
 
-                        // Invariant [tag-chain-semantic-immutable]: immutable fields must match across updates
+                        // Invariant [tag-chain-semantic-immutable]: immutable fields must match
+                        // across updates
                         if prev_publish_payload.as_ref().is_some_and(|prev| {
                             pub_payload.label != prev.label
                                 || pub_payload.version != prev.version
@@ -445,8 +449,9 @@ impl AtomSource for GitSource {
                         }
 
                         // Check temporal vector: publish src must be descendant of claim src
-                        // NOTE: Store resolution does not verify descendant relation using graph traversal
-                        // as the development history is not present in the store repository.
+                        // NOTE: Store resolution does not verify descendant relation using graph
+                        // traversal as the development history is not
+                        // present in the store repository.
 
                         if prev_publish_payload.is_none() {
                             prev_publish_payload = Some(pub_payload.clone());

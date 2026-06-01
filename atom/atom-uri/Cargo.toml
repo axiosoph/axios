@@ -11,4 +11,3 @@ atom-id = { path = "../atom-id" }
 
 [dev-dependencies]
 proptest = "1.5"
-

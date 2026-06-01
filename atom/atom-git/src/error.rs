@@ -70,7 +70,8 @@ pub enum GitError {
 
     /// The publish source revision is not at or after the claim source revision.
     #[error(
-        "Invalid temporal vector: publish src {publish_src} is not a descendant of claim src {claim_src}"
+        "Invalid temporal vector: publish src {publish_src} is not a descendant of claim src \
+         {claim_src}"
     )]
     InvalidTemporalVector {
         /// Publish source revision commit hash.

@@ -4,7 +4,9 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+
 use atom_id::AtomId;
+
 use crate::digest::Digest;
 use crate::store::StorePath;
 

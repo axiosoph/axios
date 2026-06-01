@@ -4,6 +4,7 @@
 
 use atom_id::AtomId;
 use trait_variant::make;
+
 use crate::digest::Digest;
 use crate::eval::EvalRequest;
 use crate::store::StorePath;
@@ -44,19 +45,14 @@ pub trait BuildEngine: Send + Sync + 'static {
     type Error: std::error::Error + Send + Sync + 'static;
 
     /// Evaluates an evaluation request to produce a build plan.
-    async fn evaluate(
-        &self,
-        request: EvalRequest<Self::Digest>,
-    ) -> Result<Self::Plan, Self::Error>;
+    async fn evaluate(&self, request: EvalRequest<Self::Digest>)
+    -> Result<Self::Plan, Self::Error>;
 
     /// Executes a build plan to produce output artifacts.
     async fn build(&self, plan: &Self::Plan) -> Result<Self::Output, Self::Error>;
 
     /// Checks if a pre-built output exists for the given plan.
-    async fn lookup_cached(
-        &self,
-        plan: &Self::Plan,
-    ) -> Result<Option<Self::Output>, Self::Error>;
+    async fn lookup_cached(&self, plan: &Self::Plan) -> Result<Option<Self::Output>, Self::Error>;
 
     /// Computes the content-addressed digest of a plan.
     fn plan_digest(&self, plan: &Self::Plan) -> Self::Digest;

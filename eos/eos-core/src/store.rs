@@ -5,7 +5,9 @@
 
 use std::fmt;
 use std::pin::Pin;
+
 use futures_core::Stream;
+
 use crate::digest::Digest;
 use crate::job::ArtifactInfo;
 

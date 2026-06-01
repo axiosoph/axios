@@ -711,10 +711,11 @@ fn verify_claim_unknown_alg() {
 
 #[cfg(test)]
 mod proptests {
-    use super::*;
-    use crate::{Alg, Anchor, AtomId, ClaimPayload, PublishPayload, RawVersion, Czd};
     use coz_rs::SigningKey;
     use proptest::prelude::*;
+
+    use super::*;
+    use crate::{Alg, Anchor, AtomId, ClaimPayload, Czd, PublishPayload, RawVersion};
 
     fn arb_label() -> impl Strategy<Value = String> {
         let start = "[a-zA-Z]";
@@ -822,4 +823,3 @@ mod proptests {
         }
     }
 }
-

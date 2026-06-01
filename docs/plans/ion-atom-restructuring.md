@@ -119,7 +119,7 @@ they're in the store.
 | ID    | Decision             | Choice                                                                                    | Rationale                                                                       |
 | :---- | :------------------- | :---------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------ |
 | KD-1  | atom-core deps       | `std` only + atom-id + atom-uri; `serde` via feature; `nom` in atom-uri only              | Protocol purity. Storage deps go in atom-git.                                   |
-| KD-2  | AtomDigest           | Hash-agnostic (`AsRef<[u8]>` or trait-based)                                              | Cyphr uses multi-algorithm digests.                                         |
+| KD-2  | AtomDigest           | Hash-agnostic (`AsRef<[u8]>` or trait-based)                                              | Cyphr uses multi-algorithm digests.                                             |
 | KD-3  | Version abstraction  | `trait VersionScheme` from day one                                                        | Non-negotiable. Atom serves ecosystems beyond semver.                           |
 | KD-4  | Dep resolution       | Lives in ion-resolve                                                                      | Resolution is tooling-layer, not protocol.                                      |
 | KD-5  | Manifest             | Thin `Manifest` trait in atom-core; concrete `ion.toml` in ion-manifest                   | Same pattern as VersionScheme.                                                  |
@@ -141,7 +141,7 @@ they're in the store.
 
 | ID   | Risk / Assumption                               | Severity | Status    | Mitigation                                                                                        |
 | :--- | :---------------------------------------------- | :------- | :-------- | :------------------------------------------------------------------------------------------------ |
-| R-1  | Cyphr API mismatch breaks trait signatures  | MEDIUM   | Mitigated | Boundary correctness > API correctness. ~30% chance of signature changes.                         |
+| R-1  | Cyphr API mismatch breaks trait signatures      | MEDIUM   | Mitigated | Boundary correctness > API correctness. ~30% chance of signature changes.                         |
 | R-2  | Version abstraction kills productivity          | —        | CLOSED    | Non-negotiable per nrd. Cost accepted.                                                            |
 | R-3  | Three workspaces is overhead for one person     | —        | CLOSED    | Intentional. The friction is the feature.                                                         |
 | R-4  | Premature eos abstraction                       | MEDIUM   | Mitigated | BuildEngine is thin (plan/apply). Prior art: Bazel REAPI, snix. Start thin, grow from experience. |
@@ -151,12 +151,12 @@ they're in the store.
 | R-8  | BuildEngine plan/apply is over-engineered       | LOW      | Accepted  | Cache-skipping is the core value. Terraform validates the pattern.                                |
 | R-9  | Three eos crates is too many up front           | LOW      | Accepted  | Early modularization is cheaper than late extraction.                                             |
 | R-10 | atom-uri requires surgery                       | MEDIUM   | Accepted  | `LocalAtom` moves to ion; `gix::Url` gets genericized.                                            |
-| A-1  | Atom sits atop Cyphr                        | —        | Validated | nrd is active in Cyphr development.                                                           |
+| A-1  | Atom sits atop Cyphr                            | —        | Validated | nrd is active in Cyphr development.                                                               |
 | A-2  | Existing code has proven concepts worth porting | —        | Validated | 2 years of working dep resolution, publishing, URI parsing, manifests.                            |
 | A-3  | Protocol is manifest-agnostic                   | —        | Validated | Per v2 spec.                                                                                      |
 | A-4  | Cryptographic chain is the foundation           | —        | Validated | Every step is content-addressed and cacheable.                                                    |
 | A-5  | Local atoms land in the same store as published | —        | Validated | Current eka copies local atoms into the cache repo with a dev prerelease version.                 |
-| A-6  | ekala.toml is not a central pillar              | —        | Validated | May not survive Cyphr transition.                                                             |
+| A-6  | ekala.toml is not a central pillar              | —        | Validated | May not survive Cyphr transition.                                                                 |
 | A-7  | Embedded engine is the right default            | —        | Validated | Prior art: Cargo, single-user Nix, Go.                                                            |
 
 ## Scope

@@ -1,9 +1,9 @@
 [package]
+edition = "2024"
 name    = "eos-store"
 version = "0.1.0"
-edition = "2024"
 
 [dependencies]
-eos-core = { path = "../eos-core" }
 blake3   = "=1.5.4"
+eos-core = { path = "../eos-core" }
 tokio    = { version = "1", features = ["fs", "io-util"] }

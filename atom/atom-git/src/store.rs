@@ -240,7 +240,8 @@ impl AtomStore for GitStore {
                             ObjectId::from_bytes_or_panic(publish_payload.claim.as_bytes());
                         let claim_czd_hex = claim_oid.to_hex().to_string();
 
-                        // Look up the version reference in the source repository to find the publish tag OID
+                        // Look up the version reference in the source repository to find the
+                        // publish tag OID
                         let tag_ref_name = if source_repo
                             .try_find_reference(&format!(
                                 "refs/atom/pub/{}/{}",

@@ -1,7 +1,7 @@
 [package]
+edition = "2024"
 name    = "eos-proto"
 version = "0.1.0"
-edition = "2024"
 
 [dependencies]
 capnp         = "0.20"
