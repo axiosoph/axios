@@ -556,5 +556,60 @@ mod tests {
                 prop_assert_eq!(parsed.unwrap(), original);
             }
         }
+
+        #[test]
+        fn raw_atom_uri_no_panic() {
+            bolero::check!().with_type::<Vec<u8>>().for_each(|bytes| {
+                if let Ok(s) = std::str::from_utf8(bytes) {
+                    let _ = RawAtomUri::from_str(s);
+                }
+            });
+        }
+
+        #[test]
+        fn test_raw_atom_uri_roundtrip_bolero() {
+            bolero::check!()
+                .with_type::<(Option<String>, String, Option<String>)>()
+                .for_each(|(src, lbl_str, ver)| {
+                    if let Ok(label) = Label::try_from(lbl_str.as_str()) {
+                        if let Some(s) = &src {
+                            if s.contains("::") || s.is_empty() {
+                                return;
+                            }
+                        }
+                        if let Some(v) = &ver {
+                            if v.contains('@') || v.contains("::") || v.is_empty() {
+                                return;
+                            }
+                        }
+
+                        let version = ver.clone().map(RawVersion::new);
+                        let original = RawAtomUri {
+                            source: src.clone(),
+                            label: label.clone(),
+                            version: version.clone(),
+                        };
+
+                        let serialized = original.to_string();
+                        let parsed = RawAtomUri::from_str(&serialized);
+
+                        assert!(
+                            parsed.is_ok(),
+                            "Failed to parse serialized URI: '{}'",
+                            serialized
+                        );
+                        let parsed = parsed.unwrap();
+                        assert_eq!(parsed, original);
+
+                        if let Some(parsed_src) = parsed.source() {
+                            assert_eq!(parsed_src, src.as_ref().unwrap());
+                        }
+                        assert_eq!(parsed.label(), &label);
+                        if let Some(parsed_ver) = parsed.version() {
+                            assert_eq!(parsed_ver.as_str(), ver.as_ref().unwrap());
+                        }
+                    }
+                });
+        }
     }
 }

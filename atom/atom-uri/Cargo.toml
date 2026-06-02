@@ -10,4 +10,6 @@ alurl   = { path = "../../alurl" }
 atom-id = { path = "../atom-id" }
 
 [dev-dependencies]
-proptest = "1.5"
+arbitrary = { version = "1", features = ["derive"] }
+bolero    = "0.11"
+proptest  = "1.5"

@@ -824,3 +824,74 @@ mod proptests {
         }
     }
 }
+
+#[test]
+fn atom_id_parse_roundtrip() {
+    bolero::check!()
+        .with_type::<(Vec<u8>, String)>()
+        .for_each(|(anchor_bytes, label_str)| {
+            if let Ok(label) = Label::try_from(label_str.as_str()) {
+                let anchor = Anchor::new(anchor_bytes.clone());
+                let original = AtomId::new(anchor, label);
+                let serialized = original.to_string();
+                let parsed = serialized.parse::<AtomId>().unwrap();
+                assert_eq!(parsed, original);
+            }
+        });
+}
+
+#[test]
+fn atom_id_parse_no_panic() {
+    bolero::check!().with_type::<String>().for_each(|s| {
+        let _ = s.parse::<AtomId>();
+    });
+}
+
+#[test]
+fn name_validation_hierarchy() {
+    bolero::check!().with_type::<String>().for_each(|s| {
+        let is_ident = Identifier::try_from(s.as_str()).is_ok();
+        let is_label = Label::try_from(s.as_str()).is_ok();
+        let is_tag = Tag::try_from(s.as_str()).is_ok();
+
+        // Identifier ⊂ Label ⊂ Tag
+        if is_ident {
+            assert!(is_label, "Identifier parsed but Label did not: '{}'", s);
+        }
+        if is_label {
+            assert!(is_tag, "Label parsed but Tag did not: '{}'", s);
+        }
+    });
+}
+
+#[test]
+fn label_nfkc_idempotency() {
+    bolero::check!().with_type::<String>().for_each(|s| {
+        if let Ok(label) = Label::try_from(s.as_str()) {
+            // NFKC normalization idempotency
+            use unicode_normalization::UnicodeNormalization;
+            let normalized: String = s.nfkc().collect();
+            let label_norm = Label::try_from(normalized.as_str()).unwrap();
+            assert_eq!(label, label_norm);
+        }
+    });
+}
+
+#[test]
+fn label_parse_properties() {
+    bolero::check!().with_type::<String>().for_each(|s| {
+        if let Ok(label) = Label::try_from(s.as_str()) {
+            assert!(label.to_string().parse::<Label>().is_ok());
+            assert!(label.len() <= 128);
+        }
+    });
+}
+
+#[test]
+fn tag_consecutive_dots_rejection() {
+    bolero::check!().with_type::<String>().for_each(|s| {
+        if s.contains("..") {
+            assert!(Tag::try_from(s.as_str()).is_err());
+        }
+    });
+}

@@ -10,3 +10,7 @@ bytes         = "1"
 futures-core  = "0.3"
 thiserror     = "2"
 trait-variant = "0.1"
+
+[dev-dependencies]
+arbitrary = { version = "1", features = ["derive"] }
+bolero    = "0.11"

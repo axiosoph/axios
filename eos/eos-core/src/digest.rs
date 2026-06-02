@@ -113,6 +113,9 @@ impl FromStr for Blake3Digest {
         if s.len() != 64 {
             return Err(ParseBlake3DigestError::InvalidLength(s.len()));
         }
+        if !s.is_ascii() {
+            return Err(ParseBlake3DigestError::InvalidHex);
+        }
         let mut bytes = [0u8; 32];
         for i in 0..32 {
             bytes[i] = u8::from_str_radix(&s[i * 2..i * 2 + 2], 16)
@@ -160,5 +163,37 @@ mod tests {
 
         let err_hex = "2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2axz";
         assert!(err_hex.parse::<Blake3Digest>().is_err());
+    }
+
+    mod proptests {
+        use super::*;
+
+        #[test]
+        fn blake3_digest_roundtrip() {
+            bolero::check!().with_type::<[u8; 32]>().for_each(|&bytes| {
+                let digest = Blake3Digest::from(bytes);
+                let s = digest.to_string();
+                let parsed = s.parse::<Blake3Digest>().unwrap();
+                assert_eq!(parsed, digest);
+            });
+        }
+
+        #[test]
+        fn blake3_digest_string_parsing_to_lowercase() {
+            bolero::check!().with_type::<String>().for_each(|s| {
+                if let Ok(digest) = s.parse::<Blake3Digest>() {
+                    assert_eq!(digest.to_string(), s.to_lowercase());
+                }
+            });
+        }
+
+        #[test]
+        fn blake3_digest_try_from_invalid_len() {
+            bolero::check!().with_type::<Vec<u8>>().for_each(|bytes| {
+                if bytes.len() != 32 {
+                    assert!(Blake3Digest::try_from(bytes.as_slice()).is_err());
+                }
+            });
+        }
     }
 }
