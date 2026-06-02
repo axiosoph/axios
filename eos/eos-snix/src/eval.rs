@@ -7,12 +7,13 @@
 
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::thread;
 
 use bstr::ByteSlice;
 use eos_core::digest::Blake3Digest;
-use eos_core::eval::{EvalRequest, EvalTarget, ResolvedInput};
+use eos_core::eval::{ComposerConfig, EvalRequest, EvalTarget, ResolvedInput};
 use nix_compat::derivation::Derivation;
 use nix_compat::store_path::StorePath as NixStorePath;
 use rustc_hash::FxHashMap;
@@ -252,11 +253,47 @@ pub struct ResolvedInputDto {
     pub store_path: String,
 }
 
+/// Serializable Data Transfer Object for `ComposerConfig`.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ComposerConfigDto {
+    /// Serialized as the `<anchor_b64ut>::<label>` display form.
+    pub atom_id: String,
+    pub entry: String,
+    pub version: String,
+}
+
+impl From<ComposerConfig> for ComposerConfigDto {
+    fn from(config: ComposerConfig) -> Self {
+        ComposerConfigDto {
+            atom_id: config.atom_id.to_string(),
+            entry: config.entry,
+            version: config.version,
+        }
+    }
+}
+
+impl ComposerConfigDto {
+    /// Converts back to a `ComposerConfig`, parsing the `AtomId`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the serialized `atom_id` string is malformed.
+    pub fn into_config(self) -> ComposerConfig {
+        ComposerConfig {
+            atom_id: atom_id::AtomId::from_str(&self.atom_id)
+                .expect("invalid AtomId in ComposerConfigDto"),
+            entry: self.entry,
+            version: self.version,
+        }
+    }
+}
+
 /// Serializable Data Transfer Object for `EvalRequest`.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct EvalRequestDto {
     pub expression: EvalTargetDto,
     pub inputs: HashMap<String, ResolvedInputDto>,
+    pub composer: Option<ComposerConfigDto>,
     pub eval_args: Vec<(String, String)>,
 }
 
@@ -305,6 +342,7 @@ impl From<EvalRequest<Blake3Digest>> for EvalRequestDto {
         EvalRequestDto {
             expression: req.expression.into(),
             inputs,
+            composer: req.composer.map(ComposerConfigDto::from),
             eval_args: req.eval_args,
         }
     }
@@ -319,6 +357,7 @@ impl EvalRequestDto {
         }
         let mut req = EvalRequest::new(self.expression.into());
         req.inputs = inputs;
+        req.composer = self.composer.map(|c| c.into_config());
         req.eval_args = self.eval_args;
         req
     }

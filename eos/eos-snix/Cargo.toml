@@ -6,6 +6,7 @@ version = "0.1.0"
 [dependencies]
 eos-core  = { path = "../eos-core" }
 eos-store = { path = "../eos-store" }
+atom-id   = { path = "../../atom/atom-id" }
 # Snix crates — path deps to local checkout
 blake3       = "1"
 bstr         = "1"
