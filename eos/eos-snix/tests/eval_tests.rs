@@ -78,7 +78,10 @@ async fn test_snix_engine_evaluate_sandboxed() {
     ];
     let Some(eosd_bin) = candidates.iter().find(|p| p.exists()).cloned() else {
         if is_ci {
-            panic!("eosd worker binary must be compiled and present in CI (checked target/debug/eosd, etc.)");
+            panic!(
+                "eosd worker binary must be compiled and present in CI (checked \
+                 target/debug/eosd, etc.)"
+            );
         }
         eprintln!("Skipping sandboxed test: eosd worker binary not found");
         return;

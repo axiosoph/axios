@@ -363,7 +363,8 @@ mod proptests {
                         }
                     },
                     2 => {
-                        // Mutate the serialized TOML string to have an invalid label starting with a digit.
+                        // Mutate the serialized TOML string to have an invalid label starting with
+                        // a digit.
                         let serialized = toml::to_string(&manifest).unwrap();
                         let target_str = format!("label = \"{}\"", manifest.package.label.as_ref());
                         let serialized = serialized.replace(&target_str, "label = \"123invalid\"");
@@ -371,7 +372,9 @@ mod proptests {
                     },
                     3 => {
                         // Remove the required [compose] section.
-                        if let Ok(mut value) = toml::to_string(&manifest).unwrap().parse::<toml::Value>() {
+                        if let Ok(mut value) =
+                            toml::to_string(&manifest).unwrap().parse::<toml::Value>()
+                        {
                             if let Some(table) = value.as_table_mut() {
                                 table.remove("compose");
                                 let serialized = toml::to_string(&value).unwrap();
@@ -381,10 +384,17 @@ mod proptests {
                     },
                     _ => {
                         // Inject an unrecognized field to test deny_unknown_fields.
-                        if let Ok(mut value) = toml::to_string(&manifest).unwrap().parse::<toml::Value>() {
+                        if let Ok(mut value) =
+                            toml::to_string(&manifest).unwrap().parse::<toml::Value>()
+                        {
                             if let Some(table) = value.as_table_mut() {
-                                if let Some(package) = table.get_mut("package").and_then(|v| v.as_table_mut()) {
-                                    package.insert("unknown_field_xyz".to_string(), toml::Value::String("invalid".to_string()));
+                                if let Some(package) =
+                                    table.get_mut("package").and_then(|v| v.as_table_mut())
+                                {
+                                    package.insert(
+                                        "unknown_field_xyz".to_string(),
+                                        toml::Value::String("invalid".to_string()),
+                                    );
                                     let serialized = toml::to_string(&value).unwrap();
                                     assert!(IonManifest::parse(&serialized).is_err());
                                 }
