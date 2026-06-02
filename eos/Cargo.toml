@@ -1,3 +1,4 @@
 [workspace]
+exclude  = ["fuzz"]
 members  = ["eos-core", "eos-snix", "eos-proto", "eos-daemon", "eos"]
 resolver = "2"
