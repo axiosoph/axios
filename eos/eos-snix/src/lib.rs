@@ -49,16 +49,35 @@ pub struct SnixEngine {
     pub nar_calculation_service: Arc<dyn NarCalculationService>,
     /// Sandbox execution build service.
     pub build_service: Arc<dyn BuildService>,
+    /// Address for the blob service.
+    pub blob_service_addr: String,
+    /// Address for the directory service.
+    pub directory_service_addr: String,
+    /// Address for the path info service.
+    pub path_info_service_addr: String,
+    /// Working directory for local workspace.
+    pub workspace_dir: std::path::PathBuf,
+    /// Sandbox working directory.
+    pub sandbox_workdir: std::path::PathBuf,
+    /// Whether evaluation sandboxing is enabled.
+    pub enable_eval_sandbox: bool,
 }
 
 impl SnixEngine {
     /// Creates a new `SnixEngine` wrapping the specified services.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         blob_service: Arc<dyn BlobService>,
         directory_service: Arc<dyn DirectoryService>,
         path_info_service: Arc<dyn PathInfoService>,
         nar_calculation_service: Arc<dyn NarCalculationService>,
         build_service: Arc<dyn BuildService>,
+        blob_service_addr: String,
+        directory_service_addr: String,
+        path_info_service_addr: String,
+        workspace_dir: std::path::PathBuf,
+        sandbox_workdir: std::path::PathBuf,
+        enable_eval_sandbox: bool,
     ) -> Self {
         Self {
             blob_service,
@@ -66,6 +85,12 @@ impl SnixEngine {
             path_info_service,
             nar_calculation_service,
             build_service,
+            blob_service_addr,
+            directory_service_addr,
+            path_info_service_addr,
+            workspace_dir,
+            sandbox_workdir,
+            enable_eval_sandbox,
         }
     }
 }
@@ -80,19 +105,29 @@ impl BuildEngine for SnixEngine {
         &self,
         request: EvalRequest<Self::Digest>,
     ) -> Result<Self::Plan, Self::Error> {
-        let tokio_handle = Handle::current();
-        let rx = evaluate_on_thread(
-            request.expression,
-            request.inputs,
-            request.eval_args,
-            self.blob_service.clone(),
-            self.directory_service.clone(),
-            self.path_info_service.clone(),
-            self.nar_calculation_service.clone(),
-            self.build_service.clone(),
-            tokio_handle,
-        );
-        rx.await.map_err(|_| SnixError::EvalThreadPanic)?
+        let is_daemon = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+            .map(|name| name.starts_with("eosd"))
+            .unwrap_or(false);
+
+        if self.enable_eval_sandbox && is_daemon {
+            eval::evaluate_sandboxed(self, request).await
+        } else {
+            let tokio_handle = Handle::current();
+            let rx = evaluate_on_thread(
+                request.expression,
+                request.inputs,
+                request.eval_args,
+                self.blob_service.clone(),
+                self.directory_service.clone(),
+                self.path_info_service.clone(),
+                self.nar_calculation_service.clone(),
+                self.build_service.clone(),
+                tokio_handle,
+            );
+            rx.await.map_err(|_| SnixError::EvalThreadPanic)?
+        }
     }
 
     async fn build(&self, plan: &Self::Plan) -> Result<Self::Output, Self::Error> {

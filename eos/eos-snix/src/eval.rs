@@ -12,10 +12,11 @@ use std::thread;
 
 use bstr::ByteSlice;
 use eos_core::digest::Blake3Digest;
-use eos_core::eval::{EvalTarget, ResolvedInput};
+use eos_core::eval::{EvalRequest, EvalTarget, ResolvedInput};
 use nix_compat::derivation::Derivation;
 use nix_compat::store_path::StorePath as NixStorePath;
 use rustc_hash::FxHashMap;
+use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
 use snix_build::buildservice::BuildService;
 use snix_castore::blobservice::BlobService;
@@ -222,4 +223,412 @@ pub fn evaluate_on_thread(
     });
 
     rx
+}
+
+/// Helper function to extract filesystem path from service URI.
+fn extract_path_from_addr(addr: &str) -> Option<std::path::PathBuf> {
+    if let Some(pos) = addr.find(':') {
+        let path_part = &addr[pos + 1..];
+        let clean_path = path_part.split('?').next().unwrap_or(path_part);
+        let path = std::path::PathBuf::from(clean_path);
+        if path.is_absolute() {
+            return Some(path);
+        }
+    }
+    None
+}
+
+/// Serializable Data Transfer Object for `EvalTarget`.
+#[derive(Serialize, Deserialize, Debug)]
+pub enum EvalTargetDto {
+    File(std::path::PathBuf),
+    Expression(String),
+}
+
+/// Serializable Data Transfer Object for `ResolvedInput`.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ResolvedInputDto {
+    pub digest: [u8; 32],
+    pub store_path: String,
+}
+
+/// Serializable Data Transfer Object for `EvalRequest`.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct EvalRequestDto {
+    pub expression: EvalTargetDto,
+    pub inputs: HashMap<String, ResolvedInputDto>,
+    pub eval_args: Vec<(String, String)>,
+}
+
+impl From<EvalTarget> for EvalTargetDto {
+    fn from(target: EvalTarget) -> Self {
+        match target {
+            EvalTarget::File(p) => EvalTargetDto::File(p),
+            EvalTarget::Expression(s) => EvalTargetDto::Expression(s),
+        }
+    }
+}
+
+impl From<EvalTargetDto> for EvalTarget {
+    fn from(dto: EvalTargetDto) -> Self {
+        match dto {
+            EvalTargetDto::File(p) => EvalTarget::File(p),
+            EvalTargetDto::Expression(s) => EvalTarget::Expression(s),
+        }
+    }
+}
+
+impl From<ResolvedInput<Blake3Digest>> for ResolvedInputDto {
+    fn from(input: ResolvedInput<Blake3Digest>) -> Self {
+        ResolvedInputDto {
+            digest: input.digest.0,
+            store_path: input.store_path.0,
+        }
+    }
+}
+
+impl From<ResolvedInputDto> for ResolvedInput<Blake3Digest> {
+    fn from(dto: ResolvedInputDto) -> Self {
+        ResolvedInput {
+            digest: Blake3Digest(dto.digest),
+            store_path: eos_core::store::StorePath(dto.store_path),
+        }
+    }
+}
+
+impl From<EvalRequest<Blake3Digest>> for EvalRequestDto {
+    fn from(req: EvalRequest<Blake3Digest>) -> Self {
+        let mut inputs = HashMap::new();
+        for (k, v) in req.inputs {
+            inputs.insert(k, v.into());
+        }
+        EvalRequestDto {
+            expression: req.expression.into(),
+            inputs,
+            eval_args: req.eval_args,
+        }
+    }
+}
+
+impl EvalRequestDto {
+    /// Converts this DTO into a standard `EvalRequest<Blake3Digest>`.
+    pub fn into_request(self) -> EvalRequest<Blake3Digest> {
+        let mut inputs = HashMap::new();
+        for (k, v) in self.inputs {
+            inputs.insert(k, v.into());
+        }
+        let mut req = EvalRequest::new(self.expression.into());
+        req.inputs = inputs;
+        req.eval_args = self.eval_args;
+        req
+    }
+}
+
+/// Executes evaluation inside a platform-specific restricted sandboxed environment.
+pub async fn evaluate_sandboxed(
+    engine: &crate::SnixEngine,
+    request: EvalRequest<Blake3Digest>,
+) -> Result<Derivation, SnixError> {
+    let dto = EvalRequestDto::from(request);
+    let req_bytes = serde_json::to_vec(&dto).map_err(|e| SnixError::ConversionError {
+        from: "EvalRequest",
+        to: "JSON",
+        detail: e.to_string(),
+    })?;
+
+    #[cfg(target_os = "linux")]
+    {
+        let exe_path = if let Ok(bin_str) = std::env::var("EOS_EVAL_WORKER_BIN") {
+            std::path::PathBuf::from(bin_str)
+        } else {
+            std::env::current_exe().map_err(|e| SnixError::SandboxError {
+                platform: "linux",
+                source: Box::new(e),
+            })?
+        };
+
+        let mut args = vec![
+            "--unshare-uts".to_string(),
+            "--unshare-ipc".to_string(),
+            "--unshare-pid".to_string(),
+            "--die-with-parent".to_string(),
+            "--unshare-user".to_string(),
+            "--uid".to_string(),
+            "1000".to_string(),
+            "--gid".to_string(),
+            "100".to_string(),
+            "--unshare-net".to_string(),
+            "--tmpfs".to_string(),
+            "/".to_string(),
+            "--dev".to_string(),
+            "/dev".to_string(),
+            "--proc".to_string(),
+            "/proc".to_string(),
+            "--tmpfs".to_string(),
+            "/tmp".to_string(),
+        ];
+
+        // Bind standard OS paths
+        for path in &["/usr", "/bin", "/lib", "/etc"] {
+            if std::path::Path::new(path).exists() {
+                args.push("--ro-bind".to_string());
+                args.push(path.to_string());
+                args.push(path.to_string());
+            }
+        }
+        if std::path::Path::new("/lib64").exists() {
+            args.push("--ro-bind".to_string());
+            args.push("/lib64".to_string());
+            args.push("/lib64".to_string());
+        }
+
+        // Bind current executable
+        args.push("--ro-bind".to_string());
+        args.push(exe_path.to_string_lossy().into_owned());
+        args.push(exe_path.to_string_lossy().into_owned());
+
+        // Bind workspace directory
+        args.push("--ro-bind".to_string());
+        args.push(engine.workspace_dir.to_string_lossy().into_owned());
+        args.push(engine.workspace_dir.to_string_lossy().into_owned());
+
+        // Bind sandbox workdir
+        if !engine.sandbox_workdir.exists() {
+            std::fs::create_dir_all(&engine.sandbox_workdir).map_err(|e| {
+                SnixError::SandboxError {
+                    platform: "linux",
+                    source: Box::new(e),
+                }
+            })?;
+        }
+        args.push("--bind".to_string());
+        args.push(engine.sandbox_workdir.to_string_lossy().into_owned());
+        args.push(engine.sandbox_workdir.to_string_lossy().into_owned());
+
+        // Bind DB directories
+        for addr in &[
+            &engine.blob_service_addr,
+            &engine.directory_service_addr,
+            &engine.path_info_service_addr,
+        ] {
+            if let Some(path) = extract_path_from_addr(addr) {
+                let host_path = if path.extension().is_some() {
+                    path.parent().unwrap_or(&path).to_path_buf()
+                } else {
+                    path.clone()
+                };
+                if !host_path.exists() {
+                    let _ = std::fs::create_dir_all(&host_path);
+                }
+                args.push("--bind".to_string());
+                args.push(host_path.to_string_lossy().into_owned());
+                args.push(host_path.to_string_lossy().into_owned());
+            }
+        }
+
+        // Bind expression parent directory if it's a file
+        if let EvalTargetDto::File(ref p) = dto.expression
+            && let Some(parent) = p.parent()
+        {
+            args.push("--ro-bind".to_string());
+            args.push(parent.to_string_lossy().into_owned());
+            args.push(parent.to_string_lossy().into_owned());
+        }
+
+        let mut child = tokio::process::Command::new("bwrap")
+            .args(&args)
+            .arg("--")
+            .arg(&exe_path)
+            .arg("--eval-worker")
+            .arg("--blob-service-addr")
+            .arg(&engine.blob_service_addr)
+            .arg("--directory-service-addr")
+            .arg(&engine.directory_service_addr)
+            .arg("--path-info-service-addr")
+            .arg(&engine.path_info_service_addr)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|e| SnixError::SandboxError {
+                platform: "linux bwrap",
+                source: Box::new(e),
+            })?;
+
+        // Write input DTO to stdin
+        use tokio::io::AsyncWriteExt;
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin
+                .write_all(&req_bytes)
+                .await
+                .map_err(|e| SnixError::SandboxError {
+                    platform: "linux bwrap stdin",
+                    source: Box::new(e),
+                })?;
+            stdin.flush().await.map_err(|e| SnixError::SandboxError {
+                platform: "linux bwrap stdin flush",
+                source: Box::new(e),
+            })?;
+        }
+
+        let output = child
+            .wait_with_output()
+            .await
+            .map_err(|e| SnixError::SandboxError {
+                platform: "linux bwrap wait",
+                source: Box::new(e),
+            })?;
+
+        if !output.status.success() {
+            let stderr_str = String::from_utf8_lossy(&output.stderr).into_owned();
+            return Err(SnixError::EvalFailed {
+                expression: format!("{:?}", dto.expression),
+                source: Box::new(std::io::Error::other(format!(
+                    "sandboxed evaluation failed: {}",
+                    stderr_str
+                ))),
+            });
+        }
+
+        let derivation = Derivation::from_aterm_bytes(&output.stdout).map_err(|e| {
+            SnixError::ConversionError {
+                from: "ATerm",
+                to: "Derivation",
+                detail: format!("{:?}", e),
+            }
+        })?;
+
+        Ok(derivation)
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        // birdcage macOS sandboxing
+        let exe_path = if let Ok(bin_str) = std::env::var("EOS_EVAL_WORKER_BIN") {
+            std::path::PathBuf::from(bin_str)
+        } else {
+            std::env::current_exe().map_err(|e| SnixError::SandboxError {
+                platform: "macos",
+                source: Box::new(e),
+            })?
+        };
+
+        let workspace_dir = engine.workspace_dir.clone();
+        let blob_service_addr = engine.blob_service_addr.clone();
+        let directory_service_addr = engine.directory_service_addr.clone();
+        let path_info_service_addr = engine.path_info_service_addr.clone();
+
+        // Run synchronously in spawn_blocking
+        let derivation_res =
+            tokio::task::spawn_blocking(move || -> Result<Derivation, SnixError> {
+                use std::io::Write;
+                use std::process::{Command, Stdio};
+
+                use birdcage::{Birdcage, Exception, Sandbox};
+
+                let mut sandbox = Birdcage::new();
+                sandbox
+                    .add_exception(Exception::Environment("PATH".into()))
+                    .map_err(|e| SnixError::SandboxError {
+                        platform: "macos birdcage",
+                        source: Box::new(e),
+                    })?;
+                sandbox
+                    .add_exception(Exception::ExecuteAndRead(exe_path.clone()))
+                    .map_err(|e| SnixError::SandboxError {
+                        platform: "macos birdcage",
+                        source: Box::new(e),
+                    })?;
+                sandbox
+                    .add_exception(Exception::Read(workspace_dir))
+                    .map_err(|e| SnixError::SandboxError {
+                        platform: "macos birdcage",
+                        source: Box::new(e),
+                    })?;
+
+                // Bind DB paths
+                for addr in &[
+                    &blob_service_addr,
+                    &directory_service_addr,
+                    &path_info_service_addr,
+                ] {
+                    if let Some(path) = extract_path_from_addr(addr) {
+                        sandbox
+                            .add_exception(Exception::WriteAndRead(path))
+                            .map_err(|e| SnixError::SandboxError {
+                                platform: "macos birdcage",
+                                source: Box::new(e),
+                            })?;
+                    }
+                }
+
+                let mut cmd = Command::new(&exe_path);
+                cmd.arg("--eval-worker")
+                    .arg("--blob-service-addr")
+                    .arg(&blob_service_addr)
+                    .arg("--directory-service-addr")
+                    .arg(&directory_service_addr)
+                    .arg("--path-info-service-addr")
+                    .arg(&path_info_service_addr)
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped());
+
+                let mut child = sandbox.spawn(cmd).map_err(|e| SnixError::SandboxError {
+                    platform: "macos birdcage spawn",
+                    source: Box::new(e),
+                })?;
+
+                if let Some(mut stdin) = child.stdin.take() {
+                    stdin
+                        .write_all(&req_bytes)
+                        .map_err(|e| SnixError::SandboxError {
+                            platform: "macos birdcage stdin",
+                            source: Box::new(e),
+                        })?;
+                }
+
+                let output = child
+                    .wait_with_output()
+                    .map_err(|e| SnixError::SandboxError {
+                        platform: "macos birdcage wait",
+                        source: Box::new(e),
+                    })?;
+
+                if !output.status.success() {
+                    let stderr_str = String::from_utf8_lossy(&output.stderr).into_owned();
+                    return Err(SnixError::EvalFailed {
+                        expression: format!("{:?}", dto.expression),
+                        source: Box::new(std::io::Error::other(format!(
+                            "sandboxed evaluation failed: {}",
+                            stderr_str
+                        ))),
+                    });
+                }
+
+                let derivation = Derivation::from_aterm_bytes(&output.stdout).map_err(|e| {
+                    SnixError::ConversionError {
+                        from: "ATerm",
+                        to: "Derivation",
+                        detail: format!("{:?}", e),
+                    }
+                })?;
+
+                Ok(derivation)
+            })
+            .await
+            .map_err(|_| SnixError::EvalThreadPanic)?;
+
+        derivation_res
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
+        Err(SnixError::SandboxError {
+            platform: "unsupported",
+            source: Box::new(std::io::Error::other(
+                "sandboxed evaluation not supported on this platform",
+            )),
+        })
+    }
 }
