@@ -19,19 +19,21 @@
 **Problem Domain:** Ion (L3 — the atom-native frontend) communicates
 with eos (L2 — the network-first build daemon) to evaluate and build
 resolved atoms. Ion connects to a running eos daemon via Cap'n Proto
-RPC, submits lock file contents as a `BuildRequest`, monitors build
-progress through capability-based streaming, and receives structured
-results or error diagnostics.
+RPC, submits a structured build request derived from the lock file,
+monitors build progress through capability-based streaming, and
+receives structured results or error diagnostics.
 
 This spec constrains the contract between the two layers: what ion
 transmits, what eos expects, what each is responsible for, how daemon
 discovery works, and how capabilities are negotiated, exercised, and
-released. The lock file is the sole serialized input — its schema is
-defined normatively in [lock-file-schema.md](lock-file-schema.md). The
-Cap'n Proto wire protocol, session lifecycle, and transport evolution
-are defined normatively in
+released. The lock file is the information-complete input — its
+schema is defined normatively in
+[lock-file-schema.md](lock-file-schema.md); its ownership is defined
+in [layer-boundaries.md §4.2](layer-boundaries.md). The lock file is
+parsed by ion and transmitted as structured `eos-core` types over the
+Cap’n Proto wire protocol defined normatively in
 [eos-network-protocol.md](eos-network-protocol.md). This document
-governs the semantic contract that binds those two specifications at
+governs the semantic contract that binds those specifications at
 the Ion–Eos boundary.
 
 **Related Specs:**
@@ -68,17 +70,22 @@ negotiation. See [eos-network-protocol.md §Transport
 Layer](eos-network-protocol.md) for the full transport specification.
 
 **Build Request**: The unit of work submitted by ion to eos. Ion
-serializes the complete lock file content — `[sets]`, `[compose]`
-(including `[compose.args]`), and `[[deps]]` — into a Cap'n Proto
-message and invokes `EosDaemon.submitBuild()`. The lock file content
-is the sole input; eos MUST NOT require auxiliary data.
+parses the lock file, translates its contents into structured
+`eos-core` types (dependency descriptors, composer configuration,
+evaluation arguments), and serializes those types into a Cap’n Proto
+message via `EosDaemon.submitBuild()`. The information content of the
+lock file is the sole input; eos MUST NOT require auxiliary data.
+Eos receives structured types, not raw TOML — the lock file format
+is ion’s concern (see
+[layer-boundaries.md §4.2](layer-boundaries.md)).
 
 **Build Job**: A capability reference returned by `submitBuild()`,
 representing a running or completed build. The `BuildJob` capability
 supports progress attachment (`attachProgress`), cancellation
 (`cancel`), and job identification (`getJobId`). Multiple ion
-instances submitting identical lock content receive capabilities
-referencing the same underlying job (deduplication via `JobId`).
+instances submitting build requests derived from identical lock
+content receive capabilities referencing the same underlying job
+(deduplication via `JobId`).
 
 **Backend**: A specific build system that eos delegates to. The
 initial and primary backend is Snix (see
@@ -103,25 +110,31 @@ hands control to the backend evaluator.
 
 ### Invariants
 
-**[handoff-lock-sufficiency]**: The lock file content submitted by ion
-MUST be the sole input to eos for dependency resolution and build
-execution. Eos MUST NOT require access to ion's manifest, plugin
-state, resolution history, or any external state beyond the lock
-content. The lock file is the complete contract. The schema of the
-lock file is defined in
+**[handoff-lock-sufficiency]**: The information contained in the lock
+file MUST be the sole input to eos for dependency resolution and build
+execution. Eos MUST NOT require access to ion’s manifest, plugin
+state, resolution history, or any external state beyond what the lock
+file encodes. The lock file is the information-complete contract.
+
+The lock file format is owned by ion (L3) — see
+[layer-boundaries.md §4.2](layer-boundaries.md). Ion parses the lock
+file and translates its contents into structured `eos-core` types
+before RPC submission. Eos receives the translated types, not the raw
+lock file content. The schema of the lock file is defined in
 [lock-file-schema.md](lock-file-schema.md).
 `VERIFIED: unverified`
 
 **[handoff-atom-fields]**: For each `type = "atom"` dependency in
 `[[deps]]`, eos MUST receive at minimum: `label`, `version`, `set`
-(anchor hash referencing a `[sets.<anchor>]` table), `rev` (pinned
-git revision), and `id` (content-addressed atom identifier). The `set`
-field provides mirror information via the atom-set declaration. The
-`rev` identifies the exact source tree snapshot for fetching. The `id`
-is the globally-unique cross-reference key (used by `requires`,
-`owner`, and `[compose].use`). These fields are sufficient for eos to:
-(1) locate a mirror via the `set` → `[sets.<anchor>].mirrors`
-indirection, (2) fetch and verify the atom snapshot against `rev`,
+(anchor hash referencing mirror information), `rev` (pinned git
+revision), and `id` (content-addressed atom identifier). These fields
+are transmitted as structured `eos-core` dependency descriptor types,
+not as raw lock file TOML. The `set` field provides mirror information
+via the atom-set declaration. The `rev` identifies the exact source
+tree snapshot for fetching. The `id` is the globally-unique
+cross-reference key (used by `requires`, `owner`, and the composer
+reference). These fields are sufficient for eos to: (1) locate a
+mirror, (2) fetch and verify the atom snapshot against `rev`,
 (3) identify the atom within the dependency graph via `id`. See
 [lock-file-schema.md §type = "atom"](lock-file-schema.md) for
 the normative field definitions.
@@ -132,9 +145,10 @@ the normative field definitions.
 receive at minimum: `type` (type tag), `name` (human-readable
 identifier and deduplication key), and the type-specific fetch
 coordinate — `url` + `hash` for content-hashed types, or `url` +
-`rev` for git-pinned types. Eos dispatches on the `type` tag to select
-the correct fetch and verification strategy. Eos does NOT need to know
-which ion plugin produced the entry. See
+`rev` for git-pinned types. These fields are transmitted as structured
+`eos-core` dependency descriptor types. Eos dispatches on the type tag
+to select the correct fetch and verification strategy. Eos does NOT
+need to know which ion plugin produced the entry. See
 [lock-file-schema.md §Extensibility Model](lock-file-schema.md)
 for the type namespace convention.
 `VERIFIED: unverified`
@@ -161,13 +175,15 @@ on the type prefix. See
 [lock-file-schema.md §lock-type-backend-dispatch](lock-file-schema.md).
 `VERIFIED: unverified`
 
-**[compose-handoff]**: The lock file's `[compose]` section tells eos
+**[compose-handoff]**: The lock file’s `[compose]` section tells eos
 which atom provides the import/evaluation logic for the root atom.
-When `[compose].use` contains an atom-id, eos MUST fetch and prepare
-the referenced composer atom before evaluating the root atom. The
-composer's internal logic (Nix import mechanism, module system) is
-opaque to eos — the backend evaluator consumes it. The three composer
-variants (`Atom`, `NixTrivial`, `Config`) are defined in
+Ion translates the `[compose]` section into a `ComposerConfig`
+(eos-core type) included in the build request. When the composer
+references an atom-id, eos MUST fetch and prepare the referenced
+composer atom before evaluating the root atom. The composer’s
+internal logic (Nix import mechanism, module system) is opaque to
+eos — the backend evaluator consumes it. The three composer variants
+(`Atom`, `NixTrivial`, `Config`) are defined in
 [lock-file-schema.md §[compose]](lock-file-schema.md).
 `VERIFIED: unverified`
 
@@ -359,14 +375,14 @@ operations are pure queries with no side effects on daemon state.
 
 - **PRE**: Ion holds an `EosDaemon` capability. A reconciled lock file
   exists. All entries have been validated by ion's resolution pipeline.
-  The lock file content has been parsed and is ready for serialization
-  into a Cap'n Proto `BuildRequest` message.
-- **POST**: Ion invokes `EosDaemon.submitBuild(planDigest, evalArgs)`.
-  The `planDigest` is derived from the lock file content (see
-  `[concurrent-builds]`). The `evalArgs` carry the `[compose.args]`
-  key-value pairs. Eos returns a `BuildJob` capability. If an
-  identical job already exists (same `JobId`), the existing `BuildJob`
-  is returned (deduplication). The build proceeds asynchronously.
+  The lock file has been parsed by `ion-lock` and translated into
+  structured `eos-core` types by `ion-eos`.
+- **POST**: Ion invokes `EosDaemon.submitBuild(planDigest, ...)`
+  with the structured build request. The `planDigest` is derived from
+  the lock file content (see `[concurrent-builds]`). Eos returns a
+  `BuildJob` capability. If an identical job already exists (same
+  `JobId`), the existing `BuildJob` is returned (deduplication). The
+  build proceeds asynchronously.
   `VERIFIED: unverified`
 
 **[attach-progress]**: Ion attaches to a build's progress stream.
@@ -382,16 +398,16 @@ operations are pure queries with no side effects on daemon state.
   [eos-network-protocol.md §no-cancel-on-drop](eos-network-protocol.md)).
   `VERIFIED: unverified`
 
-**[fetch-verify-build]**: Eos processes each lock entry.
+**[fetch-verify-build]**: Eos processes each dependency descriptor.
 
-- **PRE**: The lock file content has been received and parsed. The
-  `[compose]` section has been interpreted. The `[sets]` tables have
-  been resolved.
-- **POST**: For each dependency in `[[deps]]`:
-  (1) Eos selects a mirror (for atoms via `set` → `[sets].mirrors`)
+- **PRE**: The structured build request has been received and
+  validated. The composer configuration has been interpreted. The
+  atom-set mirror information has been resolved.
+- **POST**: For each dependency descriptor:
+  (1) Eos selects a mirror (for atoms via the atom-set reference)
   or uses the URL directly (for non-atom deps).
   (2) Eos fetches the artifact.
-  (3) Eos verifies integrity against the lock entry's cryptographic
+  (3) Eos verifies integrity against the descriptor's cryptographic
   fields (`rev` for atoms, `hash` for content-hashed types, `rev`
   for git-pinned types).
   (4) Eos makes the verified artifact available to the backend
@@ -434,14 +450,16 @@ issues read-only queries.
 
 ### Concurrent Builds
 
-**[concurrent-builds]**: Multiple ion instances submitting the same
-lock file content MUST receive `BuildJob` capabilities referencing the
-same underlying build execution. Deduplication is keyed on `JobId =
-hash(plan)`, where the plan digest is computed from the lock file
-content. When a second submission matches an in-progress job, the
-daemon returns the existing `BuildJob` — no duplicate work is
-performed. Each ion instance independently attaches and detaches
-progress callbacks via its own `BuildJob` capability reference. See
+**[concurrent-builds]**: Multiple ion instances submitting build
+requests derived from the same lock file content MUST receive
+`BuildJob` capabilities referencing the same underlying build
+execution. Deduplication is keyed on `JobId = hash(plan)`, where the
+plan digest is computed from the lock file content (ensuring
+consistency regardless of which ion instance performs the translation).
+When a second submission matches an in-progress job, the daemon
+returns the existing `BuildJob` — no duplicate work is performed.
+Each ion instance independently attaches and detaches progress
+callbacks via its own `BuildJob` capability reference. See
 [eos-scheduler.md](eos-scheduler.md) for the full deduplication and
 scheduling semantics.
 `VERIFIED: unverified`
@@ -452,11 +470,13 @@ scheduling semantics.
 
 **[no-manifest-leakage]**: Eos MUST NOT read or depend on the
 `ion.toml` manifest of the root atom. All information eos needs is
-in the lock file. If eos needs data not present in the lock, that is
-a signal that the lock schema is incomplete — the fix is to extend the
-lock schema (see
-[lock-file-schema.md](lock-file-schema.md)), not to leak
-the manifest across the layer boundary.
+derived from the lock file and transmitted as structured `eos-core`
+types. If eos needs data not present in the structured build request,
+that is a signal that either the lock schema or the `eos-core`
+contract types are incomplete — the fix is to extend them (see
+[lock-file-schema.md](lock-file-schema.md) and
+[layer-boundaries.md](layer-boundaries.md)), not to leak the manifest
+across the layer boundary.
 `VERIFIED: unverified`
 
 **[no-unverified-execution]**: Eos MUST NOT evaluate, import, or
@@ -498,12 +518,13 @@ namespace convention (`prefix+suffix`) is defined in
 - **Type**: Safety
   `VERIFIED: unverified`
 
-**[idempotent-submission]**: Submitting the same lock file content to
-eos multiple times MUST be idempotent with respect to build execution.
-The `JobId = hash(plan)` deduplication ensures that repeated
-submissions from the same or different ion instances do not trigger
-redundant builds. If the build has already completed, the `BuildJob`
-capability returns the cached result immediately.
+**[idempotent-submission]**: Submitting build requests derived from
+the same lock file content to eos multiple times MUST be idempotent
+with respect to build execution. The `JobId = hash(plan)`
+deduplication ensures that repeated submissions from the same or
+different ion instances do not trigger redundant builds. If the build
+has already completed, the `BuildJob` capability returns the cached
+result immediately.
 
 - **Type**: Safety
   `VERIFIED: unverified`
@@ -520,82 +541,90 @@ not overwhelm a slow client.
 
 ---
 
-## Lock File as Protocol Message
+## Lock File as Build Request
 
-The lock file content is the serialized contract between ion and eos.
-Ion produces it; eos consumes it. The lock file schema is defined
-normatively in [lock-file-schema.md](lock-file-schema.md). This
-section describes how the lock content is transmitted over the Cap'n
-Proto protocol.
+The lock file is the information-complete, human-readable artifact
+that ion produces on disk. However, the lock file format is ion's
+concern (see [layer-boundaries.md §4.2](layer-boundaries.md)). Ion
+parses the lock file and translates its contents into structured
+`eos-core` types before transmitting them over the Cap'n Proto
+protocol. Eos receives structured build request types, not raw TOML.
 
 ### Serialization
 
-Ion MUST serialize the complete lock file content — `version`,
+Ion MUST translate the complete lock file content — `version`,
 `[sets]`, `[compose]` (including `[compose.args]`), and `[[deps]]` —
-into the Cap'n Proto `submitBuild` invocation. The `planDigest`
-parameter carries the BLAKE3 digest of the serialized lock content,
-which serves as the `JobId` for deduplication. The `evalArgs` parameter
-carries the `[compose.args]` key-value pairs as a `List(KeyValue)`.
+into structured `eos-core` dependency descriptors and composer
+configuration, then serialize those types into the Cap'n Proto
+`submitBuild` invocation. The `planDigest` parameter carries the
+BLAKE3 digest of the lock file content (ensuring deduplication
+consistency with the on-disk artifact). The remaining parameters
+carry the structured dependency and composer data.
 
-> **Note:** The full lock file content is not re-serialized into a
-> monolithic Cap'n Proto struct. Instead, the `planDigest` acts as a
-> content-addressed reference. The daemon receives the lock content
-> through a separate mechanism (direct file read in v1, streamed
-> upload in vN). The `submitBuild` RPC signals intent; the daemon
-> resolves the referenced plan content.
+### Required Build Request Content
 
-### Required Lock Sections
+For a `submitBuild` invocation to succeed, the build request MUST
+include the translated equivalents of all lock file sections:
 
-For a `submitBuild` invocation to succeed, the lock content MUST
-include:
-
-| Section     | Requirement                                                             | Reference                                                       |
-| :---------- | :---------------------------------------------------------------------- | :-------------------------------------------------------------- |
-| `version`   | MUST be `0` (current schema version)                                    | [lock-file-schema.md §lock-version-field](lock-file-schema.md)  |
-| `[sets]`    | MUST include entries for all anchors referenced by `type = "atom"` deps | [lock-file-schema.md §lock-set-referenced](lock-file-schema.md) |
-| `[compose]` | MUST be present; determines evaluation strategy                         | [lock-file-schema.md §[compose]](lock-file-schema.md)           |
-| `[[deps]]`  | MUST contain all transitive dependencies                                | [lock-file-schema.md §[[deps]]](lock-file-schema.md)            |
+| Information            | Requirement                                                  | Lock file source | Reference                                                       |
+| :--------------------- | :----------------------------------------------------------- | :--------------- | :-------------------------------------------------------------- |
+| Schema version         | MUST be `0` (current schema version)                         | `version`        | [lock-file-schema.md §lock-version-field](lock-file-schema.md)  |
+| Atom-set mirrors       | MUST include entries for all anchors referenced by atom deps | `[sets]`         | [lock-file-schema.md §lock-set-referenced](lock-file-schema.md) |
+| Composer config        | MUST be present; determines evaluation strategy              | `[compose]`      | [lock-file-schema.md §[compose]](lock-file-schema.md)           |
+| Dependency descriptors | MUST describe all transitive dependencies                    | `[[deps]]`       | [lock-file-schema.md §[[deps]]](lock-file-schema.md)            |
 
 ### Structural Validation
 
-Before beginning fetch-verify-build, eos MUST validate:
+Before beginning fetch-verify-build, eos MUST validate the
+structured build request:
 
-1. **Closure integrity**: All atom-ids in `requires` arrays, `owner`
-   fields, and `[compose].use` resolve to exactly one `type = "atom"`
-   entry in `[[deps]]` (per `lock-requires-closure`,
-   `lock-owner-closure`, `lock-compose-closure` in
+1. **Closure integrity**: All atom-ids in dependency requirement
+   lists, owner fields, and the composer reference resolve to
+   exactly one atom-type dependency descriptor (per
+   `lock-requires-closure`, `lock-owner-closure`,
+   `lock-compose-closure` in
    [lock-file-schema.md](lock-file-schema.md)).
-2. **Set reference integrity**: All `set` fields on `type = "atom"`
-   entries match a key in `[sets]` (per `lock-set-referenced`).
-3. **DAG acyclicity**: The `requires` graph is a directed acyclic
-   graph (per `lock-dag-acyclicity`).
-4. **Type recognition**: All `type` tags are recognized by at least
-   one available backend (per `[capability-mismatch-handling]`).
+2. **Set reference integrity**: All atom-set references on atom-type
+   descriptors match a provided atom-set entry (per
+   `lock-set-referenced`).
+3. **DAG acyclicity**: The dependency requirement graph is a directed
+   acyclic graph (per `lock-dag-acyclicity`).
+4. **Type recognition**: All dependency type tags are recognized by
+   at least one available backend (per
+   `[capability-mismatch-handling]`).
 
 Validation failures MUST abort the build with structured errors per
 `[error-reporting-format]`.
+
+> [!NOTE]
+> Ion SHOULD perform these same validations during lock file parsing
+> (in `ion-lock`) as a fail-fast measure. Eos performs them
+> redundantly because the daemon is a trust boundary — it cannot
+> assume ion's validations were correct.
 
 ---
 
 ## Compose.args Flow
 
-The `[compose.args]` table flows from the lock file through the
-protocol to the backend evaluator:
+The `[compose.args]` table flows from the manifest through the lock
+file and protocol to the backend evaluator:
 
 ```
-ion.toml              atom.lock             EosDaemon.submitBuild()     EvalRequest
-─────────             ─────────             ───────────────────────     ───────────
-[compose]             [compose.args]        evalArgs: List(KeyValue)    eval_args: Vec<(String,String)>
-  args.system =  ──▸  system = "x86_64" ──▸ {key:"system",           ──▸ [("system","x86_64-linux")]
-  "x86_64-linux"                             value:"x86_64-linux"}
+ion.toml              atom.lock             ion-eos (bridge)            EosDaemon.submitBuild()     EvalRequest
+─────────             ─────────             ────────────────            ───────────────────────     ───────────
+[compose]             [compose.args]        ComposerConfig +            evalArgs: List(KeyValue)    eval_args: Vec<(String,String)>
+  args.system =  ──▸  system = "x86_64" ──▸ eval_args translation  ──▸ {key:"system",           ──▸ [("system","x86_64-linux")]
+  "x86_64-linux"                                                       value:"x86_64-linux"}
 ```
 
 1. Ion resolves `[compose.args]` from the manifest and writes it into
    the lock file as a TOML sub-table.
-2. Ion serializes the args as `List(KeyValue)` in the Cap'n Proto
-   `submitBuild` invocation.
-3. Eos extracts the args and populates `EvalRequest.eval_args`.
-4. The backend evaluator receives the args verbatim and applies them
+2. `ion-eos` parses the lock file (via `ion-lock`) and extracts the
+   args into structured types.
+3. `ion-eos` serializes the args as `List(KeyValue)` in the Cap'n
+   Proto `submitBuild` invocation.
+4. Eos populates `EvalRequest.eval_args` from the received data.
+5. The backend evaluator receives the args verbatim and applies them
    to the evaluation context (e.g., as Nix attrset overlays).
 
 At no point does eos interpret, validate, or transform the argument
