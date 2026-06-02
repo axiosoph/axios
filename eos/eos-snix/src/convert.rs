@@ -48,3 +48,18 @@ pub fn nix_to_store_path(path: NixStorePath<String>) -> StorePath {
 pub fn nix_ref_to_store_path(path: &NixStorePath<String>) -> StorePath {
     StorePath(path.to_absolute_path())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_digest_conversion_roundtrip() {
+        bolero::check!().with_type::<[u8; 32]>().for_each(|&bytes| {
+            let digest = Blake3Digest(bytes);
+            let b3 = blake3_to_b3(digest.clone());
+            let back = b3_to_blake3(b3).unwrap();
+            assert_eq!(back, digest);
+        });
+    }
+}
