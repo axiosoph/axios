@@ -1,0 +1,13 @@
+[package]
+description = "A valid package"
+label       = "my_package"
+version     = "1.0.0"
+
+[package.sets.main]
+mirrors = ["https://example.com/mirror"]
+
+[compose]
+entry = "default.nix"
+
+[deps.from.main]
+dependency_a = "2.0.0"
