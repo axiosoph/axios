@@ -247,9 +247,12 @@ pub enum EvalTargetDto {
 }
 
 /// Serializable Data Transfer Object for `ResolvedInput`.
+///
+/// The digest is serialized as a lowercase hex string for JSON
+/// readability and interoperability.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ResolvedInputDto {
-    pub digest: [u8; 32],
+    pub digest: String,
     pub store_path: String,
 }
 
@@ -317,8 +320,9 @@ impl From<EvalTargetDto> for EvalTarget {
 
 impl From<ResolvedInput<Blake3Digest>> for ResolvedInputDto {
     fn from(input: ResolvedInput<Blake3Digest>) -> Self {
+        let hex_digest: String = input.digest.0.iter().map(|b| format!("{b:02x}")).collect();
         ResolvedInputDto {
-            digest: input.digest.0,
+            digest: hex_digest,
             store_path: input.store_path.0,
         }
     }
@@ -326,8 +330,15 @@ impl From<ResolvedInput<Blake3Digest>> for ResolvedInputDto {
 
 impl From<ResolvedInputDto> for ResolvedInput<Blake3Digest> {
     fn from(dto: ResolvedInputDto) -> Self {
+        let mut bytes = [0u8; 32];
+        for (i, chunk) in dto.digest.as_bytes().chunks(2).enumerate() {
+            if i < 32 {
+                bytes[i] =
+                    u8::from_str_radix(std::str::from_utf8(chunk).unwrap_or("00"), 16).unwrap_or(0);
+            }
+        }
         ResolvedInput {
-            digest: Blake3Digest(dto.digest),
+            digest: Blake3Digest(bytes),
             store_path: eos_core::store::StorePath(dto.store_path),
         }
     }
