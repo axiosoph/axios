@@ -103,9 +103,16 @@ impl GitStore {
 
     /// Evict (delete) a version ref from the store.
     ///
-    /// Implements [store-claim-cleanup] by removing the version ref.
+    /// Implements `[store-claim-cleanup]` by removing the version ref.
     /// If no other version refs remain under `refs/atom/d/{claim_czd}/`,
     /// also deletes the corresponding `refs/atom/claims/d/{claim_czd}` ref.
+    ///
+    /// # Concurrency
+    ///
+    /// Steps 1 (delete version) and 2 (scan siblings) are not atomic.
+    /// Concurrent eviction of the last two versions under the same claim
+    /// could leave an orphan claim ref. Callers must serialize evictions
+    /// per claim, or a periodic GC pass should sweep orphaned claims.
     pub fn evict_version(&self, claim_czd_hex: &str, version: &str) -> Result<(), GitError> {
         let repo = &self.source.repo;
         let version_ref_name = format!("refs/atom/d/{}/{}", claim_czd_hex, version);

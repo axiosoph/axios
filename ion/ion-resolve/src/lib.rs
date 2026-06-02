@@ -1,7 +1,8 @@
-//! Dependency resolution for the ion frontend.
+//! Dependency resolution utilities for the ion frontend.
 //!
-//! SAT-based resolver producing a unified lock file covering
-//! both atom dependencies and direct nix sources.
+//! Provides semver constraint matching and version comparison helpers.
+//! A full SAT-based resolver and lock file generator are planned but
+//! not yet implemented.
 
 use semver::{Version, VersionReq};
 
