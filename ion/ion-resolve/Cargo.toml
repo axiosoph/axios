@@ -6,3 +6,4 @@ version = "0.1.0"
 [dependencies]
 atom-core    = { path = "../../atom/atom-core" }
 ion-manifest = { path = "../ion-manifest" }
+semver       = "1.0"
