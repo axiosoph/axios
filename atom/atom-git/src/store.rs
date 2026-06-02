@@ -236,8 +236,10 @@ impl AtomStore for GitStore {
                             ));
                         }
 
-                        let claim_oid =
-                            ObjectId::from_bytes_or_panic(publish_payload.claim.as_bytes());
+                        let claim_oid = ObjectId::try_from(publish_payload.claim.as_bytes())
+                            .map_err(|e| {
+                                GitError::Validation(format!("Invalid claim OID: {}", e))
+                            })?;
                         let claim_czd_hex = claim_oid.to_hex().to_string();
 
                         // Look up the version reference in the source repository to find the
@@ -270,7 +272,9 @@ impl AtomStore for GitStore {
                         copy_claim_chain(source_repo, dest_repo, claim_oid)?;
 
                         // Verify atom commit tree hash matches payload dig (Step 1)
-                        let atom_commit_oid = ObjectId::from_bytes_or_panic(dig);
+                        let atom_commit_oid = ObjectId::try_from(dig).map_err(|e| {
+                            GitError::Validation(format!("Invalid atom commit OID: {}", e))
+                        })?;
                         let commit_obj = dest_repo.find_object(atom_commit_oid)?;
                         let commit = commit_obj.try_into_commit()?;
                         let tree_oid = commit.tree_id()?.detach();
@@ -324,7 +328,9 @@ impl AtomStore for GitStore {
                         dest_repo.edit_references(edits)?;
                     } else {
                         // Ingestion of an unsigned dev version
-                        let commit_oid = ObjectId::from_bytes_or_panic(dig);
+                        let commit_oid = ObjectId::try_from(dig).map_err(|e| {
+                            GitError::Validation(format!("Invalid commit OID: {}", e))
+                        })?;
                         copy_object(source_repo, dest_repo, commit_oid)?;
 
                         let commit_obj = dest_repo.find_object(commit_oid)?;

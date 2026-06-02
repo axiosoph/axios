@@ -198,7 +198,8 @@ impl AtomRegistry for GitRegistry {
             .ok_or_else(|| GitError::NoActiveClaim(id.label().to_string()))?;
         let claim_oid = claim_ref.id().detach();
 
-        let expected_claim_oid = ObjectId::from_bytes_or_panic(claim.as_bytes());
+        let expected_claim_oid = ObjectId::try_from(claim.as_bytes())
+            .map_err(|e| GitError::Validation(format!("Invalid claim object ID: {}", e)))?;
         if claim_oid != expected_claim_oid {
             return Err(GitError::Validation(format!(
                 "Active claim mismatch: active is {} but expected {}",
@@ -232,8 +233,10 @@ impl AtomRegistry for GitRegistry {
         )?;
 
         // 3. Verify temporal vector (publish src must be a descendant of claim src)
-        let publish_src_oid = ObjectId::from_bytes_or_panic(src);
-        let claim_src_oid = ObjectId::from_bytes_or_panic(&claim_payload.src);
+        let publish_src_oid = ObjectId::try_from(src)
+            .map_err(|e| GitError::Validation(format!("Invalid publish source OID: {}", e)))?;
+        let claim_src_oid = ObjectId::try_from(claim_payload.src.as_slice())
+            .map_err(|e| GitError::Validation(format!("Invalid claim source OID: {}", e)))?;
 
         if !crate::gix_util::is_descendant(repo, publish_src_oid, claim_src_oid)? {
             return Err(GitError::InvalidTemporalVector {
@@ -243,7 +246,8 @@ impl AtomRegistry for GitRegistry {
         }
 
         // 4. Create the deterministic, parentless atom commit
-        let tree_oid = ObjectId::from_bytes_or_panic(dig);
+        let tree_oid = ObjectId::try_from(dig)
+            .map_err(|e| GitError::Validation(format!("Invalid tree OID: {}", e)))?;
         let atom_commit_oid =
             crate::gix_util::write_deterministic_commit(repo, tree_oid, publish_src_oid)?;
 
