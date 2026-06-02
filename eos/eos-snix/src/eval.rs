@@ -362,6 +362,44 @@ impl EvalRequestDto {
         req
     }
 }
+/// Constructs the common CLI arguments passed to the `--eval-worker` subprocess.
+fn build_worker_args(config: &crate::SandboxedEvalConfig) -> Vec<String> {
+    vec![
+        "--eval-worker".to_string(),
+        "--blob-service-addr".to_string(),
+        config.blob_service_addr.clone(),
+        "--directory-service-addr".to_string(),
+        config.directory_service_addr.clone(),
+        "--path-info-service-addr".to_string(),
+        config.path_info_service_addr.clone(),
+    ]
+}
+
+/// Parses the worker subprocess output into a `Derivation`.
+///
+/// Returns an error if the process exited with a non-zero status or
+/// if the stdout bytes are not valid ATerm.
+fn parse_worker_output(
+    output: std::process::Output,
+    expression_debug: &str,
+) -> Result<Derivation, SnixError> {
+    if !output.status.success() {
+        let stderr_str = String::from_utf8_lossy(&output.stderr).into_owned();
+        return Err(SnixError::EvalFailed {
+            expression: expression_debug.to_string(),
+            source: Box::new(std::io::Error::other(format!(
+                "sandboxed evaluation failed: {}",
+                stderr_str
+            ))),
+        });
+    }
+
+    Derivation::from_aterm_bytes(&output.stdout).map_err(|e| SnixError::ConversionError {
+        from: "ATerm",
+        to: "Derivation",
+        detail: format!("{:?}", e),
+    })
+}
 
 /// Executes evaluation inside a platform-specific restricted sandbox.
 ///
@@ -378,6 +416,7 @@ pub async fn evaluate_sandboxed(
         to: "JSON",
         detail: e.to_string(),
     })?;
+    let expression_debug = format!("{:?}", dto.expression);
 
     #[cfg(target_os = "linux")]
     {
@@ -474,17 +513,12 @@ pub async fn evaluate_sandboxed(
             args.push(parent.to_string_lossy().into_owned());
         }
 
+        let worker_args = build_worker_args(config);
         let mut child = tokio::process::Command::new("bwrap")
             .args(&args)
             .arg("--")
             .arg(&exe_path)
-            .arg("--eval-worker")
-            .arg("--blob-service-addr")
-            .arg(&config.blob_service_addr)
-            .arg("--directory-service-addr")
-            .arg(&config.directory_service_addr)
-            .arg("--path-info-service-addr")
-            .arg(&config.path_info_service_addr)
+            .args(&worker_args)
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
@@ -494,7 +528,9 @@ pub async fn evaluate_sandboxed(
                 source: Box::new(e),
             })?;
 
-        // Write input DTO to stdin
+        // Write the serialized request to the worker's stdin, then
+        // close the pipe explicitly so the worker sees EOF and begins
+        // processing.
         use tokio::io::AsyncWriteExt;
         if let Some(mut stdin) = child.stdin.take() {
             stdin
@@ -508,6 +544,8 @@ pub async fn evaluate_sandboxed(
                 platform: "linux bwrap stdin flush",
                 source: Box::new(e),
             })?;
+            // Explicit drop signals EOF to the worker subprocess.
+            drop(stdin);
         }
 
         let output = child
@@ -518,140 +556,92 @@ pub async fn evaluate_sandboxed(
                 source: Box::new(e),
             })?;
 
-        if !output.status.success() {
-            let stderr_str = String::from_utf8_lossy(&output.stderr).into_owned();
-            return Err(SnixError::EvalFailed {
-                expression: format!("{:?}", dto.expression),
-                source: Box::new(std::io::Error::other(format!(
-                    "sandboxed evaluation failed: {}",
-                    stderr_str
-                ))),
-            });
-        }
-
-        let derivation = Derivation::from_aterm_bytes(&output.stdout).map_err(|e| {
-            SnixError::ConversionError {
-                from: "ATerm",
-                to: "Derivation",
-                detail: format!("{:?}", e),
-            }
-        })?;
-
-        Ok(derivation)
+        parse_worker_output(output, &expression_debug)
     }
 
     #[cfg(target_os = "macos")]
     {
-        // birdcage macOS sandboxing
         let exe_path = config.resolve_worker_bin()?;
-
         let workspace_dir = config.workspace_dir.clone();
         let blob_service_addr = config.blob_service_addr.clone();
         let directory_service_addr = config.directory_service_addr.clone();
         let path_info_service_addr = config.path_info_service_addr.clone();
+        let worker_args = build_worker_args(config);
 
-        // Run synchronously in spawn_blocking
-        let derivation_res =
-            tokio::task::spawn_blocking(move || -> Result<Derivation, SnixError> {
-                use std::io::Write;
-                use std::process::{Command, Stdio};
+        tokio::task::spawn_blocking(move || -> Result<Derivation, SnixError> {
+            use std::io::Write;
+            use std::process::{Command, Stdio};
 
-                use birdcage::{Birdcage, Exception, Sandbox};
+            use birdcage::{Birdcage, Exception, Sandbox};
 
-                let mut sandbox = Birdcage::new();
-                sandbox
-                    .add_exception(Exception::Environment("PATH".into()))
-                    .map_err(|e| SnixError::SandboxError {
-                        platform: "macos birdcage",
-                        source: Box::new(e),
-                    })?;
-                sandbox
-                    .add_exception(Exception::ExecuteAndRead(exe_path.clone()))
-                    .map_err(|e| SnixError::SandboxError {
-                        platform: "macos birdcage",
-                        source: Box::new(e),
-                    })?;
-                sandbox
-                    .add_exception(Exception::Read(workspace_dir))
-                    .map_err(|e| SnixError::SandboxError {
-                        platform: "macos birdcage",
-                        source: Box::new(e),
-                    })?;
-
-                // Bind DB paths
-                for addr in &[
-                    &blob_service_addr,
-                    &directory_service_addr,
-                    &path_info_service_addr,
-                ] {
-                    if let Some(path) = extract_path_from_addr(addr) {
-                        sandbox
-                            .add_exception(Exception::WriteAndRead(path))
-                            .map_err(|e| SnixError::SandboxError {
-                                platform: "macos birdcage",
-                                source: Box::new(e),
-                            })?;
-                    }
-                }
-
-                let mut cmd = Command::new(&exe_path);
-                cmd.arg("--eval-worker")
-                    .arg("--blob-service-addr")
-                    .arg(&blob_service_addr)
-                    .arg("--directory-service-addr")
-                    .arg(&directory_service_addr)
-                    .arg("--path-info-service-addr")
-                    .arg(&path_info_service_addr)
-                    .stdin(Stdio::piped())
-                    .stdout(Stdio::piped())
-                    .stderr(Stdio::piped());
-
-                let mut child = sandbox.spawn(cmd).map_err(|e| SnixError::SandboxError {
-                    platform: "macos birdcage spawn",
+            let mut sandbox = Birdcage::new();
+            sandbox
+                .add_exception(Exception::Environment("PATH".into()))
+                .map_err(|e| SnixError::SandboxError {
+                    platform: "macos birdcage",
+                    source: Box::new(e),
+                })?;
+            sandbox
+                .add_exception(Exception::ExecuteAndRead(exe_path.clone()))
+                .map_err(|e| SnixError::SandboxError {
+                    platform: "macos birdcage",
+                    source: Box::new(e),
+                })?;
+            sandbox
+                .add_exception(Exception::Read(workspace_dir))
+                .map_err(|e| SnixError::SandboxError {
+                    platform: "macos birdcage",
                     source: Box::new(e),
                 })?;
 
-                if let Some(mut stdin) = child.stdin.take() {
-                    stdin
-                        .write_all(&req_bytes)
+            for addr in &[
+                &blob_service_addr,
+                &directory_service_addr,
+                &path_info_service_addr,
+            ] {
+                if let Some(path) = extract_path_from_addr(addr) {
+                    sandbox
+                        .add_exception(Exception::WriteAndRead(path))
                         .map_err(|e| SnixError::SandboxError {
-                            platform: "macos birdcage stdin",
+                            platform: "macos birdcage",
                             source: Box::new(e),
                         })?;
                 }
+            }
 
-                let output = child
-                    .wait_with_output()
+            let mut cmd = Command::new(&exe_path);
+            cmd.args(&worker_args)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
+
+            let mut child = sandbox.spawn(cmd).map_err(|e| SnixError::SandboxError {
+                platform: "macos birdcage spawn",
+                source: Box::new(e),
+            })?;
+
+            // Write request then close stdin to signal EOF.
+            if let Some(mut stdin) = child.stdin.take() {
+                stdin
+                    .write_all(&req_bytes)
                     .map_err(|e| SnixError::SandboxError {
-                        platform: "macos birdcage wait",
+                        platform: "macos birdcage stdin",
                         source: Box::new(e),
                     })?;
+                drop(stdin);
+            }
 
-                if !output.status.success() {
-                    let stderr_str = String::from_utf8_lossy(&output.stderr).into_owned();
-                    return Err(SnixError::EvalFailed {
-                        expression: format!("{:?}", dto.expression),
-                        source: Box::new(std::io::Error::other(format!(
-                            "sandboxed evaluation failed: {}",
-                            stderr_str
-                        ))),
-                    });
-                }
-
-                let derivation = Derivation::from_aterm_bytes(&output.stdout).map_err(|e| {
-                    SnixError::ConversionError {
-                        from: "ATerm",
-                        to: "Derivation",
-                        detail: format!("{:?}", e),
-                    }
+            let output = child
+                .wait_with_output()
+                .map_err(|e| SnixError::SandboxError {
+                    platform: "macos birdcage wait",
+                    source: Box::new(e),
                 })?;
 
-                Ok(derivation)
-            })
-            .await
-            .map_err(|_| SnixError::EvalThreadPanic)?;
-
-        derivation_res
+            parse_worker_output(output, &expression_debug)
+        })
+        .await
+        .map_err(|_| SnixError::EvalThreadPanic)?
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
