@@ -12,11 +12,11 @@ eos-core     = { path = "../eos-core" }
 eos-snix     = { path = "../eos-snix" }
 futures      = "0.3"
 hex          = "0.4"
-nix-compat   = { path = "/var/home/nrd/git/git.snix.dev/snix/snix/snix/nix-compat" }
+nix-compat   = { git = "https://github.com/nrdxp/snix.git", branch = "eos-patches" }
 serde        = { version = "1", features = ["derive"] }
 sha2         = "0.10"
-snix-castore = { path = "/var/home/nrd/git/git.snix.dev/snix/snix/snix/castore" }
-snix-store   = { path = "/var/home/nrd/git/git.snix.dev/snix/snix/snix/store" }
+snix-castore = { git = "https://github.com/nrdxp/snix.git", branch = "eos-patches" }
+snix-store   = { git = "https://github.com/nrdxp/snix.git", branch = "eos-patches" }
 thiserror    = "2"
 tokio        = { version = "1", features = ["sync", "rt", "macros", "process"] }
 toml         = "0.8"

@@ -4,25 +4,25 @@ name    = "eos-snix"
 version = "0.1.0"
 
 [dependencies]
-atom-id   = { path = "../../atom/atom-id" }
-eos-core  = { path = "../eos-core" }
+atom-id  = { path = "../../atom/atom-id" }
+eos-core = { path = "../eos-core" }
 # Snix crates — path deps to local checkout
 blake3       = "1"
 bstr         = "1"
 bytes        = "1"
 clap         = { version = "4", features = ["derive"] }
 futures      = "0.3"
-nix-compat   = { path = "/var/home/nrd/git/git.snix.dev/snix/snix/snix/nix-compat" }
+nix-compat   = { git = "https://github.com/nrdxp/snix.git", branch = "eos-patches" }
+redb         = "4.1.0"
 rustc-hash   = "2"
 serde        = { version = "1", features = ["derive"] }
 serde_json   = "1"
 smol_str     = "0.2"
-snix-build   = { path = "/var/home/nrd/git/git.snix.dev/snix/snix/snix/build" }
-snix-castore = { path = "/var/home/nrd/git/git.snix.dev/snix/snix/snix/castore" }
-snix-eval    = { path = "/var/home/nrd/git/git.snix.dev/snix/snix/snix/eval" }
-snix-glue    = { path = "/var/home/nrd/git/git.snix.dev/snix/snix/snix/glue" }
-snix-store   = { path = "/var/home/nrd/git/git.snix.dev/snix/snix/snix/store" }
-redb         = "4.1.0"
+snix-build   = { git = "https://github.com/nrdxp/snix.git", branch = "eos-patches" }
+snix-castore = { git = "https://github.com/nrdxp/snix.git", branch = "eos-patches" }
+snix-eval    = { git = "https://github.com/nrdxp/snix.git", branch = "eos-patches" }
+snix-glue    = { git = "https://github.com/nrdxp/snix.git", branch = "eos-patches" }
+snix-store   = { git = "https://github.com/nrdxp/snix.git", branch = "eos-patches" }
 thiserror    = "2"
 tokio        = { version = "1", features = ["rt-multi-thread", "sync", "macros"] }
 tokio-util   = { version = "0.7", features = ["io"] }
