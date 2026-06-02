@@ -123,19 +123,32 @@ pub async fn run_orchestrated_build(
                 .parse::<AtomId>()
                 .map_err(|e| format!("Invalid atom ID in compose.use: {}", e))?;
 
-            // Retrieve the composer atom resolved path from inputs
-            let composer_input = resolved_inputs
-                .values()
-                .find(|_i| {
-                    // Match the composer_atom_id digest.
-                    // The digest represents the base32-encoded hash.
-                    // Let's check against both the digest string and the atom-id display
-                    // representation.
-                    true // Since we validated composer_atom_id exists in validation step, we can just find it
+            // Find the lock file dep whose atom ID matches the composer
+            let composer_label = lock_file
+                .deps
+                .iter()
+                .filter_map(|dep| {
+                    if let crate::lock::Dependency::Atom(atom_dep) = dep {
+                        if atom_dep.id == composer_atom_id {
+                            return Some(atom_dep.label.as_str());
+                        }
+                    }
+                    None
                 })
+                .next()
                 .ok_or_else(|| {
-                    format!("Composer atom {} input was not resolved", composer_atom_id)
+                    format!(
+                        "Composer atom {} not found in lock file deps",
+                        composer_atom_id
+                    )
                 })?;
+
+            let composer_input = resolved_inputs.get(composer_label).ok_or_else(|| {
+                format!(
+                    "Composer atom {} (label '{}') was not resolved",
+                    composer_atom_id, composer_label
+                )
+            })?;
 
             let at = lock_file
                 .compose
