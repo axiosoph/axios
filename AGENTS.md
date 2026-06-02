@@ -7,10 +7,12 @@ This file defines rules, constraints, and architecture context for AI agents wor
 This workspace relies on globally installed agent skills and plugins rather than custom, project-specific frameworks.
 
 > [!IMPORTANT]
-> **Heed Installed Agent Skills:** Review available globally installed agent skills and tools for task-specific and language-specific guidance before starting work:
+> **Heed Installed Agent Skills & Environments:** Review available globally installed agent skills, tools, and local development environments before starting work:
 >
 > - **Rust Development:** Look for and adhere to installed Rust coding/linting agent skills for Rust-specific idioms and patterns.
+> - **Nix Tooling:** Check if the `IN_NIX_SHELL` environment variable is set. If it is set, assume all development environment tools are already available and do not redundantly invoke `nix-shell`.
 > - **Git Workflows & Commits:** Check for workflow-specific agent skills. Automated commits are permitted and encouraged _only if_ they strictly adhere to the instructions of an installed commit hygiene agent skill. If no such skill is available, do not perform automated commits.
+> - **Formatting & treefmt:** Before any commit, format the workspace using `treefmt` to keep the codebase clean intra-commit.
 > - Balance global tooling with project constraints: Heed installed agent skills for general workflows and language conventions, but always prioritize this monorepo's architectural layers, terminology constraints, and local invariants. Do not ignore your tooling, but ensure its application aligns with the project context.
 
 ---
@@ -97,7 +99,7 @@ Each workspace is independent — run commands from the workspace root:
 | :----- | :------------------------------------------- |
 | Check  | `cargo check` (from `atom/`, `eos/`, `ion/`) |
 | Test   | `cargo test` (from workspace root)           |
-| Format | `cargo fmt` (from workspace root)            |
+| Format | `treefmt` (from workspace root)              |
 | Lint   | `cargo clippy` (from workspace root)         |
 
 ---
@@ -155,7 +157,7 @@ Each workspace is independent — run commands from the workspace root:
 - **Halt on Ambiguity:** Never rationalize an assumption. Stop and ask.
 - **Verification Required:** Every plan step must be verified.
 - **Commit Boundaries:** Pause and justify before every commit point.
-- **Commit Hygiene:** Automated commits are permitted _only_ when adhering precisely to the instructions of an installed commit hygiene agent skill. If no such skill is installed or available in your toolset, automated commits are strictly prohibited and you must default to manual commits or consult the user.
+- **Commit Hygiene:** Automated commits are permitted _only_ when adhering precisely to the instructions of an installed commit hygiene agent skill. If no such skill is installed or available in your toolset, automated commits are strictly prohibited and you must default to manual commits or consult the user. Additionally, you must run `treefmt` before committing.
 - **Terminology Compliance:** Use only canonical terms from the glossary above.
 
 ---
