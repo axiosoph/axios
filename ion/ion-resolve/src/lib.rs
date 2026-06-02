@@ -66,3 +66,66 @@ mod tests {
         assert!(compare_versions("1.2.3", "invalid").is_err());
     }
 }
+
+#[cfg(test)]
+mod proptests {
+    use super::*;
+
+    #[test]
+    fn test_matches_constraint_no_panic() {
+        bolero::check!()
+            .with_type::<(String, String)>()
+            .for_each(|(v_str, c_str)| {
+                let _ = matches_constraint(v_str, c_str);
+            });
+    }
+
+    #[test]
+    fn test_compare_versions_no_panic() {
+        bolero::check!()
+            .with_type::<(String, String)>()
+            .for_each(|(v1, v2)| {
+                let _ = compare_versions(v1, v2);
+            });
+    }
+
+    #[test]
+    fn test_compare_versions_antisymmetry() {
+        bolero::check!()
+            .with_type::<((u32, u32, u32), (u32, u32, u32))>()
+            .for_each(|(v1_tup, v2_tup)| {
+                let v1 = format!("{}.{}.{}", v1_tup.0, v1_tup.1, v1_tup.2);
+                let v2 = format!("{}.{}.{}", v2_tup.0, v2_tup.1, v2_tup.2);
+
+                let cmp1 = compare_versions(&v1, &v2).unwrap();
+                let cmp2 = compare_versions(&v2, &v1).unwrap();
+
+                assert_eq!(cmp1, cmp2.reverse());
+            });
+    }
+
+    #[test]
+    fn test_compare_versions_transitivity() {
+        bolero::check!()
+            .with_type::<((u32, u32, u32), (u32, u32, u32), (u32, u32, u32))>()
+            .for_each(|(v1_tup, v2_tup, v3_tup)| {
+                let v1 = format!("{}.{}.{}", v1_tup.0, v1_tup.1, v1_tup.2);
+                let v2 = format!("{}.{}.{}", v2_tup.0, v2_tup.1, v2_tup.2);
+                let v3 = format!("{}.{}.{}", v3_tup.0, v3_tup.1, v3_tup.2);
+
+                let cmp12 = compare_versions(&v1, &v2).unwrap();
+                let cmp23 = compare_versions(&v2, &v3).unwrap();
+                let cmp13 = compare_versions(&v1, &v3).unwrap();
+
+                if cmp12 == std::cmp::Ordering::Less && cmp23 == std::cmp::Ordering::Less {
+                    assert_eq!(cmp13, std::cmp::Ordering::Less);
+                } else if cmp12 == std::cmp::Ordering::Greater
+                    && cmp23 == std::cmp::Ordering::Greater
+                {
+                    assert_eq!(cmp13, std::cmp::Ordering::Greater);
+                } else if cmp12 == std::cmp::Ordering::Equal && cmp23 == std::cmp::Ordering::Equal {
+                    assert_eq!(cmp13, std::cmp::Ordering::Equal);
+                }
+            });
+    }
+}
