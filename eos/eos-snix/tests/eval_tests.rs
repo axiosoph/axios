@@ -47,8 +47,14 @@ async fn test_snix_engine_evaluate() {
 
 #[tokio::test]
 async fn test_snix_engine_evaluate_sandboxed() {
+    let is_ci = std::env::var("CI").is_ok();
+
     // 1. Gate on Linux + bwrap availability
     if !cfg!(target_os = "linux") {
+        if is_ci {
+            panic!("Sandboxed tests must run on Linux under CI");
+        }
+        eprintln!("Skipping sandboxed test: not on Linux");
         return;
     }
     if std::process::Command::new("bwrap")
@@ -56,6 +62,10 @@ async fn test_snix_engine_evaluate_sandboxed() {
         .status()
         .is_err()
     {
+        if is_ci {
+            panic!("bwrap must be installed in CI for sandboxed tests");
+        }
+        eprintln!("Skipping sandboxed test: bwrap not installed");
         return;
     }
 
@@ -67,7 +77,10 @@ async fn test_snix_engine_evaluate_sandboxed() {
         cwd.join("../../target/debug/eosd"),
     ];
     let Some(eosd_bin) = candidates.iter().find(|p| p.exists()).cloned() else {
-        // Skip if the eosd binary has not been compiled
+        if is_ci {
+            panic!("eosd worker binary must be compiled and present in CI (checked target/debug/eosd, etc.)");
+        }
+        eprintln!("Skipping sandboxed test: eosd worker binary not found");
         return;
     };
 
