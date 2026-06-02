@@ -16,6 +16,8 @@ mkShell {
     pkgs.stdenv.cc.cc.lib
   ];
   packages = [
+    protobuf
+    capnproto
     toolchain
     cargo-fuzz
   ];
