@@ -26,5 +26,6 @@ mkShell {
     shfmt
     nixfmt
     taplo
+    just
   ];
 }
