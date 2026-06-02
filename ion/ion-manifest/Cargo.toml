@@ -8,3 +8,7 @@ atom-core = { path = "../../atom/atom-core" }
 atom-id   = { path = "../../atom/atom-id" }
 serde     = { version = "1", features = ["derive"] }
 toml      = "0.8"
+
+[dev-dependencies]
+arbitrary = { version = "1", features = ["derive"] }
+bolero    = "0.11"

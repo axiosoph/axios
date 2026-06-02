@@ -1,0 +1,23 @@
+[package]
+edition = "2024"
+name    = "ion-fuzz"
+publish = false
+version = "0.0.0"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+arbitrary     = { version = "1", features = ["derive"] }
+atom-id       = { path = "../../atom/atom-id" }
+ion-manifest  = { path = "../ion-manifest" }
+libfuzzer-sys = "0.4"
+serde_json    = "1"
+toml          = "0.8"
+
+[[bin]]
+bench = false
+doc   = false
+name  = "manifest_parser"
+path  = "fuzz_targets/manifest_parser.rs"
+test  = false
