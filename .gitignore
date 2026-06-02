@@ -9,3 +9,6 @@ Cargo.lock
 # Proptest regressions
 *proptest-regressions*
 
+# Bolero fuzz artifacts
+**/__fuzz__/
+

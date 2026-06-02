@@ -1,4 +1,3 @@
 [workspace]
-exclude  = ["fuzz"]
 members  = ["ion-manifest", "ion-resolve", "ion-cli", "ion-eos"]
 resolver = "2"

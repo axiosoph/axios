@@ -706,4 +706,15 @@ mod tests {
             }
         });
     }
+
+    #[test]
+    fn test_lock_file_parse_raw_no_panic() {
+        check!().with_type::<Vec<u8>>().for_each(|bytes| {
+            if let Ok(s) = std::str::from_utf8(bytes) {
+                if let Ok(lock) = LockFile::parse(s) {
+                    let _ = lock.validate();
+                }
+            }
+        });
+    }
 }

@@ -895,3 +895,32 @@ fn tag_consecutive_dots_rejection() {
         }
     });
 }
+
+#[derive(bolero::TypeGenerator, Debug)]
+struct FuzzVerifyInput {
+    is_claim: bool,
+    alg: u8,
+    payload: Vec<u8>,
+    signature: Vec<u8>,
+    public_key: Vec<u8>,
+}
+
+#[test]
+fn test_verify_robustness_bolero() {
+    bolero::check!()
+        .with_type::<FuzzVerifyInput>()
+        .for_each(|input| {
+            let alg = match input.alg % 3 {
+                0 => "Ed25519",
+                1 => "ES256",
+                _ => "UNSUPPORTED",
+            };
+            if input.is_claim {
+                let _ =
+                    crate::verify_claim(&input.payload, &input.signature, alg, &input.public_key);
+            } else {
+                let _ =
+                    crate::verify_publish(&input.payload, &input.signature, alg, &input.public_key);
+            }
+        });
+}

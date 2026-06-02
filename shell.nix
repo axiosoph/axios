@@ -20,7 +20,7 @@ mkShell {
     protobuf
     capnproto
     toolchain
-    cargo-fuzz
+    cargo-bolero
     treefmt
     prettier
     shfmt
