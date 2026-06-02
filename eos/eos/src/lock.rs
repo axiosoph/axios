@@ -376,8 +376,10 @@ mod tests {
         let mut sets = HashMap::new();
         let mut anchors = Vec::new();
 
-        for _ in 0..num_sets {
-            let anchor_bytes = driver.arbitrary::<[u8; 20]>()?;
+        for i in 0..num_sets {
+            let mut anchor_bytes = [0u8; 20];
+            anchor_bytes[0] = driver.arbitrary::<u8>()?;
+            anchor_bytes[1] = i as u8;
             let anchor_hex = hex::encode(anchor_bytes);
 
             let tag = format!("set-{}", driver.arbitrary::<u8>()?);
@@ -436,12 +438,16 @@ mod tests {
             let is_local = set_details.mirrors.len() == 1 && set_details.mirrors[0] == "::";
             let rev = if is_local {
                 if driver.arbitrary::<bool>()? {
-                    Some(hex::encode(driver.arbitrary::<[u8; 20]>()?))
+                    let mut r = [0u8; 20];
+                    r[0] = driver.arbitrary::<u8>()?;
+                    Some(hex::encode(r))
                 } else {
                     None
                 }
             } else {
-                Some(hex::encode(driver.arbitrary::<[u8; 20]>()?))
+                let mut r = [0u8; 20];
+                r[0] = driver.arbitrary::<u8>()?;
+                Some(hex::encode(r))
             };
 
             let label_parsed = atom_id::Label::try_from(label.as_str()).unwrap();
@@ -480,7 +486,9 @@ mod tests {
         for _ in 0..num_other_deps {
             let name = format!("dep-{}", driver.arbitrary::<u8>()?);
             let url = format!("https://example.com/{}.nix", name);
-            let hash = format!("sha256:{}", hex::encode(driver.arbitrary::<[u8; 32]>()?));
+            let mut hash_bytes = [0u8; 32];
+            hash_bytes[0] = driver.arbitrary::<u8>()?;
+            let hash = format!("sha256:{}", hex::encode(hash_bytes));
             let owner = if driver.arbitrary::<bool>()? && !atom_deps.is_empty() {
                 Some(driver.choose(&atom_deps)?.id.clone())
             } else {
@@ -497,7 +505,11 @@ mod tests {
                 1 => Dependency::NixGit(NixGitDep {
                     name,
                     url,
-                    rev: hex::encode(driver.arbitrary::<[u8; 20]>()?),
+                    rev: {
+                        let mut r = [0u8; 20];
+                        r[0] = driver.arbitrary::<u8>()?;
+                        hex::encode(r)
+                    },
                     version: Some("1.0.0".to_string()),
                     owner,
                 }),
