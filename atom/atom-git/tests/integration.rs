@@ -663,6 +663,8 @@ mod proptests {
     use proptest::prelude::*;
     use tempfile::TempDir;
 
+    use super::*;
+
     proptest! {
         #[test]
         fn test_anchor_derivation_pbt(
@@ -746,6 +748,115 @@ mod proptests {
             let derived = atom_git::gix_util::derive_anchor(&repo, final_merge_oid).unwrap();
             let expected_oldest_root = roots[target_oldest_index];
             prop_assert_eq!(derived, expected_oldest_root);
+        }
+
+        #[test]
+        fn test_store_ingest_evict_pbt(
+            major_versions in prop::collection::vec(0..10u32, 1..5),
+            shuffle_seed in 0..100usize,
+        ) {
+            let dir = TempDir::new().unwrap();
+            let repo = gix::init_bare(dir.path()).unwrap();
+
+            let empty_tree_oid = repo
+                .write_object(gix::objs::Tree::empty())
+                .unwrap()
+                .detach();
+
+            let store = GitStore::new(repo);
+            let claim_czd_hex = "abcdef0123456789abcdef0123456789abcdef01";
+
+            // 1. Write claim reference refs/atom/claims/d/{claim_czd_hex}
+            let claim_ref_name = format!("refs/atom/claims/d/{}", claim_czd_hex);
+            let claim_fullname = gix::refs::FullName::try_from(claim_ref_name.as_str()).unwrap();
+            let claim_edit = gix::refs::transaction::RefEdit {
+                change: gix::refs::transaction::Change::Update {
+                    log: gix::refs::transaction::LogChange::default(),
+                    expected: gix::refs::transaction::PreviousValue::Any,
+                    new: gix::refs::Target::Object(empty_tree_oid),
+                },
+                name: claim_fullname,
+                deref: false,
+            };
+            store.source.repo.edit_reference(claim_edit).unwrap();
+
+            // Deduplicate versions
+            let mut versions = major_versions;
+            versions.sort();
+            versions.dedup();
+            let version_strs: Vec<String> = versions.iter().map(|v| format!("{}.0.0", v)).collect();
+
+            // Write version references
+            for ver_str in &version_strs {
+                let ref_name = format!("refs/atom/d/{}/{}", claim_czd_hex, ver_str);
+                let fullname = gix::refs::FullName::try_from(ref_name.as_str()).unwrap();
+                let edit = gix::refs::transaction::RefEdit {
+                    change: gix::refs::transaction::Change::Update {
+                        log: gix::refs::transaction::LogChange::default(),
+                        expected: gix::refs::transaction::PreviousValue::Any,
+                        new: gix::refs::Target::Object(empty_tree_oid),
+                    },
+                    name: fullname,
+                    deref: false,
+                };
+                store.source.repo.edit_reference(edit).unwrap();
+            }
+
+            // Verify all exist
+            for ver_str in &version_strs {
+                let ref_name = format!("refs/atom/d/{}/{}", claim_czd_hex, ver_str);
+                let has_ref = store.source.repo.try_find_reference(&ref_name)
+                    .unwrap()
+                    .is_some();
+                prop_assert!(has_ref);
+            }
+            let has_claim = store.source.repo.try_find_reference(&claim_ref_name)
+                .unwrap()
+                .is_some();
+            prop_assert!(has_claim);
+
+            // Evict them in pseudo-random order determined by shuffle_seed
+            let mut to_evict = version_strs.clone();
+            let n = to_evict.len();
+            for i in 0..n {
+                let j = (shuffle_seed + i) % n;
+                to_evict.swap(i, j);
+            }
+
+            let mut remaining = version_strs.clone();
+
+            for ver_str in to_evict {
+                store.evict_version(claim_czd_hex, &ver_str).unwrap();
+
+                // Verify this version is gone
+                let ref_name = format!("refs/atom/d/{}/{}", claim_czd_hex, ver_str);
+                let has_ver = store.source.repo.try_find_reference(&ref_name)
+                    .unwrap()
+                    .is_some();
+                prop_assert!(!has_ver);
+
+                // Remove from remaining list
+                remaining.retain(|x| x != &ver_str);
+
+                // Verify all other remaining versions still exist
+                for rem in &remaining {
+                    let rem_ref_name = format!("refs/atom/d/{}/{}", claim_czd_hex, rem);
+                    let has_rem = store.source.repo.try_find_reference(&rem_ref_name)
+                        .unwrap()
+                        .is_some();
+                    prop_assert!(has_rem);
+                }
+
+                // Verify claim reference presence matches remaining status
+                let has_claim = store.source.repo.try_find_reference(&claim_ref_name)
+                    .unwrap()
+                    .is_some();
+                if !remaining.is_empty() {
+                    prop_assert!(has_claim);
+                } else {
+                    prop_assert!(!has_claim);
+                }
+            }
         }
     }
 }
