@@ -254,6 +254,10 @@ proceeds.
 - Protocol types: `Manifest`, `VersionScheme`, `ClaimPayload`,
   `PublishPayload`
 - Storage backends: git bridge (`atom-git`), future Cyphr bridge
+- **Atom store**: content-addressed storage for atom source trees.
+  This is the sole storage interface for atom content. Consumers
+  (eos, ion) read atoms through the `AtomSource` trait and MUST
+  NOT implement their own atom fetching or storage logic.
 
 L1 MUST NOT own: manifest _formats_ (that's L3), build recipes
 (that's L2), dependency resolution (that's L3), or lock files
@@ -263,18 +267,26 @@ VERIFIED: _pending_
 
 **[boundary-L2-concerns]**: L2 (eos) owns:
 
-- Build engine trait: `BuildEngine`, `BuildPlan`, `ArtifactStore`
+- Build engine trait: `BuildEngine`, `BuildPlan`
 - Build execution: evaluation, sandboxing, plan/apply lifecycle
 - Scheduling: job queues, work-stealing, lease management
-- Store infrastructure: blob stores, directory stores, caching
+- **Artifact store**: content-addressed storage for build outputs
+  (derivations, compiled artifacts). Defined by the `ArtifactStore`
+  trait in `eos-core`. Backend: snix store (primary).
 - Build input contract: `EvalRequest`, `ResolvedInput`,
-  `ComposerConfig`, DTO types, cache key computation
+  `ComposerConfig`, `BuildRequest`, `FetchDescriptor`, cache key
+  computation
 - Daemon infrastructure: network protocol, RPC, discovery
+- Non-atom dependency fetching: Nix expressions, tarballs, git
+  sources. These are not atoms and do not flow through the atom
+  protocol.
 
 L2 MUST NOT own: manifest formats (that's L3), dependency
 resolution (that's L3), CLI interface (that's L3), identity
-primitives (that's L1), or **frontend-specific serialization
-formats** including the lock file (that's L3).
+primitives (that's L1), **atom storage or fetching** (that's L1),
+or **frontend-specific serialization formats** including the lock
+file (that's L3). Eos reads atom content through the `AtomSource`
+trait (L1) and MUST NOT implement its own atom fetching logic.
 
 VERIFIED: _pending_
 
@@ -389,6 +401,35 @@ adaptations:
 
 After lock file migration, `ion-eos` additionally depends on
 `ion-lock` to parse lock files before translation.
+
+### §4.4 — Store Separation
+
+**[boundary-store-separation]**: The atom store (L1) and the
+artifact store (L2) are architecturally distinct and MUST NOT
+be conflated.
+
+| Property            | Atom Store (L1)                        | Artifact Store (L2)                   |
+| :------------------ | :------------------------------------- | :------------------------------------ |
+| **Data**            | Atom source trees (source code)        | Build outputs (derivations, binaries) |
+| **Trait**           | `AtomSource` / `AtomStore` (atom-core) | `ArtifactStore` (eos-core)            |
+| **Addressing**      | `AtomId` / `AtomDigest`                | Plan hash / output digest             |
+| **Primary backend** | git                                    | snix store                            |
+| **Populated by**    | Ion (ingestion), eos composite source  | Eos (build outputs)                   |
+| **Read by**         | Eos (build inputs via `AtomSource`)    | Eos (cache hits), ion (build results) |
+
+A host MAY run both an atom store and an artifact store, but
+they are logically and physically separate. An implementation
+MUST NOT store atom source trees in the artifact store or build
+outputs in the atom store.
+
+The atom store is the ONLY path through which atom content enters
+the eos pipeline. Eos reads atom content through the `AtomSource`
+trait and MUST NOT implement its own atom fetching or ingestion
+logic (see `[boundary-L2-concerns]`). Verification of atom
+integrity is the atom protocol's responsibility at ingestion
+time — eos trusts atoms resolved from its `AtomSource`.
+
+VERIFIED: _pending_
 
 ---
 
@@ -517,6 +558,38 @@ After migration, the orchestrator MUST accept pre-parsed
 `eos-core` types — an `EvalRequest` (or a structured
 `BuildRequest` type in `eos-core`) rather than raw TOML.
 
+### §6.4 — Eos daemon persists lock files to disk
+
+**Violates:** `[boundary-L2-concerns]`
+
+`eos-daemon/src/scheduler.rs` reads lock file content from a
+`locks_dir` on the host filesystem (`/tmp/eos-locks/{digest}.lock`).
+`eos-daemon/src/config.rs` defines the `locks_dir` CLI argument
+and `resolve_locks_dir()` helper. This is a remnant of the
+pre-structured-request architecture where ion or an operator
+copied raw lock files into place for the daemon to consume.
+
+After the lock migration (§6.1), eos receives structured
+`BuildRequest` types via RPC — no lock file touches the eos side
+at all. The `locks_dir` configuration, `resolve_locks_dir()`
+method, and all lock file I/O in the scheduler MUST be removed.
+
+### §6.5 — Eos reimplements atom fetching
+
+**Violates:** `[boundary-L2-concerns]`, `[boundary-L1-concerns]`
+
+`eos/eos/src/fetch.rs` implements atom fetching from mirrors
+(via `curl`, `git clone`, tarball extraction) — duplicating
+functionality that belongs to the atom protocol (L1). Eos MUST
+read atom content through the `AtomSource` interface, not
+implement its own fetch-and-verify pipeline for atoms.
+
+After migration, atom dependency resolution in eos uses
+`AtomSource::resolve()` on a composite source (local store →
+registry → ion peer). Non-atom dependency fetching (Nix
+expressions, tarballs, git sources) remains in eos as those
+are not atoms and do not flow through the atom protocol.
+
 ---
 
 ## §7 — Decision Framework
@@ -570,6 +643,7 @@ apply these questions in order:
 | `[boundary-L4-concerns]`         | `VERIFIED: agent-check` | Deferred                            | Minimal constraints pending plugin maturity       |
 | `[boundary-lock-ownership]`      | `VERIFIED: agent-check` | Cargo-atom test; format vs contract | §4.2 rationale                                    |
 | `[boundary-bridge-crate]`        | `VERIFIED: agent-check` | `ion-eos` Cargo.toml verified       | Conforms                                          |
+| `[boundary-store-separation]`    | `UNVERIFIED`            | Manual audit                        | New constraint; pending implementation            |
 | `[boundary-ci-enforcement]`      | `UNVERIFIED`            | Script does not yet exist           | Pending implementation                            |
 | `[boundary-crate-metadata]`      | `UNVERIFIED`            | Metadata not yet present            | Pending implementation                            |
 | `[boundary-violation-budget]`    | `UNVERIFIED`            | File does not yet exist             | Pending implementation                            |

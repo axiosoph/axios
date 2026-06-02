@@ -104,6 +104,25 @@ provides the import/evaluation logic for the root atom. Eos treats the
 composer as opaque — it fetches and prepares the composer atom, then
 hands control to the backend evaluator.
 
+**Atom Store vs Artifact Store**: Eos interacts with two distinct
+storage systems that MUST NOT be conflated:
+
+- **Atom Store** (L1, atom protocol): Content-addressed storage for
+  atom source trees. Accessed via the `AtomSource` trait. Populated
+  by ion (ingestion from registries/local sources) and/or by eos's
+  `AtomSource` composite (on-demand registry fetch). Backend: git
+  (primary). This is NOT an eos concern — eos reads from it but does
+  not define it.
+
+- **Artifact Store** (L2, eos): Content-addressed storage for build
+  outputs (derivations, compiled artifacts). Accessed via the
+  `ArtifactStore` trait in `eos-core`. Backend: snix store (primary).
+  This IS an eos concern.
+
+These stores hold fundamentally different data types (source code vs
+build artifacts), use different addressing schemes, and are managed by
+different layers.
+
 ---
 
 ## Constraints
@@ -129,13 +148,17 @@ lock file content. The schema of the lock file is defined in
 (anchor hash referencing mirror information), `rev` (pinned git
 revision), and `id` (content-addressed atom identifier). These fields
 are transmitted as structured `eos-core` dependency descriptor types,
-not as raw lock file TOML. The `set` field provides mirror information
-via the atom-set declaration. The `rev` identifies the exact source
-tree snapshot for fetching. The `id` is the globally-unique
-cross-reference key (used by `requires`, `owner`, and the composer
-reference). These fields are sufficient for eos to: (1) locate a
-mirror, (2) fetch and verify the atom snapshot against `rev`,
-(3) identify the atom within the dependency graph via `id`. See
+not as raw lock file TOML. The `set` field references an `AtomSetInfo`
+entry in the `BuildRequest`, which the `AtomSource` composite
+implementation uses for registry mirror resolution (see
+[atom-sourcing.md §Composite AtomSource](atom-sourcing.md)) — eos
+does not directly fetch from URLs embedded in set data. The `rev`
+identifies the exact source tree snapshot. The `id` is the
+globally-unique cross-reference key (used by `requires`, `owner`, and
+the composer reference). These fields are sufficient for eos's
+`AtomSource` to: (1) resolve the atom from configured sources
+(local store, registry mirrors, ion peer fallback), (2) identify the
+atom within the dependency graph via `id`. See
 [lock-file-schema.md §type = "atom"](lock-file-schema.md) for
 the normative field definitions.
 `VERIFIED: unverified`
@@ -153,14 +176,27 @@ need to know which ion plugin produced the entry. See
 for the type namespace convention.
 `VERIFIED: unverified`
 
-**[eos-verification-obligation]**: After fetching any dependency, eos
-MUST verify the artifact's integrity against the lock entry's
-cryptographic fields before using it. For `type = "atom"` entries, eos
-verifies against `rev` (the pinned git revision). For `type = "nix"`,
-`nix+tar`, and `nix+src` entries, eos verifies against `hash` (SRI
-format). For `type = "nix+git"` entries, git's own
-content-addressing via `rev` provides integrity. Eos MUST NOT
-evaluate, import, or execute unverified artifacts. See
+**[eos-verification-obligation]**: Verification responsibilities are
+split by dependency type, reflecting each layer's integrity guarantees:
+
+- **Atom dependencies** (`type = "atom"`): Integrity verification is
+  the atom protocol's responsibility at ingestion time (see
+  [atom-transactions.md §ingest-preserves-identity](atom-transactions.md)).
+  Eos trusts atoms resolved from its `AtomSource` composite — the
+  atom protocol guarantees that nothing enters an `AtomStore`
+  unverified. Re-verification by eos is redundant and MUST NOT be
+  treated as a required step.
+
+- **Non-atom dependencies** (`type` ∈ {`nix`, `nix+tar`, `nix+src`,
+  `nix+git`}): Eos MUST verify the fetched artifact's integrity
+  against the dependency descriptor's cryptographic fields before
+  using it. For content-hashed types (`nix`, `nix+tar`, `nix+src`),
+  eos verifies against `hash` (SRI format). For git-pinned types
+  (`nix+git`), git's own content-addressing via `rev` provides
+  integrity.
+
+In both cases, eos MUST NOT evaluate, import, or execute unverified
+artifacts. See
 [lock-file-schema.md §lock-hash-integrity](lock-file-schema.md)
 for the digest invariants.
 `VERIFIED: unverified`
@@ -398,21 +434,36 @@ operations are pure queries with no side effects on daemon state.
   [eos-network-protocol.md §no-cancel-on-drop](eos-network-protocol.md)).
   `VERIFIED: unverified`
 
-**[fetch-verify-build]**: Eos processes each dependency descriptor.
+**[fetch-verify-build]**: Eos resolves and prepares all dependencies
+for evaluation.
+
+Eos resolves each atom dependency from its configured `AtomSource`
+composite (see
+[atom-sourcing.md §Composite AtomSource](atom-sourcing.md)).
+Resolution follows a priority chain: local store (cache hit), registry
+mirrors (on-demand fetch via atom protocol), and the ion peer
+(fallback for unreachable atoms). For non-atom dependencies, eos
+fetches from the URL in the dependency descriptor and verifies
+integrity per `[eos-verification-obligation]`.
+
+Atom integrity verification is the atom protocol's responsibility at
+ingestion time (see
+[atom-transactions.md §ingest-preserves-identity](atom-transactions.md)).
+Eos trusts atoms resolved from its `AtomSource` — re-verification is
+redundant since the atom protocol guarantees that nothing enters an
+`AtomStore` unverified.
 
 - **PRE**: The structured build request has been received and
-  validated. The composer configuration has been interpreted. The
-  atom-set mirror information has been resolved.
+  validated. The composer configuration has been interpreted.
 - **POST**: For each dependency descriptor:
-  (1) Eos selects a mirror (for atoms via the atom-set reference)
-  or uses the URL directly (for non-atom deps).
-  (2) Eos fetches the artifact.
-  (3) Eos verifies integrity against the descriptor's cryptographic
-  fields (`rev` for atoms, `hash` for content-hashed types, `rev`
-  for git-pinned types).
-  (4) Eos makes the verified artifact available to the backend
-  evaluator and builder.
-  Failed verification MUST abort the build per
+  (1) Atom deps: eos resolves the atom from its `AtomSource`
+  composite (local store → registry mirrors → ion peer fallback).
+  (2) Non-atom deps: eos fetches from the URL in the descriptor and
+  verifies integrity against the descriptor's cryptographic fields
+  (`hash` for content-hashed types, `rev` for git-pinned types).
+  (3) Eos makes the resolved/verified artifact available to the
+  backend evaluator and builder.
+  Failed verification of non-atom deps MUST abort the build per
   `[eos-verification-obligation]`.
   `VERIFIED: unverified`
 
@@ -445,6 +496,40 @@ issues read-only queries.
   capability remains valid for the lifetime of the underlying
   `EosDaemon` connection.
   `VERIFIED: unverified`
+
+### Content Delivery Negotiation
+
+**[content-delivery-negotiation]**: After receiving a `BuildRequest`,
+eos begins resolving atom dependencies concurrently from its
+configured `AtomSource` composite. Eos MAY encounter atoms that
+cannot be resolved from any configured source (local dev atoms,
+unreachable mirrors). For these, eos falls back to the ion peer as a
+last-resort `AtomSource`.
+
+The negotiation follows a `FindMissing` pattern (analogous to Bazel
+RE API's `FindMissingBlobs`):
+
+1. Ion submits `BuildRequest` via `submitBuild()` → receives
+   `BuildJob` capability
+2. Eos begins concurrent resolution of all atom deps from its
+   `AtomSource` composite
+3. Ion calls `BuildJob.getMissing()` — blocks until eos has attempted
+   all non-peer sources
+4. Eos returns the list of `AtomId`s it could not resolve
+5. Ion streams content for each missing atom via
+   `BuildJob.provideAtom(id, content)`
+6. Ion signals completion via `BuildJob.allProvided()`
+7. Eos ingests received atoms into its local store and begins
+   evaluation
+
+If `getMissing()` returns an empty list, steps 5–6 are skipped — all
+atoms were resolvable without ion's assistance. This is the common
+case for CI/CD and warm-cache deployments.
+
+Ion MUST NOT call `provideAtom()` for atoms not in the `getMissing()`
+response. Eos MUST reject unsolicited atom transfers.
+
+`VERIFIED: unverified`
 
 ---
 
@@ -480,11 +565,13 @@ across the layer boundary.
 `VERIFIED: unverified`
 
 **[no-unverified-execution]**: Eos MUST NOT evaluate, import, or
-execute any artifact that has not passed integrity verification
-against the lock entry's cryptographic fields. This applies to all
-dependency types: atoms (verified via `rev`), content-hashed types
-(verified via `hash`), and git-pinned types (verified via `rev`
-and git's content-addressing).
+execute any artifact that has not passed integrity verification.
+For atom dependencies, verification is the atom protocol's
+responsibility at ingestion time — eos trusts atoms resolved from its
+`AtomSource` (see `[eos-verification-obligation]`). For non-atom
+dependencies, eos MUST verify integrity against the descriptor's
+cryptographic fields: content-hashed types (verified via `hash`) and
+git-pinned types (verified via `rev` and git's content-addressing).
 `VERIFIED: unverified`
 
 **[no-daemon-bypass]**: Ion MUST NOT circumvent the daemon by directly
@@ -710,6 +797,7 @@ This returns the current `BuildStatus` as a snapshot value.
 | `progress-liveness`            | Integration test       | UNVERIFIED | Attach → verify all state transitions delivered          |
 | `discovery-read-only`          | Code audit             | UNVERIFIED | No mutating code paths reachable via `AtomDiscovery`     |
 | `query-discovery`              | Integration test       | UNVERIFIED | Obtain `AtomDiscovery`, issue resolve/contains/search    |
+| `content-delivery-negotiation` | Integration test       | UNVERIFIED | getMissing → provideAtom flow; reject unsolicited atoms  |
 
 ---
 

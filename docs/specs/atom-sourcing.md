@@ -348,6 +348,25 @@ local sets:
 If an adapter does not support local sets, `[no-unpublished-dependency]`
 is trivially satisfied (no local-only atoms exist).
 
+### Peer-Assisted Resolution
+
+A resolver or build system MAY accept atom content from a peer client as a fallback resolution mechanism. This enables two scenarios:
+
+1. **Local development atoms**: Atoms that exist only in the developer's working tree have no remote mirror. The client (ion) is the only source for these atoms. See §Local Development Sets.
+
+2. **Mirror failure recovery**: If all configured mirrors for an atom-set are unreachable, the client MAY provide cached atom content it previously resolved, allowing the build to proceed despite network issues.
+
+Peer-assisted resolution is a transport-level concern: the atom content enters the store through the same `AtomStore::ingest()` path as any other source. The peer acts as an `AtomSource` that the store ingests from. All ingestion invariants apply — the store verifies atom integrity before accepting content from a peer, just as it would from a registry.
+
+**[peer-source-last-resort]**: Peer-assisted resolution SHOULD be the lowest-priority source. The resolution priority order is:
+
+1. Local store (previously ingested atoms)
+2. Remote mirrors (authoritative sources)
+3. Peer client (fallback)
+
+This ordering ensures that authoritative sources are preferred and that the peer is only consulted when all other options are exhausted.
+`VERIFIED: unverified`
+
 ## Verification
 
 | Constraint                 | Method      | Result | Detail                                                                                                 |

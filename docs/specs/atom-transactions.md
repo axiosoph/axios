@@ -173,6 +173,21 @@ The protocol formalizes this topology through three roles
 - `ingest(dyn AtomSource) → Result<()>` — import from a remote source
 - `contains(AtomId) → bool` — check local availability
 
+**[trait-async-io]**: The `AtomSource` and `AtomStore` traits MUST use async methods for operations that MAY involve I/O. Specifically:
+
+- `AtomSource::resolve()` — MUST be async. Implementations MAY need to fetch from remote registries.
+- `AtomSource::discover()` — MUST be async. Remote search queries involve network I/O.
+- `AtomStore::ingest()` — MUST be async. Ingestion from remote sources involves network transfers.
+- `AtomStore::contains()` — MUST be async. Remote store existence checks involve network I/O.
+
+Local implementations (e.g., git-backed stores on the same filesystem) MAY complete these async methods synchronously (no `.await` points). The async boundary exists for consumers that need it (registry sources, peer sources), not to mandate concurrency in all implementations.
+
+Data accessor traits (`AtomEntry`, `AtomVersion`, `Manifest`) MUST remain synchronous — they operate on in-memory data structures with no I/O.
+
+`AtomRegistry::claim()` and `AtomRegistry::publish()` MAY remain synchronous in v1 (registries are local git repos). If remote registry write operations are added in vN, these SHOULD be made async.
+
+`VERIFIED: unverified`
+
 The critical architectural property: **a store IS a source**. The
 `AtomStore` trait extends `AtomSource`, so any component that reads
 from an `AtomSource` can read from either a remote source or a local
@@ -198,6 +213,24 @@ or care whether atoms came from one source or a hundred.
 for every atom in the source, the store's `resolve` MUST return at
 least what the source's `resolve` returns. The store accumulates —
 it never loses atoms through ingestion.
+
+**Composite Sources**: An `AtomSource` implementation MAY compose multiple underlying sources into a single interface with priority-based resolution. A composite source tries each underlying source in priority order and returns the first successful resolution.
+
+The canonical composition for an eos daemon:
+
+```
+CompositeAtomSource
+  Priority 1: LocalGitStore    — cached atoms (instant)
+  Priority 2: RegistrySource(s) — remote mirrors (async fetch + ingest)
+  Priority 3: PeerSource        — fallback from the requesting client (async stream)
+```
+
+This composition is transparent: eos calls `resolve()` on the composite and does not know which underlying source provided the result. The composite ingests fetched atoms into the local store (Priority 1) so that subsequent resolutions for the same atom are cache hits.
+
+Composite sources MUST preserve the accumulation guarantee: after resolving an atom from any priority level, the local store MUST contain that atom for future lookups.
+
+**[composite-source-concurrent]**: A composite source SHOULD resolve multiple atoms concurrently. When a `BuildRequest` contains N atom dependencies, the composite source SHOULD spawn N concurrent resolution tasks (bounded by a configurable concurrency limit). This is the primary performance justification for the async trait requirement (`[trait-async-io]`).
+`VERIFIED: unverified`
 
 Each role uses **associated types** to remain backend-agnostic:
 
