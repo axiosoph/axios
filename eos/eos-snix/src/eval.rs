@@ -240,24 +240,40 @@ fn extract_path_from_addr(addr: &str) -> Option<std::path::PathBuf> {
 }
 
 /// Serializable Data Transfer Object for `EvalTarget`.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum EvalTargetDto {
     File(std::path::PathBuf),
     Expression(String),
+}
+
+#[cfg(any(test, fuzzing))]
+impl bolero::generator::TypeGenerator for EvalTargetDto {
+    fn generate<D: bolero::Driver>(driver: &mut D) -> Option<Self> {
+        let is_file = bool::generate(driver)?;
+        if is_file {
+            let s = String::generate(driver)?;
+            Some(Self::File(std::path::PathBuf::from(s)))
+        } else {
+            let s = String::generate(driver)?;
+            Some(Self::Expression(s))
+        }
+    }
 }
 
 /// Serializable Data Transfer Object for `ResolvedInput`.
 ///
 /// The digest is serialized as a lowercase hex string for JSON
 /// readability and interoperability.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[cfg_attr(any(test, fuzzing), derive(bolero::TypeGenerator))]
 pub struct ResolvedInputDto {
     pub digest: String,
     pub store_path: String,
 }
 
 /// Serializable Data Transfer Object for `ComposerConfig`.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[cfg_attr(any(test, fuzzing), derive(bolero::TypeGenerator))]
 pub struct ComposerConfigDto {
     /// Serialized as the `<anchor_b64ut>::<label>` display form.
     pub atom_id: String,
@@ -293,7 +309,8 @@ impl ComposerConfigDto {
 }
 
 /// Serializable Data Transfer Object for `EvalRequest`.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[cfg_attr(any(test, fuzzing), derive(bolero::TypeGenerator))]
 pub struct EvalRequestDto {
     pub expression: EvalTargetDto,
     pub inputs: HashMap<String, ResolvedInputDto>,
@@ -329,19 +346,41 @@ impl From<ResolvedInput<Blake3Digest>> for ResolvedInputDto {
     }
 }
 
-impl From<ResolvedInputDto> for ResolvedInput<Blake3Digest> {
-    fn from(dto: ResolvedInputDto) -> Self {
-        let mut bytes = [0u8; 32];
-        for (i, chunk) in dto.digest.as_bytes().chunks(2).enumerate() {
-            if i < 32 {
-                bytes[i] =
-                    u8::from_str_radix(std::str::from_utf8(chunk).unwrap_or("00"), 16).unwrap_or(0);
-            }
+impl TryFrom<ResolvedInputDto> for ResolvedInput<Blake3Digest> {
+    type Error = SnixError;
+
+    fn try_from(dto: ResolvedInputDto) -> Result<Self, Self::Error> {
+        if dto.digest.len() != 64 {
+            return Err(SnixError::ConversionError {
+                from: "ResolvedInputDto",
+                to: "ResolvedInput",
+                detail: format!(
+                    "digest length is {}, expected 64 hex characters",
+                    dto.digest.len()
+                ),
+            });
         }
-        ResolvedInput {
+        if !dto.digest.is_ascii() {
+            return Err(SnixError::ConversionError {
+                from: "ResolvedInputDto",
+                to: "ResolvedInput",
+                detail: "digest contains non-ASCII characters".to_string(),
+            });
+        }
+        let mut bytes = [0u8; 32];
+        for (i, byte) in bytes.iter_mut().enumerate() {
+            *byte = u8::from_str_radix(&dto.digest[i * 2..i * 2 + 2], 16).map_err(|e| {
+                SnixError::ConversionError {
+                    from: "ResolvedInputDto",
+                    to: "ResolvedInput",
+                    detail: format!("invalid hex in digest: {}", e),
+                }
+            })?;
+        }
+        Ok(ResolvedInput {
             digest: Blake3Digest(bytes),
             store_path: eos_core::store::StorePath(dto.store_path),
-        }
+        })
     }
 }
 
@@ -365,7 +404,7 @@ impl EvalRequestDto {
     pub fn into_request(self) -> Result<EvalRequest<Blake3Digest>, SnixError> {
         let mut inputs = HashMap::new();
         for (k, v) in self.inputs {
-            inputs.insert(k, v.into());
+            inputs.insert(k, v.try_into()?);
         }
         let mut req = EvalRequest::new(self.expression.into());
         req.inputs = inputs;
@@ -402,7 +441,7 @@ pub fn compute_eval_cache_key(request: &EvalRequest<Blake3Digest>) -> [u8; 32] {
         eval_args: &eval_args_sorted,
     };
 
-    let bytes = serde_json::to_vec(&key_struct).unwrap_or_default();
+    let bytes = serde_json::to_vec(&key_struct).expect("failed to serialize cache key struct");
     blake3::hash(&bytes).into()
 }
 /// Constructs the common CLI arguments passed to the `--eval-worker` subprocess.
@@ -695,5 +734,92 @@ pub async fn evaluate_sandboxed(
                 "sandboxed evaluation not supported on this platform",
             )),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn eval_request_dto_roundtrip() {
+        bolero::check!()
+            .with_type::<EvalRequestDto>()
+            .for_each(|dto| {
+                if let Ok(req) = dto.clone().into_request() {
+                    let back = EvalRequestDto::from(req);
+                    assert_eq!(back.expression, dto.expression);
+                    assert_eq!(back.eval_args, dto.eval_args);
+                    match (&back.composer, &dto.composer) {
+                        (Some(c1), Some(c2)) => {
+                            assert_eq!(
+                                c1.clone().into_config().unwrap(),
+                                c2.clone().into_config().unwrap()
+                            );
+                        },
+                        (None, None) => {},
+                        _ => panic!("composer mismatch"),
+                    }
+                    assert_eq!(back.inputs.len(), dto.inputs.len());
+                    for (k, v1) in &back.inputs {
+                        let v2 = dto.inputs.get(k).unwrap();
+                        assert_eq!(v1.digest, v2.digest.to_lowercase());
+                        assert_eq!(v1.store_path, v2.store_path);
+                    }
+                }
+            });
+    }
+
+    #[test]
+    fn eval_request_dto_invalid_hex_fails() {
+        bolero::check!()
+            .with_type::<ResolvedInputDto>()
+            .for_each(|dto| {
+                let is_valid_hex = dto.digest.len() == 64
+                    && dto.digest.is_ascii()
+                    && dto.digest.chars().all(|c| c.is_ascii_hexdigit());
+                let converted = ResolvedInput::try_from(dto.clone());
+                if !is_valid_hex {
+                    assert!(converted.is_err());
+                } else {
+                    assert!(converted.is_ok());
+                }
+            });
+    }
+
+    #[test]
+    fn cache_key_determinism() {
+        bolero::check!()
+            .with_type::<EvalRequestDto>()
+            .for_each(|dto| {
+                if let Ok(req) = dto.clone().into_request() {
+                    let k1 = compute_eval_cache_key(&req);
+                    let k2 = compute_eval_cache_key(&req);
+                    assert_eq!(k1, k2, "Cache key is not idempotent");
+                }
+            });
+    }
+
+    #[test]
+    fn cache_key_order_independence() {
+        bolero::check!()
+            .with_type::<EvalRequestDto>()
+            .for_each(|dto| {
+                if let Ok(req) = dto.clone().into_request() {
+                    let k1 = compute_eval_cache_key(&req);
+                    let inputs_vec: Vec<_> = req.inputs.clone().into_iter().collect();
+                    let mut shuffled_inputs = HashMap::new();
+                    for (k, v) in inputs_vec.into_iter().rev() {
+                        shuffled_inputs.insert(k, v);
+                    }
+                    let mut shuffled_req = req.clone();
+                    shuffled_req.inputs = shuffled_inputs;
+                    let k2 = compute_eval_cache_key(&shuffled_req);
+                    assert_eq!(
+                        k1, k2,
+                        "Cache key depends on inputs HashMap iteration order"
+                    );
+                }
+            });
     }
 }

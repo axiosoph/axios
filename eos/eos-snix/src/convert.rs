@@ -14,9 +14,18 @@ pub fn blake3_to_b3(digest: Blake3Digest) -> B3Digest {
 }
 
 /// Converts a Snix `B3Digest` to a `Blake3Digest`.
-#[inline]
-pub fn b3_to_blake3(digest: B3Digest) -> Blake3Digest {
-    Blake3Digest(<[u8; 32]>::from(digest))
+pub fn b3_to_blake3(digest: B3Digest) -> Result<Blake3Digest, SnixError> {
+    let slice = &digest[..];
+    if slice.len() != 32 {
+        return Err(SnixError::ConversionError {
+            from: "B3Digest",
+            to: "Blake3Digest",
+            detail: format!("digest length is {}, expected 32", slice.len()),
+        });
+    }
+    let mut bytes = [0u8; 32];
+    bytes.copy_from_slice(slice);
+    Ok(Blake3Digest(bytes))
 }
 
 /// Converts a `StorePath` to a Snix `StorePath<String>`.

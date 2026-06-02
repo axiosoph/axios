@@ -32,3 +32,10 @@ url          = "2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 birdcage = "0.8"
+
+[dev-dependencies]
+arbitrary = { version = "1", features = ["derive"] }
+bolero    = "0.11"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }

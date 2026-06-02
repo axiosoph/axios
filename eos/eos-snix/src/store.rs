@@ -79,8 +79,8 @@ impl ArtifactStore for SnixStore {
             None => Ok(None),
             Some(info) => {
                 let node_digest = match &info.node {
-                    snix_castore::Node::File { digest, .. } => Some(b3_to_blake3(*digest)),
-                    snix_castore::Node::Directory { digest, .. } => Some(b3_to_blake3(*digest)),
+                    snix_castore::Node::File { digest, .. } => Some(b3_to_blake3(*digest)?),
+                    snix_castore::Node::Directory { digest, .. } => Some(b3_to_blake3(*digest)?),
                     snix_castore::Node::Symlink { .. } => None,
                 };
 
@@ -158,8 +158,8 @@ impl ArtifactStore for SnixStore {
             })?;
 
         let node_digest = match &root_node {
-            snix_castore::Node::File { digest, .. } => Some(b3_to_blake3(*digest)),
-            snix_castore::Node::Directory { digest, .. } => Some(b3_to_blake3(*digest)),
+            snix_castore::Node::File { digest, .. } => Some(b3_to_blake3(*digest)?),
+            snix_castore::Node::Directory { digest, .. } => Some(b3_to_blake3(*digest)?),
             snix_castore::Node::Symlink { .. } => None,
         };
 
@@ -201,8 +201,8 @@ impl ArtifactStore for SnixStore {
             }),
             Ok(info) => {
                 let node_digest = match &info.node {
-                    snix_castore::Node::File { digest, .. } => Some(b3_to_blake3(*digest)),
-                    snix_castore::Node::Directory { digest, .. } => Some(b3_to_blake3(*digest)),
+                    snix_castore::Node::File { digest, .. } => Some(b3_to_blake3(*digest)?),
+                    snix_castore::Node::Directory { digest, .. } => Some(b3_to_blake3(*digest)?),
                     snix_castore::Node::Symlink { .. } => None,
                 };
 
