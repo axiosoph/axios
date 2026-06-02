@@ -56,6 +56,14 @@ pub struct DaemonConfig {
     /// Directory where lock files are stored.
     #[arg(long, env = "EOS_LOCKS_DIR", default_value = "/tmp/eos-locks")]
     pub locks_dir: PathBuf,
+
+    /// Hidden flag to run as a sandboxed evaluation worker.
+    #[arg(long, hide = true)]
+    pub eval_worker: bool,
+
+    /// Whether to enable evaluation sandboxing.
+    #[arg(long, env = "ENABLE_EVAL_SANDBOX", default_value_t = true)]
+    pub enable_eval_sandbox: bool,
 }
 
 impl DaemonConfig {

@@ -19,6 +19,8 @@ eos-snix = { path = "../eos-snix" }
 eos-store = { path = "../eos-store" }
 snix-store = { path = "/var/home/nrd/git/git.snix.dev/snix/snix/snix/store" }
 snix-castore = { path = "/var/home/nrd/git/git.snix.dev/snix/snix/snix/castore" }
+snix-build = { path = "/var/home/nrd/git/git.snix.dev/snix/snix/snix/build" }
+serde_json = "1"
 tokio = { version = "1", features = [
   "rt-multi-thread",
   "net",

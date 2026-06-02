@@ -33,6 +33,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     // 2. Parse configuration
     let config = Arc::new(DaemonConfig::parse());
+    if config.eval_worker {
+        return run_eval_worker(config).await;
+    }
     let socket_path = config
         .resolve_socket_path()
         .map_err(std::io::Error::other)?;
@@ -80,6 +83,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         path_info_service,
         nar_calculation_service.into(),
         build_service,
+        config.blob_service_addr.clone(),
+        config.directory_service_addr.clone(),
+        config.path_info_service_addr.clone(),
+        config.workspace_dir.clone(),
+        config.sandbox_workdir.clone(),
+        config.enable_eval_sandbox,
     ));
 
     // 4. Initialize Scheduler and Index
@@ -162,6 +171,65 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             }
         })
         .await;
+
+    Ok(())
+}
+
+async fn run_eval_worker(
+    config: Arc<DaemonConfig>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    use std::io::{Read, Write};
+
+    // 1. Read EvalRequestDto from stdin
+    let mut stdin_bytes = Vec::new();
+    std::io::stdin().read_to_end(&mut stdin_bytes)?;
+
+    let dto: eos_snix::eval::EvalRequestDto = serde_json::from_slice(&stdin_bytes)?;
+    let request = dto.into_request();
+
+    // 2. Initialize Snix services
+    let urls = snix_store::utils::ServiceUrls::parse_from([
+        "eosd",
+        "--blob-service-addr",
+        &config.blob_service_addr,
+        "--directory-service-addr",
+        &config.directory_service_addr,
+        "--path-info-service-addr",
+        &config.path_info_service_addr,
+    ]);
+
+    let (blob_service, directory_service, path_info_service, nar_calculation_service) =
+        snix_store::utils::construct_services(urls)
+            .await
+            .map_err(|e| {
+                std::io::Error::other(format!("Failed to initialize Snix services: {}", e))
+            })?;
+
+    // Create a dummy build service for the evaluator since builds are decoupled.
+    let build_service = Arc::new(snix_build::buildservice::DummyBuildService::default());
+
+    // 3. Run evaluation
+    let tokio_handle = tokio::runtime::Handle::current();
+    let rx = eos_snix::eval::evaluate_on_thread(
+        request.expression,
+        request.inputs,
+        request.eval_args,
+        blob_service,
+        directory_service,
+        path_info_service,
+        nar_calculation_service.into(),
+        build_service,
+        tokio_handle,
+    );
+
+    let plan = rx
+        .await
+        .map_err(|_| std::io::Error::other("eval thread panicked"))??;
+
+    // 4. Serialize Derivation to stdout as ATerm bytes
+    let aterm_bytes = plan.to_aterm_bytes();
+    std::io::stdout().write_all(&aterm_bytes)?;
+    std::io::stdout().flush()?;
 
     Ok(())
 }
