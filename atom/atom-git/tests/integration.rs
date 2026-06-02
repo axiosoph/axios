@@ -524,6 +524,138 @@ fn test_differential_git_cli() {
     assert!(stdout_str.contains("committer "));
 }
 
+#[test]
+fn test_store_claim_cleanup() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = gix::init_bare(dir.path()).unwrap();
+
+    let empty_tree_oid = repo
+        .write_object(gix::objs::Tree::empty())
+        .unwrap()
+        .detach();
+
+    let store = GitStore::new(repo);
+    let claim_czd_hex = "0123456789abcdef0123456789abcdef01234567";
+
+    // 1. Write claim reference refs/atom/claims/d/{claim_czd_hex}
+    let claim_ref_name = format!("refs/atom/claims/d/{}", claim_czd_hex);
+    let claim_fullname = gix::refs::FullName::try_from(claim_ref_name.as_str()).unwrap();
+    let claim_edit = gix::refs::transaction::RefEdit {
+        change: gix::refs::transaction::Change::Update {
+            log: gix::refs::transaction::LogChange::default(),
+            expected: gix::refs::transaction::PreviousValue::Any,
+            new: gix::refs::Target::Object(empty_tree_oid),
+        },
+        name: claim_fullname,
+        deref: false,
+    };
+    store.source.repo.edit_reference(claim_edit).unwrap();
+
+    // 2. Write version 1 refs/atom/d/{claim_czd_hex}/1.0.0
+    let v1_ref_name = format!("refs/atom/d/{}/1.0.0", claim_czd_hex);
+    let v1_fullname = gix::refs::FullName::try_from(v1_ref_name.as_str()).unwrap();
+    let v1_edit = gix::refs::transaction::RefEdit {
+        change: gix::refs::transaction::Change::Update {
+            log: gix::refs::transaction::LogChange::default(),
+            expected: gix::refs::transaction::PreviousValue::Any,
+            new: gix::refs::Target::Object(empty_tree_oid),
+        },
+        name: v1_fullname,
+        deref: false,
+    };
+    store.source.repo.edit_reference(v1_edit).unwrap();
+
+    // 3. Write version 2 refs/atom/d/{claim_czd_hex}/2.0.0
+    let v2_ref_name = format!("refs/atom/d/{}/2.0.0", claim_czd_hex);
+    let v2_fullname = gix::refs::FullName::try_from(v2_ref_name.as_str()).unwrap();
+    let v2_edit = gix::refs::transaction::RefEdit {
+        change: gix::refs::transaction::Change::Update {
+            log: gix::refs::transaction::LogChange::default(),
+            expected: gix::refs::transaction::PreviousValue::Any,
+            new: gix::refs::Target::Object(empty_tree_oid),
+        },
+        name: v2_fullname,
+        deref: false,
+    };
+    store.source.repo.edit_reference(v2_edit).unwrap();
+
+    // Verify all references exist
+    assert!(
+        store
+            .source
+            .repo
+            .try_find_reference(&claim_ref_name)
+            .unwrap()
+            .is_some()
+    );
+    assert!(
+        store
+            .source
+            .repo
+            .try_find_reference(&v1_ref_name)
+            .unwrap()
+            .is_some()
+    );
+    assert!(
+        store
+            .source
+            .repo
+            .try_find_reference(&v2_ref_name)
+            .unwrap()
+            .is_some()
+    );
+
+    // 4. Evict version 1.0.0
+    store.evict_version(claim_czd_hex, "1.0.0").unwrap();
+
+    // Verify version 1.0.0 is gone, but version 2.0.0 and claim remain
+    assert!(
+        store
+            .source
+            .repo
+            .try_find_reference(&v1_ref_name)
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        store
+            .source
+            .repo
+            .try_find_reference(&v2_ref_name)
+            .unwrap()
+            .is_some()
+    );
+    assert!(
+        store
+            .source
+            .repo
+            .try_find_reference(&claim_ref_name)
+            .unwrap()
+            .is_some()
+    );
+
+    // 5. Evict version 2.0.0
+    store.evict_version(claim_czd_hex, "2.0.0").unwrap();
+
+    // Verify version 2.0.0 is gone, and since no versions are left, the claim is also deleted
+    assert!(
+        store
+            .source
+            .repo
+            .try_find_reference(&v2_ref_name)
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        store
+            .source
+            .repo
+            .try_find_reference(&claim_ref_name)
+            .unwrap()
+            .is_none()
+    );
+}
+
 #[cfg(test)]
 mod proptests {
     use atom_git::gix_util;

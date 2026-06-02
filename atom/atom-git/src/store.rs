@@ -100,6 +100,58 @@ impl GitStore {
 
         Ok(())
     }
+
+    /// Evict (delete) a version ref from the store.
+    ///
+    /// Implements [store-claim-cleanup] by removing the version ref.
+    /// If no other version refs remain under `refs/atom/d/{claim_czd}/`,
+    /// also deletes the corresponding `refs/atom/claims/d/{claim_czd}` ref.
+    pub fn evict_version(&self, claim_czd_hex: &str, version: &str) -> Result<(), GitError> {
+        let repo = &self.source.repo;
+        let version_ref_name = format!("refs/atom/d/{}/{}", claim_czd_hex, version);
+        let version_fullname = FullName::try_from(version_ref_name.as_str())
+            .map_err(|e| GitError::Validation(e.to_string()))?;
+
+        // 1. Delete the version reference
+        let edit = RefEdit {
+            change: Change::Delete {
+                expected: PreviousValue::Any,
+                log: RefLog::AndReference,
+            },
+            name: version_fullname,
+            deref: false,
+        };
+        repo.edit_reference(edit)?;
+
+        // 2. Check if any other version refs remain under refs/atom/d/{claim_czd_hex}/
+        let prefix = format!("refs/atom/d/{}/", claim_czd_hex);
+        let refs = repo.references()?;
+        let mut any_left = false;
+        for r in refs.prefixed(prefix.as_str())? {
+            if r.is_ok() {
+                any_left = true;
+                break;
+            }
+        }
+
+        // 3. If no other versions remain, delete refs/atom/claims/d/{claim_czd_hex}
+        if !any_left {
+            let claim_ref_name = format!("refs/atom/claims/d/{}", claim_czd_hex);
+            if let Ok(claim_fullname) = FullName::try_from(claim_ref_name.as_str()) {
+                let claim_edit = RefEdit {
+                    change: Change::Delete {
+                        expected: PreviousValue::Any,
+                        log: RefLog::AndReference,
+                    },
+                    name: claim_fullname,
+                    deref: false,
+                };
+                let _ = repo.edit_reference(claim_edit);
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl AtomSource for GitStore {
