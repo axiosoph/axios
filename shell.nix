@@ -15,10 +15,16 @@ mkShell {
   LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
     pkgs.stdenv.cc.cc.lib
   ];
+  SNIX_BUILD_SANDBOX_SHELL = "/bin/sh";
   packages = [
     protobuf
     capnproto
     toolchain
     cargo-fuzz
+    treefmt
+    prettier
+    shfmt
+    nixfmt
+    taplo
   ];
 }

@@ -8,19 +8,19 @@ name = "eosd"
 path = "src/main.rs"
 
 [dependencies]
+atom-id = { path = "../../atom/atom-id" }
 capnp = "0.20"
 capnp-rpc = "0.20"
 clap = { version = "4", features = ["derive"] }
 eos = { path = "../eos" }
 eos-core = { path = "../eos-core" }
-atom-id = { path = "../../atom/atom-id" }
 eos-proto = { path = "../eos-proto" }
 eos-snix = { path = "../eos-snix" }
 eos-store = { path = "../eos-store" }
-snix-store = { path = "/var/home/nrd/git/git.snix.dev/snix/snix/snix/store" }
-snix-castore = { path = "/var/home/nrd/git/git.snix.dev/snix/snix/snix/castore" }
-snix-build = { path = "/var/home/nrd/git/git.snix.dev/snix/snix/snix/build" }
 serde_json = "1"
+snix-build = { path = "/var/home/nrd/git/git.snix.dev/snix/snix/snix/build" }
+snix-castore = { path = "/var/home/nrd/git/git.snix.dev/snix/snix/snix/castore" }
+snix-store = { path = "/var/home/nrd/git/git.snix.dev/snix/snix/snix/store" }
 tokio = { version = "1", features = [
   "rt-multi-thread",
   "net",

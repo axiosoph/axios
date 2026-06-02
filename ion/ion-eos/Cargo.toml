@@ -4,14 +4,14 @@ name    = "ion-eos"
 version = "0.1.0"
 
 [dependencies]
-capnp     = "0.20"
-capnp-rpc = "0.20"
-eos-core  = { path = "../../eos/eos-core" }
-eos-proto = { path = "../../eos/eos-proto" }
-thiserror = "2"
-tokio     = { version = "1", features = ["net", "rt"] }
-blake3    = "1"
-toml      = "0.8"
+atom-id    = { path = "../../atom/atom-id" }
+blake3     = "1"
+capnp      = "0.20"
+capnp-rpc  = "0.20"
+eos-core   = { path = "../../eos/eos-core" }
+eos-proto  = { path = "../../eos/eos-proto" }
+thiserror  = "2"
+tokio      = { version = "1", features = ["net", "rt"] }
 tokio-util = { version = "0.7", features = ["compat"] }
-atom-id   = { path = "../../atom/atom-id" }
-tracing   = "0.1"
+toml       = "0.8"
+tracing    = "0.1"

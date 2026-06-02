@@ -1,0 +1,28 @@
+[formatter.nixfmt]
+command  = "nixfmt"
+excludes = ["build/Cargo.nix"]
+includes = ["*.nix"]
+options  = []
+
+[formatter.shfmt]
+command  = "shfmt"
+excludes = []
+includes = ["*.sh", ".envrc"]
+options  = []
+
+[formatter.taplo]
+command  = "taplo"
+excludes = []
+includes = ["*.toml", ".cargo/config.toml"]
+options  = ["fmt", "-o", "align_entries=true", "-o", "reorder_keys=true"]
+
+[formatter.prettier]
+command  = "prettier"
+excludes = ["*/sources.json"]
+includes = ["*.json", "*.md", "*.yaml", "*.yml"]
+options  = ["--write"]
+
+[formatter.rustfmt]
+command  = "rustfmt"
+excludes = []
+includes = ["*.rs"]

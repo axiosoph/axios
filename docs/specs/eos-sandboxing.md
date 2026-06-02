@@ -13,15 +13,17 @@
 
 ## Domain
 
-**Problem Domain:** Hermetic evaluation and build execution represent core security boundaries in Eos (L2). Because evaluating code (Nix/Snix expressions) or building outputs (executing plan builders) requires interacting with arbitrary execution parameters, we must prevent host system contamination, arbitrary filesystem access, and network leaks. Eos enforces strict containment boundaries by executing evaluations and builds inside isolated sandboxes. 
+**Problem Domain:** Hermetic evaluation and build execution represent core security boundaries in Eos (L2). Because evaluating code (Nix/Snix expressions) or building outputs (executing plan builders) requires interacting with arbitrary execution parameters, we must prevent host system contamination, arbitrary filesystem access, and network leaks. Eos enforces strict containment boundaries by executing evaluations and builds inside isolated sandboxes.
 
 We distinguish between two sandboxing boundaries:
+
 1. **Evaluation Sandboxing**: Isolates the language evaluator during expression-to-plan translation to prevent host file disclosure and impurity leaks.
 2. **Build Sandboxing**: Isolates the build process when applying a plan to produce concrete artifacts.
 
 To reconcile the thread-locality (`!Send`) of the language evaluator with the concurrent host daemon (`eosd`), Eos launches a sandboxed sub-process executing a hidden `--eval-worker` subcommand. This worker operates inside Bubblewrap on Linux and Birdcage on macOS, exchanging serialized request and result payloads via standard I/O streams.
 
 **Model Reference:**
+
 - [eos-build-engine.md](eos-build-engine.md) — §2.4 (BuildEngine), §2.5 (ArtifactStore)
 - [eos-snix-backend.md](eos-snix-backend.md) — Snix-specific execution bounds and store mappings
 
@@ -109,27 +111,30 @@ TYPE ResolvedInputDto = {
 `VERIFIED: unverified`
 
 **[eos-eval-sandbox-linux-bwrap]**: On Linux, evaluation sandboxing MUST employ Bubblewrap (`bwrap`). The Bubblewrap jail MUST enforce the following constraints:
+
 - Bind a read-only view of the Axios workspace directory.
 - Bind a read-only view of the parent directory containing the target evaluation file.
 - Bind writable paths to the temporary sandbox workdir.
 - Bind writable paths to the local database sockets and directories (e.g., Redb stores).
 - Unshare all namespaces (network, IPC, user, PID, UTS) except for paths mapped to standard descriptors.
-`VERIFIED: unverified`
+  `VERIFIED: unverified`
 
 **[eos-eval-sandbox-macos-birdcage]**: On macOS, evaluation sandboxing MUST employ Birdcage (`birdcage`). The Birdcage jail MUST enforce the following constraints:
+
 - Grant read-only access to the Axios workspace directory and the daemon executable.
 - Grant read/write access to local database sockets and directories.
 - Deny network access (excluding Unix sockets).
 - Deny write access to all other host directories.
 - Execute within a `tokio::task::spawn_blocking` pool to isolate synchronous seatbelt profile interactions.
-`VERIFIED: unverified`
+  `VERIFIED: unverified`
 
 ### Build Sandboxing Invariants
 
 **[eos-build-sandbox-platform-dispatch]**: Eos MUST dispatch build sandboxes based on platform availability:
+
 - **Linux**: Select OCI runtimes (`crun`, `runc`) if present; fall back to Bubblewrap (`bwrap`).
 - **macOS**: Delegate execution to a remote builder, or report an error if no remote builder is configured. Local build sandboxing via Birdcage is reserved as a future extension.
-`VERIFIED: unverified`
+  `VERIFIED: unverified`
 
 **[eos-build-sandbox-network-containment]**: Build execution MUST NOT have access to the external network, unless the plan is explicitly declared as a fixed-output derivation containing a pre-computed hash of the expected artifact.
 `VERIFIED: unverified`
@@ -169,14 +174,14 @@ TYPE ResolvedInputDto = {
 
 ## Verification
 
-| Constraint | Method | Result | Detail |
-| :--- | :--- | :--- | :--- |
-| `eos-eval-worker-isolation` | Process inspection | UNVERIFIED | Verify that evaluation spawns a separate OS process |
-| `eos-eval-sandbox-network-containment` | Network socket test | UNVERIFIED | Attempt network requests inside the sandbox, verify abort |
-| `eos-eval-sandbox-host-isolation` | Write restriction check | UNVERIFIED | Attempt writes to `/var` or `/tmp` from the worker, verify error |
-| `eos-eval-sandbox-linux-bwrap` | Sandbox mount check | UNVERIFIED | Audit Bubblewrap argument vectors for compliance |
-| `eos-eval-sandbox-macos-birdcage` | Sandbox profile audit | UNVERIFIED | Audit Birdcage exception rules and profile constraints |
-| `eos-build-sandbox-network-containment` | Build socket test | UNVERIFIED | Attempt network access in builds without pre-declared outputs, verify abort |
+| Constraint                              | Method                  | Result     | Detail                                                                      |
+| :-------------------------------------- | :---------------------- | :--------- | :-------------------------------------------------------------------------- |
+| `eos-eval-worker-isolation`             | Process inspection      | UNVERIFIED | Verify that evaluation spawns a separate OS process                         |
+| `eos-eval-sandbox-network-containment`  | Network socket test     | UNVERIFIED | Attempt network requests inside the sandbox, verify abort                   |
+| `eos-eval-sandbox-host-isolation`       | Write restriction check | UNVERIFIED | Attempt writes to `/var` or `/tmp` from the worker, verify error            |
+| `eos-eval-sandbox-linux-bwrap`          | Sandbox mount check     | UNVERIFIED | Audit Bubblewrap argument vectors for compliance                            |
+| `eos-eval-sandbox-macos-birdcage`       | Sandbox profile audit   | UNVERIFIED | Audit Birdcage exception rules and profile constraints                      |
+| `eos-build-sandbox-network-containment` | Build socket test       | UNVERIFIED | Attempt network access in builds without pre-declared outputs, verify abort |
 
 ---
 

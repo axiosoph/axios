@@ -769,7 +769,8 @@ mod proptests {
             let claim = Czd::from_bytes(claim_bytes);
             let tmb = coz_rs::Thumbprint::from_bytes(vec![0; 32]);
             let version = RawVersion::new(version_str);
-            let original = PublishPayload::new(Alg::Ed25519, id, claim, dig_bytes, now, path, src, tmb, version);
+            let original = PublishPayload::new(
+                Alg::Ed25519, id, claim, dig_bytes, now, path, src, tmb, version);
 
             let serialized = serde_json::to_string(&original).unwrap();
             let deserialized: PublishPayload = serde_json::from_str(&serialized).unwrap();

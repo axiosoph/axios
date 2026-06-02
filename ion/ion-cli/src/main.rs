@@ -35,9 +35,15 @@ fn resolve_socket_path(explicit: Option<std::path::PathBuf>) -> Result<std::path
     if let Ok(xdg_runtime) = std::env::var("XDG_RUNTIME_DIR")
         && !xdg_runtime.is_empty()
     {
-        return Ok(std::path::PathBuf::from(xdg_runtime).join("eos").join("eos.sock"));
+        return Ok(std::path::PathBuf::from(xdg_runtime)
+            .join("eos")
+            .join("eos.sock"));
     }
-    Err("Could not resolve Eos socket path: neither --socket, $EOS_SOCKET, nor $XDG_RUNTIME_DIR was set".to_string())
+    Err(
+        "Could not resolve Eos socket path: neither --socket, $EOS_SOCKET, nor $XDG_RUNTIME_DIR \
+         was set"
+            .to_string(),
+    )
 }
 
 #[tokio::main]
