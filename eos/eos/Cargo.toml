@@ -10,7 +10,6 @@ base64       = "0.22"
 blake3       = "1"
 eos-core     = { path = "../eos-core" }
 eos-snix     = { path = "../eos-snix" }
-eos-store    = { path = "../eos-store" }
 futures      = "0.3"
 hex          = "0.4"
 nix-compat   = { path = "/var/home/nrd/git/git.snix.dev/snix/snix/snix/nix-compat" }

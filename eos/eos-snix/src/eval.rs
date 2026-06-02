@@ -240,7 +240,7 @@ fn extract_path_from_addr(addr: &str) -> Option<std::path::PathBuf> {
 }
 
 /// Serializable Data Transfer Object for `EvalTarget`.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum EvalTargetDto {
     File(std::path::PathBuf),
     Expression(String),
@@ -250,14 +250,14 @@ pub enum EvalTargetDto {
 ///
 /// The digest is serialized as a lowercase hex string for JSON
 /// readability and interoperability.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ResolvedInputDto {
     pub digest: String,
     pub store_path: String,
 }
 
 /// Serializable Data Transfer Object for `ComposerConfig`.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ComposerConfigDto {
     /// Serialized as the `<anchor_b64ut>::<label>` display form.
     pub atom_id: String,
@@ -293,7 +293,7 @@ impl ComposerConfigDto {
 }
 
 /// Serializable Data Transfer Object for `EvalRequest`.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct EvalRequestDto {
     pub expression: EvalTargetDto,
     pub inputs: HashMap<String, ResolvedInputDto>,
@@ -373,6 +373,37 @@ impl EvalRequestDto {
         req.eval_args = self.eval_args;
         Ok(req)
     }
+}
+
+/// Computes a deterministic cache key for the given evaluation request.
+pub fn compute_eval_cache_key(request: &EvalRequest<Blake3Digest>) -> [u8; 32] {
+    let dto = EvalRequestDto::from(request.clone());
+
+    // Deterministic sorting of inputs
+    let mut inputs_sorted: Vec<(String, ResolvedInputDto)> = dto.inputs.into_iter().collect();
+    inputs_sorted.sort_by(|a, b| a.0.cmp(&b.0));
+
+    // Deterministic sorting of evaluation arguments
+    let mut eval_args_sorted = dto.eval_args.clone();
+    eval_args_sorted.sort_by(|a, b| a.0.cmp(&b.0));
+
+    #[derive(serde::Serialize)]
+    struct DeterministicKey<'a> {
+        expression: &'a EvalTargetDto,
+        inputs: &'a [(String, ResolvedInputDto)],
+        composer: &'a Option<ComposerConfigDto>,
+        eval_args: &'a [(String, String)],
+    }
+
+    let key_struct = DeterministicKey {
+        expression: &dto.expression,
+        inputs: &inputs_sorted,
+        composer: &dto.composer,
+        eval_args: &eval_args_sorted,
+    };
+
+    let bytes = serde_json::to_vec(&key_struct).unwrap_or_default();
+    blake3::hash(&bytes).into()
 }
 /// Constructs the common CLI arguments passed to the `--eval-worker` subprocess.
 fn build_worker_args(config: &crate::SandboxedEvalConfig) -> Vec<String> {

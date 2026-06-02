@@ -61,4 +61,12 @@ pub enum SnixError {
     /// The evaluation thread panicked or was aborted.
     #[error("eval thread panicked")]
     EvalThreadPanic,
+
+    /// Cache access or synchronization error.
+    #[error("cache error: {0}")]
+    CacheError(String),
+
+    /// Mutex lock poisoning error.
+    #[error("cache lock poisoned")]
+    CacheLockError,
 }

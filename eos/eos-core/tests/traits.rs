@@ -28,6 +28,21 @@ fn test_trait_bounds_satisfiable() {
             Ok(String::new())
         }
 
+        async fn plan(
+            &self,
+            _request: EvalRequest<Self::Digest>,
+        ) -> Result<eos_core::engine::BuildPlan<Self::Digest, Self::Plan>, Self::Error> {
+            Ok(eos_core::engine::BuildPlan::NeedsEvaluation(
+                eos_core::engine::AtomRef {
+                    id: AtomId::new(
+                        Anchor::new(vec![0; 20]),
+                        Label::try_from("composer").unwrap(),
+                    ),
+                    digest: Blake3Digest([0; 32]),
+                },
+            ))
+        }
+
         async fn build(&self, _plan: &Self::Plan) -> Result<Self::Output, Self::Error> {
             Ok(Vec::new())
         }

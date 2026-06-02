@@ -13,7 +13,6 @@ use eos_core::job::{ArtifactInfo, JobId, JobStatus, ProgressEvent};
 use eos_core::store::StorePath;
 use eos_snix::SnixEngine;
 use tokio::sync::broadcast;
-use tracing::info;
 
 use crate::fetch::fetch_and_import;
 use crate::lock::LockFile;
@@ -177,46 +176,70 @@ pub async fn run_orchestrated_build(
     request.inputs = resolved_inputs;
     request.eval_args = eval_args;
 
-    // Evaluate plan
-    let plan = engine
-        .evaluate(request)
-        .await
-        .map_err(|e| format!("Evaluation failed: {}", e))?;
-
     // 5. Lookup cached or build
-    send_progress(
-        &progress_tx,
-        job_id,
-        JobStatus::Building {
-            phase: "Checking cache...".to_string(),
-            progress: None,
-        },
-        None,
-    );
-
-    let output = if let Some(cached) = engine
-        .lookup_cached(&plan)
+    let build_plan = engine
+        .plan(request.clone())
         .await
-        .map_err(|e| format!("Cache lookup failed: {}", e))?
-    {
-        info!("Cache hit for job {}", job_id);
-        cached
-    } else {
-        // Execute build
-        send_progress(
-            &progress_tx,
-            job_id,
-            JobStatus::Building {
-                phase: "Building outputs...".to_string(),
-                progress: None,
-            },
-            Some("Running sandbox build...".to_string()),
-        );
+        .map_err(|e| format!("Planning failed: {}", e))?;
 
-        engine
-            .build(&plan)
-            .await
-            .map_err(|e| format!("Build execution failed: {}", e))?
+    let (plan, output) = match build_plan {
+        eos_core::engine::BuildPlan::Cached(ref _paths) => {
+            let plan = engine
+                .evaluate(request)
+                .await
+                .map_err(|e| format!("Evaluation failed: {}", e))?;
+            let output = engine
+                .lookup_cached(&plan)
+                .await
+                .map_err(|e| format!("Cache lookup failed: {}", e))?
+                .ok_or_else(|| "Cache lookup failed after positive plan lookup".to_string())?;
+            (plan, output)
+        },
+        eos_core::engine::BuildPlan::NeedsBuild(plan) => {
+            send_progress(
+                &progress_tx,
+                job_id,
+                JobStatus::Building {
+                    phase: "Building outputs...".to_string(),
+                    progress: None,
+                },
+                Some("Running sandbox build...".to_string()),
+            );
+            let output = engine
+                .build(&plan)
+                .await
+                .map_err(|e| format!("Build execution failed: {}", e))?;
+            (plan, output)
+        },
+        eos_core::engine::BuildPlan::NeedsEvaluation(_atom_ref) => {
+            let plan = engine
+                .evaluate(request)
+                .await
+                .map_err(|e| format!("Evaluation failed: {}", e))?;
+
+            if let Some(cached) = engine
+                .lookup_cached(&plan)
+                .await
+                .map_err(|e| format!("Cache lookup failed: {}", e))?
+            {
+                (plan, cached)
+            } else {
+                send_progress(
+                    &progress_tx,
+                    job_id,
+                    JobStatus::Building {
+                        phase: "Building outputs...".to_string(),
+                        progress: None,
+                    },
+                    Some("Running sandbox build...".to_string()),
+                );
+                let output = engine
+                    .build(&plan)
+                    .await
+                    .map_err(|e| format!("Build execution failed: {}", e))?;
+                (plan, output)
+            }
+        },
     };
 
     // Commit to store and return output paths

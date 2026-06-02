@@ -48,6 +48,12 @@ pub trait BuildEngine: Send + Sync + 'static {
     async fn evaluate(&self, request: EvalRequest<Self::Digest>)
     -> Result<Self::Plan, Self::Error>;
 
+    /// Evaluates the build plan state of an atom to guide the execution state machine.
+    async fn plan(
+        &self,
+        request: EvalRequest<Self::Digest>,
+    ) -> Result<BuildPlan<Self::Digest, Self::Plan>, Self::Error>;
+
     /// Executes a build plan to produce output artifacts.
     async fn build(&self, plan: &Self::Plan) -> Result<Self::Output, Self::Error>;
 

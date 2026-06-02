@@ -6,6 +6,7 @@ use atom_id::AtomId;
 
 /// Represents a parsed lock file.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct LockFile {
     /// Schema version (must be 0).
     pub version: u64,
@@ -19,6 +20,7 @@ pub struct LockFile {
 
 /// Details of an atom-set in the lock file.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SetDetails {
     /// Mirrors for fetching this atom-set.
     pub mirrors: Vec<String>,
@@ -26,6 +28,7 @@ pub struct SetDetails {
 
 /// Composer configuration.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ComposeConfig {
     /// Composer atom identifier (or special values like "nix" or "static").
     #[serde(default)]
@@ -41,7 +44,7 @@ pub struct ComposeConfig {
 
 /// Unified dependency item.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(tag = "type")]
+#[serde(tag = "type", deny_unknown_fields)]
 pub enum Dependency {
     /// An atom dependency.
     #[serde(rename = "atom")]
@@ -88,6 +91,7 @@ impl Dependency {
 
 /// An atom dependency.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AtomDep {
     /// Human-readable label within the atom-set.
     pub label: String,
@@ -113,6 +117,7 @@ fn default_true() -> bool {
 
 /// A plain Nix file fetch.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct NixDep {
     /// Human-readable identifier.
     pub name: String,
@@ -127,6 +132,7 @@ pub struct NixDep {
 
 /// A Nix Git repository fetch.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct NixGitDep {
     /// Human-readable identifier.
     pub name: String,
@@ -144,6 +150,7 @@ pub struct NixGitDep {
 
 /// A Nix Tarball fetch.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct NixTarDep {
     /// Human-readable identifier.
     pub name: String,
@@ -158,6 +165,7 @@ pub struct NixTarDep {
 
 /// A Nix Source File fetch.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct NixSrcDep {
     /// Human-readable identifier.
     pub name: String,

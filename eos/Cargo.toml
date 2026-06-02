@@ -1,7 +1,6 @@
 [workspace]
 members = [
   "eos-core",
-  "eos-store",
   "eos-snix",
   "eos-proto",
   "eos-daemon",

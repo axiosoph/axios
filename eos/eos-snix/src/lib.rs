@@ -10,12 +10,14 @@ pub mod sandbox;
 pub mod store;
 
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::str::FromStr;
+use std::sync::{Arc, Mutex};
 
 use eos_core::digest::Blake3Digest;
 use eos_core::engine::BuildEngine;
 use eos_core::eval::EvalRequest;
 use nix_compat::derivation::Derivation;
+use redb::ReadableDatabase;
 pub use sandbox::{SandboxConfig, select_sandbox};
 use snix_build::buildservice::BuildService;
 use snix_castore::Node;
@@ -99,6 +101,8 @@ pub struct SnixEngine {
     /// `Some` dispatches evaluations to an isolated subprocess.
     /// `None` evaluates in-process on a dedicated OS thread.
     pub eval_sandbox: Option<SandboxedEvalConfig>,
+    /// Evaluation cache database.
+    eval_cache: Mutex<Option<Arc<redb::Database>>>,
 }
 
 impl SnixEngine {
@@ -121,9 +125,101 @@ impl SnixEngine {
             nar_calculation_service,
             build_service,
             eval_sandbox,
+            eval_cache: Mutex::new(None),
         }
     }
+
+    fn get_eval_cache(&self) -> Result<Arc<redb::Database>, SnixError> {
+        let mut cache_guard = self
+            .eval_cache
+            .lock()
+            .map_err(|_| SnixError::CacheLockError)?;
+        if let Some(ref db) = *cache_guard {
+            return Ok(db.clone());
+        }
+
+        // Determine DB path
+        let db_path = if let Ok(path_str) = std::env::var("EOS_EVAL_CACHE_DB") {
+            PathBuf::from(path_str)
+        } else if let Some(ref sandbox_config) = self.eval_sandbox {
+            sandbox_config.sandbox_workdir.join("eval-cache.redb")
+        } else {
+            std::env::temp_dir().join("eos-eval-cache.redb")
+        };
+
+        if let Some(parent) = db_path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| SnixError::CacheError(e.to_string()))?;
+        }
+
+        let db =
+            redb::Database::create(&db_path).map_err(|e| SnixError::CacheError(e.to_string()))?;
+
+        // Initialize the table
+        let write_txn = db
+            .begin_write()
+            .map_err(|e| SnixError::CacheError(e.to_string()))?;
+        {
+            let _ = write_txn
+                .open_table(EVAL_CACHE_TABLE)
+                .map_err(|e| SnixError::CacheError(e.to_string()))?;
+        }
+        write_txn
+            .commit()
+            .map_err(|e| SnixError::CacheError(e.to_string()))?;
+
+        let arc_db = Arc::new(db);
+        *cache_guard = Some(arc_db.clone());
+        Ok(arc_db)
+    }
+
+    fn get_cached_plan(&self, cache_key: [u8; 32]) -> Result<Option<Derivation>, SnixError> {
+        let db = self.get_eval_cache()?;
+        let read_txn = db
+            .begin_read()
+            .map_err(|e| SnixError::CacheError(e.to_string()))?;
+        let table = read_txn
+            .open_table(EVAL_CACHE_TABLE)
+            .map_err(|e| SnixError::CacheError(e.to_string()))?;
+        let result = table
+            .get(cache_key)
+            .map_err(|e| SnixError::CacheError(e.to_string()))?;
+        if let Some(val) = result {
+            let bytes = val.value();
+            let drv =
+                Derivation::from_aterm_bytes(bytes).map_err(|e| SnixError::ConversionError {
+                    from: "ATerm",
+                    to: "Derivation",
+                    detail: format!("{:?}", e),
+                })?;
+            Ok(Some(drv))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn set_cached_plan(&self, cache_key: [u8; 32], plan: &Derivation) -> Result<(), SnixError> {
+        let db = self.get_eval_cache()?;
+        let write_txn = db
+            .begin_write()
+            .map_err(|e| SnixError::CacheError(e.to_string()))?;
+        {
+            let mut table = write_txn
+                .open_table(EVAL_CACHE_TABLE)
+                .map_err(|e| SnixError::CacheError(e.to_string()))?;
+            let bytes = plan.to_aterm_bytes();
+            table
+                .insert(cache_key, bytes.as_slice())
+                .map_err(|e| SnixError::CacheError(e.to_string()))?;
+        }
+        write_txn
+            .commit()
+            .map_err(|e| SnixError::CacheError(e.to_string()))?;
+        Ok(())
+    }
 }
+
+const EVAL_CACHE_TABLE: redb::TableDefinition<[u8; 32], &[u8]> =
+    redb::TableDefinition::new("eval_cache");
 
 impl BuildEngine for SnixEngine {
     type Digest = Blake3Digest;
@@ -135,8 +231,13 @@ impl BuildEngine for SnixEngine {
         &self,
         request: EvalRequest<Self::Digest>,
     ) -> Result<Self::Plan, Self::Error> {
-        if let Some(ref sandbox_config) = self.eval_sandbox {
-            eval::evaluate_sandboxed(sandbox_config, request).await
+        let cache_key = eval::compute_eval_cache_key(&request);
+        if let Some(cached) = self.get_cached_plan(cache_key)? {
+            return Ok(cached);
+        }
+
+        let plan = if let Some(ref sandbox_config) = self.eval_sandbox {
+            eval::evaluate_sandboxed(sandbox_config, request).await?
         } else {
             let tokio_handle = Handle::current();
             let rx = evaluate_on_thread(
@@ -150,8 +251,47 @@ impl BuildEngine for SnixEngine {
                 self.build_service.clone(),
                 tokio_handle,
             );
-            rx.await.map_err(|_| SnixError::EvalThreadPanic)?
+            rx.await.map_err(|_| SnixError::EvalThreadPanic)??
+        };
+
+        self.set_cached_plan(cache_key, &plan)?;
+        Ok(plan)
+    }
+
+    async fn plan(
+        &self,
+        request: EvalRequest<Self::Digest>,
+    ) -> Result<eos_core::engine::BuildPlan<Self::Digest, Self::Plan>, Self::Error> {
+        let cache_key = eval::compute_eval_cache_key(&request);
+        if let Some(plan) = self.get_cached_plan(cache_key)? {
+            if let Some(output) = self.lookup_cached(&plan).await? {
+                let store_path = output.path_info.store_path.to_string();
+                return Ok(eos_core::engine::BuildPlan::Cached(vec![
+                    eos_core::store::StorePath(store_path),
+                ]));
+            } else {
+                return Ok(eos_core::engine::BuildPlan::NeedsBuild(plan));
+            }
         }
+
+        // Cache miss -> NeedsEvaluation
+        let id = if let Some(ref composer) = request.composer {
+            composer.atom_id.clone()
+        } else {
+            atom_id::AtomId::new(
+                atom_id::Anchor::new(vec![0; 32]),
+                atom_id::Label::from_str("composer").unwrap(),
+            )
+        };
+        let digest = if let Some(input) = request.inputs.values().next() {
+            input.digest
+        } else {
+            Blake3Digest([0; 32])
+        };
+
+        Ok(eos_core::engine::BuildPlan::NeedsEvaluation(
+            eos_core::engine::AtomRef { id, digest },
+        ))
     }
 
     async fn build(&self, plan: &Self::Plan) -> Result<Self::Output, Self::Error> {
