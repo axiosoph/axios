@@ -101,18 +101,20 @@ Evaluating expressions (such as Nix/Snix code) is a dangerous operation because 
 
 ### The Subprocess Worker Model
 
-Instead of evaluating expressions directly inside the main `eosd` daemon process, the daemon forks itself:
+Sandboxed evaluation is enabled by providing a `SandboxedEvalConfig` to `SnixEngine`. When present, the engine dispatches evaluations to an isolated subprocess instead of evaluating in-process:
 
-1. The daemon resolves the path to its own binary using `std::env::current_exe()`.
+1. The engine resolves the worker binary path in precedence order: `EOS_EVAL_WORKER_BIN` environment variable → configured `worker_bin` path → `std::env::current_exe()`.
 2. It spawns the binary as a child subprocess, passing the hidden subcommand `--eval-worker` along with service connection parameters.
-3. The daemon serializes the evaluation parameters (`EvalRequestDto`) as a JSON payload over the child's standard input (`stdin`).
+3. The engine serializes the evaluation parameters (`EvalRequestDto`) as a JSON payload over the child's standard input (`stdin`), then closes the pipe to signal EOF.
 4. The worker executes the evaluation within a sandbox and prints the computed **Plan** (serialized as Nix-compatible ATerm derivation bytes) to standard output (`stdout`).
-5. The daemon reads stdout, registers the plan in the evaluation cache, and terminates the worker.
+5. The engine reads stdout, parses the ATerm into a `Derivation`, and terminates the worker.
+
+When no `SandboxedEvalConfig` is present, evaluations run in-process on a dedicated OS thread (the `!Send` snix-eval types prevent evaluation on tokio worker threads).
 
 ### Platform Isolation Dispatch
 
-- **Linux (Bubblewrap)**: Spawns the worker wrapped in `bwrap`. The sandbox disables network access (omits `--share-net`), unshares namespaces, maps the Axios workspace directory and the evaluated files as read-only mounts (`--ro-bind`), and restricts write access to the temporary workspace and the local database sockets (`--bind`).
-- **macOS (Birdcage)**: Spawns the worker within a blocking task using the `birdcage` library. It applies macOS Seatbelt sandbox policies, whitelisting read-only access to the daemon binary and workspace directories, permitting read/write access to Unix socket paths, and denying network connections and other filesystem modifications.
+- **Linux (Bubblewrap)**: Spawns the worker wrapped in `bwrap`. The sandbox disables network access (`--unshare-net`), unshares namespaces (user, PID, UTS, IPC), maps the Axios workspace directory and the evaluated files as read-only mounts (`--ro-bind`), and restricts write access to the temporary workspace and the local database directories (`--bind`). Host configuration directories like `/etc` are deliberately excluded to prevent impurity.
+- **macOS (Birdcage)**: Spawns the worker within a `tokio::task::spawn_blocking` pool using the `birdcage` library. It applies macOS Seatbelt sandbox policies, whitelisting read-only access to the daemon binary and workspace directories, permitting read/write access to database paths, and denying network connections and other filesystem modifications.
 
 ---
 

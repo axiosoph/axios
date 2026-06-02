@@ -101,7 +101,7 @@ TYPE ResolvedInputDto = {
 **[eos-eval-worker-isolation]**: Eos MUST NOT execute evaluations within the primary daemon thread or process. All evaluations MUST be delegated to a dedicated worker subprocess invoked with the `--eval-worker` parameter.
 `VERIFIED: unverified`
 
-**[eos-eval-worker-executable]**: The worker subprocess MUST be launched using the exact executable path of the running daemon, retrieved via `std::env::current_exe()`.
+**[eos-eval-worker-executable]**: The worker subprocess MUST be launched using a binary resolved in this order: (1) the `EOS_EVAL_WORKER_BIN` environment variable, (2) an explicit `worker_bin` path configured in `SandboxedEvalConfig`, (3) `std::env::current_exe()`. Sandbox dispatch is gated solely by the presence of a `SandboxedEvalConfig` on `SnixEngine` — no process-name heuristics.
 `VERIFIED: unverified`
 
 **[eos-eval-sandbox-network-containment]**: The evaluation worker subprocess MUST NOT have access to the external network. Network namespace sharing or socket creation MUST be disabled.
@@ -164,7 +164,16 @@ TYPE ResolvedInputDto = {
 
 ## Forbidden States
 
-**[no-unbounded-eval-io]**: The evaluation worker subprocess MUST NOT access `/etc`, `/home`, or host system configuration directories not explicitly whitelisted in the sandbox exceptions list.
+**[no-unbounded-eval-io]**: The evaluation worker subprocess MUST NOT access `/etc`, `/home`, or host system configuration directories not explicitly whitelisted in the sandbox exceptions list. The allowed system paths are:
+
+- `/usr` (read-only) — system binaries and libraries
+- `/bin` (read-only) — essential binaries
+- `/lib`, `/lib64` (read-only) — dynamic linker and shared libraries
+- The workspace directory (read-only) — source files under evaluation
+- The sandbox workdir (read-write) — evaluation temporary state
+- Database socket/file directories (read-write) — store access
+
+All other host filesystem paths MUST be denied.
 `VERIFIED: unverified`
 
 **[no-shared-network-sockets]**: The evaluation worker MUST NOT inherit network file descriptors or access the loopback interface (`127.0.0.1`), preventing IPC leak paths to host-level daemons.
@@ -195,3 +204,6 @@ TYPE ResolvedInputDto = {
 
 3. **Performance Overhead**:
    Spawning a fresh process for each evaluation introduces execution overhead. Eos mitigates this cost by maintaining a persistent evaluation cache. We bypass the worker subprocess entirely if the cache key (the snapshot digest combined with evaluation arguments) already maps to a pre-computed plan.
+
+4. **Eval Cache and Sandbox Interaction**:
+   The evaluation cache MUST be consulted in the daemon process _before_ spawning the sandbox worker. The cache is trusted data in the daemon's process space — it MUST NOT be moved inside the sandbox. If the cache hits, no subprocess is spawned. This ensures the cache lookup runs at full speed without sandbox overhead, and prevents the sandbox from needing write access to the cache store.
