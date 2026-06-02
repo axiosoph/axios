@@ -1,0 +1,5 @@
+[package]
+label = "pkg"
+version = "1.0.0"
+[compose]
+entry = "default.nix"

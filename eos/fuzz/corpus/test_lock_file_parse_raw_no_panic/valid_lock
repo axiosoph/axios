@@ -1,0 +1,12 @@
+version = 0
+[sets]
+"0000000000000000000000000000000000000000" = { tag = "set-1", mirrors = ["::"] }
+[[deps]]
+type = "atom"
+label = "pkg"
+version = "1.0.0"
+set = "0000000000000000000000000000000000000000"
+requires = []
+direct = true
+[compose]
+use = "static"
