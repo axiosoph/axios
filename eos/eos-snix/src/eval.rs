@@ -277,17 +277,18 @@ impl From<ComposerConfig> for ComposerConfigDto {
 
 impl ComposerConfigDto {
     /// Converts back to a `ComposerConfig`, parsing the `AtomId`.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the serialized `atom_id` string is malformed.
-    pub fn into_config(self) -> ComposerConfig {
-        ComposerConfig {
-            atom_id: atom_id::AtomId::from_str(&self.atom_id)
-                .expect("invalid AtomId in ComposerConfigDto"),
+    pub fn into_config(self) -> Result<ComposerConfig, SnixError> {
+        let atom_id =
+            atom_id::AtomId::from_str(&self.atom_id).map_err(|e| SnixError::ConversionError {
+                from: "ComposerConfigDto",
+                to: "ComposerConfig",
+                detail: format!("invalid AtomId '{}': {}", self.atom_id, e),
+            })?;
+        Ok(ComposerConfig {
+            atom_id,
             entry: self.entry,
             version: self.version,
-        }
+        })
     }
 }
 
@@ -361,16 +362,16 @@ impl From<EvalRequest<Blake3Digest>> for EvalRequestDto {
 
 impl EvalRequestDto {
     /// Converts this DTO into a standard `EvalRequest<Blake3Digest>`.
-    pub fn into_request(self) -> EvalRequest<Blake3Digest> {
+    pub fn into_request(self) -> Result<EvalRequest<Blake3Digest>, SnixError> {
         let mut inputs = HashMap::new();
         for (k, v) in self.inputs {
             inputs.insert(k, v.into());
         }
         let mut req = EvalRequest::new(self.expression.into());
         req.inputs = inputs;
-        req.composer = self.composer.map(|c| c.into_config());
+        req.composer = self.composer.map(|c| c.into_config()).transpose()?;
         req.eval_args = self.eval_args;
-        req
+        Ok(req)
     }
 }
 /// Constructs the common CLI arguments passed to the `--eval-worker` subprocess.

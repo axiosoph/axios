@@ -193,7 +193,9 @@ async fn run_eval_worker(
     std::io::stdin().read_to_end(&mut stdin_bytes)?;
 
     let dto: eos_snix::eval::EvalRequestDto = serde_json::from_slice(&stdin_bytes)?;
-    let request = dto.into_request();
+    let request = dto
+        .into_request()
+        .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { Box::new(e) })?;
 
     // 2. Initialize Snix services
     let urls = snix_store::utils::ServiceUrls::parse_from([
