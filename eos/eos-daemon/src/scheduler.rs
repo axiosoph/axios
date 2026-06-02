@@ -28,6 +28,32 @@ pub struct JobState {
     pub abort_handle: Arc<Mutex<Option<tokio::task::AbortHandle>>>,
 }
 
+/// Status and metadata for a worker node.
+#[allow(dead_code)]
+pub struct WorkerStatus {
+    /// Cryptographic worker identity.
+    pub id: String,
+    /// Concurrency limits.
+    pub max_concurrency: usize,
+    /// Active jobs currently assigned.
+    pub active_jobs: std::collections::HashSet<Blake3Digest>,
+    /// Last recorded heartbeat timestamp.
+    pub last_heartbeat: SystemTime,
+    /// Whether the worker is healthy.
+    pub healthy: bool,
+}
+
+/// Lease covering a running job.
+#[allow(dead_code)]
+pub struct Lease {
+    /// Worker assigned to the job.
+    pub worker_id: String,
+    /// Lease grant timestamp.
+    pub granted_at: SystemTime,
+    /// Lease expiration timestamp.
+    pub expires_at: SystemTime,
+}
+
 /// The build job scheduler.
 pub struct Scheduler {
     config: Arc<DaemonConfig>,
@@ -35,6 +61,10 @@ pub struct Scheduler {
     index: Arc<eos::index::LockFileIndex>,
     jobs: Arc<Mutex<HashMap<Blake3Digest, JobState>>>,
     semaphore: Arc<Semaphore>,
+    workers: Arc<Mutex<HashMap<String, WorkerStatus>>>,
+    leases: Arc<Mutex<HashMap<Blake3Digest, Lease>>>,
+    pub lease_duration: Arc<Mutex<std::time::Duration>>,
+    pub heartbeat_deadline: Arc<Mutex<std::time::Duration>>,
 }
 
 impl Scheduler {
@@ -46,13 +76,113 @@ impl Scheduler {
         index: Arc<eos::index::LockFileIndex>,
     ) -> Self {
         let max_concurrency = config.max_concurrency;
-        Self {
+        let lease_duration = Arc::new(Mutex::new(std::time::Duration::from_secs(30)));
+        let heartbeat_deadline = Arc::new(Mutex::new(std::time::Duration::from_secs(10)));
+
+        let scheduler = Self {
             config,
             engine,
             index,
             jobs: Arc::new(Mutex::new(HashMap::new())),
             semaphore: Arc::new(Semaphore::new(max_concurrency)),
-        }
+            workers: Arc::new(Mutex::new(HashMap::new())),
+            leases: Arc::new(Mutex::new(HashMap::new())),
+            lease_duration,
+            heartbeat_deadline,
+        };
+
+        // Spawn a background monitoring loop for leases and heartbeats
+        let workers_clone = scheduler.workers.clone();
+        let leases_clone = scheduler.leases.clone();
+        let jobs_clone = scheduler.jobs.clone();
+        let heartbeat_deadline_clone = scheduler.heartbeat_deadline.clone();
+
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                let now = SystemTime::now();
+
+                // 1. Check worker heartbeats [eos-scheduler-heartbeat-liveness]
+                let mut unhealthy_workers = Vec::new();
+                let deadline = if let Ok(guard) = heartbeat_deadline_clone.lock() {
+                    *guard
+                } else {
+                    std::time::Duration::from_secs(10)
+                };
+
+                if let Ok(mut w_guard) = workers_clone.lock() {
+                    for (id, worker) in w_guard.iter_mut() {
+                        if worker.healthy {
+                            if let Ok(elapsed) = now.duration_since(worker.last_heartbeat) {
+                                if elapsed > deadline {
+                                    worker.healthy = false;
+                                    info!("Worker {} marked unhealthy due to missed heartbeat", id);
+                                    unhealthy_workers.push(id.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 2. Revoke leases for unhealthy workers or expired leases
+                //    [eos-scheduler-lease-expiry]
+                let mut expired_jobs = Vec::new();
+                if let Ok(mut l_guard) = leases_clone.lock() {
+                    let mut to_remove = Vec::new();
+                    for (job_id, lease) in l_guard.iter() {
+                        let is_expired = now > lease.expires_at;
+                        let is_worker_unhealthy = unhealthy_workers.contains(&lease.worker_id);
+                        if is_expired || is_worker_unhealthy {
+                            expired_jobs.push((*job_id, lease.worker_id.clone(), is_expired));
+                            to_remove.push(*job_id);
+                        }
+                    }
+                    for job_id in to_remove {
+                        l_guard.remove(&job_id);
+                    }
+                }
+
+                // 3. Process expired/unhealthy worker jobs (abort and re-queue)
+                for (job_id, worker_id, is_expired) in expired_jobs {
+                    if let Ok(mut jobs_guard) = jobs_clone.lock() {
+                        if let Some(j) = jobs_guard.get_mut(&job_id) {
+                            let msg = if is_expired {
+                                format!("Lease expired for job {} on worker {}", job_id, worker_id)
+                            } else {
+                                format!("Worker {} became unhealthy for job {}", worker_id, job_id)
+                            };
+                            error!("{}", msg);
+
+                            // Abort currently running task
+                            if let Ok(handle_guard) = j.abort_handle.lock() {
+                                if let Some(ref handle) = *handle_guard {
+                                    handle.abort();
+                                }
+                            }
+
+                            // Evict from assigned worker's active jobs list
+                            if let Ok(mut w_guard) = workers_clone.lock() {
+                                if let Some(w) = w_guard.get_mut(&worker_id) {
+                                    w.active_jobs.remove(&job_id);
+                                }
+                            }
+
+                            // Transition job back to queued for reassignment
+                            j.status = JobStatus::Queued;
+                            let event = ProgressEvent {
+                                job_id: j.id,
+                                timestamp: SystemTime::now(),
+                                status: JobStatus::Queued,
+                                log_line: Some(format!("Re-queueing: {}", msg)),
+                            };
+                            let _ = j.sender.send(event);
+                        }
+                    }
+                }
+            }
+        });
+
+        scheduler
     }
 
     /// Submits a lock file build job to the scheduler.
@@ -293,6 +423,163 @@ impl Scheduler {
             Ok(true)
         } else {
             Ok(false)
+        }
+    }
+
+    /// Register a worker with the scheduler.
+    pub fn register_worker(&self, worker_id: String, max_concurrency: usize) -> Result<(), String> {
+        let mut guard = self.workers.lock().map_err(|e| e.to_string())?;
+        guard.insert(
+            worker_id.clone(),
+            WorkerStatus {
+                id: worker_id,
+                max_concurrency,
+                active_jobs: std::collections::HashSet::new(),
+                last_heartbeat: SystemTime::now(),
+                healthy: true,
+            },
+        );
+        Ok(())
+    }
+
+    /// Record a heartbeat from a worker, updating its last_heartbeat and marking it healthy.
+    pub fn record_heartbeat(&self, worker_id: &str) -> Result<(), String> {
+        let mut guard = self.workers.lock().map_err(|e| e.to_string())?;
+        if let Some(w) = guard.get_mut(worker_id) {
+            w.last_heartbeat = SystemTime::now();
+            if !w.healthy {
+                w.healthy = true;
+                info!("Worker {} returned to healthy status", worker_id);
+            }
+            Ok(())
+        } else {
+            Err(format!("Worker {} not registered", worker_id))
+        }
+    }
+
+    /// Grant a lease for a job on a worker.
+    pub fn grant_lease(&self, job_id: Blake3Digest, worker_id: String) -> Result<(), String> {
+        let mut guard = self.leases.lock().map_err(|e| e.to_string())?;
+        let now = SystemTime::now();
+        let duration = if let Ok(g) = self.lease_duration.lock() {
+            *g
+        } else {
+            std::time::Duration::from_secs(30)
+        };
+        guard.insert(
+            job_id,
+            Lease {
+                worker_id,
+                granted_at: now,
+                expires_at: now + duration,
+            },
+        );
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use clap::Parser;
+    use snix_build::buildservice::DummyBuildService;
+    use snix_store::utils::{ServiceUrlsMemory, construct_services};
+
+    use super::*;
+
+    #[tokio::test]
+    async fn test_scheduler_lease_and_heartbeat() {
+        let (blob_service, directory_service, path_info_service, nar_calculation_service) =
+            construct_services(ServiceUrlsMemory::parse_from(std::iter::empty::<&str>()))
+                .await
+                .unwrap();
+
+        let build_service = Arc::new(DummyBuildService::default());
+        let engine = Arc::new(SnixEngine::new(
+            blob_service,
+            directory_service,
+            path_info_service,
+            nar_calculation_service.into(),
+            build_service,
+            None,
+        ));
+
+        let config = Arc::new(DaemonConfig {
+            socket_path: None,
+            blob_service_addr: "memory://".to_string(),
+            directory_service_addr: "memory://".to_string(),
+            path_info_service_addr: "memory://".to_string(),
+            max_concurrency: 2,
+            sandbox_workdir: PathBuf::from("/tmp/sandbox"),
+            workspace_dir: PathBuf::from("/tmp/workspace"),
+            locks_dir: PathBuf::from("/tmp/locks"),
+            eval_worker: false,
+            enable_eval_sandbox: false,
+        });
+
+        let index = Arc::new(eos::index::LockFileIndex::new());
+
+        let scheduler = Scheduler::new(config, engine, index);
+        // Reduce lease and heartbeat durations for faster test execution
+        let scheduler = scheduler;
+        *scheduler.lease_duration.lock().unwrap() = std::time::Duration::from_millis(500);
+        *scheduler.heartbeat_deadline.lock().unwrap() = std::time::Duration::from_millis(100);
+
+        let worker_id = "worker-1".to_string();
+        scheduler.register_worker(worker_id.clone(), 2).unwrap();
+
+        // Check registered status
+        {
+            let guard = scheduler.workers.lock().unwrap();
+            let w = guard.get(&worker_id).unwrap();
+            assert!(w.healthy);
+            assert_eq!(w.max_concurrency, 2);
+        }
+
+        // Grant a lease
+        let job_id = Blake3Digest([1; 32]);
+        scheduler.grant_lease(job_id, worker_id.clone()).unwrap();
+
+        {
+            let guard = scheduler.leases.lock().unwrap();
+            let lease = guard.get(&job_id).unwrap();
+            assert_eq!(lease.worker_id, worker_id);
+        }
+
+        // 1. Test heartbeat deadline expiry (worker goes unhealthy and lease is revoked)
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+
+        {
+            let guard = scheduler.workers.lock().unwrap();
+            let w = guard.get(&worker_id).unwrap();
+            assert!(!w.healthy);
+        }
+        {
+            let guard = scheduler.leases.lock().unwrap();
+            assert!(guard.get(&job_id).is_none());
+        }
+
+        // 2. record heartbeat, verify it stays healthy
+        scheduler.record_heartbeat(&worker_id).unwrap();
+        {
+            let guard = scheduler.workers.lock().unwrap();
+            let w = guard.get(&worker_id).unwrap();
+            assert!(w.healthy);
+        }
+
+        // 3. Grant a lease again, wait 600ms while keeping worker healthy
+        scheduler.grant_lease(job_id, worker_id.clone()).unwrap();
+
+        for _ in 0..6 {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            let _ = scheduler.record_heartbeat(&worker_id);
+        }
+
+        // Lease should expire and be gone
+        {
+            let guard = scheduler.leases.lock().unwrap();
+            assert!(guard.get(&job_id).is_none());
         }
     }
 }
