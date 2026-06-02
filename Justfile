@@ -10,6 +10,9 @@ test:
     cargo test --manifest-path eos/Cargo.toml
     @echo "Running tests in 'ion' workspace..."
     cargo test --manifest-path ion/Cargo.toml
+    @echo "Running tests in 'alurl' crate..."
+    cargo test --manifest-path alurl/Cargo.toml
+
 
 # Run all Bolero fuzzers sequentially (defaults to 10 seconds each)
 fuzz args="-T 10s --profile release":
