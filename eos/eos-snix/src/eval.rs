@@ -368,8 +368,11 @@ pub async fn evaluate_sandboxed(
             "/tmp".to_string(),
         ];
 
-        // Bind standard OS paths
-        for path in &["/usr", "/bin", "/lib", "/etc"] {
+        // Bind minimal OS paths required for dynamic linking and execution.
+        // Deliberately excludes /etc — host configuration files
+        // (/etc/passwd, /etc/hostname, /etc/resolv.conf, /etc/localtime)
+        // are impurity vectors prohibited by [no-unbounded-eval-io].
+        for path in &["/usr", "/bin", "/lib"] {
             if std::path::Path::new(path).exists() {
                 args.push("--ro-bind".to_string());
                 args.push(path.to_string());
