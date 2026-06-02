@@ -363,9 +363,13 @@ impl EvalRequestDto {
     }
 }
 
-/// Executes evaluation inside a platform-specific restricted sandboxed environment.
+/// Executes evaluation inside a platform-specific restricted sandbox.
+///
+/// Spawns the worker binary inside a platform-native container
+/// (Bubblewrap on Linux, Birdcage on macOS), feeds the serialized
+/// `EvalRequest` via stdin, and reads the ATerm derivation from stdout.
 pub async fn evaluate_sandboxed(
-    engine: &crate::SnixEngine,
+    config: &crate::SandboxedEvalConfig,
     request: EvalRequest<Blake3Digest>,
 ) -> Result<Derivation, SnixError> {
     let dto = EvalRequestDto::from(request);
@@ -377,14 +381,7 @@ pub async fn evaluate_sandboxed(
 
     #[cfg(target_os = "linux")]
     {
-        let exe_path = if let Ok(bin_str) = std::env::var("EOS_EVAL_WORKER_BIN") {
-            std::path::PathBuf::from(bin_str)
-        } else {
-            std::env::current_exe().map_err(|e| SnixError::SandboxError {
-                platform: "linux",
-                source: Box::new(e),
-            })?
-        };
+        let exe_path = config.resolve_worker_bin()?;
 
         let mut args = vec![
             "--unshare-uts".to_string(),
@@ -431,12 +428,12 @@ pub async fn evaluate_sandboxed(
 
         // Bind workspace directory
         args.push("--ro-bind".to_string());
-        args.push(engine.workspace_dir.to_string_lossy().into_owned());
-        args.push(engine.workspace_dir.to_string_lossy().into_owned());
+        args.push(config.workspace_dir.to_string_lossy().into_owned());
+        args.push(config.workspace_dir.to_string_lossy().into_owned());
 
         // Bind sandbox workdir
-        if !engine.sandbox_workdir.exists() {
-            std::fs::create_dir_all(&engine.sandbox_workdir).map_err(|e| {
+        if !config.sandbox_workdir.exists() {
+            std::fs::create_dir_all(&config.sandbox_workdir).map_err(|e| {
                 SnixError::SandboxError {
                     platform: "linux",
                     source: Box::new(e),
@@ -444,14 +441,14 @@ pub async fn evaluate_sandboxed(
             })?;
         }
         args.push("--bind".to_string());
-        args.push(engine.sandbox_workdir.to_string_lossy().into_owned());
-        args.push(engine.sandbox_workdir.to_string_lossy().into_owned());
+        args.push(config.sandbox_workdir.to_string_lossy().into_owned());
+        args.push(config.sandbox_workdir.to_string_lossy().into_owned());
 
         // Bind DB directories
         for addr in &[
-            &engine.blob_service_addr,
-            &engine.directory_service_addr,
-            &engine.path_info_service_addr,
+            &config.blob_service_addr,
+            &config.directory_service_addr,
+            &config.path_info_service_addr,
         ] {
             if let Some(path) = extract_path_from_addr(addr) {
                 let host_path = if path.extension().is_some() {
@@ -483,11 +480,11 @@ pub async fn evaluate_sandboxed(
             .arg(&exe_path)
             .arg("--eval-worker")
             .arg("--blob-service-addr")
-            .arg(&engine.blob_service_addr)
+            .arg(&config.blob_service_addr)
             .arg("--directory-service-addr")
-            .arg(&engine.directory_service_addr)
+            .arg(&config.directory_service_addr)
             .arg("--path-info-service-addr")
-            .arg(&engine.path_info_service_addr)
+            .arg(&config.path_info_service_addr)
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
@@ -546,19 +543,12 @@ pub async fn evaluate_sandboxed(
     #[cfg(target_os = "macos")]
     {
         // birdcage macOS sandboxing
-        let exe_path = if let Ok(bin_str) = std::env::var("EOS_EVAL_WORKER_BIN") {
-            std::path::PathBuf::from(bin_str)
-        } else {
-            std::env::current_exe().map_err(|e| SnixError::SandboxError {
-                platform: "macos",
-                source: Box::new(e),
-            })?
-        };
+        let exe_path = config.resolve_worker_bin()?;
 
-        let workspace_dir = engine.workspace_dir.clone();
-        let blob_service_addr = engine.blob_service_addr.clone();
-        let directory_service_addr = engine.directory_service_addr.clone();
-        let path_info_service_addr = engine.path_info_service_addr.clone();
+        let workspace_dir = config.workspace_dir.clone();
+        let blob_service_addr = config.blob_service_addr.clone();
+        let directory_service_addr = config.directory_service_addr.clone();
+        let path_info_service_addr = config.path_info_service_addr.clone();
 
         // Run synchronously in spawn_blocking
         let derivation_res =

@@ -9,6 +9,7 @@ pub mod eval;
 pub mod sandbox;
 pub mod store;
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use eos_core::digest::Blake3Digest;
@@ -37,11 +38,55 @@ pub struct SnixOutput {
     pub node: Node,
 }
 
+/// Configuration for out-of-process sandboxed evaluation.
+///
+/// When present on [`SnixEngine`], evaluations are dispatched to a
+/// restricted subprocess using platform-native containerization
+/// (Bubblewrap on Linux, Birdcage on macOS). When absent, evaluations
+/// run in-process on a dedicated OS thread.
+#[derive(Clone, Debug)]
+pub struct SandboxedEvalConfig {
+    /// Override path to the worker binary. Falls back to
+    /// `std::env::current_exe()` if `None`. Settable via
+    /// the `EOS_EVAL_WORKER_BIN` environment variable.
+    pub worker_bin: Option<PathBuf>,
+    /// Address for the blob service (forwarded to the worker).
+    pub blob_service_addr: String,
+    /// Address for the directory service (forwarded to the worker).
+    pub directory_service_addr: String,
+    /// Address for the path info service (forwarded to the worker).
+    pub path_info_service_addr: String,
+    /// Workspace root mounted read-only inside the sandbox.
+    pub workspace_dir: PathBuf,
+    /// Temporary directory mounted read-write for evaluation state.
+    pub sandbox_workdir: PathBuf,
+}
+
+impl SandboxedEvalConfig {
+    /// Resolves the worker binary path.
+    ///
+    /// Checks the `EOS_EVAL_WORKER_BIN` environment variable first,
+    /// then falls back to the configured `worker_bin`, and finally to
+    /// `std::env::current_exe()`.
+    pub fn resolve_worker_bin(&self) -> Result<PathBuf, SnixError> {
+        if let Ok(bin_str) = std::env::var("EOS_EVAL_WORKER_BIN") {
+            return Ok(PathBuf::from(bin_str));
+        }
+        if let Some(ref bin) = self.worker_bin {
+            return Ok(bin.clone());
+        }
+        std::env::current_exe().map_err(|e| SnixError::SandboxError {
+            platform: "worker_bin",
+            source: Box::new(e),
+        })
+    }
+}
+
 /// A Snix-backed implementation of the [`BuildEngine`] trait.
 pub struct SnixEngine {
     /// Underlying blob storage service.
     pub blob_service: Arc<dyn BlobService>,
-    /// Underlying directory directory tree service.
+    /// Underlying directory tree service.
     pub directory_service: Arc<dyn DirectoryService>,
     /// Underlying Nix path information metadata service.
     pub path_info_service: Arc<dyn PathInfoService>,
@@ -49,35 +94,25 @@ pub struct SnixEngine {
     pub nar_calculation_service: Arc<dyn NarCalculationService>,
     /// Sandbox execution build service.
     pub build_service: Arc<dyn BuildService>,
-    /// Address for the blob service.
-    pub blob_service_addr: String,
-    /// Address for the directory service.
-    pub directory_service_addr: String,
-    /// Address for the path info service.
-    pub path_info_service_addr: String,
-    /// Working directory for local workspace.
-    pub workspace_dir: std::path::PathBuf,
-    /// Sandbox working directory.
-    pub sandbox_workdir: std::path::PathBuf,
-    /// Whether evaluation sandboxing is enabled.
-    pub enable_eval_sandbox: bool,
+    /// Evaluation sandbox configuration.
+    ///
+    /// `Some` dispatches evaluations to an isolated subprocess.
+    /// `None` evaluates in-process on a dedicated OS thread.
+    pub eval_sandbox: Option<SandboxedEvalConfig>,
 }
 
 impl SnixEngine {
     /// Creates a new `SnixEngine` wrapping the specified services.
-    #[allow(clippy::too_many_arguments)]
+    ///
+    /// Pass `Some(config)` for `eval_sandbox` to enable out-of-process
+    /// sandboxed evaluation, or `None` for in-process evaluation.
     pub fn new(
         blob_service: Arc<dyn BlobService>,
         directory_service: Arc<dyn DirectoryService>,
         path_info_service: Arc<dyn PathInfoService>,
         nar_calculation_service: Arc<dyn NarCalculationService>,
         build_service: Arc<dyn BuildService>,
-        blob_service_addr: String,
-        directory_service_addr: String,
-        path_info_service_addr: String,
-        workspace_dir: std::path::PathBuf,
-        sandbox_workdir: std::path::PathBuf,
-        enable_eval_sandbox: bool,
+        eval_sandbox: Option<SandboxedEvalConfig>,
     ) -> Self {
         Self {
             blob_service,
@@ -85,12 +120,7 @@ impl SnixEngine {
             path_info_service,
             nar_calculation_service,
             build_service,
-            blob_service_addr,
-            directory_service_addr,
-            path_info_service_addr,
-            workspace_dir,
-            sandbox_workdir,
-            enable_eval_sandbox,
+            eval_sandbox,
         }
     }
 }
@@ -105,14 +135,8 @@ impl BuildEngine for SnixEngine {
         &self,
         request: EvalRequest<Self::Digest>,
     ) -> Result<Self::Plan, Self::Error> {
-        let is_daemon = std::env::current_exe()
-            .ok()
-            .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
-            .map(|name| name.starts_with("eosd"))
-            .unwrap_or(false);
-
-        if self.enable_eval_sandbox && is_daemon {
-            eval::evaluate_sandboxed(self, request).await
+        if let Some(ref sandbox_config) = self.eval_sandbox {
+            eval::evaluate_sandboxed(sandbox_config, request).await
         } else {
             let tokio_handle = Handle::current();
             let rx = evaluate_on_thread(

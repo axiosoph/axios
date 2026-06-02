@@ -3,7 +3,7 @@ use std::sync::Arc;
 use clap::Parser;
 use eos_core::engine::BuildEngine;
 use eos_core::eval::{EvalRequest, EvalTarget};
-use eos_snix::SnixEngine;
+use eos_snix::{SandboxedEvalConfig, SnixEngine};
 use snix_build::buildservice::DummyBuildService;
 use snix_store::utils::{ServiceUrlsMemory, construct_services};
 
@@ -17,19 +17,14 @@ async fn test_snix_engine_evaluate() {
 
     let build_service = Arc::new(DummyBuildService::default());
 
-    // 2. Instantiate the SnixEngine
+    // 2. Instantiate the SnixEngine without sandbox (in-process eval)
     let engine = SnixEngine::new(
         blob_service,
         directory_service,
         path_info_service,
         nar_calculation_service.into(),
         build_service,
-        "memory://".to_string(),
-        "memory://".to_string(),
-        "memory://".to_string(),
-        std::env::current_dir().unwrap(),
-        std::env::temp_dir(),
-        false, // disable eval sandbox for unit test
+        None, // no sandbox — evaluate in-process
     );
 
     // 3. Construct an EvalRequest targeting a simple derivation expression
@@ -52,7 +47,7 @@ async fn test_snix_engine_evaluate() {
 
 #[tokio::test]
 async fn test_snix_engine_evaluate_sandboxed() {
-    // 1. Check if bwrap is installed on the host and we're on Linux
+    // 1. Gate on Linux + bwrap availability
     if !cfg!(target_os = "linux") {
         return;
     }
@@ -64,32 +59,19 @@ async fn test_snix_engine_evaluate_sandboxed() {
         return;
     }
 
-    // Determine target/debug/eosd binary path
-    let eosd_path = std::env::current_dir().unwrap();
-    let paths_to_try = vec![
-        eosd_path.join("target/debug/eosd"),
-        eosd_path.join("../target/debug/eosd"),
-        eosd_path.join("../../target/debug/eosd"),
+    // 2. Locate the compiled eosd worker binary
+    let cwd = std::env::current_dir().unwrap();
+    let candidates = [
+        cwd.join("target/debug/eosd"),
+        cwd.join("../target/debug/eosd"),
+        cwd.join("../../target/debug/eosd"),
     ];
-    let mut resolved_eosd = None;
-    for p in paths_to_try {
-        if p.exists() {
-            resolved_eosd = Some(p);
-            break;
-        }
-    }
-
-    let Some(eosd_bin) = resolved_eosd else {
-        // Skip test if we cannot find compiled eosd binary
+    let Some(eosd_bin) = candidates.iter().find(|p| p.exists()).cloned() else {
+        // Skip if the eosd binary has not been compiled
         return;
     };
 
-    // Set environment variable so the sandboxed evaluator uses the compiled daemon
-    unsafe {
-        std::env::set_var("EOS_EVAL_WORKER_BIN", &eosd_bin);
-    }
-
-    // 2. Initialize in-memory store services
+    // 3. Initialize in-memory store services
     let (blob_service, directory_service, path_info_service, nar_calculation_service) =
         construct_services(ServiceUrlsMemory::parse_from(std::iter::empty::<&str>()))
             .await
@@ -97,22 +79,27 @@ async fn test_snix_engine_evaluate_sandboxed() {
 
     let build_service = Arc::new(DummyBuildService::default());
 
-    // 3. Instantiate the SnixEngine with eval sandbox enabled
+    // 4. Construct sandbox config with explicit worker binary path
+    let sandbox_config = SandboxedEvalConfig {
+        worker_bin: Some(eosd_bin),
+        blob_service_addr: "memory://".to_string(),
+        directory_service_addr: "memory://".to_string(),
+        path_info_service_addr: "memory://".to_string(),
+        workspace_dir: std::env::current_dir().unwrap(),
+        sandbox_workdir: std::env::temp_dir().join("eos-test-sandbox"),
+    };
+
+    // 5. Instantiate the SnixEngine with sandbox enabled
     let engine = SnixEngine::new(
         blob_service,
         directory_service,
         path_info_service,
         nar_calculation_service.into(),
         build_service,
-        "memory://".to_string(),
-        "memory://".to_string(),
-        "memory://".to_string(),
-        std::env::current_dir().unwrap(),
-        std::env::temp_dir(),
-        true, // enable eval sandbox!
+        Some(sandbox_config),
     );
 
-    // 4. Construct an EvalRequest targeting a simple derivation expression
+    // 6. Construct an EvalRequest targeting a simple derivation expression
     let request = EvalRequest::new(EvalTarget::Expression(
         r#"builtins.derivation {
             name = "hello-sandboxed";
@@ -122,10 +109,10 @@ async fn test_snix_engine_evaluate_sandboxed() {
         .to_string(),
     ));
 
-    // 5. Run evaluate and assert success
+    // 7. Run evaluate — this MUST take the sandboxed subprocess path
     let plan = engine.evaluate(request).await.unwrap();
 
-    // 6. Verify the generated Derivation properties
+    // 8. Verify the generated Derivation properties
     assert_eq!(plan.builder, "/bin/sh");
     assert_eq!(
         plan.environment.get("name").unwrap().as_slice(),

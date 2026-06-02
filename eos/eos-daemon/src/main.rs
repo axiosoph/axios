@@ -77,18 +77,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     .await
     .map_err(|e| std::io::Error::other(format!("Failed to initialize sandbox: {}", e)))?;
 
+    let eval_sandbox = if config.enable_eval_sandbox {
+        Some(eos_snix::SandboxedEvalConfig {
+            worker_bin: None,
+            blob_service_addr: config.blob_service_addr.clone(),
+            directory_service_addr: config.directory_service_addr.clone(),
+            path_info_service_addr: config.path_info_service_addr.clone(),
+            workspace_dir: config.workspace_dir.clone(),
+            sandbox_workdir: config.sandbox_workdir.clone(),
+        })
+    } else {
+        None
+    };
+
     let engine = Arc::new(SnixEngine::new(
         blob_service,
         directory_service,
         path_info_service,
         nar_calculation_service.into(),
         build_service,
-        config.blob_service_addr.clone(),
-        config.directory_service_addr.clone(),
-        config.path_info_service_addr.clone(),
-        config.workspace_dir.clone(),
-        config.sandbox_workdir.clone(),
-        config.enable_eval_sandbox,
+        eval_sandbox,
     ));
 
     // 4. Initialize Scheduler and Index
