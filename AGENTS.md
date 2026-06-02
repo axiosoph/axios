@@ -1,22 +1,27 @@
 # Axios Agent Configuration
 
-This file defines rules and context for AI agents working in the `axios/`
-monorepo. It is a **Predicate** that supplements the root
-[AGENTS.md](../AGENTS.md).
+This file defines rules, constraints, and architecture context for AI agents working in the `axios/` monorepo.
 
-## Predicate System
+## Tooling and Agent Skills
 
-This project uses [predicate](https://github.com/nrdxp/predicate).
+This workspace relies on globally installed agent skills and plugins rather than custom, project-specific frameworks.
 
 > [!IMPORTANT]
-> You **must** also review [../.agent/PREDICATE.md](../.agent/PREDICATE.md)
-> and follow its instructions before beginning work.
+> **Heed Installed Agent Skills:** Review available globally installed agent skills and tools for task-specific and language-specific guidance before starting work:
+>
+> - **Rust Development:** Look for and adhere to installed Rust coding/linting agent skills for Rust-specific idioms and patterns.
+> - **Git Workflows & Commits:** Check for workflow-specific agent skills. Automated commits are permitted and encouraged _only if_ they strictly adhere to the instructions of an installed commit hygiene agent skill. If no such skill is available, do not perform automated commits.
+> - Balance global tooling with project constraints: Heed installed agent skills for general workflows and language conventions, but always prioritize this monorepo's architectural layers, terminology constraints, and local invariants. Do not ignore your tooling, but ensure its application aligns with the project context.
 
-**Active Personas:**
+---
 
-- rust.md (Rust idioms and patterns)
-- depmap.md (DepMap MCP server usage)
-- personalization.md (User naming preferences)
+## Spec-Driven Development
+
+This project is strictly spec-driven. Agents must regularly consult the specification documents inside the [docs/specs/](docs/specs) directory to ensure design correctness.
+
+- **Review Specifications First:** Before implementing features or making modifications, locate and read the corresponding spec file (e.g. L1/Atom specs, L2/Eos specs, or L3/Ion specs).
+- **No Ad-Hoc Decisions:** Do not make assumptions or ad-hoc design decisions if a specification is unclear, ambiguous, or missing details.
+- **Surface Unknowns:** If you encounter a gap or ambiguity in the specifications, halt and surface the unknown immediately so that it can be explicitly discussed, resolved, and documented.
 
 ---
 
@@ -99,6 +104,9 @@ Each workspace is independent — run commands from the workspace root:
 
 ## Workspace Crates
 
+> [!TIP]
+> **Dynamic Discovery:** Crates and dependency layouts evolve. Rather than relying solely on this static list, always use dynamic discovery tools (e.g., query `cargo metadata` or inspect the root `Cargo.toml`) to determine the live set of active crates and dependencies.
+
 ### atom/ (L1 — Protocol)
 
 | Crate       | Purpose                                              |
@@ -147,11 +155,10 @@ Each workspace is independent — run commands from the workspace root:
 - **Halt on Ambiguity:** Never rationalize an assumption. Stop and ask.
 - **Verification Required:** Every plan step must be verified.
 - **Commit Boundaries:** Pause and justify before every commit point.
-- **Manual Commits:** Agents never execute `git commit`.
+- **Commit Hygiene:** Automated commits are permitted _only_ when adhering precisely to the instructions of an installed commit hygiene agent skill. If no such skill is installed or available in your toolset, automated commits are strictly prohibited and you must default to manual commits or consult the user.
 - **Terminology Compliance:** Use only canonical terms from the glossary above.
 
 ---
 
 > [!TIP]
-> Use `/predicate` if you lose track of these rules or if the conversation
-> becomes too long.
+> Refer to the workspace-specific `AGENTS.md` files in the subdirectories (e.g. `atom/AGENTS.md`, `eos/AGENTS.md`, `ion/AGENTS.md`) for more targeted context on each layer.
