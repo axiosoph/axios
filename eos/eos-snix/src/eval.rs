@@ -246,7 +246,7 @@ pub enum EvalTargetDto {
     Expression(String),
 }
 
-#[cfg(any(test, fuzzing))]
+#[cfg(test)]
 impl bolero::generator::TypeGenerator for EvalTargetDto {
     fn generate<D: bolero::Driver>(driver: &mut D) -> Option<Self> {
         let is_file = bool::generate(driver)?;
@@ -265,7 +265,7 @@ impl bolero::generator::TypeGenerator for EvalTargetDto {
 /// The digest is serialized as a lowercase hex string for JSON
 /// readability and interoperability.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-#[cfg_attr(any(test, fuzzing), derive(bolero::TypeGenerator))]
+#[cfg_attr(test, derive(bolero::TypeGenerator))]
 pub struct ResolvedInputDto {
     pub digest: String,
     pub store_path: String,
@@ -273,7 +273,7 @@ pub struct ResolvedInputDto {
 
 /// Serializable Data Transfer Object for `ComposerConfig`.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-#[cfg_attr(any(test, fuzzing), derive(bolero::TypeGenerator))]
+#[cfg_attr(test, derive(bolero::TypeGenerator))]
 pub struct ComposerConfigDto {
     /// Serialized as the `<anchor_b64ut>::<label>` display form.
     pub atom_id: String,
@@ -310,7 +310,7 @@ impl ComposerConfigDto {
 
 /// Serializable Data Transfer Object for `EvalRequest`.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-#[cfg_attr(any(test, fuzzing), derive(bolero::TypeGenerator))]
+#[cfg_attr(test, derive(bolero::TypeGenerator))]
 pub struct EvalRequestDto {
     pub expression: EvalTargetDto,
     pub inputs: HashMap<String, ResolvedInputDto>,
