@@ -1,21 +1,15 @@
-//! Orchestration logic for evaluating and building dependencies from a lock file.
+//! Orchestration logic for evaluating and building dependencies from a BuildRequest.
 
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::SystemTime;
 
-use atom_id::AtomId;
 use eos_core::digest::Blake3Digest;
 use eos_core::engine::BuildEngine;
 use eos_core::eval::{ComposerConfig, EvalRequest, EvalTarget};
-use eos_core::job::{ArtifactInfo, JobId, JobStatus, ProgressEvent};
-use eos_core::store::StorePath;
-use eos_snix::SnixEngine;
+use eos_core::job::{JobId, JobStatus, ProgressEvent};
 use tokio::sync::broadcast;
-
-use crate::fetch::fetch_and_import;
-use crate::lock::LockFile;
 
 /// Helper to send progress updates.
 fn send_progress(
@@ -33,35 +27,20 @@ fn send_progress(
     let _ = tx.send(event);
 }
 
-/// Runs the full orchestrated build pipeline: fetch dependencies, evaluate composer, and build
-/// plan.
-pub async fn run_orchestrated_build(
-    lock_content: &str,
-    eval_args: Vec<(String, String)>,
-    engine: Arc<SnixEngine>,
+/// Runs the orchestrated build pipeline: fetch dependencies, evaluate composer, and build plan.
+pub async fn run_orchestrated_build<
+    E: BuildEngine<Digest = Blake3Digest>,
+    S: atom_core::AtomSource,
+>(
+    request: &eos_core::request::BuildRequest<Blake3Digest>,
+    source: &S,
+    engine: Arc<E>,
     workspace_dir: &Path,
     sandbox_workdir: &Path,
     progress_tx: broadcast::Sender<ProgressEvent<Blake3Digest>>,
     job_id: JobId<Blake3Digest>,
 ) -> Result<Vec<String>, String> {
-    // 1. Parse lock file
-    send_progress(
-        &progress_tx,
-        job_id,
-        JobStatus::Evaluating {
-            message: "Parsing lock file...".to_string(),
-        },
-        None,
-    );
-    let lock_file =
-        LockFile::parse(lock_content).map_err(|e| format!("Failed to parse lock file: {}", e))?;
-
-    // 2. Validate lock file structure
-    lock_file
-        .validate()
-        .map_err(|e| format!("Lock file validation failed: {}", e))?;
-
-    // 3. Fetch and verify dependencies
+    // 1. Fetch and verify dependencies concurrently
     send_progress(
         &progress_tx,
         job_id,
@@ -71,26 +50,51 @@ pub async fn run_orchestrated_build(
         None,
     );
 
-    let mut resolved_inputs = HashMap::new();
-    for dep in &lock_file.deps {
-        let name = dep.name();
-        send_progress(
-            &progress_tx,
-            job_id,
-            JobStatus::Evaluating {
-                message: format!("Fetching dependency: {}...", name),
-            },
-            Some(format!("Fetching dependency: {}", name)),
-        );
+    let snix_engine = engine
+        .as_any()
+        .downcast_ref::<eos_snix::SnixEngine>()
+        .ok_or_else(|| "Engine must be a SnixEngine".to_string())?;
 
-        let resolved = fetch_and_import(dep, &lock_file, &engine, workspace_dir, sandbox_workdir)
-            .await
-            .map_err(|e| format!("Failed to fetch dependency {}: {}", name, e))?;
+    let mut futures = Vec::new();
+    for dep in &request.deps {
+        let name = dep.name().to_string();
+        let dep_clone = dep.clone();
+        let sandbox_workdir_buf = sandbox_workdir.to_path_buf();
+        let progress_tx_clone = progress_tx.clone();
 
-        resolved_inputs.insert(name.to_string(), resolved);
+        let fut = async move {
+            send_progress(
+                &progress_tx_clone,
+                job_id,
+                JobStatus::Evaluating {
+                    message: format!("Fetching dependency: {}...", name),
+                },
+                Some(format!("Fetching dependency: {}", name)),
+            );
+
+            let resolved = match dep_clone {
+                eos_core::request::FetchDescriptor::Atom(atom_desc) => {
+                    crate::fetch::fetch_atom(&atom_desc, source, snix_engine, &sandbox_workdir_buf)
+                        .await
+                },
+                other => {
+                    crate::fetch::fetch_external(&other, snix_engine, &sandbox_workdir_buf).await
+                },
+            };
+
+            resolved.map(|r| (name, r))
+        };
+        futures.push(fut);
     }
 
-    // 4. Construct EvalRequest
+    let results = futures::future::join_all(futures).await;
+    let mut resolved_inputs = HashMap::new();
+    for res in results {
+        let (name, resolved) = res.map_err(|e| format!("Failed to fetch dependency: {}", e))?;
+        resolved_inputs.insert(name, resolved);
+    }
+
+    // 2. Construct EvalRequest
     send_progress(
         &progress_tx,
         job_id,
@@ -100,16 +104,10 @@ pub async fn run_orchestrated_build(
         None,
     );
 
-    let mut request = if let Some(ref use_str) = lock_file.compose.r#use {
-        if use_str == "nix" {
-            let entry_path = lock_file
-                .compose
-                .entry
-                .as_ref()
-                .ok_or_else(|| "Missing compose.entry field for nix composer".to_string())?;
-
+    let mut eval_request = match &request.composer {
+        eos_core::request::ComposerSpec::NixTrivial { expression, .. } => {
             // Resolve local path or the entrypoint
-            let target_path = workspace_dir.join(entry_path);
+            let target_path = workspace_dir.join(expression);
             if !target_path.exists() {
                 return Err(format!(
                     "Composer entry path does not exist: {:?}",
@@ -117,88 +115,71 @@ pub async fn run_orchestrated_build(
                 ));
             }
             EvalRequest::new(EvalTarget::File(target_path))
-        } else {
-            // Composer is an atom
-            let composer_atom_id = use_str
-                .parse::<AtomId>()
-                .map_err(|e| format!("Invalid atom ID in compose.use: {}", e))?;
-
-            // Find the lock file dep whose atom ID matches the composer
-            let composer_label = lock_file
+        },
+        eos_core::request::ComposerSpec::Atom { id, entry, .. } => {
+            // Find the atom fetch descriptor
+            let atom_dep = request
                 .deps
                 .iter()
                 .filter_map(|dep| {
-                    if let crate::lock::Dependency::Atom(atom_dep) = dep {
-                        if atom_dep.id == composer_atom_id {
-                            return Some(atom_dep.label.as_str());
-                        }
+                    if let eos_core::request::FetchDescriptor::Atom(atom_dep) = dep
+                        && atom_dep.id == *id
+                    {
+                        Some(atom_dep)
+                    } else {
+                        None
                     }
-                    None
                 })
                 .next()
-                .ok_or_else(|| {
-                    format!(
-                        "Composer atom {} not found in lock file deps",
-                        composer_atom_id
-                    )
-                })?;
+                .ok_or_else(|| format!("Composer atom {} not found in request deps", id))?;
 
-            let composer_input = resolved_inputs.get(composer_label).ok_or_else(|| {
+            let composer_input = resolved_inputs.get(&atom_dep.label).ok_or_else(|| {
                 format!(
                     "Composer atom {} (label '{}') was not resolved",
-                    composer_atom_id, composer_label
+                    id, atom_dep.label
                 )
             })?;
 
-            let at = lock_file
-                .compose
-                .at
+            let entry_file = entry
                 .as_ref()
-                .ok_or_else(|| "Missing compose.at for atom composer".to_string())?;
-            let entry = lock_file
-                .compose
-                .entry
-                .as_ref()
-                .ok_or_else(|| "Missing compose.entry for atom composer".to_string())?;
+                .ok_or_else(|| "Missing entry file for atom composer".to_string())?;
 
             let composer_config = ComposerConfig {
-                atom_id: composer_atom_id,
-                entry: entry.clone(),
-                version: at.clone(),
+                atom_id: id.clone(),
+                entry: entry_file.clone(),
+                version: atom_dep.version.clone(),
             };
 
-            // Evaluation target is the entrypoint file inside the composer atom
-            // In Snix, the composer config is passed to SnixStoreIO / EvalIO
             let mut req = EvalRequest::new(EvalTarget::File(
-                Path::new(&composer_input.store_path.0).join(entry),
+                Path::new(&composer_input.store_path.0).join(entry_file),
             ));
             req.composer = Some(composer_config);
             req
-        }
-    } else {
-        // Default to static configuration (no-op evaluation)
-        send_progress(
-            &progress_tx,
-            job_id,
-            JobStatus::Completed { outputs: vec![] },
-            Some("Static configuration lock, no evaluation needed".to_string()),
-        );
-        return Ok(vec![]);
+        },
+        eos_core::request::ComposerSpec::Static => {
+            send_progress(
+                &progress_tx,
+                job_id,
+                JobStatus::Completed { outputs: vec![] },
+                Some("Static configuration, no evaluation needed".to_string()),
+            );
+            return Ok(vec![]);
+        },
     };
 
-    request.inputs = resolved_inputs;
-    request.eval_args = eval_args;
+    eval_request.inputs = resolved_inputs;
+    eval_request.eval_args = request.eval_args.clone();
 
-    // 5. Lookup cached or build
+    // 3. Lookup cached or build
     let build_plan = engine
-        .plan(request.clone())
+        .plan(eval_request.clone())
         .await
         .map_err(|e| format!("Planning failed: {}", e))?;
 
     let (plan, output) = match build_plan {
         eos_core::engine::BuildPlan::Cached(ref _paths) => {
             let plan = engine
-                .evaluate(request)
+                .evaluate(eval_request)
                 .await
                 .map_err(|e| format!("Evaluation failed: {}", e))?;
             let output = engine
@@ -226,7 +207,7 @@ pub async fn run_orchestrated_build(
         },
         eos_core::engine::BuildPlan::NeedsEvaluation(_atom_ref) => {
             let plan = engine
-                .evaluate(request)
+                .evaluate(eval_request)
                 .await
                 .map_err(|e| format!("Evaluation failed: {}", e))?;
 
@@ -255,43 +236,19 @@ pub async fn run_orchestrated_build(
         },
     };
 
-    // Commit to store and return output paths
-    let store_path = output.path_info.store_path.to_string();
-    let root_digest = engine.plan_digest(&plan);
-
-    // Prepare ArtifactInfo to complete the job
-    let node_digest = match &output.node {
-        snix_castore::Node::File { digest, .. } => *digest,
-        snix_castore::Node::Directory { digest, .. } => *digest,
-        snix_castore::Node::Symlink { .. } => {
-            return Err("Build output cannot be a symlink node".to_string());
-        },
-    };
-
-    let artifact_info = ArtifactInfo {
-        digest: Blake3Digest(node_digest.into()),
-        store_path: StorePath(store_path.clone()),
-        size: output.path_info.nar_size,
-        references: output
-            .path_info
-            .references
-            .into_iter()
-            .map(|r| StorePath(r.to_string()))
-            .collect(),
-        deriver: Some(root_digest),
-    };
+    // Extract artifact metadata
+    let artifacts = engine.output_artifacts(&output, &plan);
+    let store_paths: Vec<String> = artifacts.iter().map(|a| a.store_path.0.clone()).collect();
 
     send_progress(
         &progress_tx,
         job_id,
-        JobStatus::Completed {
-            outputs: vec![artifact_info],
-        },
+        JobStatus::Completed { outputs: artifacts },
         Some(format!(
-            "Build completed successfully. Output: {}",
-            store_path
+            "Build completed successfully. Outputs: {:?}",
+            store_paths
         )),
     );
 
-    Ok(vec![store_path])
+    Ok(store_paths)
 }

@@ -50,6 +50,19 @@ pub enum FetchDescriptor {
     NixSrc(NixSrcFetchDescriptor),
 }
 
+impl FetchDescriptor {
+    /// Gets the unique/symbolic name of this dependency.
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Atom(desc) => &desc.label,
+            Self::Nix(desc) => &desc.name,
+            Self::NixGit(desc) => &desc.name,
+            Self::NixTar(desc) => &desc.name,
+            Self::NixSrc(desc) => &desc.name,
+        }
+    }
+}
+
 /// Fetch descriptor for an atom dependency.
 /// Unlike non-atom deps, atom deps are resolved via AtomSource,
 /// not fetched from URLs by eos.
