@@ -204,35 +204,15 @@ impl Scheduler {
             };
             let source = atom_git::GitSource::new(repo);
 
-            // Construct the content bridge at the wiring site where the
-            // concrete backend (git) and engine services are both known.
-            // This avoids as_any() downcasts inside the build pipeline.
-            let bridge_repo = match gix::open(&config.workspace_dir) {
-                Ok(r) => r,
-                Err(e) => {
-                    let err_msg =
-                        format!("Failed to open workspace git repository for bridge: {}", e);
-                    error!("{}", err_msg);
-                    let event = ProgressEvent {
-                        job_id,
-                        timestamp: SystemTime::now(),
-                        status: JobStatus::Failed {
-                            error: err_msg,
-                            exit_code: None,
-                        },
-                        log_line: None,
-                    };
-                    let _ = sender.send(event.clone());
-                    if let Ok(mut guard) = jobs_map.lock()
-                        && let Some(j) = guard.get_mut(&plan_digest)
-                    {
-                        j.status = event.status;
-                    }
-                    return;
-                },
+            let ingest_service = eos_snix::SnixIngestService {
+                blob_service: engine.blob_service.clone(),
+                directory_service: engine.directory_service.clone(),
+                path_info_service: engine.path_info_service.clone(),
+                nar_calculation_service: engine.nar_calculation_service.clone(),
             };
-            let bridge = eos::bridge::GitCastoreBridge::new(
-                bridge_repo,
+
+            let bridge = eos::bridge::CastoreBridge::new(
+                source.clone(),
                 engine.blob_service.clone(),
                 engine.directory_service.clone(),
                 engine.path_info_service.clone(),
@@ -244,6 +224,7 @@ impl Scheduler {
                 &request,
                 &source,
                 &bridge,
+                &ingest_service,
                 engine,
                 &config.workspace_dir,
                 &config.sandbox_workdir,

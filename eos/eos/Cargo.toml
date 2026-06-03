@@ -12,10 +12,6 @@ blake3 = "1"
 eos-core = { path = "../eos-core" }
 eos-snix = { path = "../eos-snix" }
 futures = "0.3"
-gix = { version = "^0.83", default-features = false, features = [
-  "max-performance-safe",
-  "sha1",
-] }
 hex = "0.4"
 nix-compat = { git = "https://github.com/nrdxp/snix.git", branch = "eos-patches" }
 semver = "1"

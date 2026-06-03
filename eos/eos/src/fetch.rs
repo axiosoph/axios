@@ -6,8 +6,6 @@ use std::path::Path;
 use base64::prelude::*;
 use eos_core::digest::Blake3Digest;
 use eos_core::eval::ResolvedInput;
-use eos_core::store::StorePath;
-use eos_snix::SnixEngine;
 use sha2::{Digest, Sha256};
 
 /// Helper to download a file from a URL.
@@ -160,11 +158,14 @@ fn verify_file_hash(path: &Path, expected_sri: &str) -> Result<(), String> {
 
 /// Fetches a non-atom dependency directly from URLs, verifies it, imports it,
 /// and returns the ResolvedInput.
-pub async fn fetch_external(
+pub async fn fetch_external<I>(
     desc: &eos_core::request::FetchDescriptor,
-    engine: &SnixEngine,
+    ingest: &I,
     sandbox_workdir: &Path,
-) -> Result<ResolvedInput<Blake3Digest>, String> {
+) -> Result<ResolvedInput<Blake3Digest>, String>
+where
+    I: eos_core::ingest::ContentIngestService<Digest = Blake3Digest>,
+{
     let name = desc.name();
     let temp_dir = sandbox_workdir.join("fetch-temp").join(name);
     if temp_dir.exists() {
@@ -179,58 +180,20 @@ pub async fn fetch_external(
             let out_path = temp_dir.join("checkout");
             fetch_git(&nix_git_dep.url, &nix_git_dep.rev, &out_path).await?;
 
-            let path_info = snix_store::import::import_path_as_nar_ca(
-                &out_path,
-                name,
-                engine.blob_service.clone(),
-                engine.directory_service.clone(),
-                &engine.path_info_service,
-                &*engine.nar_calculation_service,
-            )
-            .await
-            .map_err(|e| format!("Failed to import nix+git dependency to store: {}", e))?;
-
-            let digest = match &path_info.node {
-                snix_castore::Node::File { digest, .. } => *digest,
-                snix_castore::Node::Directory { digest, .. } => *digest,
-                snix_castore::Node::Symlink { .. } => {
-                    return Err("Nix+git dependency cannot be a symlink node".to_string());
-                },
-            };
-
-            Ok(ResolvedInput {
-                digest: Blake3Digest(digest.into()),
-                store_path: StorePath(path_info.store_path.to_string()),
-            })
+            ingest
+                .ingest_path(&out_path, name)
+                .await
+                .map_err(|e| format!("Failed to import nix+git dependency to store: {}", e))
         },
         eos_core::request::FetchDescriptor::Nix(nix_dep) => {
             let file_path = temp_dir.join(&nix_dep.name);
             download_file(&nix_dep.url, &file_path).await?;
             verify_file_hash(&file_path, &nix_dep.hash)?;
 
-            let path_info = snix_store::import::import_path_as_nar_ca(
-                &file_path,
-                name,
-                engine.blob_service.clone(),
-                engine.directory_service.clone(),
-                &engine.path_info_service,
-                &*engine.nar_calculation_service,
-            )
-            .await
-            .map_err(|e| format!("Failed to import nix file to store: {}", e))?;
-
-            let digest = match &path_info.node {
-                snix_castore::Node::File { digest, .. } => *digest,
-                snix_castore::Node::Directory { digest, .. } => *digest,
-                snix_castore::Node::Symlink { .. } => {
-                    return Err("Nix file cannot be a symlink node".to_string());
-                },
-            };
-
-            Ok(ResolvedInput {
-                digest: Blake3Digest(digest.into()),
-                store_path: StorePath(path_info.store_path.to_string()),
-            })
+            ingest
+                .ingest_path(&file_path, name)
+                .await
+                .map_err(|e| format!("Failed to import nix file to store: {}", e))
         },
         eos_core::request::FetchDescriptor::NixTar(nix_tar_dep) => {
             let tar_path = temp_dir.join("archive.tar.gz");
@@ -240,58 +203,20 @@ pub async fn fetch_external(
             let out_dir = temp_dir.join("extracted");
             extract_tarball(&tar_path, &out_dir).await?;
 
-            let path_info = snix_store::import::import_path_as_nar_ca(
-                &out_dir,
-                name,
-                engine.blob_service.clone(),
-                engine.directory_service.clone(),
-                &engine.path_info_service,
-                &*engine.nar_calculation_service,
-            )
-            .await
-            .map_err(|e| format!("Failed to import nix+tar dependency to store: {}", e))?;
-
-            let digest = match &path_info.node {
-                snix_castore::Node::File { digest, .. } => *digest,
-                snix_castore::Node::Directory { digest, .. } => *digest,
-                snix_castore::Node::Symlink { .. } => {
-                    return Err("Nix+tar dependency cannot be a symlink node".to_string());
-                },
-            };
-
-            Ok(ResolvedInput {
-                digest: Blake3Digest(digest.into()),
-                store_path: StorePath(path_info.store_path.to_string()),
-            })
+            ingest
+                .ingest_path(&out_dir, name)
+                .await
+                .map_err(|e| format!("Failed to import nix+tar dependency to store: {}", e))
         },
         eos_core::request::FetchDescriptor::NixSrc(nix_src_dep) => {
             let file_path = temp_dir.join(&nix_src_dep.name);
             download_file(&nix_src_dep.url, &file_path).await?;
             verify_file_hash(&file_path, &nix_src_dep.hash)?;
 
-            let path_info = snix_store::import::import_path_as_nar_ca(
-                &file_path,
-                name,
-                engine.blob_service.clone(),
-                engine.directory_service.clone(),
-                &engine.path_info_service,
-                &*engine.nar_calculation_service,
-            )
-            .await
-            .map_err(|e| format!("Failed to import nix+src dependency to store: {}", e))?;
-
-            let digest = match &path_info.node {
-                snix_castore::Node::File { digest, .. } => *digest,
-                snix_castore::Node::Directory { digest, .. } => *digest,
-                snix_castore::Node::Symlink { .. } => {
-                    return Err("Nix+src dependency cannot be a symlink node".to_string());
-                },
-            };
-
-            Ok(ResolvedInput {
-                digest: Blake3Digest(digest.into()),
-                store_path: StorePath(path_info.store_path.to_string()),
-            })
+            ingest
+                .ingest_path(&file_path, name)
+                .await
+                .map_err(|e| format!("Failed to import nix+src dependency to store: {}", e))
         },
     }
 }
