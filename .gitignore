@@ -12,14 +12,6 @@ Cargo.lock
 # Bolero fuzz artifacts
 **/__fuzz__/
 
-# Generated website content and build outputs
+# Generated compliance tracking database
 docs/compliance.json
-www/content/specs/*.md
-!www/content/specs/_index.md
-www/content/adr/*.md
-!www/content/adr/_index.md
-www/content/compliance.md
-www/content/explanation/spec-audit.md
-www/content/explanation/decoupling-snix.md
-www/public/
 
