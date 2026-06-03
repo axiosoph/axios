@@ -57,6 +57,14 @@
       </label>
     </header>
 
+    <div class="sidebar-search" id="search-trigger" role="button" tabindex="0" title="Search documentation (Press / or Ctrl+K)">
+      <svg class="icon-search" viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
+        <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/>
+      </svg>
+      <span>Search...</span>
+      <kbd class="search-key">/</kbd>
+    </div>
+
     <nav class="sidebar-nav">
       {% for item in nav %}
         {% set section_prefix = item.path | replace(from="index.html", to="") %}
@@ -222,6 +230,210 @@
         }
       });
     });
+  </script>
+
+  <!-- Search Modal -->
+  <div id="search-modal" class="search-modal" aria-hidden="true" style="display: none;">
+    <div class="search-modal-overlay" id="search-modal-overlay"></div>
+    <div class="search-modal-container">
+      <div class="search-modal-header">
+        <svg class="search-modal-icon" viewBox="0 0 16 16" width="16" height="16" fill="currentColor">
+          <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/>
+        </svg>
+        <input type="text" id="search-input" placeholder="Search documentation..." autocomplete="off" />
+        <button id="search-close" class="search-close-btn" aria-label="Close search">
+          <kbd>ESC</kbd>
+        </button>
+      </div>
+      <div class="search-modal-body" id="search-results">
+        <div class="search-empty">Type to search...</div>
+      </div>
+      <div class="search-modal-footer">
+        <div class="search-help">
+          <span><kbd>↑↓</kbd> to navigate</span>
+          <span><kbd>↵</kbd> to select</span>
+        </div>
+        <div class="search-powered">
+          Powered by <a href="https://pagefind.app/" target="_blank" rel="noopener">Pagefind</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Search Functionality
+    (function() {
+      const searchTrigger = document.getElementById("search-trigger");
+      const searchModal = document.getElementById("search-modal");
+      const searchOverlay = document.getElementById("search-modal-overlay");
+      const searchClose = document.getElementById("search-close");
+      const searchInput = document.getElementById("search-input");
+      const searchResults = document.getElementById("search-results");
+      
+      let pagefind = null;
+      let activeIndex = -1;
+      let items = [];
+
+      async function initPagefind() {
+        if (!pagefind) {
+          try {
+            pagefind = await import("{{ prefix }}/pagefind/pagefind.js");
+            await pagefind.options({
+              // Pagefind options if needed
+            });
+          } catch (e) {
+            console.error("Failed to load pagefind search index:", e);
+          }
+        }
+      }
+
+      function openSearch() {
+        searchModal.style.display = "flex";
+        searchModal.setAttribute("aria-hidden", "false");
+        document.body.style.overflow = "hidden";
+        setTimeout(() => searchInput.focus(), 50);
+        initPagefind();
+      }
+
+      function closeSearch() {
+        searchModal.style.display = "none";
+        searchModal.setAttribute("aria-hidden", "true");
+        document.body.style.overflow = "";
+        searchInput.value = "";
+        searchResults.innerHTML = '<div class="search-empty">Type to search...</div>';
+        activeIndex = -1;
+        items = [];
+      }
+
+      if (searchTrigger) {
+        searchTrigger.addEventListener("click", openSearch);
+        searchTrigger.addEventListener("keydown", function(e) {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            openSearch();
+          }
+        });
+      }
+
+      if (searchOverlay) searchOverlay.addEventListener("click", closeSearch);
+      if (searchClose) searchClose.addEventListener("click", closeSearch);
+
+      // Keyboard triggers (/ and Ctrl+K / Cmd+K)
+      window.addEventListener("keydown", function(e) {
+        if (e.key === "/" && document.activeElement !== searchInput && document.activeElement.tagName !== "INPUT" && document.activeElement.tagName !== "TEXTAREA") {
+          e.preventDefault();
+          openSearch();
+        }
+        if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+          e.preventDefault();
+          openSearch();
+        }
+        if (e.key === "Escape" && searchModal.style.display === "flex") {
+          closeSearch();
+        }
+      });
+
+      // Search input handling
+      let debounceTimeout;
+      searchInput.addEventListener("input", function() {
+        clearTimeout(debounceTimeout);
+        const query = searchInput.value.trim();
+        
+        if (!query) {
+          searchResults.innerHTML = '<div class="search-empty">Type to search...</div>';
+          activeIndex = -1;
+          items = [];
+          return;
+        }
+
+        debounceTimeout = setTimeout(async function() {
+          if (!pagefind) await initPagefind();
+          if (!pagefind) {
+            searchResults.innerHTML = '<div class="search-empty error">Search unavailable</div>';
+            return;
+          }
+
+          searchResults.innerHTML = '<div class="search-loading">Searching...</div>';
+          
+          try {
+            const search = await pagefind.search(query);
+            if (search.results.length === 0) {
+              searchResults.innerHTML = `<div class="search-empty">No results found for "${query}"</div>`;
+              activeIndex = -1;
+              items = [];
+              return;
+            }
+
+            // Load top 10 results
+            const topResults = search.results.slice(0, 10);
+            const dataResults = await Promise.all(topResults.map(r => r.data()));
+            
+            searchResults.innerHTML = "";
+            items = [];
+            activeIndex = -1;
+
+            const list = document.createElement("div");
+            list.className = "search-results-list";
+
+            dataResults.forEach((res, index) => {
+              const a = document.createElement("a");
+              a.href = res.url;
+              a.className = "search-result-item";
+              
+              // Extract category from URL
+              let category = "Docs";
+              if (res.url.includes("/reference/")) category = "Reference";
+              else if (res.url.includes("/adr/")) category = "ADR";
+              else if (res.url.includes("/explanation/")) category = "Explanation";
+
+              a.innerHTML = `
+                <div class="search-result-meta">
+                  <span class="search-result-category">${category}</span>
+                </div>
+                <div class="search-result-title">${res.meta.title || "Untitled"}</div>
+                <div class="search-result-excerpt">${res.excerpt}</div>
+              `;
+              
+              list.appendChild(a);
+              items.push(a);
+            });
+
+            searchResults.appendChild(list);
+          } catch (e) {
+            console.error("Search error:", e);
+            searchResults.innerHTML = '<div class="search-empty error">An error occurred while searching</div>';
+          }
+        }, 150);
+      });
+
+      // Keyboard navigation in results
+      searchInput.addEventListener("keydown", function(e) {
+        if (items.length === 0) return;
+
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          if (activeIndex < items.length - 1) {
+            if (activeIndex >= 0) items[activeIndex].classList.remove("selected");
+            activeIndex++;
+            items[activeIndex].classList.add("selected");
+            items[activeIndex].scrollIntoView({ block: "nearest" });
+          }
+        } else if (e.key === "ArrowUp") {
+          e.preventDefault();
+          if (activeIndex > 0) {
+            items[activeIndex].classList.remove("selected");
+            activeIndex--;
+            items[activeIndex].classList.add("selected");
+            items[activeIndex].scrollIntoView({ block: "nearest" });
+          }
+        } else if (e.key === "Enter") {
+          if (activeIndex >= 0 && items[activeIndex]) {
+            e.preventDefault();
+            items[activeIndex].click();
+          }
+        }
+      });
+    })();
   </script>
 </body>
 

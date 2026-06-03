@@ -15,3 +15,6 @@ Cargo.lock
 # Generated compliance tracking database
 docs/compliance.json
 
+
+# Local Netlify folder
+.netlify
