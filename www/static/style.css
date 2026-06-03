@@ -1113,7 +1113,12 @@
 
   @media (max-width: 768px) {
     .sidebar-search {
+      display: none;
       margin-block-end: 1rem;
+    }
+
+    .sidebar:has(.nav-toggle:checked) .sidebar-search {
+      display: flex;
     }
   }
 }
