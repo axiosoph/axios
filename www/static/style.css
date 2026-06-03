@@ -226,7 +226,8 @@
   main {
     padding-block: 3rem;
     padding-inline: 4rem;
-    max-inline-size: 960px;
+    max-inline-size: 1400px;
+    inline-size: 100%;
   }
 
   @media (max-width: 768px) {
@@ -503,10 +504,11 @@
     overflow-x: auto;
     margin-block-end: 1.5rem;
     padding-block: 0.5rem;
+    -webkit-overflow-scrolling: touch;
   }
 
   .mermaid-diagram svg {
-    max-inline-size: 100%;
+    max-inline-size: none;
     block-size: auto;
   }
 }
