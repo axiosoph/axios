@@ -62,4 +62,14 @@ pub trait BuildEngine: Send + Sync + 'static {
 
     /// Computes the content-addressed digest of a plan.
     fn plan_digest(&self, plan: &Self::Plan) -> Self::Digest;
+
+    /// Extract artifact metadata from engine output.
+    fn output_artifacts(
+        &self,
+        output: &Self::Output,
+        plan: &Self::Plan,
+    ) -> Vec<crate::job::ArtifactInfo<Self::Digest>>;
+
+    /// Helper to downcast the engine to its concrete implementation.
+    fn as_any(&self) -> &dyn std::any::Any;
 }

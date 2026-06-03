@@ -306,4 +306,36 @@ impl BuildEngine for SnixEngine {
         let bytes = plan.to_aterm_bytes();
         Blake3Digest(blake3::hash(&bytes).into())
     }
+
+    fn output_artifacts(
+        &self,
+        output: &Self::Output,
+        plan: &Self::Plan,
+    ) -> Vec<eos_core::job::ArtifactInfo<Self::Digest>> {
+        let store_path = output.path_info.store_path.to_string();
+        let root_digest = self.plan_digest(plan);
+
+        let node_digest = match &output.node {
+            snix_castore::Node::File { digest, .. } => (*digest).into(),
+            snix_castore::Node::Directory { digest, .. } => (*digest).into(),
+            snix_castore::Node::Symlink { .. } => [0u8; 32],
+        };
+
+        vec![eos_core::job::ArtifactInfo {
+            digest: Blake3Digest(node_digest),
+            store_path: eos_core::store::StorePath(store_path),
+            size: output.path_info.nar_size,
+            references: output
+                .path_info
+                .references
+                .iter()
+                .map(|r| eos_core::store::StorePath(r.to_string()))
+                .collect(),
+            deriver: Some(root_digest),
+        }]
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }

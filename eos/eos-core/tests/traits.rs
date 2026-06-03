@@ -57,6 +57,18 @@ fn test_trait_bounds_satisfiable() {
         fn plan_digest(&self, _plan: &Self::Plan) -> Self::Digest {
             Blake3Digest([0; 32])
         }
+
+        fn output_artifacts(
+            &self,
+            _output: &Self::Output,
+            _plan: &Self::Plan,
+        ) -> Vec<eos_core::job::ArtifactInfo<Self::Digest>> {
+            Vec::new()
+        }
+
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
     }
 
     assert_impl::<MockEngine>();
