@@ -141,7 +141,7 @@ pub trait AtomSource: Send + Sync + 'static {
     type Entry: AtomEntry;
 
     /// Backend-specific error type.
-    type Error: std::fmt::Debug + std::fmt::Display + Send;
+    type Error: std::error::Error + Send + Sync + 'static;
 
     /// Look up an atom by its identity.
     ///

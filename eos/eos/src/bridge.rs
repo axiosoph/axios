@@ -65,7 +65,7 @@ pub enum BridgeError {
 
     /// Source error while fetching content.
     #[error("source error: {0}")]
-    Source(String),
+    Source(#[source] Box<dyn std::error::Error + Send + Sync>),
 }
 
 /// Generic implementation of [`AtomContentBridge`].
@@ -134,7 +134,7 @@ impl<C: AtomContent> AtomContentBridge for CastoreBridge<C> {
             .source
             .content(id, dig)
             .await
-            .map_err(|e| BridgeError::Source(e.to_string()))?
+            .map_err(|e| BridgeError::Source(Box::new(e)))?
             .ok_or_else(|| BridgeError::ContentNotFound {
                 id: id.to_string(),
                 dig: hex::encode(dig),
@@ -149,40 +149,35 @@ impl<C: AtomContent> AtomContentBridge for CastoreBridge<C> {
                     data,
                     executable,
                 } => {
-                    let full_path = format!("{label}/{path}");
-                    let size = data.len() as u64;
-                    let digest = self.upload_blob(&full_path, &data).await?;
-                    let castore_path = parse_castore_path(&full_path)?;
+                    let digest = self.upload_blob(&path, &data).await?;
                     ingestion_entries.push(IngestionEntry::Regular {
-                        path: castore_path,
-                        size,
+                        path: parse_castore_path(&format!("{label}/{path}"))?,
+                        size: data.len() as u64,
                         executable,
                         digest,
                     });
                 },
                 ContentEntry::Symlink { path, target } => {
-                    let full_path = format!("{label}/{path}");
-                    let castore_path = parse_castore_path(&full_path)?;
                     ingestion_entries.push(IngestionEntry::Symlink {
-                        path: castore_path,
+                        path: parse_castore_path(&format!("{label}/{path}"))?,
                         target,
                     });
                 },
                 ContentEntry::Directory { path } => {
-                    let full_path = format!("{label}/{path}");
-                    let castore_path = parse_castore_path(&full_path)?;
-                    ingestion_entries.push(IngestionEntry::Dir { path: castore_path });
+                    ingestion_entries.push(IngestionEntry::Dir {
+                        path: parse_castore_path(&format!("{label}/{path}"))?,
+                    });
                 },
             }
         }
 
-        // Add the root directory entry last (single-component path).
-        let root_castore_path = parse_castore_path(label)?;
+        // The bridge prepends "label/" to all paths, so we need to add the root directory
+        // entry (named just "label") at the very end of the stream.
         ingestion_entries.push(IngestionEntry::Dir {
-            path: root_castore_path,
+            path: parse_castore_path(label)?,
         });
 
-        // Feed entries into the castore directory service
+        // Ingest the entries into castore
         let root_node = ingest_entries(
             self.directory_service.clone(),
             futures::stream::iter(ingestion_entries.into_iter().map(Ok::<_, std::io::Error>)),
@@ -195,7 +190,7 @@ impl<C: AtomContent> AtomContentBridge for CastoreBridge<C> {
             .nar_calculation_service
             .calculate_nar(&root_node)
             .await
-            .map_err(|e| BridgeError::NarCalculation(e))?;
+            .map_err(BridgeError::NarCalculation)?;
 
         let ca = nix_compat::nixhash::CAHash::Nar(nix_compat::nixhash::NixHash::Sha256(nar_sha256));
 

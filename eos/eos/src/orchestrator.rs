@@ -27,6 +27,17 @@ fn send_progress(
     let _ = tx.send(event);
 }
 
+/// Context bundling the source, bridge, and ingest service for build orchestration.
+#[derive(Clone, Copy)]
+pub struct BuildContext<'a, S, B, I> {
+    /// Atom source interface.
+    pub source: &'a S,
+    /// Atom content bridge interface.
+    pub bridge: &'a B,
+    /// Ingest service for external dependencies.
+    pub ingest: &'a I,
+}
+
 /// Runs the orchestrated build pipeline: fetch dependencies, evaluate composer, and build plan.
 pub async fn run_orchestrated_build<
     E: BuildEngine<Digest = Blake3Digest>,
@@ -35,9 +46,7 @@ pub async fn run_orchestrated_build<
     I: eos_core::ingest::ContentIngestService<Digest = Blake3Digest>,
 >(
     request: &eos_core::request::BuildRequest<Blake3Digest>,
-    source: &S,
-    bridge: &B,
-    ingest: &I,
+    ctx: BuildContext<'_, S, B, I>,
     engine: Arc<E>,
     workspace_dir: &Path,
     sandbox_workdir: &Path,
@@ -60,6 +69,10 @@ pub async fn run_orchestrated_build<
         let dep_clone = dep.clone();
         let sandbox_workdir_buf = sandbox_workdir.to_path_buf();
         let progress_tx_clone = progress_tx.clone();
+
+        let source = ctx.source;
+        let bridge = ctx.bridge;
+        let ingest = ctx.ingest;
 
         let fut = async move {
             send_progress(

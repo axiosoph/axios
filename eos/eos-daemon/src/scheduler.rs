@@ -219,12 +219,16 @@ impl Scheduler {
                 engine.nar_calculation_service.clone(),
             );
 
+            let build_ctx = eos::orchestrator::BuildContext {
+                source: &source,
+                bridge: &bridge,
+                ingest: &ingest_service,
+            };
+
             // Run build orchestration pipeline
             match eos::orchestrator::run_orchestrated_build(
                 &request,
-                &source,
-                &bridge,
-                &ingest_service,
+                build_ctx,
                 engine,
                 &config.workspace_dir,
                 &config.sandbox_workdir,
