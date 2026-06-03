@@ -80,11 +80,61 @@
     margin-block-start: 1.5rem;
     margin-block-end: 1rem;
     text-wrap: balance;
+    transition: padding-inline-start 0.15s ease, border-inline-start 0.15s ease;
   }
 
   h1 { font-size: clamp(1.75rem, 4cqi, 2.5rem); margin-block-start: 0; }
   h2 { font-size: 1.5rem; border-block-end: 1px solid var(--border); padding-block-end: 0.3rem; }
   h3 { font-size: 1.25rem; }
+
+  /* Heading anchor links (¶) - hover reveal for deep-linking */
+  .heading-anchor {
+    visibility: hidden;
+    margin-inline-start: 0.5em;
+    font-size: 0.75em;
+    color: var(--fg-muted);
+    text-decoration: none;
+    opacity: 0.5;
+    transition: opacity 0.15s ease, color 0.15s ease;
+  }
+
+  .heading-anchor:hover {
+    color: var(--accent);
+    opacity: 1;
+  }
+
+  /* Show anchor on heading hover */
+  h1:hover .heading-anchor,
+  h2:hover .heading-anchor,
+  h3:hover .heading-anchor,
+  h4:hover .heading-anchor,
+  h5:hover .heading-anchor,
+  h6:hover .heading-anchor {
+    visibility: visible;
+  }
+
+  /* Highlight heading when :target (clicked anchor) */
+  h1:target,
+  h2:target,
+  h3:target,
+  h4:target,
+  h5:target,
+  h6:target {
+    scroll-margin-top: 1rem;
+    padding-inline-start: 0.5rem;
+    border-inline-start: 3px solid var(--accent);
+  }
+
+  /* Always show pilcrow on targeted heading */
+  h1:target .heading-anchor,
+  h2:target .heading-anchor,
+  h3:target .heading-anchor,
+  h4:target .heading-anchor,
+  h5:target .heading-anchor,
+  h6:target .heading-anchor {
+    visibility: visible;
+    color: var(--accent);
+  }
 
   ul, ol {
     margin-block-end: 1rem;
@@ -333,16 +383,20 @@
     gap: 0.15rem;
     margin-block-start: 0.25rem;
     margin-block-end: 0.5rem;
+    scroll-target-group: auto; /* CSS-only scrollspy progressive enhancement */
   }
 
   .anchor-link {
     font-size: 0.8rem;
     color: var(--fg-muted);
     padding-block: 0.15rem;
+    transition: color 0.15s ease;
   }
 
-  .anchor-link:hover {
+  .anchor-link:hover,
+  .anchor-link:target-current {
     color: var(--accent);
+    font-weight: 600;
   }
 
   .anchor-link.level-3 { margin-inline-start: 0.5rem; }
