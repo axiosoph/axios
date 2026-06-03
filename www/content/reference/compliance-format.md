@@ -5,8 +5,6 @@ quadrant = "Reference"
 audience = "Developers adding code annotations or spec writers defining constraints"
 +++
 
-# Compliance Annotation Format & Schema
-
 This reference page defines the codebase compliance annotation syntax, the JSON schema for tracking data, and instructions for annotating new implementations.
 
 ## Codebase Annotation Syntax

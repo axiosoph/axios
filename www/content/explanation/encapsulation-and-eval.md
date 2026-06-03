@@ -5,8 +5,6 @@ quadrant = "Explanation"
 audience = "Nix developers, system configuration engineers, and architects looking to understand evaluation-time performance optimization"
 +++
 
-# Encapsulation and Evaluation-Time Purity
-
 The Nix package manager is celebrated for its ability to deliver reproducible, content-addressed build artifacts. However, Nix does not enforce the same discipline on its own source code (Nix expressions). As Nix repositories (such as `nixpkgs`) scale to millions of lines, this lack of code boundaries leads to a scaling crisis.
 
 Atom Nix provides the core language-level tooling to solve this, enforcing true code encapsulation and evaluation-time isolation.

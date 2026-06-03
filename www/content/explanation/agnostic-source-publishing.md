@@ -5,8 +5,6 @@ quadrant = "Explanation"
 audience = "Systems architects, package manager maintainers, and developers seeking to use Atom with traditional toolchains"
 +++
 
-# Ecosystem Agnosticism: Augmenting Traditional Package Managers
-
 Although the Atom protocol was originally motivated by the unique code scaling and purity challenges of the Nix ecosystem, its production architecture is decoupled from Nix. The core protocol is an ecosystem-agnostic publishing and integrity layer that can augment traditional package managers (e.g., Cargo, npm, PyPI) to provide decentralized, cryptographically secure source publishing.
 
 ## Why Traditional Package Managers Need Atom

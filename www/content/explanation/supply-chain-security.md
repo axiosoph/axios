@@ -5,8 +5,6 @@ quadrant = "Explanation"
 audience = "Security engineers, package manager designers, and Axios users evaluating system trust guarantees"
 +++
 
-# The Decentralized Cure for Supply Chain Attacks
-
 Modern software development is built on the assumption that package registries are secure. Every time a developer runs `npm install`, `cargo build`, or `pip install`, they delegate trust to a centralized intermediary. This trust model is a major vulnerability in the software supply chain.
 
 ## The Centralized Registry Bottleneck

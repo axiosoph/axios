@@ -5,8 +5,6 @@ quadrant = "Explanation"
 audience = "Axios stack developers, codebase contributors, and architects tracking integration patterns"
 +++
 
-# Axios Stack Architecture & Implementation
-
 The Axios stack is designed as a layered, content-addressed publishing and build system. To maintain clean separation of concerns and prevent dependency bloat, the codebase is split into three independent Cargo workspaces, representing a downward-only dependency chain:
 
 $$\text{Ion (L3)} \to \text{Eos (L2)} \to \text{Atom (L1)}$$

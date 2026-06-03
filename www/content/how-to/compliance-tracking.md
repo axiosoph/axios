@@ -5,8 +5,6 @@ quadrant = "How-To"
 audience = "Developers and CI/CD engineers running or extending the Axios compliance tracker"
 +++
 
-# Running the Spec Compliance Tracker
-
 This guide shows you how to run the automated compliance tracking tool to verify specification compliance across the Axios codebase.
 
 ## Prerequisites
