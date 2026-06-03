@@ -8,12 +8,12 @@ use eos_core::index::{AtomIndex, AtomMeta, AtomQuery};
 
 /// A basic, in-memory implementation of [`AtomIndex`].
 #[derive(Debug, Default)]
-pub struct LockFileIndex {
+pub struct RequestIndex {
     atoms: Mutex<HashMap<AtomId, AtomMeta>>,
 }
 
-impl LockFileIndex {
-    /// Creates a new `LockFileIndex`.
+impl RequestIndex {
+    /// Creates a new `RequestIndex`.
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -22,7 +22,7 @@ impl LockFileIndex {
     }
 }
 
-impl AtomIndex for LockFileIndex {
+impl AtomIndex for RequestIndex {
     type Error = std::convert::Infallible;
 
     async fn resolve(&self, id: &AtomId) -> Result<Option<AtomMeta>, Self::Error> {
