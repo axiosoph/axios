@@ -55,12 +55,12 @@ impl AtomSource for GitRegistry {
     type Entry = GitEntry;
     type Error = GitError;
 
-    fn resolve(&self, id: &AtomId) -> Result<Option<Self::Entry>, Self::Error> {
-        self.source.resolve(id)
+    async fn resolve(&self, id: &AtomId) -> Result<Option<Self::Entry>, Self::Error> {
+        self.source.resolve(id).await
     }
 
-    fn discover(&self, query: &str) -> Result<Vec<AtomId>, Self::Error> {
-        self.source.discover(query)
+    async fn discover(&self, query: &str) -> Result<Vec<AtomId>, Self::Error> {
+        self.source.discover(query).await
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -70,14 +70,14 @@ impl AtomSource for GitRegistry {
 
 impl AtomRegistry for GitRegistry {
     fn claim(&self, id: &AtomId, owner: &[u8]) -> Result<Czd, Self::Error> {
-        let repo = &self.source.repo;
+        let repo = self.source.repo();
         let head_oid = repo
             .head_id()
             .map_err(|e| GitError::Init(format!("Failed to resolve HEAD: {}", e)))?
             .detach();
 
         // 1. Derive anchor and verify it matches the ID
-        let derived_anchor_oid = crate::gix_util::derive_anchor(repo, head_oid)?;
+        let derived_anchor_oid = crate::gix_util::derive_anchor(&repo, head_oid)?;
         let expected_anchor = Anchor::new(derived_anchor_oid.as_bytes().to_vec());
         if expected_anchor != *id.anchor() {
             return Err(GitError::InvalidAnchor {
@@ -134,7 +134,7 @@ impl AtomRegistry for GitRegistry {
         let claim_msg = serde_json::to_string(&envelope)?;
 
         // 5. Write claim commit
-        let new_claim_oid = crate::gix_util::write_claim_commit(repo, claim_msg, parent_oid)?;
+        let new_claim_oid = crate::gix_util::write_claim_commit(&repo, claim_msg, parent_oid)?;
 
         // 6. Atomically update references using a transaction
         let mut edits = Vec::new();
@@ -189,7 +189,7 @@ impl AtomRegistry for GitRegistry {
         src: &[u8],
         path: &str,
     ) -> Result<(), Self::Error> {
-        let repo = &self.source.repo;
+        let repo = self.source.repo();
 
         // 1. Resolve and verify the active claim
         let claim_ref_name = format!("refs/atom/claims/pub/{}", id.label());
@@ -238,7 +238,7 @@ impl AtomRegistry for GitRegistry {
         let claim_src_oid = ObjectId::try_from(claim_payload.src.as_slice())
             .map_err(|e| GitError::Validation(format!("Invalid claim source OID: {}", e)))?;
 
-        if !crate::gix_util::is_descendant(repo, publish_src_oid, claim_src_oid)? {
+        if !crate::gix_util::is_descendant(&repo, publish_src_oid, claim_src_oid)? {
             return Err(GitError::InvalidTemporalVector {
                 publish_src: publish_src_oid.to_hex().to_string(),
                 claim_src: claim_src_oid.to_hex().to_string(),
@@ -249,7 +249,7 @@ impl AtomRegistry for GitRegistry {
         let tree_oid = ObjectId::try_from(dig)
             .map_err(|e| GitError::Validation(format!("Invalid tree OID: {}", e)))?;
         let atom_commit_oid =
-            crate::gix_util::write_deterministic_commit(repo, tree_oid, publish_src_oid)?;
+            crate::gix_util::write_deterministic_commit(&repo, tree_oid, publish_src_oid)?;
 
         // 5. Determine version reference state and update tag target
         let version_ref_name = format!("refs/atom/pub/{}/{}", id.label(), version.as_str());
@@ -323,7 +323,7 @@ impl AtomRegistry for GitRegistry {
         let tagger = crate::gix_util::blank_signature();
         let tag_name = format!("{}-{}", id.label(), version.as_str());
         let new_tag_oid = crate::gix_util::write_publish_tag(
-            repo,
+            &repo,
             &tag_name,
             target_oid,
             target_kind,

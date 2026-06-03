@@ -50,7 +50,7 @@ impl GitStore {
         path: &Path,
         dev_version: &RawVersion,
     ) -> Result<(), GitError> {
-        let repo = &self.source.repo;
+        let repo = self.source.repo();
 
         // 1. Construct AtomId using the filesystem sentinel anchor
         let anchor = atom_id::Anchor::new(FS_SENTINEL_ANCHOR.to_vec());
@@ -62,7 +62,7 @@ impl GitStore {
         let digest_str = digest.to_string();
 
         // 3. Recursively write tree from filesystem path
-        let tree_oid = write_tree_recursive(repo, path)?;
+        let tree_oid = write_tree_recursive(&repo, path)?;
 
         // 4. Create an unsigned, parentless, deterministic commit with no src header
         let blank = crate::gix_util::blank_signature();
@@ -114,7 +114,7 @@ impl GitStore {
     /// could leave an orphan claim ref. Callers must serialize evictions
     /// per claim, or a periodic GC pass should sweep orphaned claims.
     pub fn evict_version(&self, claim_czd_hex: &str, version: &str) -> Result<(), GitError> {
-        let repo = &self.source.repo;
+        let repo = self.source.repo();
         let version_ref_name = format!("refs/atom/d/{}/{}", claim_czd_hex, version);
         let version_fullname = FullName::try_from(version_ref_name.as_str())
             .map_err(|e| GitError::Validation(e.to_string()))?;
@@ -165,12 +165,12 @@ impl AtomSource for GitStore {
     type Entry = GitEntry;
     type Error = GitError;
 
-    fn resolve(&self, id: &AtomId) -> Result<Option<Self::Entry>, Self::Error> {
-        self.source.resolve(id)
+    async fn resolve(&self, id: &AtomId) -> Result<Option<Self::Entry>, Self::Error> {
+        self.source.resolve(id).await
     }
 
-    fn discover(&self, query: &str) -> Result<Vec<AtomId>, Self::Error> {
-        self.source.discover(query)
+    async fn discover(&self, query: &str) -> Result<Vec<AtomId>, Self::Error> {
+        self.source.discover(query).await
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -179,16 +179,16 @@ impl AtomSource for GitStore {
 }
 
 impl AtomStore for GitStore {
-    fn ingest<S: AtomSource>(&self, source: &S) -> Result<(), Self::Error> {
-        let dest_repo = &self.source.repo;
+    async fn ingest<S: AtomSource>(&self, source: &S) -> Result<(), Self::Error> {
+        let dest_repo = self.source.repo();
 
         // 1. Downcast source to obtain its source repository
         let source_repo = if let Some(git_source) = source.as_any().downcast_ref::<GitSource>() {
-            &git_source.repo
+            git_source.repo()
         } else if let Some(git_registry) = source.as_any().downcast_ref::<GitRegistry>() {
-            &git_registry.source.repo
+            git_registry.source.repo()
         } else if let Some(git_store) = source.as_any().downcast_ref::<GitStore>() {
-            &git_store.source.repo
+            git_store.source.repo()
         } else {
             return Err(GitError::Validation(
                 "Ingestion is only supported from Git-backed sources".into(),
@@ -198,11 +198,13 @@ impl AtomStore for GitStore {
         // 2. Discover all atom identities in the source
         let discovered_ids = source
             .discover("")
+            .await
             .map_err(|e| GitError::Validation(e.to_string()))?;
 
         for id in discovered_ids {
             if let Some(entry) = source
                 .resolve(&id)
+                .await
                 .map_err(|e| GitError::Validation(e.to_string()))?
             {
                 for v in entry.versions() {
@@ -327,8 +329,8 @@ impl AtomStore for GitStore {
                         let tag_oid = tag_ref.id().detach();
 
                         // 3. Transfer Git objects from source ODB to store ODB
-                        copy_tag_chain(source_repo, dest_repo, tag_oid)?;
-                        copy_claim_chain(source_repo, dest_repo, claim_oid)?;
+                        copy_tag_chain(&source_repo, &dest_repo, tag_oid)?;
+                        copy_claim_chain(&source_repo, &dest_repo, claim_oid)?;
 
                         // Verify atom commit tree hash matches payload dig (Step 1)
                         let atom_commit_oid = ObjectId::try_from(dig).map_err(|e| {
@@ -390,12 +392,12 @@ impl AtomStore for GitStore {
                         let commit_oid = ObjectId::try_from(dig).map_err(|e| {
                             GitError::Validation(format!("Invalid commit OID: {}", e))
                         })?;
-                        copy_object(source_repo, dest_repo, commit_oid)?;
+                        copy_object(&source_repo, &dest_repo, commit_oid)?;
 
                         let commit_obj = dest_repo.find_object(commit_oid)?;
                         let commit = commit_obj.try_into_commit()?;
                         let tree_oid = commit.tree_id()?.detach();
-                        copy_tree_recursive(source_repo, dest_repo, tree_oid)?;
+                        copy_tree_recursive(&source_repo, &dest_repo, tree_oid)?;
 
                         // Compute dev digest using ES256
                         let digest = atom_core::AtomDigest::compute(&id, coz_rs::Alg::ES256)
@@ -432,11 +434,12 @@ impl AtomStore for GitStore {
         Ok(())
     }
 
-    fn contains(&self, id: &AtomId) -> bool {
+    async fn contains(&self, id: &AtomId) -> Result<bool, Self::Error> {
         // Resolve the identity to see if any versions exist
-        match self.resolve(id) {
-            Ok(Some(entry)) => !entry.versions.is_empty(),
-            _ => false,
+        match self.resolve(id).await {
+            Ok(Some(entry)) => Ok(!entry.versions.is_empty()),
+            Ok(None) => Ok(false),
+            Err(e) => Err(e),
         }
     }
 }

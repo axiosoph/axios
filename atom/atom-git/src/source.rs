@@ -93,13 +93,20 @@ pub struct GitEntry {
 /// Read-only observation of a Git-backed Atom registry or store.
 pub struct GitSource {
     /// The underlying Git repository.
-    pub repo: gix::Repository,
+    pub repo_ts: gix::ThreadSafeRepository,
 }
 
 impl GitSource {
     /// Create a new `GitSource` wrapping a Git repository.
     pub fn new(repo: gix::Repository) -> Self {
-        Self { repo }
+        Self {
+            repo_ts: repo.into_sync(),
+        }
+    }
+
+    /// Return a thread-local Repository handle.
+    pub fn repo(&self) -> gix::Repository {
+        self.repo_ts.to_thread_local()
     }
 }
 
@@ -107,15 +114,16 @@ impl AtomSource for GitSource {
     type Entry = GitEntry;
     type Error = GitError;
 
-    fn resolve(&self, id: &AtomId) -> Result<Option<Self::Entry>, Self::Error> {
+    async fn resolve(&self, id: &AtomId) -> Result<Option<Self::Entry>, Self::Error> {
+        let repo = self.repo();
         let mut versions = Vec::new();
 
         // 1. REGISTRY RESOLUTION: refs/atom/pub/{label}/{version}
         // First check for active claim for this label
         let claim_ref_name = format!("refs/atom/claims/pub/{}", id.label());
-        if let Some(claim_ref) = self.repo.try_find_reference(&claim_ref_name)? {
+        if let Some(claim_ref) = repo.try_find_reference(&claim_ref_name)? {
             let claim_oid = claim_ref.id().detach();
-            let claim_obj = self.repo.find_object(claim_oid)?;
+            let claim_obj = repo.find_object(claim_oid)?;
             let claim_commit = claim_obj.try_into_commit()?;
             let claim_msg_str = claim_commit.message_raw_sloppy().to_string();
 
@@ -146,7 +154,7 @@ impl AtomSource for GitSource {
             if claim_payload.anchor == *id.anchor() {
                 // Find all version refs in refs/atom/pub/{label}/*
                 let prefix_str = format!("refs/atom/pub/{}/", id.label());
-                let references = self.repo.references()?;
+                let references = repo.references()?;
                 for ref_res in references.prefixed(prefix_str.as_str())? {
                     let reference = ref_res.map_err(|e| GitError::Validation(e.to_string()))?;
                     let ref_name = reference.name().as_bstr().to_string();
@@ -160,7 +168,7 @@ impl AtomSource for GitSource {
                     let mut tag_messages = Vec::new();
 
                     let dig_oid = loop {
-                        let obj = self.repo.find_object(current_oid)?;
+                        let obj = repo.find_object(current_oid)?;
                         match obj.kind {
                             gix::object::Kind::Tag => {
                                 let tag = obj.try_into_tag()?;
@@ -181,7 +189,7 @@ impl AtomSource for GitSource {
                     };
 
                     // Verify that the atom commit has the src header matching publish
-                    let atom_obj = self.repo.find_object(dig_oid)?;
+                    let atom_obj = repo.find_object(dig_oid)?;
                     let atom_commit = atom_obj.try_into_commit()?;
                     let atom_decoded = atom_commit.decode()?;
                     let atom_src_val = atom_decoded
@@ -262,7 +270,7 @@ impl AtomSource for GitSource {
                             .map_err(|e| {
                                 GitError::Validation(format!("Invalid claim source OID: {}", e))
                             })?;
-                        if !is_descendant(&self.repo, pub_src_oid, claim_src_oid)? {
+                        if !is_descendant(&repo, pub_src_oid, claim_src_oid)? {
                             return Err(GitError::InvalidTemporalVector {
                                 publish_src: pub_src_oid.to_hex().to_string(),
                                 claim_src: claim_src_oid.to_hex().to_string(),
@@ -306,7 +314,7 @@ impl AtomSource for GitSource {
         // 2. STORE RESOLUTION: refs/atom/claims/d/{claim_czd} and refs/atom/d/{claim_czd}/{version}
         // Scan all claims in refs/atom/claims/d/* to find matching (anchor, label)
         let store_claims_prefix = "refs/atom/claims/d/";
-        let references = self.repo.references()?;
+        let references = repo.references()?;
         for ref_res in references.prefixed(store_claims_prefix)? {
             let claim_ref = ref_res.map_err(|e| GitError::Validation(e.to_string()))?;
             let ref_name = claim_ref.name().as_bstr().to_string();
@@ -316,7 +324,7 @@ impl AtomSource for GitSource {
             }
 
             let claim_oid = claim_ref.id().detach();
-            let claim_obj = self.repo.find_object(claim_oid)?;
+            let claim_obj = repo.find_object(claim_oid)?;
             let claim_commit = claim_obj.try_into_commit()?;
             let claim_msg_str = claim_commit.message_raw_sloppy().to_string();
 
@@ -346,7 +354,7 @@ impl AtomSource for GitSource {
             if claim_payload.anchor == *id.anchor() && claim_payload.label == *id.label() {
                 // Find all version refs under refs/atom/d/{claim_czd_hex}/*
                 let prefix_str = format!("refs/atom/d/{}/", claim_czd_hex);
-                let refs_iter = self.repo.references()?;
+                let refs_iter = repo.references()?;
                 for v_ref_res in refs_iter.prefixed(prefix_str.as_str())? {
                     let v_ref = v_ref_res.map_err(|e| GitError::Validation(e.to_string()))?;
                     let v_ref_name = v_ref.name().as_bstr().to_string();
@@ -360,7 +368,7 @@ impl AtomSource for GitSource {
                     let mut tag_messages = Vec::new();
 
                     let dig_oid = loop {
-                        let obj = self.repo.find_object(current_oid)?;
+                        let obj = repo.find_object(current_oid)?;
                         match obj.kind {
                             gix::object::Kind::Tag => {
                                 let tag = obj.try_into_tag()?;
@@ -381,7 +389,7 @@ impl AtomSource for GitSource {
                     };
 
                     // Verify that the atom commit has the src header matching publish
-                    let atom_obj = self.repo.find_object(dig_oid)?;
+                    let atom_obj = repo.find_object(dig_oid)?;
                     let atom_commit = atom_obj.try_into_commit()?;
                     let atom_decoded = atom_commit.decode()?;
                     let atom_src_val = atom_decoded
@@ -509,7 +517,7 @@ impl AtomSource for GitSource {
             if let Some(digest) = atom_core::AtomDigest::compute(id, alg) {
                 let digest_str = digest.to_string();
                 let dev_prefix = format!("refs/atom/dev/{}/", digest_str);
-                let refs_iter = self.repo.references()?;
+                let refs_iter = repo.references()?;
                 for dev_ref_res in refs_iter.prefixed(dev_prefix.as_str())? {
                     let dev_ref = dev_ref_res.map_err(|e| GitError::Validation(e.to_string()))?;
                     let dev_ref_name = dev_ref.name().as_bstr().to_string();
@@ -548,12 +556,13 @@ impl AtomSource for GitSource {
         }
     }
 
-    fn discover(&self, query: &str) -> Result<Vec<AtomId>, Self::Error> {
+    async fn discover(&self, query: &str) -> Result<Vec<AtomId>, Self::Error> {
+        let repo = self.repo();
         let mut ids = indexmap::IndexSet::new();
 
         // 1. Scan registry claims: refs/atom/claims/pub/{label}
         let claims_prefix = "refs/atom/claims/pub/";
-        let references = self.repo.references()?;
+        let references = repo.references()?;
         for ref_res in references.prefixed(claims_prefix)? {
             let claim_ref = ref_res.map_err(|e| GitError::Validation(e.to_string()))?;
             let ref_name = claim_ref.name().as_bstr().to_string();
@@ -563,7 +572,7 @@ impl AtomSource for GitSource {
             }
 
             let claim_oid = claim_ref.id().detach();
-            let claim_obj = self.repo.find_object(claim_oid)?;
+            let claim_obj = repo.find_object(claim_oid)?;
             let claim_commit = claim_obj.try_into_commit()?;
             let claim_msg_str = claim_commit.message_raw_sloppy().to_string();
 
@@ -591,7 +600,7 @@ impl AtomSource for GitSource {
 
         // 2. Scan store claims: refs/atom/claims/d/{claim_czd}
         let store_claims_prefix = "refs/atom/claims/d/";
-        let refs_iter = self.repo.references()?;
+        let refs_iter = repo.references()?;
         for ref_res in refs_iter.prefixed(store_claims_prefix)? {
             let claim_ref = ref_res.map_err(|e| GitError::Validation(e.to_string()))?;
             let ref_name = claim_ref.name().as_bstr().to_string();
@@ -601,7 +610,7 @@ impl AtomSource for GitSource {
             }
 
             let claim_oid = claim_ref.id().detach();
-            let claim_obj = self.repo.find_object(claim_oid)?;
+            let claim_obj = repo.find_object(claim_oid)?;
             let claim_commit = claim_obj.try_into_commit()?;
             let claim_msg_str = claim_commit.message_raw_sloppy().to_string();
 

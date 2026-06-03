@@ -24,3 +24,4 @@ thiserror = "1"
 [dev-dependencies]
 proptest = "1.5"
 tempfile = "3"
+tokio    = { version = "1", features = ["rt", "macros"] }

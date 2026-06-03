@@ -135,24 +135,25 @@ pub trait AtomVersion {
 ///
 /// Observations are wrapped in `Result` to distinguish "not found"
 /// (`Ok(None)`) from backend failure (`Err`).
-pub trait AtomSource: 'static {
+#[trait_variant::make(Send)]
+pub trait AtomSource: Send + Sync + 'static {
     /// Backend-defined observation type returned by [`resolve`](Self::resolve).
     type Entry: AtomEntry;
 
     /// Backend-specific error type.
-    type Error: std::fmt::Debug + std::fmt::Display;
+    type Error: std::fmt::Debug + std::fmt::Display + Send;
 
     /// Look up an atom by its identity.
     ///
     /// Returns `Ok(None)` if the atom is not present in this source.
     /// Returns `Err` on backend failure (network, disk, permission, etc.).
-    fn resolve(&self, id: &AtomId) -> Result<Option<Self::Entry>, Self::Error>;
+    async fn resolve(&self, id: &AtomId) -> Result<Option<Self::Entry>, Self::Error>;
 
     /// Search for atoms matching a query string.
     ///
     /// Returns atom identities, not full entries — use
     /// [`resolve`](Self::resolve) for observation data.
-    fn discover(&self, query: &str) -> Result<Vec<AtomId>, Self::Error>;
+    async fn discover(&self, query: &str) -> Result<Vec<AtomId>, Self::Error>;
 
     /// Downcast helper to support concrete backend operations.
     fn as_any(&self) -> &dyn std::any::Any;
@@ -204,15 +205,16 @@ pub trait AtomRegistry: AtomSource {
 /// [`resolve`](AtomSource::resolve) on this store MUST return at least
 /// what the source's `resolve` returns. The store accumulates — it never
 /// loses atoms through ingestion.
+#[trait_variant::make(Send)]
 pub trait AtomStore: AtomSource {
     /// Import atoms from a source into this store.
     ///
     /// After completion, this store contains at least every atom
     /// that was in `source` (⊇ condition).
-    fn ingest<S: AtomSource>(&self, source: &S) -> Result<(), Self::Error>;
+    async fn ingest<S: AtomSource>(&self, source: &S) -> Result<(), Self::Error>;
 
     /// Check whether an atom is present in this store.
-    fn contains(&self, id: &AtomId) -> bool;
+    async fn contains(&self, id: &AtomId) -> Result<bool, Self::Error>;
 }
 
 // ============================================================================

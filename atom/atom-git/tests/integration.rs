@@ -139,9 +139,8 @@ fn test_claim_and_key_rotation() {
     let claim_czd = registry.claim(&id, &pub_key).unwrap();
 
     // Verify claim reference was created
-    let claim_ref = registry
-        .source
-        .repo
+    let repo = registry.source.repo();
+    let claim_ref = repo
         .try_find_reference("refs/atom/claims/pub/my-package")
         .unwrap()
         .unwrap();
@@ -156,7 +155,7 @@ fn test_claim_and_key_rotation() {
     let next_pub = next_sk.verifying_key().public_key_bytes().to_vec();
 
     let registry_rotated = GitRegistry::new(
-        registry.source.repo,
+        registry.source.repo(),
         next_prv,
         next_pub.clone(),
         Alg::Ed25519,
@@ -167,9 +166,8 @@ fn test_claim_and_key_rotation() {
     assert_ne!(claim_czd, next_claim_czd);
 
     // Check that the next claim has the previous claim as a parent (claim rotation chain)
-    let claim_commit_obj = registry_rotated
-        .source
-        .repo
+    let repo_rotated = registry_rotated.source.repo();
+    let claim_commit_obj = repo_rotated
         .find_object(ObjectId::from_bytes_or_panic(next_claim_czd.as_bytes()))
         .unwrap();
     let claim_commit = claim_commit_obj.try_into_commit().unwrap();
@@ -196,6 +194,8 @@ fn test_publish_and_tag_chain() {
         "cargo".to_string(),
     );
 
+    let repo = registry.source.repo();
+
     let anchor = atom_core::Anchor::new(genesis_oid.as_bytes().to_vec());
     let label = Label::try_from("my-package").unwrap();
     let id = AtomId::new(anchor, label);
@@ -205,15 +205,13 @@ fn test_publish_and_tag_chain() {
 
     // Create a version workspace state tree
     let ver_commit_oid = create_commit(
-        &registry.source.repo,
+        &repo,
         "v1.0.0 src",
         "lib.rs",
         b"fn test() {}",
         vec![genesis_oid],
     );
-    let ver_commit_obj = registry
-        .source
-        .repo
+    let ver_commit_obj = repo
         .find_object(ver_commit_oid)
         .unwrap()
         .try_into_commit()
@@ -234,18 +232,14 @@ fn test_publish_and_tag_chain() {
         .unwrap();
 
     // Verify tag exists
-    let tag_ref = registry
-        .source
-        .repo
+    let tag_ref = repo
         .try_find_reference("refs/atom/pub/my-package/1.0.0")
         .unwrap()
         .unwrap();
     let tag_oid = tag_ref.id().detach();
 
     // Peel publish reference back to the deterministic commit
-    let peeled = registry
-        .source
-        .repo
+    let peeled = repo
         .find_object(tag_oid)
         .unwrap()
         .peel_to_kind(gix::object::Kind::Commit)
@@ -264,8 +258,8 @@ fn test_publish_and_tag_chain() {
     assert_eq!(src_header, ver_commit_oid.to_hex().to_string());
 }
 
-#[test]
-fn test_local_ingest() {
+#[tokio::test]
+async fn test_local_ingest() {
     // 1. Create registry repository and publish a package version
     let (_reg_dir, reg_repo, reg_genesis_oid) = setup_test_repo();
 
@@ -281,6 +275,8 @@ fn test_local_ingest() {
         "cargo".to_string(),
     );
 
+    let reg_repo = registry.source.repo();
+
     let anchor = atom_core::Anchor::new(reg_genesis_oid.as_bytes().to_vec());
     let label = Label::try_from("pkg").unwrap();
     let id = AtomId::new(anchor.clone(), label.clone());
@@ -288,15 +284,13 @@ fn test_local_ingest() {
     let claim_czd = registry.claim(&id, &pub_key).unwrap();
 
     let ver_commit_oid = create_commit(
-        &registry.source.repo,
+        &reg_repo,
         "v1.0.0 src",
         "src/main.rs",
         b"main",
         vec![reg_genesis_oid],
     );
-    let ver_commit_obj = registry
-        .source
-        .repo
+    let ver_commit_obj = reg_repo
         .find_object(ver_commit_oid)
         .unwrap()
         .try_into_commit()
@@ -320,7 +314,7 @@ fn test_local_ingest() {
     let store = GitStore::new(store_repo);
 
     // Ingest!
-    store.ingest(&registry.source).unwrap();
+    store.ingest(&registry.source).await.unwrap();
 
     // 3. Verify store references are written by claim czd (Step 5)
     let claim_czd_hex = ObjectId::from_bytes_or_panic(claim_czd.as_bytes())
@@ -329,15 +323,12 @@ fn test_local_ingest() {
     let store_claim_ref_name = format!("refs/atom/claims/d/{}", claim_czd_hex);
     let store_version_ref_name = format!("refs/atom/d/{}/1.0.0", claim_czd_hex);
 
-    let store_claim_ref = store
-        .source
-        .repo
+    let repo_store = store.source.repo();
+    let store_claim_ref = repo_store
         .try_find_reference(&store_claim_ref_name)
         .unwrap()
         .unwrap();
-    let _store_version_ref = store
-        .source
-        .repo
+    let _store_version_ref = repo_store
         .try_find_reference(&store_version_ref_name)
         .unwrap()
         .unwrap();
@@ -348,8 +339,8 @@ fn test_local_ingest() {
     );
 
     // Verify resolving the store source yields the correct package info
-    let query_source = GitSource::new(gix::open(store.source.repo.path()).unwrap());
-    let resolved_entry = query_source.resolve(&id).unwrap().unwrap();
+    let query_source = GitSource::new(gix::open(repo_store.path()).unwrap());
+    let resolved_entry = query_source.resolve(&id).await.unwrap().unwrap();
     let mut versions = resolved_entry.versions();
     let version_entry = versions.next().unwrap();
     assert_eq!(version_entry.version().as_str(), "1.0.0");
@@ -378,17 +369,11 @@ fn test_fs_dev_ingest() {
     let digest = atom_core::AtomDigest::compute(&dev_id, coz_rs::Alg::ES256).unwrap();
     let digest_str = digest.to_string();
     let dev_ref_name = format!("refs/atom/dev/{}/0.1.0-dev", digest_str);
-    let dev_ref = store
-        .source
-        .repo
-        .try_find_reference(&dev_ref_name)
-        .unwrap()
-        .unwrap();
+    let repo = store.source.repo();
+    let dev_ref = repo.try_find_reference(&dev_ref_name).unwrap().unwrap();
 
     // The ref should point to a commit carrying our files
-    let peeled = store
-        .source
-        .repo
+    let peeled = repo
         .find_object(dev_ref.id().detach())
         .unwrap()
         .peel_to_kind(gix::object::Kind::Commit)
@@ -415,6 +400,8 @@ fn test_failures_and_forbidden_states() {
         Alg::Ed25519,
         "cargo".to_string(),
     );
+
+    let repo = registry.source.repo();
 
     let anchor = atom_core::Anchor::new(genesis_oid.as_bytes().to_vec());
     let label = Label::try_from("bad-package").unwrap();
@@ -445,15 +432,8 @@ fn test_failures_and_forbidden_states() {
     let empty_tree = Tree {
         entries: Vec::new(),
     };
-    let other_tree_oid = registry
-        .source
-        .repo
-        .write_object(empty_tree)
-        .unwrap()
-        .detach();
-    let other_genesis_oid = registry
-        .source
-        .repo
+    let other_tree_oid = repo.write_object(empty_tree).unwrap().detach();
+    let other_genesis_oid = repo
         .commit_as(
             other_sig,
             other_sig,
@@ -549,7 +529,7 @@ fn test_store_claim_cleanup() {
         name: claim_fullname,
         deref: false,
     };
-    store.source.repo.edit_reference(claim_edit).unwrap();
+    store.source.repo().edit_reference(claim_edit).unwrap();
 
     // 2. Write version 1 refs/atom/d/{claim_czd_hex}/1.0.0
     let v1_ref_name = format!("refs/atom/d/{}/1.0.0", claim_czd_hex);
@@ -563,7 +543,7 @@ fn test_store_claim_cleanup() {
         name: v1_fullname,
         deref: false,
     };
-    store.source.repo.edit_reference(v1_edit).unwrap();
+    store.source.repo().edit_reference(v1_edit).unwrap();
 
     // 3. Write version 2 refs/atom/d/{claim_czd_hex}/2.0.0
     let v2_ref_name = format!("refs/atom/d/{}/2.0.0", claim_czd_hex);
@@ -577,13 +557,13 @@ fn test_store_claim_cleanup() {
         name: v2_fullname,
         deref: false,
     };
-    store.source.repo.edit_reference(v2_edit).unwrap();
+    store.source.repo().edit_reference(v2_edit).unwrap();
 
     // Verify all references exist
     assert!(
         store
             .source
-            .repo
+            .repo()
             .try_find_reference(&claim_ref_name)
             .unwrap()
             .is_some()
@@ -591,7 +571,7 @@ fn test_store_claim_cleanup() {
     assert!(
         store
             .source
-            .repo
+            .repo()
             .try_find_reference(&v1_ref_name)
             .unwrap()
             .is_some()
@@ -599,7 +579,7 @@ fn test_store_claim_cleanup() {
     assert!(
         store
             .source
-            .repo
+            .repo()
             .try_find_reference(&v2_ref_name)
             .unwrap()
             .is_some()
@@ -612,7 +592,7 @@ fn test_store_claim_cleanup() {
     assert!(
         store
             .source
-            .repo
+            .repo()
             .try_find_reference(&v1_ref_name)
             .unwrap()
             .is_none()
@@ -620,7 +600,7 @@ fn test_store_claim_cleanup() {
     assert!(
         store
             .source
-            .repo
+            .repo()
             .try_find_reference(&v2_ref_name)
             .unwrap()
             .is_some()
@@ -628,7 +608,7 @@ fn test_store_claim_cleanup() {
     assert!(
         store
             .source
-            .repo
+            .repo()
             .try_find_reference(&claim_ref_name)
             .unwrap()
             .is_some()
@@ -641,7 +621,7 @@ fn test_store_claim_cleanup() {
     assert!(
         store
             .source
-            .repo
+            .repo()
             .try_find_reference(&v2_ref_name)
             .unwrap()
             .is_none()
@@ -649,7 +629,7 @@ fn test_store_claim_cleanup() {
     assert!(
         store
             .source
-            .repo
+            .repo()
             .try_find_reference(&claim_ref_name)
             .unwrap()
             .is_none()
@@ -778,7 +758,7 @@ mod proptests {
                 name: claim_fullname,
                 deref: false,
             };
-            store.source.repo.edit_reference(claim_edit).unwrap();
+            store.source.repo().edit_reference(claim_edit).unwrap();
 
             // Deduplicate versions
             let mut versions = major_versions;
@@ -799,18 +779,18 @@ mod proptests {
                     name: fullname,
                     deref: false,
                 };
-                store.source.repo.edit_reference(edit).unwrap();
+                store.source.repo().edit_reference(edit).unwrap();
             }
 
             // Verify all exist
             for ver_str in &version_strs {
                 let ref_name = format!("refs/atom/d/{}/{}", claim_czd_hex, ver_str);
-                let has_ref = store.source.repo.try_find_reference(&ref_name)
+                let has_ref = store.source.repo().try_find_reference(&ref_name)
                     .unwrap()
                     .is_some();
                 prop_assert!(has_ref);
             }
-            let has_claim = store.source.repo.try_find_reference(&claim_ref_name)
+            let has_claim = store.source.repo().try_find_reference(&claim_ref_name)
                 .unwrap()
                 .is_some();
             prop_assert!(has_claim);
@@ -830,7 +810,7 @@ mod proptests {
 
                 // Verify this version is gone
                 let ref_name = format!("refs/atom/d/{}/{}", claim_czd_hex, ver_str);
-                let has_ver = store.source.repo.try_find_reference(&ref_name)
+                let has_ver = store.source.repo().try_find_reference(&ref_name)
                     .unwrap()
                     .is_some();
                 prop_assert!(!has_ver);
@@ -841,14 +821,14 @@ mod proptests {
                 // Verify all other remaining versions still exist
                 for rem in &remaining {
                     let rem_ref_name = format!("refs/atom/d/{}/{}", claim_czd_hex, rem);
-                    let has_rem = store.source.repo.try_find_reference(&rem_ref_name)
+                    let has_rem = store.source.repo().try_find_reference(&rem_ref_name)
                         .unwrap()
                         .is_some();
                     prop_assert!(has_rem);
                 }
 
                 // Verify claim reference presence matches remaining status
-                let has_claim = store.source.repo.try_find_reference(&claim_ref_name)
+                let has_claim = store.source.repo().try_find_reference(&claim_ref_name)
                     .unwrap()
                     .is_some();
                 if !remaining.is_empty() {
