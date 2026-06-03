@@ -91,6 +91,7 @@ pub struct GitEntry {
 }
 
 /// Read-only observation of a Git-backed Atom registry or store.
+#[derive(Clone)]
 pub struct GitSource {
     /// The underlying Git repository.
     pub repo_ts: gix::ThreadSafeRepository,
