@@ -37,11 +37,11 @@ fuzz-verification args="-T 10s --profile release":
 
 # Run the raw lock file TOML fuzzer via Bolero
 fuzz-lock-raw args="-T 10s --profile release":
-    cargo bolero test --manifest-path eos/Cargo.toml -p eos --corpus-dir eos/fuzz/corpus/test_lock_file_parse_raw_no_panic lock::tests::test_lock_file_parse_raw_no_panic {{args}}
+    cargo bolero test --manifest-path ion/Cargo.toml -p ion-lock --corpus-dir ion/ion-lock/fuzz/corpus/test_lock_file_parse_raw_no_panic tests::test_lock_file_parse_raw_no_panic {{args}}
 
 # Run the structured lock file fuzzer via Bolero
 fuzz-lock-structured args="-T 10s --profile release":
-    cargo bolero test --manifest-path eos/Cargo.toml -p eos --corpus-dir eos/fuzz/corpus/test_lock_file_roundtrip lock::tests::test_lock_file_roundtrip {{args}}
+    cargo bolero test --manifest-path ion/Cargo.toml -p ion-lock --corpus-dir ion/ion-lock/fuzz/corpus/test_lock_file_roundtrip tests::test_lock_file_roundtrip {{args}}
 
 # Run the manifest TOML fuzzer via Bolero
 fuzz-manifest args="-T 10s --profile release":
