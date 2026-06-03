@@ -280,7 +280,7 @@ This page tracks the compliance of the Axios codebase (`atom/`, `eos/`, `ion/`, 
         clean_title = spec_name.replace(".md", "").replace("-", " ").title()
         
         markdown_content += f"### {clean_title}\n\n"
-        markdown_content += f"Specification file: [`{rel_path}`]({{{{ prefix }}}}/specs/{spec_name.replace('.md', '.html')})\n\n"
+        markdown_content += f"Specification file: [`{rel_path}`](specs/{spec_name.replace('.md', '.html')})\n\n"
         markdown_content += "| Constraint ID | Status | Mechanism | Verification Path |\n"
         markdown_content += "| :--- | :--- | :--- | :--- |\n"
         

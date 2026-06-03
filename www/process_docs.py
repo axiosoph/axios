@@ -1,6 +1,25 @@
 import os
 import re
 
+def rewrite_links(text):
+    # Regex for markdown links: [text](path.md) or [text](path.md#hash)
+    def repl(match):
+        text_part = match.group(1)
+        url_part = match.group(2)
+        hash_part = match.group(3) or ""
+        
+        if url_part.startswith(("http://", "https://", "mailto:")):
+            return match.group(0)
+            
+        if url_part.endswith(".md"):
+            new_url = url_part[:-3] + ".html"
+        else:
+            new_url = url_part
+        return f"[{text_part}]({new_url}{hash_part})"
+
+    pattern = r"\[([^\]]+)\]\(([^)#?\s]+\.md)(#[^)\s]*)?\)"
+    return re.sub(pattern, repl, text)
+
 def process_specs():
     src_dir = "../docs/specs"
     dst_dir = "content/specs"
@@ -28,6 +47,7 @@ def process_specs():
                 break
                 
         body_content = "".join(lines[body_start:])
+        body_content = rewrite_links(body_content)
         
         # Formulate TOML frontmatter and classification block
         frontmatter = f"""+++
@@ -68,6 +88,7 @@ def process_adrs():
                 break
                 
         body_content = "".join(lines[body_start:])
+        body_content = rewrite_links(body_content)
         
         frontmatter = f"""+++
 title = "{title}"
@@ -101,6 +122,7 @@ def process_explanations():
             break
             
     body_content = "".join(lines[body_start:])
+    body_content = rewrite_links(body_content)
     
     frontmatter = f"""+++
 title = "{title}"
