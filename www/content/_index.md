@@ -12,7 +12,7 @@ Welcome to the Axios static documentation website. Axios is the umbrella name fo
 The monorepo contains three distinct projects:
 
 1. **L1: Atom** — The decentralized, content-addressed source code publishing protocol.
-2. **L2: Eos** — A build scheduler that leverages the idempotency of Nix-like tools and Atom's content-addressability to coordinate execution via external backends.
+2. **L2: Eos** — The idempotent build scheduler and backend coordinator.
 3. **L3: Ion** — The user-facing CLI, manifest schema, and dependency resolver.
 
 ## Key Sections
