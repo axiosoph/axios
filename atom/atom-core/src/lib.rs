@@ -155,8 +155,16 @@ pub trait AtomSource: Send + Sync + 'static {
     /// [`resolve`](Self::resolve) for observation data.
     async fn discover(&self, query: &str) -> Result<Vec<AtomId>, Self::Error>;
 
-    /// Downcast helper to support concrete backend operations.
-    fn as_any(&self) -> &dyn std::any::Any;
+    /// Downcast helper for backend-internal operations.
+    ///
+    /// This exists solely for L1-internal use (e.g., git-to-git `AtomStore::ingest`).
+    /// L2 consumers (eos) MUST NOT call this — use [`AtomContentBridge`] instead.
+    ///
+    /// The default implementation panics. Override only in backends that need
+    /// intra-backend downcasting.
+    fn as_any(&self) -> &dyn std::any::Any {
+        panic!("as_any() is not supported by this AtomSource implementation")
+    }
 }
 
 /// Claiming and publishing interface (source-side).
