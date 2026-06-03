@@ -167,6 +167,71 @@ pub trait AtomSource: Send + Sync + 'static {
     }
 }
 
+/// A single entry in an atom's content tree.
+///
+/// Represents one node in the abstract tree yielded by
+/// [`AtomContent::content`]. Entries are ordered
+/// children-before-parents (leaves-to-root) to satisfy
+/// castore ingestion ordering requirements.
+#[derive(Clone, Debug)]
+pub enum ContentEntry {
+    /// A regular file with content bytes.
+    Regular {
+        /// Relative path within the atom tree (e.g., "src/lib.rs").
+        path: String,
+        /// Raw file content.
+        data: Vec<u8>,
+        /// Whether the file is executable.
+        executable: bool,
+    },
+    /// A symbolic link.
+    Symlink {
+        /// Relative path of the symlink.
+        path: String,
+        /// Target of the symlink.
+        target: Vec<u8>,
+    },
+    /// A directory marker.
+    Directory {
+        /// Relative path of the directory.
+        path: String,
+    },
+}
+
+/// Content observation interface (model §2.1a).
+///
+/// Extends [`AtomSource`] with the ability to yield the content
+/// tree for a specific atom version. This is the _content recovery_
+/// functor — it recovers the tree data that `AtomSource` (the
+/// forgetful functor) deliberately omits.
+///
+/// Implementations provide backend-specific tree extraction:
+/// - Git backend: walks `gix` tree objects
+/// - Future backends: extract from their native representation
+///
+/// Consumers (e.g., [`AtomStore::ingest`], eos bridge) use this
+/// trait to transfer content across backend boundaries without
+/// runtime downcasting.
+#[trait_variant::make(Send)]
+pub trait AtomContent: AtomSource {
+    /// Yield the content tree for a specific atom version.
+    ///
+    /// Returns the full tree as a `Vec<ContentEntry>` ordered
+    /// children-before-parents (leaves-to-root).
+    ///
+    /// # Arguments
+    ///
+    /// * `id` — the atom's identity
+    /// * `dig` — backend-specific content snapshot digest (e.g., 20-byte git tree OID)
+    ///
+    /// Returns `None` if the content is not found.
+    async fn content(
+        &self,
+        id: &AtomId,
+        dig: &[u8],
+    ) -> Result<Option<Vec<ContentEntry>>, Self::Error>;
+}
+
 /// Claiming and publishing interface (source-side).
 ///
 /// Extends [`AtomSource`] with write operations. Lives at the canonical
