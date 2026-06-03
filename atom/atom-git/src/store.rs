@@ -204,7 +204,10 @@ impl AtomStore for GitStore {
                 .map_err(|e| GitError::Validation(e.to_string()))?
             {
                 for v in entry.versions() {
-                    if let Some(oid) = v.czd().and_then(|czd| ObjectId::try_from(czd.as_bytes()).ok()) {
+                    if let Some(oid) = v
+                        .czd()
+                        .and_then(|czd| ObjectId::try_from(czd.as_bytes()).ok())
+                    {
                         candidate_parents.push(oid);
                     }
                 }
@@ -343,7 +346,9 @@ impl AtomStore for GitStore {
                             &dest_repo,
                             claim_msg.to_string(),
                             None,
-                        ).ok() == Some(claim_oid)
+                        )
+                        .ok()
+                            == Some(claim_oid)
                         {
                             found = true;
                         }
@@ -353,7 +358,9 @@ impl AtomStore for GitStore {
                                     &dest_repo,
                                     claim_msg.to_string(),
                                     Some(candidate),
-                                ).ok() == Some(claim_oid)
+                                )
+                                .ok()
+                                    == Some(claim_oid)
                                 {
                                     found = true;
                                     break;

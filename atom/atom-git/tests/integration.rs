@@ -913,9 +913,16 @@ fn test_atom_content_bolero() {
 
             for (path, f) in &files {
                 let kind_mod = f.kind % 3;
-                let data = if f.content.is_empty() { b"default".to_vec() } else { f.content.clone() };
+                let data = if f.content.is_empty() {
+                    b"default".to_vec()
+                } else {
+                    f.content.clone()
+                };
 
-                let blob_oid = repo.write_object(gix::objs::Blob { data }).unwrap().detach();
+                let blob_oid = repo
+                    .write_object(gix::objs::Blob { data })
+                    .unwrap()
+                    .detach();
 
                 let mode = match kind_mod {
                     0 => EntryKind::Blob.into(),
@@ -928,11 +935,14 @@ fn test_atom_content_bolero() {
                 let parent_path = parts[0..parts.len() - 1].join("/");
                 let filename = parts.last().unwrap().to_string();
 
-                tree_entries.entry(parent_path).or_insert_with(Vec::new).push(Entry {
-                    mode,
-                    filename: filename.into(),
-                    oid: blob_oid,
-                });
+                tree_entries
+                    .entry(parent_path)
+                    .or_insert_with(Vec::new)
+                    .push(Entry {
+                        mode,
+                        filename: filename.into(),
+                        oid: blob_oid,
+                    });
             }
 
             let mut parent_paths: Vec<String> = tree_entries.keys().cloned().collect();
@@ -944,17 +954,23 @@ fn test_atom_content_bolero() {
                 }
                 let mut entries = tree_entries.remove(&p_path).unwrap();
                 entries.sort();
-                let tree_oid = repo.write_object(gix::objs::Tree { entries }).unwrap().detach();
+                let tree_oid = repo
+                    .write_object(gix::objs::Tree { entries })
+                    .unwrap()
+                    .detach();
 
                 let parts: Vec<&str> = p_path.split('/').collect();
                 let parent_of_p = parts[0..parts.len() - 1].join("/");
                 let dirname = parts.last().unwrap().to_string();
 
-                tree_entries.entry(parent_of_p).or_insert_with(Vec::new).push(Entry {
-                    mode: EntryKind::Tree.into(),
-                    filename: dirname.into(),
-                    oid: tree_oid,
-                });
+                tree_entries
+                    .entry(parent_of_p)
+                    .or_insert_with(Vec::new)
+                    .push(Entry {
+                        mode: EntryKind::Tree.into(),
+                        filename: dirname.into(),
+                        oid: tree_oid,
+                    });
             }
 
             let mut root_entries = tree_entries.remove("").unwrap_or_default();
@@ -1169,7 +1185,10 @@ async fn test_atom_content_walk_and_reconstruct() {
         file1_idx.unwrap() < b_idx.unwrap(),
         "file1.txt must be before dir a/b"
     );
-    assert!(b_idx.unwrap() < a_idx.unwrap(), "dir a/b must be before dir a");
+    assert!(
+        b_idx.unwrap() < a_idx.unwrap(),
+        "dir a/b must be before dir a"
+    );
 
     // Verify reconstruction:
     // Use GitStore to reconstruct the tree from the walked entries.
