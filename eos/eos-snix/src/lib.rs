@@ -6,6 +6,7 @@ pub mod build;
 pub mod convert;
 pub mod error;
 pub mod eval;
+pub mod ingest;
 pub mod sandbox;
 pub mod store;
 
@@ -16,6 +17,7 @@ use std::sync::{Arc, Mutex};
 use eos_core::digest::Blake3Digest;
 use eos_core::engine::BuildEngine;
 use eos_core::eval::EvalRequest;
+pub use ingest::{SnixIngestError, SnixIngestService};
 use nix_compat::derivation::Derivation;
 use redb::ReadableDatabase;
 pub use sandbox::{SandboxConfig, select_sandbox};
@@ -333,9 +335,5 @@ impl BuildEngine for SnixEngine {
                 .collect(),
             deriver: Some(root_digest),
         }]
-    }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
     }
 }
