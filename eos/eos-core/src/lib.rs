@@ -5,6 +5,7 @@
 
 #![allow(async_fn_in_trait)]
 
+pub mod bridge;
 pub mod digest;
 pub mod engine;
 pub mod error;
@@ -14,6 +15,7 @@ pub mod job;
 pub mod request;
 pub mod store;
 
+pub use bridge::AtomContentBridge;
 pub use digest::{Blake3Digest, Digest, ParseBlake3DigestError};
 pub use engine::{AtomRef, BuildEngine, BuildPlan};
 pub use eval::{ComposerConfig, EvalRequest, EvalTarget, ResolvedInput};
