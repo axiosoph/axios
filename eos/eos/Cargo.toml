@@ -5,14 +5,15 @@ version = "0.1.0"
 
 [dependencies]
 atom-core    = { path = "../../atom/atom-core" }
+atom-git     = { path = "../../atom/atom-git" }
 atom-id      = { path = "../../atom/atom-id" }
 base64       = "0.22"
 blake3       = "1"
 eos-core     = { path = "../eos-core" }
 eos-snix     = { path = "../eos-snix" }
 futures      = "0.3"
+gix          = { version = "^0.83", default-features = false }
 hex          = "0.4"
-ion-lock     = { path = "../../ion/ion-lock" }
 nix-compat   = { git = "https://github.com/nrdxp/snix.git", branch = "eos-patches" }
 semver       = "1"
 serde        = { version = "1", features = ["derive"] }
