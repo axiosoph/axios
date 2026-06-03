@@ -53,10 +53,6 @@ pub struct DaemonConfig {
     )]
     pub workspace_dir: PathBuf,
 
-    /// Directory where lock files are stored.
-    #[arg(long, env = "EOS_LOCKS_DIR", default_value = "/tmp/eos-locks")]
-    pub locks_dir: PathBuf,
-
     /// Hidden flag to run as a sandboxed evaluation worker.
     #[arg(long, hide = true)]
     pub eval_worker: bool,
@@ -91,21 +87,5 @@ impl DaemonConfig {
              $XDG_RUNTIME_DIR was set"
                 .to_string(),
         )
-    }
-
-    /// Resolves the locks directory path.
-    #[must_use]
-    pub fn resolve_locks_dir(&self) -> PathBuf {
-        if let Ok(locks_env) = std::env::var("EOS_LOCKS_DIR")
-            && !locks_env.is_empty()
-        {
-            return PathBuf::from(locks_env);
-        }
-        if let Ok(xdg_runtime) = std::env::var("XDG_RUNTIME_DIR")
-            && !xdg_runtime.is_empty()
-        {
-            return PathBuf::from(xdg_runtime).join("eos").join("locks");
-        }
-        self.locks_dir.clone()
     }
 }

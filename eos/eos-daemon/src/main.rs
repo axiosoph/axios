@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 use capnp_rpc::{RpcSystem, rpc_twoparty_capnp, twoparty};
 use clap::Parser;
-use eos::index::LockFileIndex;
+use eos::index::RequestIndex;
 use eos_proto::eos_capnp;
 use eos_snix::{SandboxConfig, SnixEngine, select_sandbox};
 use tokio::net::UnixListener;
@@ -108,7 +108,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     ));
 
     // 4. Initialize Scheduler and Index
-    let index = Arc::new(LockFileIndex::new());
+    let index = Arc::new(RequestIndex::new());
     let scheduler = Arc::new(Scheduler::new(config.clone(), engine, index.clone()));
 
     // Ensure parent directory of socket exists

@@ -4,10 +4,14 @@ use std::sync::Arc;
 
 use atom_id::AtomId;
 use capnp::capability::Promise;
-use eos::index::LockFileIndex;
+use eos::index::RequestIndex;
 use eos_core::digest::Blake3Digest;
 use eos_core::index::{AtomMeta, AtomQuery};
 use eos_core::job::JobStatus;
+use eos_core::request::{
+    AtomFetchDescriptor, AtomSetInfo, BuildRequest, ComposerSpec, FetchDescriptor,
+    NixFetchDescriptor, NixGitFetchDescriptor, NixSrcFetchDescriptor, NixTarFetchDescriptor,
+};
 use eos_core::{AtomIndex, Digest};
 use eos_proto::eos_capnp;
 
@@ -50,15 +54,207 @@ fn populate_atom_meta(
 /// Implementation of the `EosDaemon` Cap'n Proto interface.
 pub struct EosDaemonImpl {
     scheduler: Arc<Scheduler>,
-    index: Arc<LockFileIndex>,
+    index: Arc<RequestIndex>,
 }
 
 impl EosDaemonImpl {
     /// Creates a new `EosDaemonImpl`.
     #[must_use]
-    pub fn new(scheduler: Arc<Scheduler>, index: Arc<LockFileIndex>) -> Self {
+    pub fn new(scheduler: Arc<Scheduler>, index: Arc<RequestIndex>) -> Self {
         Self { scheduler, index }
     }
+}
+
+fn deserialize_request(
+    reader: eos_capnp::build_request::Reader<'_>,
+) -> Result<BuildRequest<Blake3Digest>, capnp::Error> {
+    // 1. planDigest
+    let digest_bytes = reader.get_plan_digest()?;
+    let plan_digest =
+        Blake3Digest::try_from(digest_bytes).map_err(|e| capnp::Error::failed(e.to_string()))?;
+
+    // 2. sets
+    let sets_reader = reader.get_sets()?;
+    let mut sets = std::collections::HashMap::new();
+    for i in 0..sets_reader.len() {
+        let set_entry = sets_reader.get(i);
+        let anchor = set_entry.get_anchor()?.to_str()?.to_string();
+        let tag = set_entry.get_tag()?.to_str()?.to_string();
+        let mirrors_reader = set_entry.get_mirrors()?;
+        let mut mirrors = Vec::new();
+        for j in 0..mirrors_reader.len() {
+            mirrors.push(mirrors_reader.get(j)?.to_str()?.to_string());
+        }
+        sets.insert(anchor, AtomSetInfo { tag, mirrors });
+    }
+
+    // 3. deps
+    let deps_reader = reader.get_deps()?;
+    let mut deps = Vec::new();
+    for i in 0..deps_reader.len() {
+        let dep_reader = deps_reader.get(i);
+        use eos_capnp::dep_descriptor::Which;
+        let fd = match dep_reader.which()? {
+            Which::Atom(group) => {
+                let id = resolve_atom_id(group.get_id()?)?;
+                let label = group.get_label()?.to_str()?.to_string();
+                let version = group.get_version()?.to_str()?.to_string();
+                let set = group.get_set()?.to_str()?.to_string();
+                let rev_str = group.get_rev()?.to_str()?;
+                let rev = if rev_str.is_empty() {
+                    None
+                } else {
+                    Some(rev_str.to_string())
+                };
+
+                let requires_reader = group.get_requires()?;
+                let mut requires = Vec::new();
+                for j in 0..requires_reader.len() {
+                    requires.push(resolve_atom_id(requires_reader.get(j))?);
+                }
+                let direct = group.get_direct();
+                FetchDescriptor::Atom(AtomFetchDescriptor {
+                    id,
+                    label,
+                    version,
+                    set,
+                    rev,
+                    requires,
+                    direct,
+                })
+            },
+            Which::Nix(group) => {
+                let name = group.get_name()?.to_str()?.to_string();
+                let url = group.get_url()?.to_str()?.to_string();
+                let hash = group.get_hash()?.to_str()?.to_string();
+                let owner = if group.has_owner() {
+                    Some(resolve_atom_id(group.get_owner()?)?)
+                } else {
+                    None
+                };
+                FetchDescriptor::Nix(NixFetchDescriptor {
+                    name,
+                    url,
+                    hash,
+                    owner,
+                })
+            },
+            Which::NixGit(group) => {
+                let name = group.get_name()?.to_str()?.to_string();
+                let url = group.get_url()?.to_str()?.to_string();
+                let rev = group.get_rev()?.to_str()?.to_string();
+                let ver_str = group.get_version()?.to_str()?;
+                let version = if ver_str.is_empty() {
+                    None
+                } else {
+                    Some(ver_str.to_string())
+                };
+                let owner = if group.has_owner() {
+                    Some(resolve_atom_id(group.get_owner()?)?)
+                } else {
+                    None
+                };
+                FetchDescriptor::NixGit(NixGitFetchDescriptor {
+                    name,
+                    url,
+                    rev,
+                    version,
+                    owner,
+                })
+            },
+            Which::NixTar(group) => {
+                let name = group.get_name()?.to_str()?.to_string();
+                let url = group.get_url()?.to_str()?.to_string();
+                let hash = group.get_hash()?.to_str()?.to_string();
+                let owner = if group.has_owner() {
+                    Some(resolve_atom_id(group.get_owner()?)?)
+                } else {
+                    None
+                };
+                FetchDescriptor::NixTar(NixTarFetchDescriptor {
+                    name,
+                    url,
+                    hash,
+                    owner,
+                })
+            },
+            Which::NixSrc(group) => {
+                let name = group.get_name()?.to_str()?.to_string();
+                let url = group.get_url()?.to_str()?.to_string();
+                let hash = group.get_hash()?.to_str()?.to_string();
+                let owner = if group.has_owner() {
+                    Some(resolve_atom_id(group.get_owner()?)?)
+                } else {
+                    None
+                };
+                FetchDescriptor::NixSrc(NixSrcFetchDescriptor {
+                    name,
+                    url,
+                    hash,
+                    owner,
+                })
+            },
+        };
+        deps.push(fd);
+    }
+
+    // 4. composer
+    let comp_reader = reader.get_composer()?;
+    use eos_capnp::composer_spec::Which as CompWhich;
+    let composer = match comp_reader.which()? {
+        CompWhich::Atom(group) => {
+            let id = resolve_atom_id(group.get_id()?)?;
+            let entry_str = group.get_entry()?.to_str()?;
+            let entry = if entry_str.is_empty() {
+                None
+            } else {
+                Some(entry_str.to_string())
+            };
+            let args_list = group.get_args()?;
+            let mut args = std::collections::HashMap::new();
+            for j in 0..args_list.len() {
+                let kv = args_list.get(j);
+                args.insert(
+                    kv.get_key()?.to_str()?.to_string(),
+                    kv.get_value()?.to_str()?.to_string(),
+                );
+            }
+            ComposerSpec::Atom { id, entry, args }
+        },
+        CompWhich::NixTrivial(group) => {
+            let expression = group.get_expression()?.to_str()?.to_string();
+            let args_list = group.get_args()?;
+            let mut args = std::collections::HashMap::new();
+            for j in 0..args_list.len() {
+                let kv = args_list.get(j);
+                args.insert(
+                    kv.get_key()?.to_str()?.to_string(),
+                    kv.get_value()?.to_str()?.to_string(),
+                );
+            }
+            ComposerSpec::NixTrivial { expression, args }
+        },
+        CompWhich::Static(()) => ComposerSpec::Static,
+    };
+
+    // 5. evalArgs
+    let eval_args_reader = reader.get_eval_args()?;
+    let mut eval_args = Vec::new();
+    for j in 0..eval_args_reader.len() {
+        let kv = eval_args_reader.get(j);
+        eval_args.push((
+            kv.get_key()?.to_str()?.to_string(),
+            kv.get_value()?.to_str()?.to_string(),
+        ));
+    }
+
+    Ok(BuildRequest {
+        plan_digest,
+        sets,
+        deps,
+        composer,
+        eval_args,
+    })
 }
 
 impl eos_capnp::eos_daemon::Server for EosDaemonImpl {
@@ -72,46 +268,17 @@ impl eos_capnp::eos_daemon::Server for EosDaemonImpl {
             Err(e) => return Promise::err(e),
         };
 
-        let plan_digest_reader = match params_reader.get_plan_digest() {
+        let request_reader = match params_reader.get_request() {
             Ok(r) => r,
             Err(e) => return Promise::err(e),
         };
 
-        let digest_bytes = match plan_digest_reader.get_bytes() {
-            Ok(b) => b,
+        let request = match deserialize_request(request_reader) {
+            Ok(req) => req,
             Err(e) => return Promise::err(e),
         };
 
-        let plan_digest = match Blake3Digest::try_from(digest_bytes) {
-            Ok(d) => d,
-            Err(e) => return Promise::err(capnp::Error::failed(e.to_string())),
-        };
-
-        let eval_args_reader = match params_reader.get_eval_args() {
-            Ok(r) => r,
-            Err(e) => return Promise::err(e),
-        };
-
-        let mut eval_args = Vec::new();
-        for kv in eval_args_reader.iter() {
-            let key = match kv.get_key() {
-                Ok(k) => match k.to_str() {
-                    Ok(s) => s.to_string(),
-                    Err(e) => return Promise::err(capnp::Error::failed(e.to_string())),
-                },
-                Err(e) => return Promise::err(e),
-            };
-            let value = match kv.get_value() {
-                Ok(v) => match v.to_str() {
-                    Ok(s) => s.to_string(),
-                    Err(e) => return Promise::err(capnp::Error::failed(e.to_string())),
-                },
-                Err(e) => return Promise::err(e),
-            };
-            eval_args.push((key, value));
-        }
-
-        match self.scheduler.submit(plan_digest, eval_args) {
+        match self.scheduler.submit(request) {
             Ok(job_state) => {
                 let job_server = BuildJobImpl::new(job_state, self.scheduler.clone());
                 let job_client: eos_capnp::build_job::Client = capnp_rpc::new_client(job_server);
@@ -310,16 +477,25 @@ impl eos_capnp::build_job::Server for BuildJobImpl {
         results.get().set_job_id(digest_bytes);
         Promise::ok(())
     }
+
+    fn get_missing(
+        &mut self,
+        _params: eos_capnp::build_job::GetMissingParams,
+        mut results: eos_capnp::build_job::GetMissingResults,
+    ) -> Promise<(), capnp::Error> {
+        let _list = results.get().init_missing_atoms(0);
+        Promise::ok(())
+    }
 }
 
 /// Implementation of the `AtomDiscovery` Cap'n Proto interface.
 pub struct AtomDiscoveryImpl {
-    index: Arc<LockFileIndex>,
+    index: Arc<RequestIndex>,
 }
 
 impl AtomDiscoveryImpl {
     /// Creates a new `AtomDiscoveryImpl`.
-    pub fn new(index: Arc<LockFileIndex>) -> Self {
+    pub fn new(index: Arc<RequestIndex>) -> Self {
         Self { index }
     }
 }

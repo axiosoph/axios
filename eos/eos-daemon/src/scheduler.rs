@@ -45,7 +45,7 @@ pub struct JobState {
 pub struct Scheduler {
     config: Arc<DaemonConfig>,
     engine: Arc<SnixEngine>,
-    index: Arc<eos::index::LockFileIndex>,
+    index: Arc<eos::index::RequestIndex>,
     jobs: Arc<Mutex<HashMap<Blake3Digest, JobState>>>,
     semaphore: Arc<Semaphore>,
 }
@@ -56,7 +56,7 @@ impl Scheduler {
     pub fn new(
         config: Arc<DaemonConfig>,
         engine: Arc<SnixEngine>,
-        index: Arc<eos::index::LockFileIndex>,
+        index: Arc<eos::index::RequestIndex>,
     ) -> Self {
         let max_concurrency = config.max_concurrency;
 
@@ -69,19 +69,19 @@ impl Scheduler {
         }
     }
 
-    /// Submits a lock file build job to the scheduler.
+    /// Submits a BuildRequest to the scheduler.
     ///
     /// If the job is already active, returns the existing handle.
     /// Otherwise, schedules a new background task.
     ///
     /// # Errors
     ///
-    /// Returns an error if the locks directory cannot be read or resolve socket fails.
+    /// Returns an error if the scheduler lock is poisoned.
     pub fn submit(
         &self,
-        plan_digest: Blake3Digest,
-        eval_args: Vec<(String, String)>,
+        request: eos_core::request::BuildRequest<Blake3Digest>,
     ) -> Result<JobState, String> {
+        let plan_digest = request.plan_digest;
         let mut guard = self.jobs.lock().map_err(|e| e.to_string())?;
 
         // 1. Deduplication [eos-scheduler-deduplication]
@@ -160,13 +160,29 @@ impl Scheduler {
                 j.status = event.status;
             }
 
-            // Resolve lock path on host
-            let locks_dir = config.resolve_locks_dir();
-            let lock_path = locks_dir.join(format!("{}.lock", plan_digest));
-            let lock_content = match tokio::fs::read_to_string(&lock_path).await {
-                Ok(content) => content,
+            // Populate AtomIndex with atoms from BuildRequest
+            use eos_core::AtomIndex;
+            for dep in &request.deps {
+                if let eos_core::request::FetchDescriptor::Atom(atom_dep) = dep {
+                    let meta = eos_core::index::AtomMeta {
+                        id: atom_dep.id.clone(),
+                        label: atom_dep.label.clone(),
+                        versions: vec![eos_core::index::VersionInfo {
+                            version: atom_dep.version.clone(),
+                            rev: atom_dep.rev.clone().unwrap_or_default(),
+                            set: atom_dep.set.clone(),
+                        }],
+                        sets: vec![atom_dep.set.clone()],
+                    };
+                    let _ = index.ingest(meta).await;
+                }
+            }
+
+            // Open the local workspace git repository to act as an AtomSource
+            let repo = match gix::open(&config.workspace_dir) {
+                Ok(r) => r,
                 Err(e) => {
-                    let err_msg = format!("Failed to read lock file at {:?}: {}", lock_path, e);
+                    let err_msg = format!("Failed to open workspace git repository: {}", e);
                     error!("{}", err_msg);
                     let event = ProgressEvent {
                         job_id,
@@ -186,31 +202,12 @@ impl Scheduler {
                     return;
                 },
             };
-
-            // Populate AtomIndex with atoms from lock file
-            if let Ok(lock_file) = eos::lock::LockFile::parse(&lock_content) {
-                use eos_core::AtomIndex;
-                for dep in lock_file.deps {
-                    if let eos::lock::Dependency::Atom(atom_dep) = dep {
-                        let meta = eos_core::index::AtomMeta {
-                            id: atom_dep.id,
-                            label: atom_dep.label,
-                            versions: vec![eos_core::index::VersionInfo {
-                                version: atom_dep.version.clone(),
-                                rev: atom_dep.rev.unwrap_or_default(),
-                                set: atom_dep.set.clone(),
-                            }],
-                            sets: vec![atom_dep.set],
-                        };
-                        let _ = index.ingest(meta).await;
-                    }
-                }
-            }
+            let source = atom_git::GitSource::new(repo);
 
             // Run build orchestration pipeline
             match eos::orchestrator::run_orchestrated_build(
-                &lock_content,
-                eval_args,
+                &request,
+                &source,
                 engine,
                 &config.workspace_dir,
                 &config.sandbox_workdir,
