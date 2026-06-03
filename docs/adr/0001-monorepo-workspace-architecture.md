@@ -56,7 +56,7 @@ Three independent Cargo workspaces in a monorepo, mapped to a 5-layer stack:
 Cyphr (L0) → Atom (L1) → Eos (L2) → Ion (L3) → Plugins (L4)
 ```
 
-### `atom/` — Protocol workspace (L1)
+### atom/ — Protocol workspace (L1)
 
 | Crate       | Responsibility                                                                 | Dependencies               |
 | :---------- | :----------------------------------------------------------------------------- | :------------------------- |
@@ -96,7 +96,7 @@ trait AtomStore: AtomSource {
 Registries, other stores, and dev workspaces all implement `AtomSource`, so
 ingestion from any source uses the same codepath.
 
-### `eos/` — Runtime engine workspace (L2)
+### eos/ — Runtime engine workspace (L2)
 
 | Crate       | Responsibility                                     | Dependencies                 |
 | :---------- | :------------------------------------------------- | :--------------------------- |
@@ -140,7 +140,7 @@ trait ArtifactStore {
 Thin wrapper over snix BlobService/DirectoryService. The trait is eos's
 contract; snix is the default backend.
 
-### `ion/` — Frontend workspace (L3)
+### ion/ — Frontend workspace (L3)
 
 | Crate          | Responsibility                                       | Dependencies                |
 | :------------- | :--------------------------------------------------- | :-------------------------- |

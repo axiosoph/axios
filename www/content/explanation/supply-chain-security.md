@@ -22,14 +22,9 @@ The downstream user has no way to verify the code's lineage. They must trust tha
 
 The Atom protocol inverts this trust model. Instead of relying on administrative credentials on a centralized server, Atom establishes trust through **Surety of Source**—a cryptographic link that binds a published package directly to its origin repository's history.
 
-Under this model, package mirrors, registries, and stores are treated as dumb transport layers. The package's authenticity is verified locally by the consumer using cryptographic proofs:
+Under this model, package mirrors, registries, and stores are treated as dumb transport layers. The package's authenticity is verified locally by the consumer using cryptographic proofs linking the origin repository's history to the snapshot:
 
-```mermaid
-graph LR
-    A["Genesis Commit"] --> B["Claim Transaction (owner key)"]
-    B --> C["Publish Transaction (version)"]
-    C --> D["Deterministic Content Snapshot"]
-```
+$$\text{Genesis Commit} \to \text{Claim Transaction} \to \text{Publish Transaction} \to \text{Content Snapshot}$$
 
 The verification chain relies on three immutable links:
 

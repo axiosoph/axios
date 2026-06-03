@@ -17,7 +17,7 @@ By integrating the Atom protocol as a publishing overlay, traditional toolchains
 2. **Surety of Source**: Downstream consumers verify that the source code they compile came from the original repository owner (verified via signed claims and commit DAG ancestry).
 3. **Pluggable Mirrors**: Since package integrity is verified mathematically, packages can be retrieved from any mirror, CDN, or local store without compromising security.
 
-## The Custom URI Scheme (`atom-uri` & `alurl`)
+## The Custom URI Scheme (atom-uri & alurl)
 
 To address packages within the decentralized space, the system uses a custom URI scheme implemented in the `atom-uri` crate. The URI format is designed for both human readability and machine resolution:
 
@@ -29,7 +29,20 @@ To address packages within the decentralized space, the system uses a custom URI
 - **`label`** — A validated Unicode identifier (following UAX #31 rules with a custom hyphen exception) naming the package within the repository set.
 - **`version`** — An unparsed raw version string following semantic or ecosystem-specific versioning.
 
-### URL Aliasing via `alurl`
+### Examples of Atom URIs
+
+Below are representative examples demonstrating the syntax across different deployment models:
+
+- **Ecosystem URL Sourcing**: Specifying a full remote Git hosting provider path:
+  `git.snix.dev/snix/snix::snix-core@^1.2`
+- **Short-hand Aliasing (with `alurl`)**: Using custom aliases resolved to remote repositories:
+  `+gh/axiosoph/axios::ion-cli@1.0.0`
+- **Local Directory Sourcing**: Reference paths directly on the local filesystem for dev workflow:
+  `/home/user/src/project::lib-common@0.5.1`
+- **Minimal Sourcing (Ecosystem defaults)**: Resolving using current repository context:
+  `atom-uri@1.0`
+
+### URL Aliasing via alurl
 
 To avoid typing long hostnames in sources, the stack integrates the `alurl` crate. `alurl` is a structure-preserving URL alias detection and expansion library.
 
@@ -39,7 +52,7 @@ It scans host positions within source strings for `+`-prefixed identifiers (e.g.
 
 Atom does not implement the full Package URL (PURL) specification, as PURL makes hardcoded layout assumptions that do not map to Atom's unique `(anchor, label)` identity.
 
-Instead, the protocol borrows only the **ecosystem type identifiers** from PURL (e.g. `"cargo"`, `"npm"`, `"pypi"`) to populate the `pkg` field in the claim transaction. 
+Instead, the protocol borrows only the **ecosystem type identifiers** from PURL (e.g. `"cargo"`, `"npm"`, `"pypi"`) to populate the `pkg` field in the claim transaction.
 
 This type identifier allows generic package resolution clients to dispatch manifest parsing and version resolution to the appropriate ecosystem adapter:
 
@@ -57,6 +70,7 @@ This type identifier allows generic package resolution clients to dispatch manif
 ```
 
 For example, when resolving a Cargo project dependency:
+
 1. The resolution tool reads the dependency's Atom ID.
 2. It fetches the corresponding publish transactions from the Git repository.
 3. The **Cargo Adapter** extracts the `Cargo.toml` manifest from the deterministic content snapshot (`dig`).

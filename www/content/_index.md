@@ -14,9 +14,9 @@ Welcome to the Axios static documentation website. Axios is the umbrella name fo
 
 The stack consists of three distinct layers:
 
-1. **L1: Atom** — The decentralized, content-addressed source code publishing protocol. *(Specification active; `atom-git` backend and `atom-uri` resolver are implemented).*
-2. **L2: Eos** — The idempotent build scheduler and backend coordinator. *(Scheduler traits and `eos-snix` backend are active; daemon/remote protocol is under development).*
-3. **L3: Ion** — The user-facing CLI, manifest schema, and dependency resolver. *(Under Construction — SAT resolver and TOML parsing logic are prototyped; CLI commands are pending implementation).*
+1. **L1: Atom** — The decentralized, content-addressed source code publishing protocol. _(Specification active; `atom-git` backend and `atom-uri` resolver are implemented)._
+2. **L2: Eos** — The idempotent build scheduler and backend coordinator. _(Scheduler traits and `eos-snix` backend are active; daemon/remote protocol is under development)._
+3. **L3: Ion** — The user-facing CLI, manifest schema, and dependency resolver. _(Under Construction — SAT resolver and TOML parsing logic are prototyped; CLI commands are pending implementation)._
 
 ## Key Sections
 
