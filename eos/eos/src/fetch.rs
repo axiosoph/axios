@@ -9,9 +9,6 @@ use eos_core::eval::ResolvedInput;
 use eos_core::store::StorePath;
 use eos_snix::SnixEngine;
 use sha2::{Digest, Sha256};
-use tracing::info;
-
-use crate::lock::{Dependency, LockFile};
 
 /// Helper to download a file from a URL.
 async fn download_file(url: &str, out_path: &Path) -> Result<(), String> {
@@ -161,137 +158,24 @@ fn verify_file_hash(path: &Path, expected_sri: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Fetches a dependency, verifies it, imports it into the store, and returns the ResolvedInput.
-pub async fn fetch_and_import(
-    dep: &Dependency,
-    lock_file: &LockFile,
+/// Fetches a non-atom dependency directly from URLs, verifies it, imports it,
+/// and returns the ResolvedInput.
+pub async fn fetch_external(
+    desc: &eos_core::request::FetchDescriptor,
     engine: &SnixEngine,
-    workspace_dir: &Path,
     sandbox_workdir: &Path,
 ) -> Result<ResolvedInput<Blake3Digest>, String> {
-    let name = dep.name();
+    let name = desc.name();
     let temp_dir = sandbox_workdir.join("fetch-temp").join(name);
     if temp_dir.exists() {
         let _ = tokio::fs::remove_dir_all(&temp_dir).await;
     }
 
-    match dep {
-        Dependency::Atom(atom_dep) => {
-            // Determine mirror/source URL or local filesystem path
-            let set_details = lock_file.sets.get(&atom_dep.set).ok_or_else(|| {
-                format!("Atom {} references undeclared set: {}", name, atom_dep.set)
-            })?;
-
-            let is_local = set_details.mirrors.iter().any(|m| m == "::");
-            if is_local {
-                info!("Fetching local atom: {} from workspace", name);
-                let atom_src_dir = if let Some(ref rev) = atom_dep.rev {
-                    // Extract commit from local workspace git repository to a temp directory
-                    let out_path = temp_dir.join("checkout");
-                    fetch_git(workspace_dir.to_str().unwrap(), rev, &out_path).await?;
-                    out_path
-                } else {
-                    // Use local workspace directory directly if rev is absent
-                    // We look under workspace_dir/atom/<name> or workspace_dir/atoms/<name>
-                    let path1 = workspace_dir.join("atom").join(name);
-                    let path2 = workspace_dir.join(name);
-                    if path1.exists() {
-                        path1
-                    } else if path2.exists() {
-                        path2
-                    } else {
-                        return Err(format!("Local atom {} path not found in workspace", name));
-                    }
-                };
-
-                // Import into SnixStore
-                let path_info = snix_store::import::import_path_as_nar_ca(
-                    &atom_src_dir,
-                    name,
-                    engine.blob_service.clone(),
-                    engine.directory_service.clone(),
-                    &engine.path_info_service,
-                    &*engine.nar_calculation_service,
-                )
-                .await
-                .map_err(|e| format!("Failed to import local atom to store: {}", e))?;
-
-                let digest = match &path_info.node {
-                    snix_castore::Node::File { digest, .. } => *digest,
-                    snix_castore::Node::Directory { digest, .. } => *digest,
-                    snix_castore::Node::Symlink { .. } => {
-                        return Err("Atom source cannot be a symlink node".to_string());
-                    },
-                };
-
-                Ok(ResolvedInput {
-                    digest: Blake3Digest(digest.into()),
-                    store_path: StorePath(path_info.store_path.to_string()),
-                })
-            } else {
-                // Remote atom
-                let rev = atom_dep
-                    .rev
-                    .as_ref()
-                    .ok_or_else(|| format!("Remote atom {} must specify a rev commit", name))?;
-
-                let mut fetch_errs = Vec::new();
-                let mut path_info = None;
-
-                for mirror in &set_details.mirrors {
-                    let out_path = temp_dir.join("checkout");
-                    match fetch_git(mirror, rev, &out_path).await {
-                        Ok(()) => {
-                            // Import into store
-                            match snix_store::import::import_path_as_nar_ca(
-                                &out_path,
-                                name,
-                                engine.blob_service.clone(),
-                                engine.directory_service.clone(),
-                                &engine.path_info_service,
-                                &*engine.nar_calculation_service,
-                            )
-                            .await
-                            {
-                                Ok(pi) => {
-                                    path_info = Some(pi);
-                                    break;
-                                },
-                                Err(e) => {
-                                    fetch_errs
-                                        .push(format!("Import error for mirror {}: {}", mirror, e));
-                                },
-                            }
-                        },
-                        Err(e) => {
-                            fetch_errs
-                                .push(format!("Git fetch error for mirror {}: {}", mirror, e));
-                        },
-                    }
-                }
-
-                let path_info = path_info.ok_or_else(|| {
-                    format!(
-                        "Failed to fetch atom {} from any mirror: {:?}",
-                        name, fetch_errs
-                    )
-                })?;
-
-                let digest = match &path_info.node {
-                    snix_castore::Node::File { digest, .. } => *digest,
-                    snix_castore::Node::Directory { digest, .. } => *digest,
-                    snix_castore::Node::Symlink { .. } => {
-                        return Err("Atom source cannot be a symlink node".to_string());
-                    },
-                };
-
-                Ok(ResolvedInput {
-                    digest: Blake3Digest(digest.into()),
-                    store_path: StorePath(path_info.store_path.to_string()),
-                })
-            }
+    match desc {
+        eos_core::request::FetchDescriptor::Atom(_) => {
+            Err("Atom dependencies cannot be fetched via fetch_external".to_string())
         },
-        Dependency::NixGit(nix_git_dep) => {
+        eos_core::request::FetchDescriptor::NixGit(nix_git_dep) => {
             let out_path = temp_dir.join("checkout");
             fetch_git(&nix_git_dep.url, &nix_git_dep.rev, &out_path).await?;
 
@@ -319,7 +203,7 @@ pub async fn fetch_and_import(
                 store_path: StorePath(path_info.store_path.to_string()),
             })
         },
-        Dependency::Nix(nix_dep) => {
+        eos_core::request::FetchDescriptor::Nix(nix_dep) => {
             let file_path = temp_dir.join(&nix_dep.name);
             download_file(&nix_dep.url, &file_path).await?;
             verify_file_hash(&file_path, &nix_dep.hash)?;
@@ -348,10 +232,9 @@ pub async fn fetch_and_import(
                 store_path: StorePath(path_info.store_path.to_string()),
             })
         },
-        Dependency::NixTar(nix_tar_dep) => {
+        eos_core::request::FetchDescriptor::NixTar(nix_tar_dep) => {
             let tar_path = temp_dir.join("archive.tar.gz");
             download_file(&nix_tar_dep.url, &tar_path).await?;
-            // Note: Verify the tarball content hash if specified
             verify_file_hash(&tar_path, &nix_tar_dep.hash)?;
 
             let out_dir = temp_dir.join("extracted");
@@ -381,7 +264,7 @@ pub async fn fetch_and_import(
                 store_path: StorePath(path_info.store_path.to_string()),
             })
         },
-        Dependency::NixSrc(nix_src_dep) => {
+        eos_core::request::FetchDescriptor::NixSrc(nix_src_dep) => {
             let file_path = temp_dir.join(&nix_src_dep.name);
             download_file(&nix_src_dep.url, &file_path).await?;
             verify_file_hash(&file_path, &nix_src_dep.hash)?;
@@ -411,4 +294,121 @@ pub async fn fetch_and_import(
             })
         },
     }
+}
+
+/// Resolves an atom dependency via AtomSource, checks out its content, and imports it.
+pub async fn fetch_atom<S: atom_core::AtomSource>(
+    desc: &eos_core::request::AtomFetchDescriptor,
+    source: &S,
+    engine: &SnixEngine,
+    sandbox_workdir: &Path,
+) -> Result<ResolvedInput<Blake3Digest>, String> {
+    use atom_core::{AtomEntry, AtomVersion};
+    let name = &desc.label;
+
+    let entry_opt = source
+        .resolve(&desc.id)
+        .await
+        .map_err(|e| format!("Failed to resolve atom {}: {}", name, e))?;
+
+    let entry = entry_opt.ok_or_else(|| format!("Atom {} not found in source", name))?;
+
+    let version_entry = entry
+        .versions()
+        .find(|v| v.version().as_str() == desc.version.as_str())
+        .ok_or_else(|| format!("Version {} not found for atom {}", desc.version, name))?;
+
+    // Downcast to retrieve the underlying Git repository path
+    let repo_path = if let Some(git_source) = source.as_any().downcast_ref::<atom_git::GitSource>()
+    {
+        git_source.repo().path().to_path_buf()
+    } else if let Some(git_store) = source.as_any().downcast_ref::<atom_git::GitStore>() {
+        git_store.source.repo().path().to_path_buf()
+    } else if let Some(git_registry) = source.as_any().downcast_ref::<atom_git::GitRegistry>() {
+        git_registry.source.repo().path().to_path_buf()
+    } else {
+        return Err(format!(
+            "Unsupported AtomSource type for atom {} (must be git-backed)",
+            name
+        ));
+    };
+
+    let temp_dir = sandbox_workdir.join("fetch-temp").join(name);
+    if temp_dir.exists() {
+        let _ = tokio::fs::remove_dir_all(&temp_dir).await;
+    }
+    let out_path = temp_dir.join("checkout");
+    tokio::fs::create_dir_all(&out_path)
+        .await
+        .map_err(|e| format!("Failed to create checkout directory: {}", e))?;
+
+    let hex_oid = hex::encode(version_entry.dig());
+    let tar_file_path = temp_dir.join("atom.tar");
+
+    let git_archive_output = tokio::process::Command::new("git")
+        .args([
+            "--git-dir",
+            repo_path.to_str().unwrap(),
+            "archive",
+            "--format=tar",
+            "-o",
+            tar_file_path.to_str().unwrap(),
+            &hex_oid,
+        ])
+        .output()
+        .await
+        .map_err(|e| format!("Failed to execute git archive: {}", e))?;
+
+    if !git_archive_output.status.success() {
+        return Err(format!(
+            "git archive failed for OID {}: {}",
+            hex_oid,
+            String::from_utf8_lossy(&git_archive_output.stderr)
+        ));
+    }
+
+    let tar_extract_output = tokio::process::Command::new("tar")
+        .args([
+            "-xf",
+            tar_file_path.to_str().unwrap(),
+            "-C",
+            out_path.to_str().unwrap(),
+        ])
+        .output()
+        .await
+        .map_err(|e| format!("Failed to execute tar extraction: {}", e))?;
+
+    if !tar_extract_output.status.success() {
+        return Err(format!(
+            "tar extraction failed: {}",
+            String::from_utf8_lossy(&tar_extract_output.stderr)
+        ));
+    }
+
+    let _ = tokio::fs::remove_file(&tar_file_path).await;
+
+    // Import into SnixStore
+    let path_info = snix_store::import::import_path_as_nar_ca(
+        &out_path,
+        name,
+        engine.blob_service.clone(),
+        engine.directory_service.clone(),
+        &engine.path_info_service,
+        &*engine.nar_calculation_service,
+    )
+    .await
+    .map_err(|e| format!("Failed to import local atom to store: {}", e))?;
+
+    let digest = match &path_info.node {
+        snix_castore::Node::File { digest, .. } => *digest,
+        snix_castore::Node::Directory { digest, .. } => *digest,
+        snix_castore::Node::Symlink { .. } => {
+            return Err("Atom source cannot be a symlink node".to_string());
+        },
+    };
+
+    Ok(ResolvedInput {
+        digest: Blake3Digest(digest.into()),
+        store_path: StorePath(path_info.store_path.to_string()),
+    })
 }
