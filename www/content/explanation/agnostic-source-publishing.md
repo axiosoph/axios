@@ -19,17 +19,37 @@ By integrating the Atom protocol as a publishing overlay, traditional toolchains
 2. **Surety of Source**: Downstream consumers verify that the source code they compile came from the original repository owner (verified via signed claims and commit DAG ancestry).
 3. **Pluggable Mirrors**: Since package integrity is verified mathematically, packages can be retrieved from any mirror, CDN, or local store without compromising security.
 
-## The PURL Integration Layer
+## The Custom URI Scheme (`atom-uri` & `alurl`)
 
-To bridge the generic Atom protocol with language-specific package managers, the protocol integrates the **Package URL (PURL)** specification.
+To address packages within the decentralized space, the system uses a custom URI scheme implemented in the `atom-uri` crate. The URI format is designed for both human readability and machine resolution:
 
-A claim transaction contains a `pkg` field defining the target ecosystem (e.g., `"cargo"`, `"npm"`, `"pypi"`). This enables generic package resolution tools to delegate parsing and version checks to **ecosystem adapters**:
+```text
+[source::] label [@version]
+```
+
+- **`source`** — A URL, SCP-style path, directory, or a `+`-prefixed alias. It is separated from the package label by the rightmost `::` delimiter.
+- **`label`** — A validated Unicode identifier (following UAX #31 rules with a custom hyphen exception) naming the package within the repository set.
+- **`version`** — An unparsed raw version string following semantic or ecosystem-specific versioning.
+
+### URL Aliasing via `alurl`
+
+To avoid typing long hostnames in sources, the stack integrates the `alurl` crate. `alurl` is a structure-preserving URL alias detection and expansion library.
+
+It scans host positions within source strings for `+`-prefixed identifiers (e.g. `+gh/owner/repo`) and expands them using a locally defined `AliasMap` (e.g. mapping `gh` to `github.com`). It performs recursive resolution with cycle detection, translating raw URIs like `+org:project::my-atom@^1` into fully qualified URLs without modifying the underlying path structure.
+
+## Adapter Dispatch and PURL Types
+
+Atom does not implement the full Package URL (PURL) specification, as PURL makes hardcoded layout assumptions that do not map to Atom's unique `(anchor, label)` identity.
+
+Instead, the protocol borrows only the **ecosystem type identifiers** from PURL (e.g. `"cargo"`, `"npm"`, `"pypi"`) to populate the `pkg` field in the claim transaction. 
+
+This type identifier allows generic package resolution clients to dispatch manifest parsing and version resolution to the appropriate ecosystem adapter:
 
 ```
                        ┌──────────────────────┐
                        │  Generic Atom Core   │
                        └──────────┬───────────
-                                  │
+                                  │ (pkg string dispatch)
                   ┌───────────────┼───────────────┐
                   ▼               ▼               ▼
            ┌─────────────┐ ┌─────────────┐ ┌─────────────┐

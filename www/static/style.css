@@ -496,4 +496,17 @@
       display: none;
     }
   }
+
+  /* Mermaid diagram container constraints for responsive width styling */
+  .mermaid-diagram {
+    max-inline-size: 100%;
+    overflow-x: auto;
+    margin-block-end: 1.5rem;
+    padding-block: 0.5rem;
+  }
+
+  .mermaid-diagram svg {
+    max-inline-size: 100%;
+    block-size: auto;
+  }
 }

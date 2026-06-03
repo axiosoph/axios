@@ -7,13 +7,16 @@ audience = "Developers, architects, and users seeking to understand the Axios mo
 
 # Axios Project Umbrella
 
+> [!WARNING]
+> Axios is in **early-stage active development**. The specifications, protocols, and APIs are pre-1.0 and subject to change.
+
 Welcome to the Axios static documentation website. Axios is the umbrella name for a collection of independent projects related to decentralized source publishing, builds, and package management.
 
-The monorepo contains three distinct projects:
+The stack consists of three distinct layers:
 
-1. **L1: Atom** — The decentralized, content-addressed source code publishing protocol.
-2. **L2: Eos** — The idempotent build scheduler and backend coordinator.
-3. **L3: Ion** — The user-facing CLI, manifest schema, and dependency resolver.
+1. **L1: Atom** — The decentralized, content-addressed source code publishing protocol. *(Specification active; `atom-git` backend and `atom-uri` resolver are implemented).*
+2. **L2: Eos** — The idempotent build scheduler and backend coordinator. *(Scheduler traits and `eos-snix` backend are active; daemon/remote protocol is under development).*
+3. **L3: Ion** — The user-facing CLI, manifest schema, and dependency resolver. *(Under Construction — SAT resolver and TOML parsing logic are prototyped; CLI commands are pending implementation).*
 
 ## Key Sections
 
