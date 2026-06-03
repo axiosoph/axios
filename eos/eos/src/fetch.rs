@@ -296,119 +296,39 @@ pub async fn fetch_external(
     }
 }
 
-/// Resolves an atom dependency via AtomSource, checks out its content, and imports it.
-pub async fn fetch_atom<S: atom_core::AtomSource>(
+/// Resolves an atom dependency via [`AtomSource`] and ingests its content via
+/// an [`AtomContentBridge`].
+///
+/// This cleanly separates observation (finding the atom version and its content
+/// digest via `AtomSource`) from transport (transferring the content tree into
+/// the engine's store via the bridge).
+pub async fn fetch_atom<S, B>(
     desc: &eos_core::request::AtomFetchDescriptor,
     source: &S,
-    engine: &SnixEngine,
-    sandbox_workdir: &Path,
-) -> Result<ResolvedInput<Blake3Digest>, String> {
+    bridge: &B,
+) -> Result<ResolvedInput<Blake3Digest>, String>
+where
+    S: atom_core::AtomSource,
+    B: eos_core::bridge::AtomContentBridge<Digest = Blake3Digest>,
+{
     use atom_core::{AtomEntry, AtomVersion};
     let name = &desc.label;
 
-    let entry_opt = source
+    // 1. Resolve: observe the atom via AtomSource (forgetful functor)
+    let entry = source
         .resolve(&desc.id)
         .await
-        .map_err(|e| format!("Failed to resolve atom {}: {}", name, e))?;
-
-    let entry = entry_opt.ok_or_else(|| format!("Atom {} not found in source", name))?;
+        .map_err(|e| format!("Failed to resolve atom {}: {}", name, e))?
+        .ok_or_else(|| format!("Atom {} not found in source", name))?;
 
     let version_entry = entry
         .versions()
         .find(|v| v.version().as_str() == desc.version.as_str())
         .ok_or_else(|| format!("Version {} not found for atom {}", desc.version, name))?;
 
-    // Downcast to retrieve the underlying Git repository path
-    let repo_path = if let Some(git_source) = source.as_any().downcast_ref::<atom_git::GitSource>()
-    {
-        git_source.repo().path().to_path_buf()
-    } else if let Some(git_store) = source.as_any().downcast_ref::<atom_git::GitStore>() {
-        git_store.source.repo().path().to_path_buf()
-    } else if let Some(git_registry) = source.as_any().downcast_ref::<atom_git::GitRegistry>() {
-        git_registry.source.repo().path().to_path_buf()
-    } else {
-        return Err(format!(
-            "Unsupported AtomSource type for atom {} (must be git-backed)",
-            name
-        ));
-    };
-
-    let temp_dir = sandbox_workdir.join("fetch-temp").join(name);
-    if temp_dir.exists() {
-        let _ = tokio::fs::remove_dir_all(&temp_dir).await;
-    }
-    let out_path = temp_dir.join("checkout");
-    tokio::fs::create_dir_all(&out_path)
+    // 2. Transfer: ingest content via the bridge (transport concern)
+    bridge
+        .ingest_atom(&desc.id, name, version_entry.dig())
         .await
-        .map_err(|e| format!("Failed to create checkout directory: {}", e))?;
-
-    let hex_oid = hex::encode(version_entry.dig());
-    let tar_file_path = temp_dir.join("atom.tar");
-
-    let git_archive_output = tokio::process::Command::new("git")
-        .args([
-            "--git-dir",
-            repo_path.to_str().unwrap(),
-            "archive",
-            "--format=tar",
-            "-o",
-            tar_file_path.to_str().unwrap(),
-            &hex_oid,
-        ])
-        .output()
-        .await
-        .map_err(|e| format!("Failed to execute git archive: {}", e))?;
-
-    if !git_archive_output.status.success() {
-        return Err(format!(
-            "git archive failed for OID {}: {}",
-            hex_oid,
-            String::from_utf8_lossy(&git_archive_output.stderr)
-        ));
-    }
-
-    let tar_extract_output = tokio::process::Command::new("tar")
-        .args([
-            "-xf",
-            tar_file_path.to_str().unwrap(),
-            "-C",
-            out_path.to_str().unwrap(),
-        ])
-        .output()
-        .await
-        .map_err(|e| format!("Failed to execute tar extraction: {}", e))?;
-
-    if !tar_extract_output.status.success() {
-        return Err(format!(
-            "tar extraction failed: {}",
-            String::from_utf8_lossy(&tar_extract_output.stderr)
-        ));
-    }
-
-    let _ = tokio::fs::remove_file(&tar_file_path).await;
-
-    // Import into SnixStore
-    let path_info = snix_store::import::import_path_as_nar_ca(
-        &out_path,
-        name,
-        engine.blob_service.clone(),
-        engine.directory_service.clone(),
-        &engine.path_info_service,
-        &*engine.nar_calculation_service,
-    )
-    .await
-    .map_err(|e| format!("Failed to import local atom to store: {}", e))?;
-
-    let digest = match &path_info.node {
-        snix_castore::Node::File { digest, .. } => *digest,
-        snix_castore::Node::Directory { digest, .. } => *digest,
-        snix_castore::Node::Symlink { .. } => {
-            return Err("Atom source cannot be a symlink node".to_string());
-        },
-    };
-
-    Ok(ResolvedInput {
-        digest: Blake3Digest(digest.into()),
-        store_path: StorePath(path_info.store_path.to_string()),
-    })
+        .map_err(|e| format!("Failed to ingest atom {} into store: {}", name, e))
 }

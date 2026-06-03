@@ -204,10 +204,46 @@ impl Scheduler {
             };
             let source = atom_git::GitSource::new(repo);
 
+            // Construct the content bridge at the wiring site where the
+            // concrete backend (git) and engine services are both known.
+            // This avoids as_any() downcasts inside the build pipeline.
+            let bridge_repo = match gix::open(&config.workspace_dir) {
+                Ok(r) => r,
+                Err(e) => {
+                    let err_msg =
+                        format!("Failed to open workspace git repository for bridge: {}", e);
+                    error!("{}", err_msg);
+                    let event = ProgressEvent {
+                        job_id,
+                        timestamp: SystemTime::now(),
+                        status: JobStatus::Failed {
+                            error: err_msg,
+                            exit_code: None,
+                        },
+                        log_line: None,
+                    };
+                    let _ = sender.send(event.clone());
+                    if let Ok(mut guard) = jobs_map.lock()
+                        && let Some(j) = guard.get_mut(&plan_digest)
+                    {
+                        j.status = event.status;
+                    }
+                    return;
+                },
+            };
+            let bridge = eos::bridge::GitCastoreBridge::new(
+                bridge_repo,
+                engine.blob_service.clone(),
+                engine.directory_service.clone(),
+                engine.path_info_service.clone(),
+                engine.nar_calculation_service.clone(),
+            );
+
             // Run build orchestration pipeline
             match eos::orchestrator::run_orchestrated_build(
                 &request,
                 &source,
+                &bridge,
                 engine,
                 &config.workspace_dir,
                 &config.sandbox_workdir,

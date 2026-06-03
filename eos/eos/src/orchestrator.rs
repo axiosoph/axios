@@ -31,9 +31,11 @@ fn send_progress(
 pub async fn run_orchestrated_build<
     E: BuildEngine<Digest = Blake3Digest>,
     S: atom_core::AtomSource,
+    B: eos_core::bridge::AtomContentBridge<Digest = Blake3Digest>,
 >(
     request: &eos_core::request::BuildRequest<Blake3Digest>,
     source: &S,
+    bridge: &B,
     engine: Arc<E>,
     workspace_dir: &Path,
     sandbox_workdir: &Path,
@@ -50,6 +52,9 @@ pub async fn run_orchestrated_build<
         None,
     );
 
+    // The engine downcast is needed only for non-atom deps (URL-based fetches
+    // that require snix-specific import_path_as_nar_ca). Atom deps use the
+    // bridge, which was constructed with the concrete backend at the wiring site.
     let snix_engine = engine
         .as_any()
         .downcast_ref::<eos_snix::SnixEngine>()
@@ -74,8 +79,7 @@ pub async fn run_orchestrated_build<
 
             let resolved = match dep_clone {
                 eos_core::request::FetchDescriptor::Atom(atom_desc) => {
-                    crate::fetch::fetch_atom(&atom_desc, source, snix_engine, &sandbox_workdir_buf)
-                        .await
+                    crate::fetch::fetch_atom(&atom_desc, source, bridge).await
                 },
                 other => {
                     crate::fetch::fetch_external(&other, snix_engine, &sandbox_workdir_buf).await
