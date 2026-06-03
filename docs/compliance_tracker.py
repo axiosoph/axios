@@ -280,7 +280,7 @@ This page tracks the compliance of the Axios codebase (`atom/`, `eos/`, `ion/`, 
         clean_title = spec_name.replace(".md", "").replace("-", " ").title()
         
         markdown_content += f"### {clean_title}\n\n"
-        markdown_content += f"Specification file: [`{rel_path}`](specs/{spec_name.replace('.md', '.html')})\n\n"
+        markdown_content += f"Specification file: [`{rel_path}`](/reference/{spec_name.replace('.md', '.html')})\n\n"
         markdown_content += "| Constraint ID | Status | Mechanism | Verification Path |\n"
         markdown_content += "| :--- | :--- | :--- | :--- |\n"
         
@@ -303,7 +303,7 @@ This page tracks the compliance of the Axios codebase (`atom/`, `eos/`, `ion/`, 
             
         markdown_content += "\n"
 
-    md_path = os.path.join(repo_root, "www", "content", "compliance.md")
+    md_path = os.path.join(repo_root, "www", "content", "reference", "compliance.md")
     os.makedirs(os.path.dirname(md_path), exist_ok=True)
     with open(md_path, "w", encoding="utf-8") as f:
         f.write(markdown_content)

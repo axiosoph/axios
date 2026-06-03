@@ -1,7 +1,7 @@
 import os
 import re
 
-def rewrite_links(text):
+def rewrite_links(text, section):
     # Regex for markdown links: [text](path.md) or [text](path.md#hash)
     def repl(match):
         text_part = match.group(1)
@@ -11,18 +11,40 @@ def rewrite_links(text):
         if url_part.startswith(("http://", "https://", "mailto:")):
             return match.group(0)
             
-        if url_part.endswith(".md"):
-            new_url = url_part[:-3] + ".html"
+        # Map uncompiled directories to the GitHub repository to avoid broken links
+        if any(folder in url_part for folder in ("models/", "plans/", ".sketches/", "charters/")):
+            clean_part = url_part
+            while clean_part.startswith("../"):
+                clean_part = clean_part[3:]
+            if clean_part.startswith(".sketches/"):
+                gh_url = f"https://github.com/axiosoph/axios/tree/main/{clean_part}"
+            else:
+                gh_url = f"https://github.com/axiosoph/axios/tree/main/docs/{clean_part}"
+            return f"[{text_part}]({gh_url}{hash_part})"
+            
+        if url_part.startswith("../specs/"):
+            norm_url = "reference/" + url_part[9:]
+        elif url_part.startswith("../adr/"):
+            norm_url = "adr/" + url_part[7:]
+        elif url_part.startswith("../"):
+            norm_url = url_part[3:]
         else:
-            new_url = url_part
-        return f"[{text_part}]({new_url}{hash_part})"
+            norm_url = f"{section}/{url_part}"
+            
+        if norm_url.endswith(".md"):
+            norm_url = norm_url[:-3] + ".html"
+            
+        if not norm_url.startswith("/"):
+            norm_url = "/" + norm_url
+            
+        return f"[{text_part}]({norm_url}{hash_part})"
 
-    pattern = r"\[([^\]]+)\]\(([^)#?\s]+\.md)(#[^)\s]*)?\)"
-    return re.sub(pattern, repl, text)
+    pattern = r"\[(.*?)\]\(([^)#?\s]+\.md)(#[^)\s]*)?\)"
+    return re.sub(pattern, repl, text, flags=re.DOTALL)
 
 def process_specs():
     src_dir = "../docs/specs"
-    dst_dir = "content/specs"
+    dst_dir = "content/reference"
     os.makedirs(dst_dir, exist_ok=True)
     
     for filename in os.listdir(src_dir):
@@ -47,7 +69,7 @@ def process_specs():
                 break
                 
         body_content = "".join(lines[body_start:])
-        body_content = rewrite_links(body_content)
+        body_content = rewrite_links(body_content, "reference")
         
         # Formulate TOML frontmatter and classification block
         frontmatter = f"""+++
@@ -88,7 +110,7 @@ def process_adrs():
                 break
                 
         body_content = "".join(lines[body_start:])
-        body_content = rewrite_links(body_content)
+        body_content = rewrite_links(body_content, "adr")
         
         frontmatter = f"""+++
 title = "{title}"
@@ -122,7 +144,7 @@ def process_explanations():
             break
             
     body_content = "".join(lines[body_start:])
-    body_content = rewrite_links(body_content)
+    body_content = rewrite_links(body_content, "explanation")
     
     frontmatter = f"""+++
 title = "{title}"

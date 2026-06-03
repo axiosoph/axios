@@ -1,13 +1,11 @@
 # Dynamically copied specifications and indices
-specs/*.md
-!specs/_index.md
+reference/*.md
+!reference/_index.md
+!reference/compliance-format.md
 
 # Dynamically copied Architecture Decision Records and indices
 adr/*.md
 !adr/_index.md
-
-# Dynamically generated compliance matrix page
-compliance.md
 
 # Dynamically copied spec audits and decoupling explanations
 explanation/spec-audit.md

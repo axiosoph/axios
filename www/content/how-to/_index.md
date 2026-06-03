@@ -2,7 +2,7 @@
 title = "How-To Guides"
 description = "Step-by-step instructions and recipes for working with Axios"
 weight = 3
-quadrant = "Explanation"
+quadrant = "How-To"
 audience = "Developers and engineers working on or with Axios"
 +++
 

@@ -30,14 +30,14 @@ The script performs the following actions:
 2. Recursively scans the codebase directories (`atom/`, `eos/`, `ion/`, `alurl/`) for compliance annotations of the form `// @spec-compliance[constraint-id]`.
 3. Matches the annotations against the specification constraints.
 4. Generates the status database `docs/compliance.json`.
-5. Compiles the markdown compliance matrix at `www/content/compliance.md`.
+5. Compiles the markdown compliance matrix at `www/content/reference/compliance.md`.
 
 ## Step 2: Verify the Output Files
 
 Verify that the following files have been generated or updated:
 
 1. **`docs/compliance.json`** — The machine-readable database mapping each constraint to its status (`VERIFIED` or `UNVERIFIED`), describing the mechanism, and listing all code paths.
-2. **`www/content/compliance.md`** — The human-readable spec compliance matrix.
+2. **`www/content/reference/compliance.md`** — The human-readable spec compliance matrix.
 
 ## Step 3: Run the Website Build Process
 

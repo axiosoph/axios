@@ -19,5 +19,5 @@ The monorepo contains three distinct projects:
 
 Explore the documentation sections to learn more:
 
-- [Specifications]({{ prefix }}/specs/index.html) — Normative behavioral contracts and schemas for each project.
-- [Architecture Decision Records]({{ prefix }}/adr/index.html) — Context and design rationale for architectural changes.
+- [Reference Documentation](reference/index.html) — Normative behavioral contracts, schemas, and spec compliance.
+- [Architecture Decision Records](adr/index.html) — Context and design rationale for architectural changes.
