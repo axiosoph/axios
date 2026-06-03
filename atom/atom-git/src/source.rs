@@ -640,10 +640,6 @@ impl AtomSource for GitSource {
 
         Ok(ids.into_iter().collect())
     }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
 }
 
 impl atom_core::AtomEntry for GitEntry {
@@ -688,8 +684,97 @@ impl AtomContent for GitSource {
     async fn content(
         &self,
         _id: &AtomId,
-        _dig: &[u8],
+        dig: &[u8],
     ) -> Result<Option<Vec<ContentEntry>>, Self::Error> {
-        Ok(None)
+        let repo = self.repo();
+        let oid = match ObjectId::try_from(dig) {
+            Ok(oid) => oid,
+            Err(_) => return Ok(None),
+        };
+
+        let obj = match repo.find_object(oid) {
+            Ok(obj) => obj,
+            Err(gix::object::find::existing::Error::NotFound { .. }) => {
+                return Ok(None);
+            },
+            Err(e) => return Err(GitError::ObjectFind(e)),
+        };
+
+        let tree_oid = match obj.kind {
+            gix::object::Kind::Tree => oid,
+            gix::object::Kind::Commit => {
+                let commit = obj.try_into_commit()?;
+                commit.tree_id()?.detach()
+            },
+            _ => {
+                return Err(GitError::Validation(format!(
+                    "git object {} is {}, expected tree or commit",
+                    oid, obj.kind
+                )));
+            },
+        };
+
+        let mut collected = Vec::new();
+        walk_git_tree_recursive(&repo, tree_oid, "", &mut collected)?;
+        Ok(Some(collected))
     }
+}
+
+fn walk_git_tree_recursive(
+    repo: &gix::Repository,
+    tree_oid: ObjectId,
+    prefix: &str,
+    out: &mut Vec<ContentEntry>,
+) -> Result<(), GitError> {
+    use gix::object::tree::EntryKind;
+
+    let tree_obj = repo.find_object(tree_oid)?;
+    let tree = tree_obj.try_into_tree()?;
+
+    for entry_result in tree.iter() {
+        let entry = entry_result?;
+        let filename = std::str::from_utf8(entry.filename())
+            .map_err(|_| GitError::Validation(format!("non-UTF-8 filename in git tree")))?;
+
+        let child_path = if prefix.is_empty() {
+            filename.to_owned()
+        } else {
+            format!("{prefix}/{filename}")
+        };
+
+        match entry.mode().kind() {
+            EntryKind::Tree => {
+                let child_oid = entry.object_id();
+                walk_git_tree_recursive(repo, child_oid, &child_path, out)?;
+                out.push(ContentEntry::Directory { path: child_path });
+            },
+            EntryKind::Blob => {
+                let obj = repo.find_object(entry.object_id())?;
+                out.push(ContentEntry::Regular {
+                    path: child_path,
+                    data: obj.data.to_vec(),
+                    executable: false,
+                });
+            },
+            EntryKind::BlobExecutable => {
+                let obj = repo.find_object(entry.object_id())?;
+                out.push(ContentEntry::Regular {
+                    path: child_path,
+                    data: obj.data.to_vec(),
+                    executable: true,
+                });
+            },
+            EntryKind::Link => {
+                let obj = repo.find_object(entry.object_id())?;
+                out.push(ContentEntry::Symlink {
+                    path: child_path,
+                    target: obj.data.to_vec(),
+                });
+            },
+            EntryKind::Commit => {
+                // Submodule, skip
+            },
+        }
+    }
+    Ok(())
 }

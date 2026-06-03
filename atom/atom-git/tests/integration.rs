@@ -55,16 +55,27 @@ fn create_commit(
         .unwrap()
         .detach();
 
-    let entry = Entry {
-        mode: EntryKind::Blob.into(),
-        filename: file_name.into(),
-        oid: blob_oid,
-    };
+    let parts: Vec<&str> = file_name.split('/').collect();
+    let mut current_oid = blob_oid;
 
-    let tree = Tree {
-        entries: vec![entry],
-    };
-    let tree_oid = repo.write_object(tree).unwrap().detach();
+    for i in (0..parts.len()).rev() {
+        let name = parts[i];
+        let mode = if i == parts.len() - 1 {
+            EntryKind::Blob.into()
+        } else {
+            EntryKind::Tree.into()
+        };
+        let entry = Entry {
+            mode,
+            filename: name.into(),
+            oid: current_oid,
+        };
+        let tree = Tree {
+            entries: vec![entry],
+        };
+        current_oid = repo.write_object(tree).unwrap().detach();
+    }
+    let tree_oid = current_oid;
 
     let sig = SignatureRef::default();
     repo.commit_as(sig, sig, "refs/heads/master", message, tree_oid, parents)
