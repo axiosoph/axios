@@ -1,23 +1,23 @@
 +++
 title = "Axios Documentation"
-description = "Overview of the Axios publishing stack, specifications, and architecture decision records"
+description = "Overview of the Axios monorepo projects, including the Atom protocol, Eos build engine, and Ion CLI"
 quadrant = "Explanation"
-audience = "Developers, architects, and users seeking to understand the Axios publishing stack"
+audience = "Developers, architects, and users seeking to understand the Axios monorepo projects"
 +++
 
-# Axios Publishing Stack
+# Axios Project Umbrella
 
-Welcome to the Axios static documentation website. Axios is a decentralized, content-addressed source publishing stack.
+Welcome to the Axios static documentation website. Axios is the umbrella name for a collection of independent projects related to decentralized source publishing, builds, and package management.
 
-The stack decomposes into three independent layers to ensure high-performance, cryptographic verification, and robust deployment constraints:
+The monorepo contains three distinct projects:
 
-1. **L1: Atom** — The protocol, identity, and addressing foundation.
-2. **L2: Eos** — The evaluation runtime, stores, and build engine.
-3. **L3: Ion** — The frontend CLI, manifest schema, and dependency resolution.
+1. **L1: Atom** — The decentralized, content-addressed source code publishing protocol.
+2. **L2: Eos** — The hermetic build engine, artifact store, and evaluation runtime.
+3. **L3: Ion** — The user-facing CLI, manifest schema, and dependency resolver.
 
 ## Key Sections
 
 Explore the documentation sections to learn more:
 
-- [Specifications]({{ prefix }}/specs/index.html) — Normative behavioral contracts and schemas for each Axios layer.
+- [Specifications]({{ prefix }}/specs/index.html) — Normative behavioral contracts and schemas for each project.
 - [Architecture Decision Records]({{ prefix }}/adr/index.html) — Context and design rationale for architectural changes.
