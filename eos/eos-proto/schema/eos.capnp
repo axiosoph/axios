@@ -20,9 +20,76 @@ interface ProgressStream {
   done @1 () -> ();
 }
 
+struct AtomSetEntry {
+  anchor @0 :Text;
+  tag @1 :Text;
+  mirrors @2 :List(Text);
+}
+
+struct DepDescriptor {
+  union {
+    atom :group {
+      id @0 :AtomId;
+      label @1 :Text;
+      version @2 :Text;
+      set @3 :Text;
+      rev @4 :Text;
+      requires @5 :List(AtomId);
+      direct @6 :Bool;
+    }
+    nix :group {
+      name @7 :Text;
+      url @8 :Text;
+      hash @9 :Text;
+      owner @10 :AtomId;
+    }
+    nixGit :group {
+      name @11 :Text;
+      url @12 :Text;
+      rev @13 :Text;
+      version @14 :Text;
+      owner @15 :AtomId;
+    }
+    nixTar :group {
+      name @16 :Text;
+      url @17 :Text;
+      hash @18 :Text;
+      owner @19 :AtomId;
+    }
+    nixSrc :group {
+      name @20 :Text;
+      url @21 :Text;
+      hash @22 :Text;
+      owner @23 :AtomId;
+    }
+  }
+}
+
+struct ComposerSpec {
+  union {
+    atom :group {
+      id @0 :AtomId;
+      entry @1 :Text;
+      args @2 :List(KeyValue);
+    }
+    nixTrivial :group {
+      expression @3 :Text;
+      args @4 :List(KeyValue);
+    }
+    static @5 :Void;
+  }
+}
+
+struct BuildRequest {
+  planDigest @0 :Data;
+  sets @1 :List(AtomSetEntry);
+  deps @2 :List(DepDescriptor);
+  composer @3 :ComposerSpec;
+  evalArgs @4 :List(KeyValue);
+}
+
 interface EosDaemon {
-  submitBuild @0 (planDigest :PlanDigest, evalArgs :List(KeyValue))
-    -> (job :BuildJob);
+  submitBuild @0 (request :BuildRequest) -> (job :BuildJob);
   queryStatus @1 (jobId :Data) -> (status :BuildStatus);
   getCapabilities @2 () -> (
     supportedBackends :List(Text),
@@ -35,6 +102,7 @@ interface BuildJob {
   attachProgress @0 (callback :ProgressStream) -> ();
   cancel @1 () -> ();
   getJobId @2 () -> (jobId :Data);
+  getMissing @3 () -> (missingAtoms :List(AtomId));
 }
 
 interface AtomDiscovery {

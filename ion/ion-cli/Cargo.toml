@@ -8,6 +8,7 @@ atom-core    = { path = "../../atom/atom-core" }
 clap         = { version = "4", features = ["derive"] }
 eos-core     = { path = "../../eos/eos-core" }
 ion-eos      = { path = "../ion-eos" }
+ion-lock     = { path = "../ion-lock" }
 ion-manifest = { path = "../ion-manifest" }
 ion-resolve  = { path = "../ion-resolve" }
 tokio        = { version = "1", features = ["rt-multi-thread", "macros", "fs"] }

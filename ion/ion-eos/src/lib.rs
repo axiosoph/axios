@@ -7,11 +7,16 @@ pub mod error;
 
 use std::path::Path;
 
+use atom_id::AtomId;
 use capnp::capability::Promise;
 use capnp_rpc::rpc_twoparty_capnp::Side;
 use eos_core::Digest;
 use eos_core::digest::Blake3Digest;
 use eos_core::job::{JobStatus, ProgressEvent};
+use eos_core::request::{
+    AtomFetchDescriptor, AtomSetInfo, BuildRequest, ComposerSpec, FetchDescriptor,
+    NixFetchDescriptor, NixGitFetchDescriptor, NixSrcFetchDescriptor, NixTarFetchDescriptor,
+};
 use eos_proto::eos_capnp;
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 
@@ -63,46 +68,147 @@ impl EosClient {
         Ok(Self { daemon: client })
     }
 
-    /// Submits a lock file content to be built.
+    /// Submits a pre-translated BuildRequest to the Eos daemon.
     ///
     /// # Errors
     ///
-    /// Returns an error if the lock file cannot be parsed or if the RPC submission fails.
-    pub async fn submit_build(&self, lock_content: &str) -> Result<BuildHandle, ClientError> {
-        // 1. Compute plan digest
-        let hash = blake3::hash(lock_content.as_bytes());
-        let digest_bytes = hash.as_bytes();
-        let plan_digest = Blake3Digest::from(*digest_bytes);
-
-        // 2. Parse compose args
-        let value: toml::Value =
-            toml::from_str(lock_content).map_err(|e| ClientError::ProtocolError {
-                detail: format!("Failed to parse TOML: {}", e),
-            })?;
-        let mut eval_args = Vec::new();
-        if let Some(compose) = value.get("compose")
-            && let Some(args) = compose.get("args")
-            && let Some(table) = args.as_table()
-        {
-            for (k, v) in table {
-                if let Some(s) = v.as_str() {
-                    eval_args.push((k.clone(), s.to_string()));
-                }
-            }
-        }
-
-        // 3. Invoke submitBuild RPC
+    /// Returns an error if the RPC submission fails.
+    pub async fn submit_build(
+        &self,
+        request: &BuildRequest<Blake3Digest>,
+    ) -> Result<BuildHandle, ClientError> {
         let mut req = self.daemon.submit_build_request();
         {
             let mut params = req.get();
-            let mut plan_digest_builder = params.reborrow().init_plan_digest();
-            plan_digest_builder.set_bytes(digest_bytes);
+            let mut request_builder = params.reborrow().init_request();
 
-            let mut eval_args_list = params.init_eval_args(eval_args.len() as u32);
-            for (i, (k, v)) in eval_args.iter().enumerate() {
-                let mut kv_builder = eval_args_list.reborrow().get(i as u32);
-                kv_builder.set_key(k);
-                kv_builder.set_value(v);
+            // a. planDigest
+            request_builder.set_plan_digest(request.plan_digest.as_bytes());
+
+            // b. sets
+            let mut sets_list = request_builder
+                .reborrow()
+                .init_sets(request.sets.len() as u32);
+            for (i, (anchor, info)) in request.sets.iter().enumerate() {
+                let mut set_entry = sets_list.reborrow().get(i as u32);
+                set_entry.set_anchor(anchor);
+                set_entry.set_tag(&info.tag);
+                let mut mirrors_list = set_entry.init_mirrors(info.mirrors.len() as u32);
+                for (j, mirror) in info.mirrors.iter().enumerate() {
+                    mirrors_list.reborrow().set(j as u32, mirror);
+                }
+            }
+
+            // c. deps
+            let mut deps_list = request_builder
+                .reborrow()
+                .init_deps(request.deps.len() as u32);
+            for (i, dep) in request.deps.iter().enumerate() {
+                let dep_desc = deps_list.reborrow().get(i as u32);
+                match dep {
+                    FetchDescriptor::Atom(d) => {
+                        let mut atom_builder = dep_desc.init_atom();
+                        let mut id_builder = atom_builder.reborrow().init_id();
+                        id_builder.set_digest(d.id.to_string().as_bytes());
+                        atom_builder.set_label(&d.label);
+                        atom_builder.set_version(&d.version);
+                        atom_builder.set_set(&d.set);
+                        if let Some(rev) = &d.rev {
+                            atom_builder.set_rev(rev);
+                        }
+                        let mut reqs_list = atom_builder
+                            .reborrow()
+                            .init_requires(d.requires.len() as u32);
+                        for (j, req_id) in d.requires.iter().enumerate() {
+                            let mut req_id_builder = reqs_list.reborrow().get(j as u32);
+                            req_id_builder.set_digest(req_id.to_string().as_bytes());
+                        }
+                        atom_builder.set_direct(d.direct);
+                    },
+                    FetchDescriptor::Nix(d) => {
+                        let mut nix_builder = dep_desc.init_nix();
+                        nix_builder.set_name(&d.name);
+                        nix_builder.set_url(&d.url);
+                        nix_builder.set_hash(&d.hash);
+                        if let Some(owner) = &d.owner {
+                            let mut owner_builder = nix_builder.init_owner();
+                            owner_builder.set_digest(owner.to_string().as_bytes());
+                        }
+                    },
+                    FetchDescriptor::NixGit(d) => {
+                        let mut git_builder = dep_desc.init_nix_git();
+                        git_builder.set_name(&d.name);
+                        git_builder.set_url(&d.url);
+                        git_builder.set_rev(&d.rev);
+                        if let Some(ver) = &d.version {
+                            git_builder.set_version(ver);
+                        }
+                        if let Some(owner) = &d.owner {
+                            let mut owner_builder = git_builder.init_owner();
+                            owner_builder.set_digest(owner.to_string().as_bytes());
+                        }
+                    },
+                    FetchDescriptor::NixTar(d) => {
+                        let mut tar_builder = dep_desc.init_nix_tar();
+                        tar_builder.set_name(&d.name);
+                        tar_builder.set_url(&d.url);
+                        tar_builder.set_hash(&d.hash);
+                        if let Some(owner) = &d.owner {
+                            let mut owner_builder = tar_builder.init_owner();
+                            owner_builder.set_digest(owner.to_string().as_bytes());
+                        }
+                    },
+                    FetchDescriptor::NixSrc(d) => {
+                        let mut src_builder = dep_desc.init_nix_src();
+                        src_builder.set_name(&d.name);
+                        src_builder.set_url(&d.url);
+                        src_builder.set_hash(&d.hash);
+                        if let Some(owner) = &d.owner {
+                            let mut owner_builder = src_builder.init_owner();
+                            owner_builder.set_digest(owner.to_string().as_bytes());
+                        }
+                    },
+                }
+            }
+
+            // d. composer
+            let mut comp_builder = request_builder.reborrow().init_composer();
+            match &request.composer {
+                ComposerSpec::Atom { id, entry, args } => {
+                    let mut atom_builder = comp_builder.init_atom();
+                    let mut id_builder = atom_builder.reborrow().init_id();
+                    id_builder.set_digest(id.to_string().as_bytes());
+                    if let Some(ent) = entry {
+                        atom_builder.set_entry(ent);
+                    }
+                    let mut args_list = atom_builder.init_args(args.len() as u32);
+                    for (j, (k, v)) in args.iter().enumerate() {
+                        let mut kv = args_list.reborrow().get(j as u32);
+                        kv.set_key(k);
+                        kv.set_value(v);
+                    }
+                },
+                ComposerSpec::NixTrivial { expression, args } => {
+                    let mut nix_builder = comp_builder.init_nix_trivial();
+                    nix_builder.set_expression(expression);
+                    let mut args_list = nix_builder.init_args(args.len() as u32);
+                    for (j, (k, v)) in args.iter().enumerate() {
+                        let mut kv = args_list.reborrow().get(j as u32);
+                        kv.set_key(k);
+                        kv.set_value(v);
+                    }
+                },
+                ComposerSpec::Static => {
+                    comp_builder.set_static(());
+                },
+            }
+
+            // e. evalArgs
+            let mut eval_args_list = request_builder.init_eval_args(request.eval_args.len() as u32);
+            for (j, (k, v)) in request.eval_args.iter().enumerate() {
+                let mut kv = eval_args_list.reborrow().get(j as u32);
+                kv.set_key(k);
+                kv.set_value(v);
             }
         }
 
@@ -127,7 +233,7 @@ impl EosClient {
         Ok(BuildHandle {
             client: job_client,
             daemon: self.daemon.clone(),
-            job_id: plan_digest,
+            job_id: request.plan_digest,
         })
     }
 
@@ -158,6 +264,121 @@ impl EosClient {
 
         Ok(DiscoveryClient::new(client))
     }
+}
+
+/// Convenience method to parse lock content and translate it to `BuildRequest`.
+///
+/// # Errors
+///
+/// Returns an error if parsing or translation fails.
+pub fn parse_and_translate(lock_content: &str) -> Result<BuildRequest<Blake3Digest>, ClientError> {
+    let lock = ion_lock::LockFile::parse(lock_content).map_err(|e| ClientError::ProtocolError {
+        detail: format!("Failed to parse lock TOML: {}", e),
+    })?;
+    lock.validate().map_err(|e| ClientError::ProtocolError {
+        detail: format!("Invalid lock file: {}", e),
+    })?;
+
+    // 1. Plan digest (Blake3 digest of lock_content)
+    let hash = blake3::hash(lock_content.as_bytes());
+    let plan_digest = Blake3Digest::from(*hash.as_bytes());
+
+    // 2. Map sets
+    let mut sets = std::collections::HashMap::new();
+    for (anchor, set_details) in lock.sets {
+        sets.insert(
+            anchor,
+            AtomSetInfo {
+                tag: set_details.tag,
+                mirrors: set_details.mirrors,
+            },
+        );
+    }
+
+    // 3. Map deps
+    let mut deps = Vec::new();
+    for dep in lock.deps {
+        let fd = match dep {
+            ion_lock::Dependency::Atom(d) => FetchDescriptor::Atom(AtomFetchDescriptor {
+                id: d.id,
+                label: d.label,
+                version: d.version,
+                set: d.set,
+                rev: d.rev,
+                requires: d.requires,
+                direct: d.direct,
+            }),
+            ion_lock::Dependency::Nix(d) => FetchDescriptor::Nix(NixFetchDescriptor {
+                name: d.name,
+                url: d.url,
+                hash: d.hash,
+                owner: d.owner,
+            }),
+            ion_lock::Dependency::NixGit(d) => FetchDescriptor::NixGit(NixGitFetchDescriptor {
+                name: d.name,
+                url: d.url,
+                rev: d.rev,
+                version: d.version,
+                owner: d.owner,
+            }),
+            ion_lock::Dependency::NixTar(d) => FetchDescriptor::NixTar(NixTarFetchDescriptor {
+                name: d.name,
+                url: d.url,
+                hash: d.hash,
+                owner: d.owner,
+            }),
+            ion_lock::Dependency::NixSrc(d) => FetchDescriptor::NixSrc(NixSrcFetchDescriptor {
+                name: d.name,
+                url: d.url,
+                hash: d.hash,
+                owner: d.owner,
+            }),
+        };
+        deps.push(fd);
+    }
+
+    // 4. Map eval args (compose args also serve as eval args for historical behavior)
+    let mut eval_args = Vec::new();
+    for (k, v) in &lock.compose.args {
+        eval_args.push((k.clone(), v.clone()));
+    }
+
+    // 5. Map composer
+    let composer = match lock.compose.r#use {
+        Some(ref u) if u == "static" => ComposerSpec::Static,
+        Some(ref u) if u == "nix" => {
+            let expr = lock
+                .compose
+                .entry
+                .clone()
+                .unwrap_or_else(|| "default.nix".to_string());
+            ComposerSpec::NixTrivial {
+                expression: expr,
+                args: lock.compose.args.clone(),
+            }
+        },
+        Some(ref u) => {
+            let atom_id = u
+                .parse::<AtomId>()
+                .map_err(|e| ClientError::ProtocolError {
+                    detail: format!("Failed to parse composer atom ID: {}", e),
+                })?;
+            ComposerSpec::Atom {
+                id: atom_id,
+                entry: lock.compose.entry,
+                args: lock.compose.args,
+            }
+        },
+        None => ComposerSpec::Static,
+    };
+
+    Ok(BuildRequest {
+        plan_digest,
+        sets,
+        deps,
+        composer,
+        eval_args,
+    })
 }
 
 /// Handle to a submitted build job.
@@ -245,6 +466,55 @@ impl BuildHandle {
             })?;
 
         Ok(ProgressStream { receiver: rx })
+    }
+
+    /// Returns a list of AtomIds that the daemon could not resolve from its local store or mirrors.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the RPC call fails.
+    pub async fn get_missing(&self) -> Result<Vec<AtomId>, ClientError> {
+        let req = self.client.get_missing_request();
+        let res = req
+            .send()
+            .promise
+            .await
+            .map_err(|e| ClientError::ProtocolError {
+                detail: format!("getMissing RPC failed: {}", e),
+            })?;
+
+        let res_reader = res.get().map_err(|e| ClientError::ProtocolError {
+            detail: e.to_string(),
+        })?;
+
+        let missing_list =
+            res_reader
+                .get_missing_atoms()
+                .map_err(|e| ClientError::ProtocolError {
+                    detail: e.to_string(),
+                })?;
+
+        let mut missing = Vec::new();
+        for i in 0..missing_list.len() {
+            let atom_id_reader = missing_list.get(i);
+            let digest_bytes =
+                atom_id_reader
+                    .get_digest()
+                    .map_err(|e| ClientError::ProtocolError {
+                        detail: e.to_string(),
+                    })?;
+            let s = std::str::from_utf8(digest_bytes).map_err(|e| ClientError::ProtocolError {
+                detail: format!("Invalid UTF-8 in AtomId from getMissing: {}", e),
+            })?;
+            let atom_id = s
+                .parse::<AtomId>()
+                .map_err(|e| ClientError::ProtocolError {
+                    detail: format!("Failed to parse AtomId '{}' from getMissing: {}", s, e),
+                })?;
+            missing.push(atom_id);
+        }
+
+        Ok(missing)
     }
 }
 

@@ -72,6 +72,28 @@ async fn main() {
             let local = tokio::task::LocalSet::new();
             local
                 .run_until(async move {
+                    // 1 & 2. Parse and validate the lock file
+                    let lock = match ion_lock::LockFile::parse(&lock_content) {
+                        Ok(l) => l,
+                        Err(e) => {
+                            eprintln!("Error: Failed to parse atom.lock: {}", e);
+                            std::process::exit(1);
+                        },
+                    };
+                    if let Err(e) = lock.validate() {
+                        eprintln!("Error: Invalid atom.lock: {}", e);
+                        std::process::exit(1);
+                    }
+
+                    // 3. Translate lock file to BuildRequest
+                    let request = match ion_eos::parse_and_translate(&lock_content) {
+                        Ok(req) => req,
+                        Err(e) => {
+                            eprintln!("Error: Failed to translate lock file: {}", e);
+                            std::process::exit(1);
+                        },
+                    };
+
                     let client = match ion_eos::EosClient::connect(&socket_path).await {
                         Ok(c) => c,
                         Err(e) => {
@@ -84,7 +106,8 @@ async fn main() {
                     };
 
                     println!("Connected to Eos daemon. Submitting build...");
-                    let handle = match client.submit_build(&lock_content).await {
+                    // 4. Submit build
+                    let handle = match client.submit_build(&request).await {
                         Ok(h) => h,
                         Err(e) => {
                             eprintln!("Error: Build submission failed: {}", e);
@@ -93,6 +116,22 @@ async fn main() {
                     };
 
                     println!("Build submitted. Job ID: {}", handle.job_id());
+
+                    // 5. Check for missing atoms
+                    let missing_atoms = match handle.get_missing().await {
+                        Ok(m) => m,
+                        Err(e) => {
+                            eprintln!("Error: Failed to query missing atoms: {}", e);
+                            std::process::exit(1);
+                        },
+                    };
+
+                    if !missing_atoms.is_empty() {
+                        println!("Missing atoms requested by daemon for peer-assisted resolution:");
+                        for id in &missing_atoms {
+                            println!("  - {}", id);
+                        }
+                    }
 
                     let mut stream = match handle.attach_progress().await {
                         Ok(s) => s,
