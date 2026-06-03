@@ -1,50 +1,45 @@
 +++
-title = "Running the Spec Compliance Tracker"
+title = "Running the spec compliance tracker"
 description = "How to run the automated spec-compliance tracking script on the Axios codebase"
 quadrant = "How-To"
-audience = "Developers and CI/CD engineers running or extending the Axios compliance tracker"
+audience = "Developers and CI/CD engineers running or extending the compliance tracker"
 +++
 
-This guide shows you how to run the automated compliance tracking tool to verify specification compliance across the Axios codebase.
+Run the compliance tracker to check specification coverage across the codebase.
 
 ## Prerequisites
 
-Ensure you have the following installed on your system:
-
-- **Python 3.8** or higher
+- Python 3.8 or higher
 - The Axios repository cloned locally
 
-## Step 1: Execute the Compliance Tracker
+## Step 1: Run the tracker
 
-Run the Python script located in the `docs/` directory from the root of the repository:
+From the repository root:
 
 ```bash
 python3 docs/compliance_tracker.py
 ```
 
-The script performs the following actions:
+The script:
 
-1. Scans all specification files in `docs/specs/*.md` for constraints declared in their verification tables.
-2. Recursively scans the codebase directories (`atom/`, `eos/`, `ion/`, `alurl/`) for compliance annotations of the form `// @spec-compliance[constraint-id]`.
-3. Matches the annotations against the specification constraints.
-4. Generates the status database `docs/compliance.json`.
-5. Compiles the markdown compliance matrix at `www/content/reference/compliance.md`.
+1. Scans `docs/specs/*.md` for constraints declared in verification tables.
+2. Recursively searches `atom/`, `eos/`, `ion/`, and `alurl/` for annotations matching `// @spec-compliance[constraint-id]`.
+3. Matches annotations against spec constraints.
+4. Writes `docs/compliance.json` (machine-readable status database).
+5. Writes `www/content/reference/compliance.md` (human-readable matrix).
 
-## Step 2: Verify the Output Files
+## Step 2: Check the output
 
-Verify that the following files have been generated or updated:
+Verify that both files were generated:
 
-1. **`docs/compliance.json`** — The machine-readable database mapping each constraint to its status (`VERIFIED` or `UNVERIFIED`), describing the mechanism, and listing all code paths.
-2. **`www/content/reference/compliance.md`** — The human-readable spec compliance matrix.
+1. `docs/compliance.json` — Maps each constraint to its status (`VERIFIED` or `UNVERIFIED`), describes the verification mechanism, and lists code paths.
+2. `www/content/reference/compliance.md` — The rendered compliance matrix.
 
-## Step 3: Run the Website Build Process
+## Step 3: Rebuild the site
 
-After updating the compliance status, rebuild the documentation site using `sukr` (run from the `www/` directory):
+After updating compliance status, rebuild from the `www/` directory:
 
 ```bash
-# Process raw documentation and specs
 python3 process_docs.py
-
-# Build the static site
 sukr
 ```

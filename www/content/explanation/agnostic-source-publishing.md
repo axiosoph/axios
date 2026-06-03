@@ -1,60 +1,50 @@
 +++
-title = "Ecosystem Agnosticism: Augmenting Traditional Package Managers"
-description = "How the Atom protocol serves as a general-purpose, decentralized source publishing overlay for Cargo, npm, PyPI, and other ecosystems"
+title = "Ecosystem agnosticism"
+description = "How the Atom protocol works as a decentralized source publishing overlay for Cargo, npm, PyPI, and other ecosystems"
 quadrant = "Explanation"
-audience = "Systems architects, package manager maintainers, and developers seeking to use Atom with traditional toolchains"
+audience = "Systems architects, package manager maintainers, and developers interested in using Atom with traditional toolchains"
 +++
 
-Although the Atom protocol was originally motivated by the unique code scaling and purity challenges of the Nix ecosystem, its production architecture is decoupled from Nix. The core protocol is an ecosystem-agnostic publishing and integrity layer that can augment traditional package managers (e.g., Cargo, npm, PyPI) to provide decentralized, cryptographically secure source publishing.
+The Atom protocol started as a response to Nix-specific code scaling problems, but the production architecture has no dependency on Nix. The core protocol is an ecosystem-agnostic publishing and integrity layer. It can sit on top of traditional package managers (Cargo, npm, PyPI, etc.) to add decentralized, cryptographically verified source publishing.
 
-## Why Traditional Package Managers Need Atom
+## Why this matters for traditional package managers
 
-Traditional package managers rely on centralized registries to resolve dependencies and verify package integrity. While this provides a convenient workflow, it couples the ecosystem to a single host and administrative authority.
+Traditional package managers depend on centralized registries for dependency resolution and integrity verification. That couples the entire ecosystem to a single host and administrative authority.
 
-By integrating the Atom protocol as a publishing overlay, traditional toolchains gain three main benefits:
+Atom, used as a publishing overlay, gives traditional toolchains:
 
-1. **Decentralized Publishing**: Developers publish package versions directly from their Git repositories using Git references (`refs/atoms/...`). There is no need to upload packages to a centralized registry or configure private registry servers.
-2. **Surety of Source**: Downstream consumers verify that the source code they compile came from the original repository owner (verified via signed claims and commit DAG ancestry).
-3. **Pluggable Mirrors**: Since package integrity is verified mathematically, packages can be retrieved from any mirror, CDN, or local store without compromising security.
+1. **Decentralized publishing** — Developers publish versions directly from their Git repositories using Git references (`refs/atoms/...`). No registry upload, no private registry server.
+2. **Surety of source** — Consumers verify that source code came from the original repository owner through signed claims and commit DAG ancestry.
+3. **Pluggable mirrors** — Because integrity is verified cryptographically, packages can be fetched from any mirror, CDN, or local store without trusting the transport.
 
-## The Custom URI Scheme (atom-uri & alurl)
+## The custom URI scheme (atom-uri and alurl)
 
-To address packages within the decentralized space, the system uses a custom URI scheme implemented in the `atom-uri` crate. The URI format is designed for both human readability and machine resolution:
+Packages in the decentralized space are addressed using a custom URI scheme from the `atom-uri` crate:
 
 ```text
 [source::] label [@version]
 ```
 
-- **`source`** — A URL, SCP-style path, directory, or a `+`-prefixed alias. It is separated from the package label by the rightmost `::` delimiter.
-- **`label`** — A validated Unicode identifier (following UAX #31 rules with a custom hyphen exception) naming the package within the repository set.
-- **`version`** — An unparsed raw version string following semantic or ecosystem-specific versioning.
+- `source` — A URL, SCP-style path, directory, or `+`-prefixed alias. Separated from the label by the rightmost `::`.
+- `label` — A validated Unicode identifier (UAX #31 rules with a custom hyphen exception) naming the package within the repository.
+- `version` — An unparsed raw version string (semantic or ecosystem-specific).
 
-### Examples of Atom URIs
+### Examples
 
-Below are representative examples demonstrating the syntax across different deployment models:
+- Full remote URL: `git.snix.dev/snix/snix::snix-core@^1.2`
+- Aliased shorthand: `+gh/axiosoph/axios::ion-cli@1.0.0`
+- Local path: `/home/user/src/project::lib-common@0.5.1`
+- Bare (current repo context): `atom-uri@1.0`
 
-- **Ecosystem URL Sourcing**: Specifying a full remote Git hosting provider path:
-  `git.snix.dev/snix/snix::snix-core@^1.2`
-- **Short-hand Aliasing (with `alurl`)**: Using custom aliases resolved to remote repositories:
-  `+gh/axiosoph/axios::ion-cli@1.0.0`
-- **Local Directory Sourcing**: Reference paths directly on the local filesystem for dev workflow:
-  `/home/user/src/project::lib-common@0.5.1`
-- **Minimal Sourcing (Ecosystem defaults)**: Resolving using current repository context:
-  `atom-uri@1.0`
+### URL aliasing with alurl
 
-### URL Aliasing via alurl
+The `alurl` crate saves typing by expanding `+`-prefixed identifiers in source strings. For example, `+gh/owner/repo` expands to `github.com/owner/repo` using a locally defined `AliasMap`. Resolution is recursive with cycle detection, so aliases can reference other aliases.
 
-To avoid typing long hostnames in sources, the stack integrates the `alurl` crate. `alurl` is a structure-preserving URL alias detection and expansion library.
+## Adapter dispatch and PURL types
 
-It scans host positions within source strings for `+`-prefixed identifiers (e.g. `+gh/owner/repo`) and expands them using a locally defined `AliasMap` (e.g. mapping `gh` to `github.com`). It performs recursive resolution with cycle detection, translating raw URIs like `+org:project::my-atom@^1` into fully qualified URLs without modifying the underlying path structure.
+Atom does not implement the full Package URL (PURL) specification. PURL assumes hardcoded layout conventions that don't map to Atom's `(anchor, label)` identity model.
 
-## Adapter Dispatch and PURL Types
-
-Atom does not implement the full Package URL (PURL) specification, as PURL makes hardcoded layout assumptions that do not map to Atom's unique `(anchor, label)` identity.
-
-Instead, the protocol borrows only the **ecosystem type identifiers** from PURL (e.g. `"cargo"`, `"npm"`, `"pypi"`) to populate the `pkg` field in the claim transaction.
-
-This type identifier allows generic package resolution clients to dispatch manifest parsing and version resolution to the appropriate ecosystem adapter:
+Instead, the protocol borrows only the ecosystem type identifiers from PURL (`"cargo"`, `"npm"`, `"pypi"`) to populate the `pkg` field in the claim transaction. This lets resolution clients dispatch manifest parsing to the right ecosystem adapter:
 
 ```
                        ┌──────────────────────┐
@@ -69,23 +59,23 @@ This type identifier allows generic package resolution clients to dispatch manif
            └─────────────┘ └─────────────┘ └─────────────┘
 ```
 
-For example, when resolving a Cargo project dependency:
+A Cargo integration would work roughly like this:
 
 1. The resolution tool reads the dependency's Atom ID.
-2. It fetches the corresponding publish transactions from the Git repository.
-3. The **Cargo Adapter** extracts the `Cargo.toml` manifest from the deterministic content snapshot (`dig`).
-4. Cargo's native resolver processes the manifest's crate dependencies.
+2. It fetches the publish transactions from the Git repository.
+3. The Cargo adapter extracts `Cargo.toml` from the deterministic content snapshot (`dig`).
+4. Cargo's native resolver handles the rest.
 
-The core Atom protocol remains completely unaware of Cargo's TOML format, semantic version resolving logic, or build requirements. It only provides the transport, verification, and file extraction capabilities.
+The Atom protocol knows nothing about Cargo's TOML format, semver rules, or build requirements. It only handles transport, verification, and file extraction.
 
-## Augmenting Existing Toolchains
+## Augmenting existing toolchains
 
-Integrating Atom does not require rewriting Cargo or npm from scratch. A hypothetical integration would function as a client-side wrapper or plugin:
+Adding Atom to an existing ecosystem doesn't mean rewriting Cargo or npm. A hypothetical integration would be a client-side wrapper or plugin:
 
-- **Publishing Overlay**: A developer runs `cargo atom-publish` which creates the deterministic snapshot of the crate subdirectory, signs the transaction, and pushes the references to their public Git repository.
-- **Dependency Resolution**: When compiling, `cargo atom-fetch` resolves the pinned atom versions in the project lock file, verifies their signatures, and extracts the crates to Cargo's local cache directory before compiling.
+- A developer runs `cargo atom-publish`, which snapshots the crate subdirectory, signs the transaction, and pushes refs to the public Git repository.
+- At build time, `cargo atom-fetch` resolves pinned atom versions from the lockfile, verifies signatures, and extracts crates into Cargo's local cache before compilation.
 
 > [!NOTE]
-> These commands are illustrative examples of how ecosystem integration could work. No Cargo or npm plugins exist yet — the Ion CLI will provide this functionality once L3 is complete.
+> These commands are illustrative. No Cargo or npm plugins exist yet. The Ion CLI will provide this functionality once L3 is complete.
 
-This architecture enables developers to incrementally adopt decentralized, secure workflows while keeping their existing build tools and language conventions intact.
+This approach lets developers adopt decentralized publishing incrementally without abandoning their existing build tools.

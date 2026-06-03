@@ -1,119 +1,119 @@
 +++
-title = "Setting Up a Contributor Environment"
-description = "How to configure your local Nix-based development environment, run standard tests, format code, and execute Bolero fuzzers on the Axios codebase"
+title = "Setting up a contributor environment"
+description = "Configure your local Nix development environment, run tests, format code, and execute fuzz harnesses on the Axios codebase"
 quadrant = "How-To"
-audience = "Axios contributors, developers, and code reviewers setting up their local workspaces"
+audience = "Axios contributors and code reviewers"
 +++
 
-This guide shows you how to set up your local environment and run workspace tasks to contribute to the Axios stack.
+Set up your local environment and learn the standard workflow for contributing to the Axios stack.
 
 ## Prerequisites
 
-Before starting, install the **Nix package manager** on your local machine.
+Install the **Nix package manager** before continuing.
 
-## Step 1: Enter the Development Shell
+## Step 1: Enter the development shell
 
-Axios uses Nix to manage its toolchain, libraries, and formatter packages. Enter the development shell to load the pinned Rust compiler version and other required packages into your path.
+Axios uses Nix to pin its toolchain, libraries, and formatters.
 
-1. Navigate to the root directory of your cloned repository.
-2. Open the shell by running:
+1. Navigate to the root of your clone.
+2. Enter the shell:
    ```bash
    nix-shell
    ```
-   _Alternative: If you have `direnv` installed and configured, run `direnv allow` to load the environment automatically._
-3. Verify that the Rust toolchain and tools are active in your session:
+   If you have `direnv`, run `direnv allow` instead; it loads the environment automatically.
+3. Verify the toolchain:
    ```bash
    just --version
    treefmt --version
    ```
 
-## Step 2: Format Code Across Workspaces
+## Step 2: Format code
 
-The Axios codebase enforces clean formatting across all file types (Rust, Nix, TOML, Markdown, and JSON) using `treefmt`.
+The project enforces formatting across Rust, Nix, TOML, Markdown, and JSON using `treefmt`.
 
-1. Run `treefmt` from the root directory of the repository to format all files:
+1. Run from the repository root:
    ```bash
    treefmt
    ```
-2. Verify that all modified files pass checks before preparing commits.
+2. Check that modified files pass before committing.
 
-## Step 3: Run the Test Suite
+## Step 3: Run tests
 
-Axios uses a task runner called `just` to orchestrate common workspace operations.
+The `just` task runner orchestrates workspace operations.
 
-1. Execute the comprehensive unit and property test suites across all independent workspaces:
+1. Run unit and property tests across all workspaces:
    ```bash
    just test
    ```
-2. Confirm that all tests in the `atom`, `eos`, `ion`, and `alurl` workspaces compile and pass.
+2. All tests in `atom`, `eos`, `ion`, and `alurl` should compile and pass.
 
-## Step 4: Lint and Check
+## Step 4: Lint
 
-Before submitting changes, run the workspace-wide linter and type checker:
+Run clippy and format checks before submitting:
 
-1. Run `cargo clippy` across all workspaces:
+1. Clippy:
    ```bash
    cargo clippy --manifest-path atom/Cargo.toml
    cargo clippy --manifest-path eos/Cargo.toml
    cargo clippy --manifest-path ion/Cargo.toml
    cargo clippy --manifest-path alurl/Cargo.toml
    ```
-2. Run `cargo fmt` to ensure formatting matches the project `.rustfmt.toml` (Rust 2024 edition, strict formatting):
+2. Format check (Rust 2024 edition, strict):
    ```bash
    cargo fmt --manifest-path atom/Cargo.toml -- --check
    cargo fmt --manifest-path eos/Cargo.toml -- --check
    cargo fmt --manifest-path ion/Cargo.toml -- --check
    ```
 
-## Step 5: Run Bolero Fuzz Tests
+## Step 5: Fuzz
 
-Axios uses `cargo-bolero` to perform robust fuzz testing on raw URI parsers, Coz verification signatures, lockfiles, and manifests.
+The project uses `cargo-bolero` for fuzz testing URI parsers, Coz signatures, lockfiles, and manifests.
 
-1. Run the entire fuzzer suite sequentially (defaults to 10 seconds of fuzzing per target):
+1. Run all fuzzers (10 seconds each by default):
    ```bash
    just fuzz
    ```
-2. Alternatively, target a specific fuzzer directly if you are debugging a particular parser or trait implementation:
-   - **URI Parser**: `just fuzz-uri`
-   - **Signature Verification**: `just fuzz-verification`
-   - **Raw Lockfile parser**: `just fuzz-lock-raw`
-   - **Structured Lockfile serialization**: `just fuzz-lock-structured`
-   - **Manifest TOML parser**: `just fuzz-manifest`
-3. Pass custom timing or profiling configurations if you need deeper execution bounds:
+2. Target a specific fuzzer:
+   - URI parser: `just fuzz-uri`
+   - Signature verification: `just fuzz-verification`
+   - Raw lockfile parser: `just fuzz-lock-raw`
+   - Structured lockfile serialization: `just fuzz-lock-structured`
+   - Manifest TOML parser: `just fuzz-manifest`
+3. Custom timing:
    ```bash
    just fuzz "-T 60s --profile release"
    ```
 
-## Step 6: Build the Documentation Site
+## Step 6: Build the documentation site
 
-The documentation site lives in `www/` and is built using `sukr`:
+The doc site lives in `www/` and is built with `sukr`:
 
-1. Process raw specs and ADRs into the content tree:
+1. Process specs and ADRs:
    ```bash
    cd www && python3 process_docs.py
    ```
-2. Build the static site:
+2. Build:
    ```bash
    sukr
    ```
-3. The generated output appears in `www/public/`.
+3. Output goes to `www/public/`.
 
-## Commit Conventions
+## Commit conventions
 
-Axios follows conventional commits. Use imperative mood, keep the subject line under 50 characters, and wrap the body at 72 characters.
+Use conventional commits. Imperative mood, subject line under 50 characters, body wrapped at 72.
 
 - `feat:` — New user-visible functionality
 - `fix:` — Bug fixes
-- `refactor:` — Code restructuring with no behavior change (no changelog entry)
+- `refactor:` — Code restructuring, no behavior change (no changelog entry)
 - `docs:` — Documentation-only changes
-- Breaking changes use a `!` suffix: `change!:`, `remove!:`
+- Breaking changes: `change!:`, `remove!:`
 
-Run `treefmt` before every commit to ensure all file types are properly formatted.
+Run `treefmt` before every commit.
 
-## Project Orientation
+## Where things are
 
-- **Specifications**: `docs/specs/` — normative behavioral contracts for each layer
-- **Architecture Decision Records**: `docs/adr/` — design rationale for structural decisions
-- **Rust toolchain**: Pinned in `rust-toolchain.toml` (edition 2024)
-- **Formatting config**: `treefmt.toml` orchestrates `rustfmt`, `taplo`, `nixfmt`, `prettier`, and `shfmt`
-- **Task runner**: `just --list` shows all available recipes
+- Specifications: `docs/specs/`
+- Architecture decision records: `docs/adr/`
+- Rust toolchain: pinned in `rust-toolchain.toml` (edition 2024)
+- Formatting: `treefmt.toml` orchestrates `rustfmt`, `taplo`, `nixfmt`, `prettier`, `shfmt`
+- Task runner: `just --list` for all available recipes

@@ -1,34 +1,34 @@
 +++
-title = "Axios Stack Architecture & Implementation"
-description = "High-level technical overview of the Axios monorepo workspaces, crate organization, trait boundaries, and data flows"
+title = "Stack architecture and implementation"
+description = "Technical overview of the Axios monorepo workspaces, crate organization, and trait boundaries"
 quadrant = "Explanation"
-audience = "Axios stack developers, codebase contributors, and architects tracking integration patterns"
+audience = "Axios stack developers, codebase contributors, and architects"
 +++
 
-The Axios stack is a layered, content-addressed publishing and build system. To maintain clean separation of concerns and prevent dependency bloat, the codebase is split into three independent Cargo workspaces representing a downward-only dependency chain: **Ion (L3)** $\to$ **Eos (L2)** $\to$ **Atom (L1)**.
+The Axios stack is a layered, content-addressed publishing and build system. The codebase is split into three independent Cargo workspaces with a downward-only dependency chain: **Ion (L3)** $\to$ **Eos (L2)** $\to$ **Atom (L1)**.
 
-A standalone utility crate, **alurl**, lives at the repository root and provides structure-preserving URL alias resolution used by `atom-uri`.
+A standalone utility crate, **alurl**, lives at the repository root. It handles URL alias resolution for `atom-uri`.
 
-## Workspace Organization
+## Workspace organization
 
-- **L1: Atom** (`atom/`) — The protocol layer. Defines package identity (`AtomId`), cryptographic signing (via [Coz](https://github.com/Cyphrme/Coz)), content-addressed digests (`AtomDigest`), and transport mapping. Completely unaware of build environments or dependency resolution. Contains four crates: `atom-id`, `atom-uri`, `atom-core`, and `atom-git`.
-- **L2: Eos** (`eos/`) — The runtime scheduler. Constructs build plans and coordinates cache-skipping, delegating sandboxed build execution to backends (such as Snix). Contains five crates: `eos-core`, `eos`, `eos-snix`, `eos-daemon`, and `eos-proto`.
-- **L3: Ion** (`ion/`) — The user-facing CLI and dependency resolver. Parses manifests (`ion.toml`), resolves the dependency graph using a SAT solver, and writes lockfiles (`ion.lock`). Contains five crates: `ion-cli`, `ion-manifest`, `ion-lock`, `ion-resolve`, and `ion-eos`.
-- **alurl** (`alurl/`) — Structure-preserving URL alias detection and expansion. Resolves `+`-prefixed identifiers (e.g. `+gh/owner/repo`) via configurable alias maps.
+- **L1: Atom** (`atom/`) — The protocol layer. Defines package identity (`AtomId`), cryptographic signing (via [Coz](https://github.com/Cyphrme/Coz)), content-addressed digests (`AtomDigest`), and transport mapping. Has no knowledge of build environments or dependency resolution. Four crates: `atom-id`, `atom-uri`, `atom-core`, `atom-git`.
+- **L2: Eos** (`eos/`) — The runtime scheduler. Constructs build plans and coordinates cache-skipping, delegating sandboxed execution to backends like Snix. Five crates: `eos-core`, `eos`, `eos-snix`, `eos-daemon`, `eos-proto`.
+- **L3: Ion** (`ion/`) — CLI and dependency resolver. Parses manifests (`ion.toml`), resolves the dependency graph with a SAT solver, and writes lockfiles (`ion.lock`). Five crates: `ion-cli`, `ion-manifest`, `ion-lock`, `ion-resolve`, `ion-eos`.
+- **alurl** (`alurl/`) — URL alias detection and expansion. Resolves `+`-prefixed identifiers (e.g. `+gh/owner/repo`) through configurable alias maps.
 
-To enforce layer discipline, L2 crates never import L3 porcelain, and L1 crates never import L2 runtime schedulers.
+L2 crates never import L3. L1 crates never import L2.
 
 ---
 
-## Core Trait Boundaries
+## Trait boundaries
 
-The stack decouples implementation details from core logic by defining abstract traits as interfaces. This design permits swapping storage backends or build schedulers without modifying porcelain crates.
+The stack uses abstract traits as interfaces between layers. Swapping a storage backend or build scheduler does not require changes to porcelain crates.
 
-### L1: Protocol Interface (atom-core)
+### L1: Protocol interface (atom-core)
 
-The protocol defines a hierarchy of traits for reading, writing, and accumulating atoms:
+The protocol defines a hierarchy of four traits:
 
-- **`AtomSource`**: The read-only observation interface. Returns entries by identity or by search query.
+- `AtomSource` — Read-only observation. Looks up atoms by identity or search query.
 
   ```rust
   pub trait AtomSource: Send + Sync + 'static {
@@ -40,7 +40,7 @@ The protocol defines a hierarchy of traits for reading, writing, and accumulatin
   }
   ```
 
-- **`AtomContent`**: Extends `AtomSource` with the ability to yield the content tree for a specific atom version. This is the content recovery interface — it extracts the full file tree that `AtomSource` deliberately omits.
+- `AtomContent` — Extends `AtomSource` with content tree extraction. This is how consumers recover the actual file tree that `AtomSource` deliberately omits.
 
   ```rust
   pub trait AtomContent: AtomSource {
@@ -52,7 +52,7 @@ The protocol defines a hierarchy of traits for reading, writing, and accumulatin
   }
   ```
 
-- **`AtomRegistry`**: The write-only publisher interface. Establishes ownership via `claim` (returning a `Czd` used to authorize subsequent publishes) and creates version releases via `publish`.
+- `AtomRegistry` — Write-only publisher interface. `claim` establishes ownership (returning a `Czd` that authorizes subsequent publishes). `publish` creates version releases.
 
   ```rust
   pub trait AtomRegistry: AtomSource {
@@ -69,7 +69,7 @@ The protocol defines a hierarchy of traits for reading, writing, and accumulatin
   }
   ```
 
-- **`AtomStore`**: The consumer-side accumulation interface. Extends `AtomContent` with `ingest` to import atoms from any source, preserving the monotonic accumulation guarantee.
+- `AtomStore` — Consumer-side accumulation. Extends `AtomContent` with `ingest` to import atoms from any source. The store only grows; it never loses atoms through ingestion.
 
   ```rust
   pub trait AtomStore: AtomContent {
@@ -78,13 +78,13 @@ The protocol defines a hierarchy of traits for reading, writing, and accumulatin
   }
   ```
 
-_The default implementation of these traits is provided by the `atom-git` bridge, translating the operations into Git references and objects._
+The default implementation of these traits lives in `atom-git`, which maps the operations to Git references and objects.
 
-### L2: Scheduler Interface (eos-core)
+### L2: Scheduler interface (eos-core)
 
-The build scheduler separates evaluation orchestration from build execution:
+The build scheduler separates evaluation from execution:
 
-- **`BuildEngine`**: The execution interface. It evaluates atom references into build plans, checks cache state, executes sandboxed builds, and extracts artifact metadata.
+- `BuildEngine` — Evaluates atom references into build plans, checks the cache, runs sandboxed builds, and extracts artifact metadata.
 
   ```rust
   pub trait BuildEngine: Send + Sync + 'static {
@@ -106,6 +106,6 @@ The build scheduler separates evaluation orchestration from build execution:
   }
   ```
 
-- **`ArtifactStore`**: The cache and storage interface. Stores build artifacts and links them to source atom digests, enabling cache-skipping optimizations.
+- `ArtifactStore` — Cache and storage interface. Links build artifacts to source atom digests for cache-skipping.
 
-_The default build engine is implemented by `eos-snix`, which delegates build execution to the Snix engine while Eos manages scheduling and caching._
+The default build engine is `eos-snix`, which delegates execution to Snix while Eos handles scheduling and caching.
