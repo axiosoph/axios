@@ -502,32 +502,48 @@ issues read-only queries.
 **[content-delivery-negotiation]**: After receiving a `BuildRequest`,
 eos begins resolving atom dependencies concurrently from its
 configured `AtomSource` composite. Eos MAY encounter atoms that
-cannot be resolved from any configured source (local dev atoms,
-unreachable mirrors). For these, eos falls back to the ion peer as a
-last-resort `AtomSource`.
+cannot be resolved from its local store or configured registry
+mirrors (local dev atoms, unreachable mirrors). For these, eos
+falls back to the ion peer — ion's `AtomStore` exposed as an
+`AtomSource` — as a last-resort source.
 
-The negotiation follows a `FindMissing` pattern (analogous to Bazel
-RE API's `FindMissingBlobs`):
+The content transfer for peer-assisted resolution is a
+**store-to-store transfer** through the atom protocol's
+`AtomStore::ingest()` interface. Ion's store acts as an
+`AtomSource` that eos's store ingests from. The transport
+mechanism (git fetch, shared filesystem, or protocol-level
+transfer over the existing RPC connection) is an implementation
+detail of the atom protocol backend, not a concern of the
+ion-eos contract. No ad-hoc data streaming channel exists
+outside the atom protocol.
+
+The negotiation follows a `FindMissing` pattern (analogous to
+Bazel RE API's `FindMissingBlobs`):
 
 1. Ion submits `BuildRequest` via `submitBuild()` → receives
    `BuildJob` capability
 2. Eos begins concurrent resolution of all atom deps from its
-   `AtomSource` composite
-3. Ion calls `BuildJob.getMissing()` — blocks until eos has attempted
-   all non-peer sources
-4. Eos returns the list of `AtomId`s it could not resolve
-5. Ion streams content for each missing atom via
-   `BuildJob.provideAtom(id, content)`
-6. Ion signals completion via `BuildJob.allProvided()`
-7. Eos ingests received atoms into its local store and begins
-   evaluation
+   `AtomSource` composite (local store, then registry mirrors)
+3. Ion calls `BuildJob.getMissing()` — blocks until eos has
+   attempted all non-peer sources
+4. Eos returns the list of `AtomId`s it could not resolve from
+   local store or registries
+5. If the missing list is non-empty, eos's composite source
+   ingests the missing atoms from ion's store via the atom
+   protocol. Ion makes its store available as an `AtomSource`
+   through a mechanism determined by the atom protocol backend
+   (e.g., git fetch for git-backed stores, or a protocol-level
+   `AtomSource` capability over the RPC connection).
+6. Eos ingests the received atoms into its local store and
+   begins evaluation
 
-If `getMissing()` returns an empty list, steps 5–6 are skipped — all
+If `getMissing()` returns an empty list, step 5 is skipped — all
 atoms were resolvable without ion's assistance. This is the common
 case for CI/CD and warm-cache deployments.
 
-Ion MUST NOT call `provideAtom()` for atoms not in the `getMissing()`
-response. Eos MUST reject unsolicited atom transfers.
+All ingestion invariants apply to peer-assisted transfers. The
+atom protocol verifies integrity on ingestion — eos's store does
+not accept unverified atoms regardless of their source.
 
 `VERIFIED: unverified`
 
@@ -797,7 +813,7 @@ This returns the current `BuildStatus` as a snapshot value.
 | `progress-liveness`            | Integration test       | UNVERIFIED | Attach → verify all state transitions delivered          |
 | `discovery-read-only`          | Code audit             | UNVERIFIED | No mutating code paths reachable via `AtomDiscovery`     |
 | `query-discovery`              | Integration test       | UNVERIFIED | Obtain `AtomDiscovery`, issue resolve/contains/search    |
-| `content-delivery-negotiation` | Integration test       | UNVERIFIED | getMissing → provideAtom flow; reject unsolicited atoms  |
+| `content-delivery-negotiation` | Integration test       | UNVERIFIED | getMissing flow; store-to-store ingest for missing atoms |
 
 ---
 

@@ -222,7 +222,7 @@ The canonical composition for an eos daemon:
 CompositeAtomSource
   Priority 1: LocalGitStore    — cached atoms (instant)
   Priority 2: RegistrySource(s) — remote mirrors (async fetch + ingest)
-  Priority 3: PeerSource        — fallback from the requesting client (async stream)
+  Priority 3: PeerSource        — client's AtomStore as AtomSource (store-to-store transfer)
 ```
 
 This composition is transparent: eos calls `resolve()` on the composite and does not know which underlying source provided the result. The composite ingests fetched atoms into the local store (Priority 1) so that subsequent resolutions for the same atom are cache hits.
