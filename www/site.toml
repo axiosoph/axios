@@ -1,0 +1,30 @@
+author   = "Axios Team"
+base_url = "https://axiosoph.github.io/axios"
+title    = "Axios Documentation"
+
+[paths]
+content   = "content"
+output    = "public"
+static    = "static"
+templates = "templates"
+
+[nav]
+nested = true
+toc    = true
+
+[feed]
+enabled = true
+
+[sitemap]
+enabled = true
+
+[extra]
+adr_ref         = "https://github.com/axiosoph/axios/tree/main/docs/adr"
+branding_color  = "#58a6ff"
+branding_logo   = "/logo.png"
+description     = "Axios: content-addressed decentralized publishing protocol stack"
+header_subtitle = "Decentralized Publishing Stack"
+header_title    = "Axios"
+issue_tracker   = "https://github.com/axiosoph/axios/issues"
+repo_url        = "https://github.com/axiosoph/axios"
+spec_ref        = "https://github.com/axiosoph/axios/tree/main/docs/specs"

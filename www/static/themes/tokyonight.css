@@ -1,0 +1,93 @@
+/**
+ * Tokyo Night Theme for sukr (Local copy)
+ */
+:root {
+  --hl-red: #f7768e;
+  --hl-orange: #ff9e64;
+  --hl-yellow: #e0af68;
+  --hl-light-green: #9ece6a;
+  --hl-green: #73daca;
+  --hl-aqua: #2ac3de;
+  --hl-teal: #1abc9c;
+  --hl-turquoise: #89ddff;
+  --hl-light-cyan: #b4f9f8;
+  --hl-cyan: #7dcfff;
+  --hl-blue: #7aa2f7;
+  --hl-purple: #9d7cd8;
+  --hl-magenta: #bb9af7;
+  --hl-comment: #565f89;
+  --hl-fg: #c0caf5;
+  --hl-fg-dark: #a9b1d6;
+  --hl-bg: #1a1b26;
+  --hl-bg-menu: #16161e;
+}
+.hl-keyword { color: var(--hl-purple); font-style: italic; }
+.hl-keyword-control { color: var(--hl-magenta); }
+.hl-keyword-control-conditional { color: var(--hl-magenta); }
+.hl-keyword-control-repeat { color: var(--hl-magenta); }
+.hl-keyword-control-import { color: var(--hl-cyan); }
+.hl-keyword-control-return { color: var(--hl-purple); font-style: italic; }
+.hl-keyword-control-exception { color: var(--hl-magenta); }
+.hl-keyword-function { color: var(--hl-magenta); }
+.hl-keyword-operator { color: var(--hl-magenta); }
+.hl-keyword-directive { color: var(--hl-cyan); }
+.hl-keyword-storage { color: var(--hl-magenta); }
+.hl-keyword-storage-type { color: var(--hl-magenta); }
+.hl-keyword-storage-modifier { color: var(--hl-magenta); }
+.hl-function { color: var(--hl-blue); font-style: italic; }
+.hl-function-builtin { color: var(--hl-aqua); }
+.hl-function-method { color: var(--hl-blue); font-style: italic; }
+.hl-function-macro { color: var(--hl-cyan); }
+.hl-function-special { color: var(--hl-cyan); }
+.hl-type { color: var(--hl-aqua); }
+.hl-type-builtin { color: var(--hl-aqua); }
+.hl-type-enum-variant { color: var(--hl-orange); }
+.hl-constant { color: var(--hl-orange); }
+.hl-constant-builtin { color: var(--hl-aqua); }
+.hl-constant-builtin-boolean { color: var(--hl-aqua); }
+.hl-constant-character { color: var(--hl-light-green); }
+.hl-constant-character-escape { color: var(--hl-magenta); }
+.hl-constant-numeric { color: var(--hl-orange); }
+.hl-constant-numeric-integer { color: var(--hl-orange); }
+.hl-constant-numeric-float { color: var(--hl-orange); }
+.hl-string { color: var(--hl-light-green); }
+.hl-string-regexp { color: var(--hl-light-cyan); }
+.hl-string-special { color: var(--hl-aqua); }
+.hl-string-special-path { color: var(--hl-aqua); }
+.hl-string-special-url { color: var(--hl-aqua); }
+.hl-string-special-symbol { color: var(--hl-aqua); }
+.hl-variable { color: var(--hl-fg); }
+.hl-variable-builtin { color: var(--hl-red); }
+.hl-variable-parameter { color: var(--hl-yellow); font-style: italic; }
+.hl-variable-other { color: var(--hl-fg); }
+.hl-variable-other-member { color: var(--hl-green); }
+.hl-comment { color: var(--hl-comment); font-style: italic; }
+.hl-comment-line { color: var(--hl-comment); font-style: italic; }
+.hl-comment-block { color: var(--hl-comment); font-style: italic; }
+.hl-comment-block-documentation { color: var(--hl-yellow); }
+.hl-comment-line-documentation { color: var(--hl-yellow); }
+.hl-punctuation { color: var(--hl-turquoise); }
+.hl-punctuation-bracket { color: var(--hl-turquoise); }
+.hl-punctuation-delimiter { color: var(--hl-turquoise); }
+.hl-punctuation-special { color: var(--hl-turquoise); }
+.hl-operator { color: var(--hl-turquoise); }
+.hl-attribute { color: var(--hl-cyan); }
+.hl-label { color: var(--hl-blue); }
+.hl-namespace { color: var(--hl-cyan); }
+.hl-constructor { color: var(--hl-aqua); }
+.hl-special { color: var(--hl-aqua); }
+.hl-tag { color: var(--hl-magenta); }
+.hl-markup-heading { color: var(--hl-blue); font-weight: bold; }
+.hl-markup-bold { font-weight: bold; }
+.hl-markup-italic { font-style: italic; }
+.hl-markup-strikethrough { text-decoration: line-through; }
+.hl-markup-link { color: var(--hl-blue); text-decoration: underline; }
+.hl-markup-link-text { color: var(--hl-teal); }
+.hl-markup-link-url { text-decoration: underline; }
+.hl-markup-link-label { color: var(--hl-teal); }
+.hl-markup-list { color: var(--hl-orange); font-weight: bold; }
+.hl-markup-quote { color: var(--hl-teal); }
+.hl-markup-raw { color: var(--hl-teal); }
+.hl-diff-plus { color: var(--hl-green); }
+.hl-diff-minus { color: var(--hl-red); }
+.hl-diff-delta { color: var(--hl-blue); }

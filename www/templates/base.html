@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  {% if page.description %}
+  <meta name="description" content="{{ page.description }}" />
+  {% elif config.extra.description %}
+  <meta name="description" content="{{ config.extra.description }}" />
+  {% endif %}
+  <title>{% block title %}{{ title }} | {{ config.title }}{% endblock title %}</title>
+  <link rel="canonical" href="{{ config.base_url }}{{ page_path }}" />
+  <link rel="stylesheet" href="{{ prefix }}/style.css" />
+</head>
+
+<body>
+  <aside class="sidebar">
+    <header class="sidebar-header">
+      <a href="{{ prefix }}/index.html" class="logo">
+        {% if config.extra.branding_logo %}
+        <span class="logo-icon">⚓</span>
+        {% endif %}
+        <span class="logo-text">{{ config.extra.header_title | default(value="Axios") }}</span>
+      </a>
+      {% if config.extra.header_subtitle %}
+      <span class="tagline">{{ config.extra.header_subtitle }}</span>
+      {% endif %}
+      
+      <input type="checkbox" id="nav-toggle" class="nav-toggle" />
+      <label for="nav-toggle" class="hamburger" aria-label="Toggle navigation">
+        <span></span>
+        <span></span>
+        <span></span>
+      </label>
+    </header>
+
+    <nav class="sidebar-nav">
+      {% for item in nav %}
+        {% set section_prefix = item.path | replace(from="index.html", to="") %}
+        {% set is_current_section = page_path is starting_with(section_prefix) %}
+        <a href="{{ prefix }}{{ item.path }}" class="nav-item {% if page_path == item.path %}active{% endif %}">{{ item.label }}</a>
+        
+        {% if page_path == item.path and page.toc and anchors %}
+        <div class="nav-anchors">
+          {% for anchor in anchors %}
+          <a href="#{{ anchor.id }}" class="anchor-link level-{{ anchor.level }}">{{ anchor.label | strip_parens }}</a>
+          {% endfor %}
+        </div>
+        {% endif %}
+        
+        {% if config.nav.nested and item.children %}
+        <div class="nav-children{% if is_current_section %} expanded{% endif %}">
+          {% for child in item.children %}
+          <a href="{{ prefix }}{{ child.path }}" class="nav-child-item {% if page_path == child.path %}active{% endif %}">{{ child.label }}</a>
+          {% if page_path == child.path and page.toc and anchors %}
+          <div class="nav-anchors">
+            {% for anchor in anchors %}
+            <a href="#{{ anchor.id }}" class="anchor-link level-{{ anchor.level }}">{{ anchor.label | strip_parens }}</a>
+            {% endfor %}
+          </div>
+          {% endif %}
+          {% endfor %}
+        </div>
+        {% endif %}
+      {% endfor %}
+    </nav>
+
+    <footer class="sidebar-footer">
+      {% if config.extra.repo_url %}
+      <a href="{{ config.extra.repo_url }}" target="_blank" rel="noopener">Repository</a>
+      {% endif %}
+      {% if config.extra.issue_tracker %}
+      <a href="{{ config.extra.issue_tracker }}" target="_blank" rel="noopener">Issues</a>
+      {% endif %}
+      {% if config.extra.spec_ref %}
+      <a href="{{ config.extra.spec_ref }}" target="_blank" rel="noopener">Spec Source</a>
+      {% endif %}
+      <span>© 2026 {{ config.author }}</span>
+    </footer>
+  </aside>
+
+  <main id="main-content">
+    {% block content %}{% endblock content %}
+  </main>
+</body>
+
+</html>

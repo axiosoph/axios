@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block content %}
+<article class="section-index-wrapper">
+  <header class="section-header">
+    <h1 class="section-title">{{ section.title }}</h1>
+    {% if section.description %}
+    <p class="section-description-lead">{{ section.description }}</p>
+    {% endif %}
+  </header>
+  
+  <nav class="section-grid-links">
+    {% for item in items %}
+    <a href="{{ prefix }}{{ item.path }}" class="section-card-link">
+      <strong class="card-title">{{ item.frontmatter.title }}</strong>
+      {% if item.frontmatter.description %}
+      <span class="card-desc">{{ item.frontmatter.description }}</span>
+      {% endif %}
+    </a>
+    {% endfor %}
+  </nav>
+</article>
+{% endblock content %}
