@@ -4,6 +4,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
   {% if page.description %}
   <meta name="description" content="{{ page.description }}" />
   {% elif config.extra.description %}
@@ -11,10 +12,31 @@
   {% endif %}
   <title>{% block title %}{{ title }} | {{ config.title }}{% endblock title %}</title>
   <link rel="canonical" href="{{ config.base_url }}{{ page_path }}" />
+  
+  <!-- Typography (Google Fonts) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Fira+Code:wght@400;500;600&display=swap" rel="stylesheet">
+  
   <link rel="stylesheet" href="{{ prefix }}/style.css" />
+  
+  <!-- Prevent Flash of Unstyled Content (FOUC) -->
+  <script>
+    (function() {
+      const savedTheme = localStorage.getItem("theme") || "system";
+      document.documentElement.setAttribute("data-theme", savedTheme);
+      const isDark = savedTheme === "dark" || (savedTheme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+      if (isDark) {
+        document.documentElement.classList.add("dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+      }
+    })();
+  </script>
 </head>
 
 <body>
+  <div class="scroll-progress-bar"></div>
   <aside class="sidebar">
     <header class="sidebar-header">
       <a href="{{ prefix }}/index.html" class="logo">
@@ -76,6 +98,14 @@
       {% if config.extra.spec_ref %}
       <a href="{{ config.extra.spec_ref }}" target="_blank" rel="noopener">Spec Source</a>
       {% endif %}
+      
+      <button id="theme-toggle" class="theme-toggle-btn" aria-label="Toggle Theme">
+        <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
+          <circle cx="8" cy="8" r="4"/>
+        </svg>
+        <span>Theme</span>
+      </button>
+
       <span>🄯 2026 {{ config.author }}</span>
     </footer>
   </aside>
@@ -83,6 +113,116 @@
   <main id="main-content">
     {% block content %}{% endblock content %}
   </main>
+
+  <!-- Client-side Scripts -->
+  <script>
+    // Theme Switcher Logic
+    (function() {
+      const themeToggle = document.getElementById("theme-toggle");
+      let currentTheme = localStorage.getItem("theme") || "system";
+
+      function updateThemeUI() {
+        const isSystemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        const activeTheme = currentTheme === "system" ? (isSystemDark ? "dark" : "light") : currentTheme;
+        
+        document.documentElement.setAttribute("data-theme", currentTheme);
+        if (activeTheme === "dark") {
+          document.documentElement.classList.add("dark");
+        } else {
+          document.documentElement.classList.remove("dark");
+        }
+        
+        if (themeToggle) {
+          if (currentTheme === "system") {
+            themeToggle.setAttribute("aria-label", "Switch to " + (isSystemDark ? "light" : "dark") + " theme");
+            themeToggle.className = "theme-toggle-btn theme-system";
+            themeToggle.innerHTML = `
+              <svg class="icon-system" viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true">
+                <path d="M5.75 13.5a.75.75 0 0 1 .75-.75h3a.75.75 0 0 1 0 1.5h-3a.75.75 0 0 1-.75-.75ZM2 2a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H2Zm0 1.5h12A.5.5 0 0 1 14.5 4v5.5H1.5V4A.5.5 0 0 1 2 3.5Z"/>
+              </svg>
+              <span>Follow System</span>
+            `;
+          } else {
+            themeToggle.setAttribute("aria-label", "Switch to system theme");
+            themeToggle.className = "theme-toggle-btn theme-pinned";
+            if (currentTheme === "dark") {
+              themeToggle.innerHTML = `
+                <svg class="icon-moon" viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true">
+                  <path d="M9.598 1.591a.75.75 0 0 1 .785-.175 7 7 0 1 1-8.967 8.967.75.75 0 0 1 .961-.96 5.5 5.5 0 0 0 7.046-7.046.75.75 0 0 1 .175-.786Z"/>
+                </svg>
+                <span>Dark Mode</span>
+              `;
+            } else {
+              themeToggle.innerHTML = `
+                <svg class="icon-sun" viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true">
+                  <path d="M8 12a4 4 0 1 1 0-8 4 4 0 0 1 0 8Zm0-1.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM8 0a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0V.75A.75.75 0 0 1 8 0ZM8 13a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 8 13Zm8-5a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1 0-1.5h1.5A.75.75 0 0 1 16 8ZM3 8a.75.75 0 0 1-.75.75H.75a.75.75 0 0 1 0-1.5h1.5A.75.75 0 0 1 3 8Zm10.657-5.657a.75.75 0 0 1 0 1.061l-1.061 1.06a.75.75 0 1 1-1.06-1.06l1.06-1.06a.75.75 0 0 1 1.06 0Zm-9.193 9.193a.75.75 0 0 1 0 1.06l-1.06 1.061a.75.75 0 1 1-1.061-1.06l1.06-1.061a.75.75 0 0 1 1.06 0Zm9.193 2.122a.75.75 0 0 1-1.06 0l-1.061-1.06a.75.75 0 1 1 1.06-1.061l1.06 1.06a.75.75 0 0 1 0 1.061ZM4.464 4.465a.75.75 0 0 1-1.06 0L2.343 3.404a.75.75 0 1 1 1.06-1.06l1.06 1.06a.75.75 0 0 1 0 1.06Z"/>
+                </svg>
+                <span>Light Mode</span>
+              `;
+            }
+          }
+        }
+      }
+
+      updateThemeUI();
+
+      if (themeToggle) {
+        themeToggle.addEventListener("click", function() {
+          const isSystemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          if (currentTheme === "system") {
+            currentTheme = isSystemDark ? "light" : "dark";
+          } else {
+            currentTheme = "system";
+          }
+          localStorage.setItem("theme", currentTheme);
+          updateThemeUI();
+        });
+      }
+
+      window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function() {
+        if (currentTheme === "system") {
+          updateThemeUI();
+        }
+      });
+    })();
+
+    // Alert Processing Logic (GitHub-style blockquotes post-processing)
+    document.addEventListener("DOMContentLoaded", function() {
+      const bqs = document.querySelectorAll(".prose-content blockquote");
+      bqs.forEach(function(bq) {
+        const firstP = bq.querySelector("p");
+        if (!firstP) return;
+        const match = firstP.innerHTML.trim().match(/^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\](?:\s|<br>)?/i);
+        if (match) {
+          const type = match[1].toUpperCase();
+          bq.className = "alert alert-" + type.toLowerCase();
+          
+          // Remove the tag from the text
+          firstP.innerHTML = firstP.innerHTML.replace(match[0], "");
+          
+          // Prepend alert header/icon
+          const alertHeader = document.createElement("div");
+          alertHeader.className = "alert-header";
+          
+          let iconSvg = "";
+          if (type === "NOTE") {
+            iconSvg = `<svg class="icon-alert" viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13Zm0 3a1 1 0 1 1 0 2 1 1 0 0 1 0-2Zm.75 4.5v3.25a.75.75 0 0 1-1.5 0V9A.75.75 0 0 1 8.75 9Z"/></svg>`;
+          } else if (type === "TIP") {
+            iconSvg = `<svg class="icon-alert" viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 11h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1 0-1Zm-.5-2.5a2.5 2.5 0 1 1 5 0c0 .9-.5 1.7-1.25 2.25a.25.25 0 0 0-.1.2v.55a.5.5 0 0 1-1 0v-.8a1.25 1.25 0 0 1 .5-1c.5-.35.85-.9.85-1.5a1.5 1.5 0 1 0-3 0c0 .4.1.8.3 1.15a.5.5 0 1 1-.85.5A2.5 2.5 0 0 1 6 8.5Z"/></svg>`;
+          } else if (type === "IMPORTANT") {
+            iconSvg = `<svg class="icon-alert" viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-3.75a.75.75 0 0 0-.75.75v3.5a.75.75 0 0 0 1.5 0v-3.5A.75.75 0 0 0 8 4.25Zm0 7.5a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"/></svg>`;
+          } else if (type === "WARNING") {
+            iconSvg = `<svg class="icon-alert" viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M6.457 1.047a2 2 0 0 1 3.086 0L15.35 8.5c.78.96.1 2.5-1.1 2.5H1.75c-1.2 0-1.88-1.54-1.1-2.5L6.457 1.047ZM8 3.5a.75.75 0 0 0-.75.75v3.5a.75.75 0 0 0 1.5 0v-3.5A.75.75 0 0 0 8 3.5Zm0 7.5a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"/></svg>`;
+          } else if (type === "CAUTION") {
+            iconSvg = `<svg class="icon-alert" viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8.22 1.754a.25.25 0 0 0-.44 0L1.698 11.75a.25.25 0 0 0 .22.375h12.164a.25.25 0 0 0 .22-.375L8.22 1.754ZM6.78 1.004a1.75 1.75 0 0 1 3.08 0l6.082 10a1.75 1.75 0 0 1-1.54 2.686H1.918a1.75 1.75 0 0 1-1.54-2.686l6.402-10ZM8 4.75a.75.75 0 0 1 .75.75v3a.75.75 0 0 1-1.5 0v-3a.75.75 0 0 1 .75-.75Zm0 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"/></svg>`;
+          }
+          
+          alertHeader.innerHTML = iconSvg + "<span>" + type + "</span>";
+          bq.insertBefore(alertHeader, firstP);
+        }
+      });
+    });
+  </script>
 </body>
 
 </html>
