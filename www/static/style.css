@@ -81,7 +81,9 @@
     margin-block-start: 1.5rem;
     margin-block-end: 1rem;
     text-wrap: balance;
-    transition: padding-inline-start 0.15s ease, border-inline-start 0.15s ease;
+    border-left: 3px solid transparent;
+    padding-left: 0;
+    transition: padding-left 0.15s ease, border-left-color 0.15s ease;
   }
 
   h1 { font-size: clamp(1.75rem, 4cqi, 2.5rem); margin-block-start: 0; }
@@ -91,7 +93,7 @@
   /* Heading anchor links (¶) - hover reveal for deep-linking */
   .heading-anchor {
     visibility: hidden;
-    margin-inline-start: 0.5em;
+    margin-left: 0.5em;
     font-size: 0.75em;
     color: var(--fg-muted);
     text-decoration: none;
@@ -122,8 +124,8 @@
   h5:target,
   h6:target {
     scroll-margin-top: 1rem;
-    padding-inline-start: 0.5rem;
-    border-inline-start: 3px solid var(--accent);
+    padding-left: 0.5rem;
+    border-left-color: var(--accent);
   }
 
   /* Always show pilcrow on targeted heading */
@@ -393,7 +395,11 @@
     transition: color 0.15s ease;
   }
 
-  .anchor-link:hover,
+  /* Split hover and target-current to prevent browsers from discarding active hover rules in case :target-current is unsupported */
+  .anchor-link:hover {
+    color: var(--accent);
+  }
+
   .anchor-link:target-current {
     color: var(--accent);
     font-weight: 600;
