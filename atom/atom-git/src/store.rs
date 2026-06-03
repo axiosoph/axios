@@ -204,10 +204,8 @@ impl AtomStore for GitStore {
                 .map_err(|e| GitError::Validation(e.to_string()))?
             {
                 for v in entry.versions() {
-                    if let Some(czd) = v.czd() {
-                        if let Ok(oid) = ObjectId::try_from(czd.as_bytes()) {
-                            candidate_parents.push(oid);
-                        }
+                    if let Some(oid) = v.czd().and_then(|czd| ObjectId::try_from(czd.as_bytes()).ok()) {
+                        candidate_parents.push(oid);
                     }
                 }
             }
@@ -321,7 +319,6 @@ impl AtomStore for GitStore {
                     let claim_czd_hex = claim_oid.to_hex().to_string();
 
                     // Reconstruct or find the claim commit in the destination repository
-                    let mut resolved_parent = None;
                     if !dest_repo.objects.exists(&claim_oid) {
                         // Find the correct parent by checking candidate parents
                         let active_claim_oid = dest_repo
@@ -342,28 +339,24 @@ impl AtomStore for GitStore {
 
                         let mut found = false;
                         // First try None (no parent)
-                        if let Ok(oid) = crate::gix_util::write_claim_commit(
+                        if crate::gix_util::write_claim_commit(
                             &dest_repo,
                             claim_msg.to_string(),
                             None,
-                        ) {
-                            if oid == claim_oid {
-                                resolved_parent = None;
-                                found = true;
-                            }
+                        ).ok() == Some(claim_oid)
+                        {
+                            found = true;
                         }
                         if !found {
                             for candidate in candidates {
-                                if let Ok(oid) = crate::gix_util::write_claim_commit(
+                                if crate::gix_util::write_claim_commit(
                                     &dest_repo,
                                     claim_msg.to_string(),
                                     Some(candidate),
-                                ) {
-                                    if oid == claim_oid {
-                                        resolved_parent = Some(candidate);
-                                        found = true;
-                                        break;
-                                    }
+                                ).ok() == Some(claim_oid)
+                                {
+                                    found = true;
+                                    break;
                                 }
                             }
                         }
@@ -374,13 +367,6 @@ impl AtomStore for GitStore {
                                 claim_oid
                             )));
                         }
-
-                        // Write the resolved claim commit
-                        crate::gix_util::write_claim_commit(
-                            &dest_repo,
-                            claim_msg.to_string(),
-                            resolved_parent,
-                        )?;
                     }
 
                     // Write each ContentEntry as a git object and reconstruct the tree

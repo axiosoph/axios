@@ -735,7 +735,7 @@ fn walk_git_tree_recursive(
     for entry_result in tree.iter() {
         let entry = entry_result?;
         let filename = std::str::from_utf8(entry.filename())
-            .map_err(|_| GitError::Validation(format!("non-UTF-8 filename in git tree")))?;
+            .map_err(|_| GitError::Validation("non-UTF-8 filename in git tree".to_string()))?;
 
         let child_path = if prefix.is_empty() {
             filename.to_owned()
@@ -773,7 +773,7 @@ fn walk_git_tree_recursive(
                 });
             },
             EntryKind::Commit => {
-                // Submodule, skip
+                tracing::warn!(path = %child_path, "Silently skipping git submodule commit entry during atom content traversal");
             },
         }
     }
