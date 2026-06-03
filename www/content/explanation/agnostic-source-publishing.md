@@ -80,9 +80,12 @@ The core Atom protocol remains completely unaware of Cargo's TOML format, semant
 
 ## Augmenting Existing Toolchains
 
-Integrating Atom does not require rewriting Cargo or npm from scratch. Instead, it can be implemented as a client-side wrapper or plugin:
+Integrating Atom does not require rewriting Cargo or npm from scratch. A hypothetical integration would function as a client-side wrapper or plugin:
 
 - **Publishing Overlay**: A developer runs `cargo atom-publish` which creates the deterministic snapshot of the crate subdirectory, signs the transaction, and pushes the references to their public Git repository.
 - **Dependency Resolution**: When compiling, `cargo atom-fetch` resolves the pinned atom versions in the project lock file, verifies their signatures, and extracts the crates to Cargo's local cache directory before compiling.
+
+> [!NOTE]
+> These commands are illustrative examples of how ecosystem integration could work. No Cargo or npm plugins exist yet — the Ion CLI will provide this functionality once L3 is complete.
 
 This architecture enables developers to incrementally adopt decentralized, secure workflows while keeping their existing build tools and language conventions intact.
