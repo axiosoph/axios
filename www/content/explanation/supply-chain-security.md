@@ -13,7 +13,7 @@ In a traditional package ecosystem, a package's integrity rests on the security 
 
 This administrative model has two critical flaws:
 
-1. **Credential-Based Security**: Trust is linked to account authentication. If a maintainer's registry credentials or API tokens are leaked, phished, or hijacked (as seen in the RedHat npm account compromise), an attacker can publish malicious package versions. The registry accepts these updates as legitimate because the authentication checked out.
+1. **Credential-Based Security**: Trust is linked to account authentication. If a maintainer's credentials or CI tokens are compromised, an attacker can publish malicious package versions that the registry accepts as legitimate. The [Red Hat `@redhat-cloud-services` npm compromise (RHSB-2026-006)](https://access.redhat.com/security/vulnerabilities/RHSB-2026-006) demonstrated this: attackers hijacked a developer's GitHub account, injected the "Miasma" credential-harvesting malware into ~32 packages across 96 versions, and the packages carried authentic provenance signatures because they were published through legitimate OIDC workflows.
 2. **Opaque Tarballs**: Registries distribute pre-packaged source files or built artifacts (such as tarballs). The link between the code in the public repository and the file hosted on the registry is completely opaque. There is no cryptographic proof that the code in the registry's tarball actually corresponds to a specific commit in the developer's source repository.
 
 The downstream user has no way to verify the code's lineage. They must trust that the registry's database is uncompromised and that the builder published the correct files.
@@ -36,9 +36,9 @@ The verification chain relies on three immutable links:
    - The relative path where the package lives in the repository.
    - The content-addressed hash of the deterministic content snapshot (`dig`).
 
-## local Verification & DAG Validation
+## Local Verification & DAG Validation
 
-When a client resolves and fetches an atom, it runs a 12-step verification sequence completely locally. The verification validates the Git Directed Acyclic Graph (DAG) using a three-point temporal ancestry check:
+When a client resolves and fetches an atom, it performs a two-phase verification sequence. The first phase (8 steps) runs entirely locally with zero network access and is mandatory. The second phase (4 steps) optionally verifies content provenance by fetching minimal source metadata. Together, these validate the Git Directed Acyclic Graph (DAG) using a three-point temporal ancestry check:
 
 $$\text{genesis} \to \text{claim.src} \to \text{publish.src}$$
 
