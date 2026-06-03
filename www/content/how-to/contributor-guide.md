@@ -47,7 +47,25 @@ Axios uses a task runner called `just` to orchestrate common workspace operation
    ```
 2. Confirm that all tests in the `atom`, `eos`, `ion`, and `alurl` workspaces compile and pass.
 
-## Step 4: Run Bolero Fuzz Tests
+## Step 4: Lint and Check
+
+Before submitting changes, run the workspace-wide linter and type checker:
+
+1. Run `cargo clippy` across all workspaces:
+   ```bash
+   cargo clippy --manifest-path atom/Cargo.toml
+   cargo clippy --manifest-path eos/Cargo.toml
+   cargo clippy --manifest-path ion/Cargo.toml
+   cargo clippy --manifest-path alurl/Cargo.toml
+   ```
+2. Run `cargo fmt` to ensure formatting matches the project `.rustfmt.toml` (Rust 2024 edition, strict formatting):
+   ```bash
+   cargo fmt --manifest-path atom/Cargo.toml -- --check
+   cargo fmt --manifest-path eos/Cargo.toml -- --check
+   cargo fmt --manifest-path ion/Cargo.toml -- --check
+   ```
+
+## Step 5: Run Bolero Fuzz Tests
 
 Axios uses `cargo-bolero` to perform robust fuzz testing on raw URI parsers, Coz verification signatures, lockfiles, and manifests.
 
@@ -65,3 +83,37 @@ Axios uses `cargo-bolero` to perform robust fuzz testing on raw URI parsers, Coz
    ```bash
    just fuzz "-T 60s --profile release"
    ```
+
+## Step 6: Build the Documentation Site
+
+The documentation site lives in `www/` and is built using `sukr`:
+
+1. Process raw specs and ADRs into the content tree:
+   ```bash
+   cd www && python3 process_docs.py
+   ```
+2. Build the static site:
+   ```bash
+   sukr
+   ```
+3. The generated output appears in `www/public/`.
+
+## Commit Conventions
+
+Axios follows conventional commits. Use imperative mood, keep the subject line under 50 characters, and wrap the body at 72 characters.
+
+- `feat:` — New user-visible functionality
+- `fix:` — Bug fixes
+- `refactor:` — Code restructuring with no behavior change (no changelog entry)
+- `docs:` — Documentation-only changes
+- Breaking changes use a `!` suffix: `change!:`, `remove!:`
+
+Run `treefmt` before every commit to ensure all file types are properly formatted.
+
+## Project Orientation
+
+- **Specifications**: `docs/specs/` — normative behavioral contracts for each layer
+- **Architecture Decision Records**: `docs/adr/` — design rationale for structural decisions
+- **Rust toolchain**: Pinned in `rust-toolchain.toml` (edition 2024)
+- **Formatting config**: `treefmt.toml` orchestrates `rustfmt`, `taplo`, `nixfmt`, `prettier`, and `shfmt`
+- **Task runner**: `just --list` shows all available recipes
