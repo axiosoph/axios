@@ -1,11 +1,11 @@
 +++
 title = "Axios Documentation"
-description = "Overview of the Axios protocol, specifications, and architecture decision records"
+description = "Overview of the Axios publishing stack, specifications, and architecture decision records"
 quadrant = "Explanation"
-audience = "Developers, architects, and users seeking to understand the Axios protocol stack"
+audience = "Developers, architects, and users seeking to understand the Axios publishing stack"
 +++
 
-# Axios Protocol & Stack
+# Axios Publishing Stack
 
 Welcome to the Axios static documentation website. Axios is a decentralized, content-addressed source publishing stack.
 
