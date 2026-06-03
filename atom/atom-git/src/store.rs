@@ -6,7 +6,10 @@
 use std::fs;
 use std::path::Path;
 
-use atom_core::{AtomEntry, AtomId, AtomSource, AtomStore, AtomVersion, Label, RawVersion};
+use atom_core::{
+    AtomContent, AtomEntry, AtomId, AtomSource, AtomStore, AtomVersion, ContentEntry, Label,
+    RawVersion,
+};
 use coz_rs;
 use gix::hash::ObjectId;
 use gix::objs::Exists;
@@ -172,14 +175,20 @@ impl AtomSource for GitStore {
     async fn discover(&self, query: &str) -> Result<Vec<AtomId>, Self::Error> {
         self.source.discover(query).await
     }
+}
 
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
+impl AtomContent for GitStore {
+    async fn content(
+        &self,
+        id: &AtomId,
+        dig: &[u8],
+    ) -> Result<Option<Vec<ContentEntry>>, Self::Error> {
+        self.source.content(id, dig).await
     }
 }
 
 impl AtomStore for GitStore {
-    async fn ingest<S: AtomSource>(&self, source: &S) -> Result<(), Self::Error> {
+    async fn ingest<S: AtomContent>(&self, source: &S) -> Result<(), Self::Error> {
         let dest_repo = self.source.repo();
 
         // 1. Downcast source to obtain its source repository

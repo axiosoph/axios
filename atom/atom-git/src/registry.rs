@@ -5,7 +5,7 @@
 
 use std::time::SystemTime;
 
-use atom_core::{AtomId, AtomRegistry, AtomSource, Czd, RawVersion};
+use atom_core::{AtomContent, AtomId, AtomRegistry, AtomSource, ContentEntry, Czd, RawVersion};
 use atom_id::{Anchor, ClaimPayload, PublishPayload};
 use gix::hash::ObjectId;
 use gix::refs::transaction::{Change, LogChange, PreviousValue, RefEdit, RefLog};
@@ -62,9 +62,15 @@ impl AtomSource for GitRegistry {
     async fn discover(&self, query: &str) -> Result<Vec<AtomId>, Self::Error> {
         self.source.discover(query).await
     }
+}
 
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
+impl AtomContent for GitRegistry {
+    async fn content(
+        &self,
+        id: &AtomId,
+        dig: &[u8],
+    ) -> Result<Option<Vec<ContentEntry>>, Self::Error> {
+        self.source.content(id, dig).await
     }
 }
 

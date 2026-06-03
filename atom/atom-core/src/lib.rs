@@ -279,12 +279,12 @@ pub trait AtomRegistry: AtomSource {
 /// what the source's `resolve` returns. The store accumulates — it never
 /// loses atoms through ingestion.
 #[trait_variant::make(Send)]
-pub trait AtomStore: AtomSource {
+pub trait AtomStore: AtomContent {
     /// Import atoms from a source into this store.
     ///
     /// After completion, this store contains at least every atom
     /// that was in `source` (⊇ condition).
-    async fn ingest<S: AtomSource>(&self, source: &S) -> Result<(), Self::Error>;
+    async fn ingest<S: AtomContent>(&self, source: &S) -> Result<(), Self::Error>;
 
     /// Check whether an atom is present in this store.
     async fn contains(&self, id: &AtomId) -> Result<bool, Self::Error>;

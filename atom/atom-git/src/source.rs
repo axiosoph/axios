@@ -1,6 +1,6 @@
 //! Implementations of [`AtomSource`] and observation types.
 
-use atom_core::{AtomId, AtomSource, RawVersion};
+use atom_core::{AtomContent, AtomId, AtomSource, ContentEntry, RawVersion};
 use atom_id::{ClaimPayload, PublishPayload};
 use coz_rs::Czd;
 use gix::hash::ObjectId;
@@ -681,5 +681,15 @@ impl atom_core::AtomVersion for GitVersionEntry {
 
     fn publish_msg(&self) -> Option<&str> {
         self.publish_msg.as_deref()
+    }
+}
+
+impl AtomContent for GitSource {
+    async fn content(
+        &self,
+        _id: &AtomId,
+        _dig: &[u8],
+    ) -> Result<Option<Vec<ContentEntry>>, Self::Error> {
+        Ok(None)
     }
 }
