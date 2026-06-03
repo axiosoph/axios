@@ -1,7 +1,8 @@
 use std::fs;
 
 use atom_core::{
-    AtomEntry, AtomId, AtomRegistry, AtomSource, AtomStore, AtomVersion, Label, RawVersion,
+    AtomContent, AtomEntry, AtomId, AtomRegistry, AtomSource, AtomStore, AtomVersion, ContentEntry,
+    Label, RawVersion,
 };
 use atom_git::{GitError, GitRegistry, GitSource, GitStore};
 use coz_rs::{Alg, Ed25519, SigningKey};
@@ -850,4 +851,335 @@ mod proptests {
             }
         }
     }
+}
+
+fn map_components_to_path(components: &[u8], kind: u8) -> Option<String> {
+    if components.is_empty() {
+        return None;
+    }
+    // Limit depth to avoid ridiculously deep trees or stack overflows
+    let depth = std::cmp::min(components.len(), 5);
+    let mut parts = Vec::new();
+    for i in 0..depth {
+        let name = match components[i] % 4 {
+            0 => "dir_a",
+            1 => "dir_b",
+            2 => "dir_c",
+            _ => "dir_d",
+        };
+        parts.push(name);
+    }
+    // The last component is the file name
+    let file_name = match kind % 3 {
+        0 => "file_x.txt",
+        1 => "file_y.sh",
+        _ => "file_z.lnk",
+    };
+    parts.push(file_name);
+    Some(parts.join("/"))
+}
+
+#[derive(bolero::TypeGenerator, Debug, Clone)]
+struct FuzzFile {
+    components: Vec<u8>,
+    content: Vec<u8>,
+    kind: u8,
+}
+
+#[test]
+fn test_atom_content_bolero() {
+    bolero::check!()
+        .with_type::<Vec<FuzzFile>>()
+        .for_each(|fuzz_files| {
+            if fuzz_files.is_empty() {
+                return;
+            }
+
+            let temp_dir = TempDir::new().unwrap();
+            let repo = gix::init(temp_dir.path()).unwrap();
+
+            let mut files = std::collections::HashMap::new();
+            for f in fuzz_files {
+                if let Some(path) = map_components_to_path(&f.components, f.kind) {
+                    files.insert(path, f.clone());
+                }
+            }
+
+            if files.is_empty() {
+                return;
+            }
+
+            let mut tree_entries = std::collections::HashMap::new();
+
+            for (path, f) in &files {
+                let kind_mod = f.kind % 3;
+                let data = if f.content.is_empty() { b"default".to_vec() } else { f.content.clone() };
+
+                let blob_oid = repo.write_object(gix::objs::Blob { data }).unwrap().detach();
+
+                let mode = match kind_mod {
+                    0 => EntryKind::Blob.into(),
+                    1 => EntryKind::BlobExecutable.into(),
+                    _ => EntryKind::Link.into(),
+                };
+
+                let parts: Vec<&str> = path.split('/').collect();
+
+                let parent_path = parts[0..parts.len() - 1].join("/");
+                let filename = parts.last().unwrap().to_string();
+
+                tree_entries.entry(parent_path).or_insert_with(Vec::new).push(Entry {
+                    mode,
+                    filename: filename.into(),
+                    oid: blob_oid,
+                });
+            }
+
+            let mut parent_paths: Vec<String> = tree_entries.keys().cloned().collect();
+            parent_paths.sort_by_key(|p| std::cmp::Reverse(p.len()));
+
+            for p_path in parent_paths {
+                if p_path.is_empty() {
+                    continue;
+                }
+                let mut entries = tree_entries.remove(&p_path).unwrap();
+                entries.sort();
+                let tree_oid = repo.write_object(gix::objs::Tree { entries }).unwrap().detach();
+
+                let parts: Vec<&str> = p_path.split('/').collect();
+                let parent_of_p = parts[0..parts.len() - 1].join("/");
+                let dirname = parts.last().unwrap().to_string();
+
+                tree_entries.entry(parent_of_p).or_insert_with(Vec::new).push(Entry {
+                    mode: EntryKind::Tree.into(),
+                    filename: dirname.into(),
+                    oid: tree_oid,
+                });
+            }
+
+            let mut root_entries = tree_entries.remove("").unwrap_or_default();
+            root_entries.sort();
+            let root_tree_oid = repo
+                .write_object(gix::objs::Tree {
+                    entries: root_entries,
+                })
+                .unwrap()
+                .detach();
+
+            let source = GitSource::new(repo.clone());
+            let id = AtomId::new(
+                atom_core::Anchor::new(vec![0; 20]),
+                Label::try_from("test-pkg").unwrap(),
+            );
+
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            let content_entries = rt.block_on(async {
+                source
+                    .content(&id, root_tree_oid.as_bytes())
+                    .await
+                    .unwrap()
+                    .unwrap()
+            });
+
+            // 1. Verify children-before-parents ordering
+            let path_indices: std::collections::HashMap<String, usize> = content_entries
+                .iter()
+                .enumerate()
+                .map(|(i, entry)| {
+                    let p = match entry {
+                        ContentEntry::Regular { path, .. } => path,
+                        ContentEntry::Symlink { path, .. } => path,
+                        ContentEntry::Directory { path } => path,
+                    };
+                    (p.clone(), i)
+                })
+                .collect();
+
+            for entry in &content_entries {
+                let path = match entry {
+                    ContentEntry::Regular { path, .. } => path,
+                    ContentEntry::Symlink { path, .. } => path,
+                    ContentEntry::Directory { path } => path,
+                };
+
+                if let Some(idx) = path.rfind('/') {
+                    let parent = &path[..idx];
+                    if let Some(&parent_idx) = path_indices.get(parent) {
+                        let self_idx = *path_indices.get(path).unwrap();
+                        assert!(
+                            self_idx < parent_idx,
+                            "Child {} (idx {}) must be before parent {} (idx {})",
+                            path,
+                            self_idx,
+                            parent,
+                            parent_idx
+                        );
+                    }
+                }
+            }
+
+            // 2. Verify write_content_tree produces identical OID
+            let store = GitStore::new(repo);
+            let dest_repo = store.source.repo();
+            let reconstructed = store
+                .write_content_tree(&dest_repo, &content_entries)
+                .unwrap();
+            assert_eq!(reconstructed, root_tree_oid);
+        });
+}
+
+#[tokio::test]
+async fn test_atom_content_walk_and_reconstruct() {
+    let (_dir, repo, _genesis_oid) = setup_test_repo();
+
+    let file1_data = b"hello from file1";
+    let script_data = b"echo hello";
+    let sym_target = b"a/b/file1.txt";
+
+    let file1_blob = repo
+        .write_object(Blob {
+            data: file1_data.to_vec(),
+        })
+        .unwrap()
+        .detach();
+    let script_blob = repo
+        .write_object(Blob {
+            data: script_data.to_vec(),
+        })
+        .unwrap()
+        .detach();
+    let sym_blob = repo
+        .write_object(Blob {
+            data: sym_target.to_vec(),
+        })
+        .unwrap()
+        .detach();
+
+    // Build 'b' tree
+    let b_tree = repo
+        .write_object(Tree {
+            entries: vec![Entry {
+                mode: EntryKind::Blob.into(),
+                filename: "file1.txt".into(),
+                oid: file1_blob,
+            }],
+        })
+        .unwrap()
+        .detach();
+
+    // Build 'a' tree
+    let a_tree = repo
+        .write_object(Tree {
+            entries: vec![Entry {
+                mode: EntryKind::Tree.into(),
+                filename: "b".into(),
+                oid: b_tree,
+            }],
+        })
+        .unwrap()
+        .detach();
+
+    // Build root tree
+    let root_tree = repo
+        .write_object(Tree {
+            entries: vec![
+                Entry {
+                    mode: EntryKind::Tree.into(),
+                    filename: "a".into(),
+                    oid: a_tree,
+                },
+                Entry {
+                    mode: EntryKind::BlobExecutable.into(),
+                    filename: "script.sh".into(),
+                    oid: script_blob,
+                },
+                Entry {
+                    mode: EntryKind::Link.into(),
+                    filename: "sym.txt".into(),
+                    oid: sym_blob,
+                },
+            ],
+        })
+        .unwrap()
+        .detach();
+
+    // Walk this tree using GitSource::content
+    let source = GitSource::new(repo.clone());
+    let id = AtomId::new(
+        atom_core::Anchor::new(vec![0; 20]),
+        Label::try_from("test-package").unwrap(),
+    );
+
+    let content_entries = source
+        .content(&id, root_tree.as_bytes())
+        .await
+        .unwrap()
+        .unwrap();
+
+    let mut file1_idx = None;
+    let mut b_idx = None;
+    let mut a_idx = None;
+    let mut script_idx = None;
+    let mut sym_idx = None;
+
+    for (i, entry) in content_entries.iter().enumerate() {
+        match entry {
+            ContentEntry::Regular {
+                path,
+                data,
+                executable,
+            } => {
+                if path == "a/b/file1.txt" {
+                    assert_eq!(data, file1_data);
+                    assert!(!executable);
+                    file1_idx = Some(i);
+                } else if path == "script.sh" {
+                    assert_eq!(data, script_data);
+                    assert!(executable);
+                    script_idx = Some(i);
+                }
+            },
+            ContentEntry::Symlink { path, target } => {
+                if path == "sym.txt" {
+                    assert_eq!(target, sym_target);
+                    sym_idx = Some(i);
+                }
+            },
+            ContentEntry::Directory { path } => {
+                if path == "a/b" {
+                    b_idx = Some(i);
+                } else if path == "a" {
+                    a_idx = Some(i);
+                }
+            },
+        }
+    }
+
+    assert!(file1_idx.is_some());
+    assert!(b_idx.is_some());
+    assert!(a_idx.is_some());
+    assert!(script_idx.is_some());
+    assert!(sym_idx.is_some());
+
+    // Verify children-before-parents ordering
+    assert!(
+        file1_idx.unwrap() < b_idx.unwrap(),
+        "file1.txt must be before dir a/b"
+    );
+    assert!(b_idx.unwrap() < a_idx.unwrap(), "dir a/b must be before dir a");
+
+    // Verify reconstruction:
+    // Use GitStore to reconstruct the tree from the walked entries.
+    let store = GitStore::new(repo);
+    let dest_repo = store.source.repo();
+    let reconstructed_tree = store
+        .write_content_tree(&dest_repo, &content_entries)
+        .unwrap();
+    assert_eq!(
+        reconstructed_tree, root_tree,
+        "Reconstructed tree OID must be bit-identical to original"
+    );
 }

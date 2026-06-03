@@ -525,7 +525,8 @@ impl AtomStore for GitStore {
 }
 
 impl GitStore {
-    fn write_content_tree(
+    /// Reconstruct the content tree in the given repository from a sequence of content entries.
+    pub fn write_content_tree(
         &self,
         repo: &gix::Repository,
         entries: &[ContentEntry],
