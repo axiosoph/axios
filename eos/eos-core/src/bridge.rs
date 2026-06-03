@@ -20,9 +20,9 @@ use crate::eval::ResolvedInput;
 
 /// Bridge between atom content storage and the build engine's artifact store.
 ///
-/// Implementations transfer atom source trees from the atom protocol's native
-/// representation (e.g., git tree objects) into the engine's content-addressed
-/// store (e.g., snix castore) where the evaluator and builder can access them.
+/// Implementations transfer atom source trees from an [`AtomContent`] representation
+/// into the engine's content-addressed store (e.g., snix castore) where the evaluator
+/// and builder can access them.
 ///
 /// # Construction
 ///

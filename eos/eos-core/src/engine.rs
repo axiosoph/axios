@@ -69,7 +69,4 @@ pub trait BuildEngine: Send + Sync + 'static {
         output: &Self::Output,
         plan: &Self::Plan,
     ) -> Vec<crate::job::ArtifactInfo<Self::Digest>>;
-
-    /// Helper to downcast the engine to its concrete implementation.
-    fn as_any(&self) -> &dyn std::any::Any;
 }

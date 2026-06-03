@@ -65,10 +65,6 @@ fn test_trait_bounds_satisfiable() {
         ) -> Vec<eos_core::job::ArtifactInfo<Self::Digest>> {
             Vec::new()
         }
-
-        fn as_any(&self) -> &dyn std::any::Any {
-            self
-        }
     }
 
     assert_impl::<MockEngine>();
