@@ -33,11 +33,9 @@ def process_specs():
         frontmatter = f"""+++
 title = "{title}"
 description = "Behavioral specification and requirements for {title}"
+quadrant = "Reference"
+audience = "Developers and integrators of the Axios stack layers"
 +++
-
-**Metadata:**
-- **Quadrant:** Reference
-- **Audience:** Developers and integrators of the Axios stack layers
 
 """
         with open(dst_path, "w", encoding="utf-8") as f:
@@ -74,11 +72,9 @@ def process_adrs():
         frontmatter = f"""+++
 title = "{title}"
 description = "Architectural decision record tracking design choices and rationale for {title}"
+quadrant = "Explanation"
+audience = "Contributors, developers, and maintainers tracking Axios system design evolution"
 +++
-
-**Metadata:**
-- **Quadrant:** Explanation
-- **Audience:** Contributors, developers, and maintainers tracking Axios system design evolution
 
 """
         with open(dst_path, "w", encoding="utf-8") as f:
@@ -109,6 +105,8 @@ def process_explanations():
     frontmatter = f"""+++
 title = "{title}"
 description = "Completeness and coherence audit of the Axios specifications"
+quadrant = "Explanation"
+audience = "Contributors and architects tracking Axios system design and specs completeness"
 +++
 
 """

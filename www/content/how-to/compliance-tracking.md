@@ -1,12 +1,9 @@
 +++
 title = "Running the Spec Compliance Tracker"
 description = "How to run the automated spec-compliance tracking script on the Axios codebase"
+quadrant = "How-To"
+audience = "Developers and CI/CD engineers running or extending the Axios compliance tracker"
 +++
-
-**Metadata:**
-
-- **Quadrant:** How-To
-- **Audience:** Developers and CI/CD engineers running or extending the Axios compliance tracker
 
 # Running the Spec Compliance Tracker
 

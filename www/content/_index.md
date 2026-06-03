@@ -1,12 +1,9 @@
 +++
 title = "Axios Documentation"
 description = "Overview of the Axios protocol, specifications, and architecture decision records"
+quadrant = "Explanation"
+audience = "Developers, architects, and users seeking to understand the Axios protocol stack"
 +++
-
-**Metadata:**
-
-- **Quadrant:** Explanation
-- **Audience:** Developers, architects, and users seeking to understand the Axios protocol stack
 
 # Axios Protocol & Stack
 

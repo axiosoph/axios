@@ -1,12 +1,9 @@
 +++
 title = "Compliance Annotation Format & Schema"
 description = "Reference guide for the Axios codebase compliance annotation syntax and JSON database schema"
+quadrant = "Reference"
+audience = "Developers adding code annotations or spec writers defining constraints"
 +++
-
-**Metadata:**
-
-- **Quadrant:** Reference
-- **Audience:** Developers adding code annotations or spec writers defining constraints
 
 # Compliance Annotation Format & Schema
 
