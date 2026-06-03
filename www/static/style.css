@@ -38,6 +38,7 @@
     font-size: 1rem; /* Use rem for responsive size */
     line-height: 1.6;
     font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    scroll-behavior: smooth;
   }
 
   body {
@@ -224,7 +225,6 @@
     padding-block: 3rem;
     padding-inline: 4rem;
     max-inline-size: 960px;
-    overflow-y: auto;
   }
 
   @media (max-width: 768px) {
