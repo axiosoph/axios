@@ -169,6 +169,38 @@ implementations containing the same atoms are interchangeable.
 failure. The coalgebra models the ideal behavior; error handling is
 orthogonal.
 
+#### 2.1a. AtomContent (atom-core, L1)
+
+```
+F_content(C) = F_source(C)                    -- inherits AtomSource
+             × (AtomId × Dig → Option<Tree>)   -- content
+```
+
+Where `Tree = Seq<ContentEntry>` is an ordered sequence of path/data
+pairs representing the atom's content tree at the given version digest.
+Entries are ordered children-before-parents (leaves-to-root).
+
+```
+ContentEntry = Regular { path, data, executable }
+             | Symlink { path, target }
+             | Directory { path }
+```
+
+Bisimulation: c₁ ~ c₂ iff F_source bisimulation holds AND content
+agrees pointwise — same (id, dig) pair yields the same tree.
+
+`AtomContent` extends `AtomSource` as a coalgebra morphism: the
+forgetful map `F_content → F_source` drops the content observer.
+This is the _content recovery_ functor — it recovers the tree data
+that `F_source` (the forgetful functor) deliberately omits.
+
+**Design rationale:** `F_source` remains minimal (identity +
+metadata) for consumers that need only observation (e.g., dependency
+resolution, version queries). `F_content` extends it for consumers
+that need tree data (store ingestion, build engine content transfer).
+The separation avoids burdening lightweight consumers with a content
+access obligation.
+
 #### 2.2. AtomRegistry (atom-core, L1)
 
 ```
@@ -184,21 +216,29 @@ the forgetful map dropping claim/publish observers.
 #### 2.3. AtomStore (atom-core, L1)
 
 ```
-F_store(W) = F_source(W)                      -- inherits AtomSource
-           × (dyn AtomSource → Result<()>)     -- ingest
+F_store(W) = F_content(W)                     -- inherits AtomContent
+           × (dyn AtomContent → Result<()>)    -- ingest
            × (AtomId → bool)                   -- contains
 ```
+
+Note: `F_store` now inherits `F_content` (not `F_source` directly),
+and `ingest` takes `dyn AtomContent` (not `dyn AtomSource`). This
+makes the content dependency explicit — ingestion requires content
+access, which `F_source` alone cannot provide.
 
 **Critical morphism — ingest as coalgebra homomorphism:**
 
 ```
-∀ source, ∀ id:
+∀ source: AtomContent, ∀ id:
   after store.ingest(source):
-    resolve(store, id) ⊇ resolve(source, id)
+    resolve(store, id) ⊇ resolve(source, id)        -- metadata preserved
+    content(store, id, dig) = content(source, id, dig)  -- content preserved
 ```
 
-The ⊇ (superset) condition is correct — the store accumulates atoms
-from multiple sources. Atom-id is stable through ingest.
+The ⊇ (superset) condition holds for metadata — the store accumulates
+atoms from multiple sources. Content preservation is exact (=) because
+content is immutable and content-addressed: the same (id, dig) pair
+always yields the same tree. Atom-id is stable through ingest.
 
 #### 2.4. BuildEngine (eos-core, L2)
 
@@ -235,24 +275,29 @@ F_artifact(A) = (Digest → Option<Blob>)        -- fetch
 
 #### 2.6. Inter-Layer Morphisms
 
-| Morphism   | Type                       | Direction | Mechanism                          |
-| :--------- | :------------------------- | :-------- | :--------------------------------- |
-| atom → eos | Forget: F_store → F_source | Downward  | Eos reads AtomStore via AtomSource |
-| ion → atom | Full: F_store              | Downward  | Ion exercises ingest, contains     |
-| ion → eos  | Full: F_engine             | Downward  | Ion dispatches plan/apply          |
+| Morphism   | Type                        | Direction | Mechanism                           |
+| :--------- | :-------------------------- | :-------- | :---------------------------------- |
+| atom → eos | Forget: F_store → F_content | Downward  | Eos reads via AtomContent (not full |
+|            |                             |           | AtomStore — no ingest/contains)     |
+| ion → atom | Full: F_store               | Downward  | Ion exercises ingest, contains      |
+| ion → eos  | Full: F_engine              | Downward  | Ion dispatches plan/apply           |
+
+The atom → eos morphism forgets mutation observers (ingest, contains)
+but retains content access. Eos needs content to transfer atom trees
+into the build store; it does not need to mutate the atom store.
 
 **Composition law:**
 
 ```
-ion ──populate──→ AtomStore ──forget──→ AtomSource ──read──→ eos
+ion ──populate──→ AtomStore ──forget──→ AtomContent ──read──→ eos
          ↑                                                      |
     Manifest, VersionScheme                              BuildEngine
     (atom-core abstractions                              (eos-core
      implemented by ion)                                  abstraction)
 ```
 
-The forgetful functor preserves bisimulation by construction: F_source
-is a component of F_store.
+The forgetful functor preserves bisimulation by construction: F_content
+is a component of F_store (which inherits F_content).
 
 ### 3. Session Types — Protocol Ordering
 
@@ -449,7 +494,9 @@ not a limitation — the model extends to async without restructuring.
 | :------------------- | :------ | :---------------------------------------------------------- |
 | Olog commutativity   | PASS    | Crypto chain and identity stability diagrams commute        |
 | Coalgebra structure  | PASS    | All coalgebras follow canonical c: X → F(X) form            |
-| Bisimulation closure | PASS    | Ingest ⊇ condition correct; all bisimulations well-defined  |
+| Bisimulation closure | PASS    | Ingest ⊇ + content = conditions correct; all well-defined   |
+| Content factoring    | PASS    | F_content × F_source product preserves bisimulation;        |
+|                      |         | forgetful F_content → F_source drops content observer only  |
 | Session type duality | PASS    | All duals well-formed; ⊕/& inversion checks out             |
 | Formalism coverage   | PARTIAL | Manifest/VersionScheme are algebraic (constructors), not    |
 |                      |         | coalgebraic (observers) — correctly omitted from coalgebras |
@@ -468,6 +515,7 @@ domain-relevant quantities. Implementation-specific constants
 | :----------------------------- | :---------- | :----------------------- | :------------------------------------------- |
 | AtomSource.resolve             | O(1)        | —                        | Hash-based lookup by atom-id                 |
 | AtomSource.discover            | O(n)        | n = atoms in store       | Scan; O(k) with index (k = result count)     |
+| AtomContent.content            | O(\|T\|)    | \|T\| = tree entry count | Walks content tree; I/O-bound for remote     |
 | AtomRegistry.claim             | O(1)        | —                        | czd computation + Ed25519 sign               |
 | AtomRegistry.publish           | O(1)        | —                        | Sign version transaction                     |
 | AtomStore.ingest               | O(\|S\|)    | \|S\| = atoms in source  | Iterates source; O(\|S∖W\|) with dedup check |
@@ -562,9 +610,10 @@ domain-relevant quantities. Implementation-specific constants
   publish." BuildSession: "handle all BuildPlan variants." These are
   testable invariants.
 
-- **The forgetful functor is a dependency firewall.** Eos seeing only
-  `AtomSource` (not `AtomStore`) means eos cannot depend on mutation
-  operations. Enforced structurally, not by convention.
+- **The forgetful functor is a dependency firewall.** Eos sees
+  `AtomContent` (not `AtomStore`) — it can observe identity, metadata,
+  and content, but cannot mutate the atom store. The firewall drops
+  `ingest` and `contains`, not content access. Enforced structurally.
 
 - **Design error handling around the plan/apply asymmetry.** Apply
   failures should support delegation; plan failures should not.
