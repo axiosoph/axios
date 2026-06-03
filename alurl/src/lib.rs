@@ -141,6 +141,10 @@ impl AliasMap {
     /// - [`ResolveError::AliasNotFound`] — `+` at host position but alias name not in map.
     /// - [`ResolveError::InvalidAliasName`] — alias name fails UAX #31.
     /// - [`ResolveError::CycleDetected`] — recursive resolution loops.
+    // @spec-compliance[sigil-required]
+    // Mechanism: Parses input using the `parse::classify` helper to require a '+' prefix at the
+    // host position for alias detection, returning Raw if absent. Verified-By:
+    // alurl/src/tests.rs:sigil_present_bare
     pub fn resolve(&self, input: &str) -> Result<AliasedUrl, ResolveError> {
         let classified = parse::classify(input)?;
 
@@ -184,6 +188,10 @@ impl AliasMap {
                 alias_name,
                 suffix,
             } => {
+                // @spec-compliance[resolution-terminates]
+                // Mechanism: Ensures that recursive alias resolution terminates by tracking names
+                // in a vector and failing with a CycleDetected error if a cycle is found.
+                // Verified-By: alurl/src/tests.rs:cycle_detected_two_aliases
                 if chain.iter().any(|n| n == alias_name) {
                     chain.push(alias_name.to_string());
                     return Err(ResolveError::CycleDetected {

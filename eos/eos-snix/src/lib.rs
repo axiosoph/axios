@@ -229,6 +229,13 @@ impl BuildEngine for SnixEngine {
     type Output = SnixOutput;
     type Plan = Derivation;
 
+    // @spec-compliance[engine-eval]
+    // Mechanism: Evaluates the Nix target (File or Expression) to generate a Derivation plan.
+    // Verified-By: eos/eos-snix/tests/eval_tests.rs:test_snix_engine_evaluate
+    // @spec-compliance[eos-eval-cache-determinism]
+    // Mechanism: Computes a deterministic cache key from the EvalRequest and retrieves cached
+    // Derivations from redb database. Verified-By:
+    // eos/eos-snix/tests/eval_tests.rs:test_snix_engine_evaluate
     async fn evaluate(
         &self,
         request: EvalRequest<Self::Digest>,

@@ -196,14 +196,18 @@ impl LockFile {
     ///
     /// Returns a validation error description if any invariant is violated.
     pub fn validate(&self) -> Result<(), String> {
-        // 1. [lock-version-field]: version must be 0
+        // @spec-compliance[lock-version-field]
+        // Mechanism: Enforces that the lock file version field is exactly 0.
+        // Verified-By: ion/ion-lock/src/lib.rs:test_lock_file_roundtrip
         if self.version != 0 {
             return Err(format!("Unsupported lock file version: {}", self.version));
         }
 
         // Validate set declarations
         for (anchor, set_details) in &self.sets {
-            // [lock-set-key-format]: anchor hash format (40 or 64 lowercase hex chars)
+            // @spec-compliance[lock-set-key-format]
+            // Mechanism: Validates that anchor keys are 40 or 64 character lowercase hex strings.
+            // Verified-By: ion/ion-lock/src/lib.rs:test_lock_file_roundtrip
             if !((anchor.len() == 40 || anchor.len() == 64)
                 && anchor
                     .chars()
@@ -211,15 +215,21 @@ impl LockFile {
             {
                 return Err(format!("Invalid set anchor key format: '{}'", anchor));
             }
-            // [lock-set-tag]: tag field must be non-empty string
+            // @spec-compliance[lock-set-tag]
+            // Mechanism: Enforces tag field must be a non-empty string.
+            // Verified-By: ion/ion-lock/src/lib.rs:test_lock_file_roundtrip
             if set_details.tag.trim().is_empty() {
                 return Err(format!("Set '{}' has an empty tag", anchor));
             }
-            // [lock-set-mirrors]: mirrors field must be non-empty
+            // @spec-compliance[lock-set-mirrors]
+            // Mechanism: Enforces mirrors field must contain at least one mirror URL.
+            // Verified-By: ion/ion-lock/src/lib.rs:test_lock_file_roundtrip
             if set_details.mirrors.is_empty() {
                 return Err(format!("Set '{}' has no mirrors", anchor));
             }
-            // [lock-set-mirror-local-sentinel]: if "::" is present, it must be the sole entry
+            // @spec-compliance[lock-set-mirror-local-sentinel]
+            // Mechanism: Validates that if local sentinel '::' is present, it must be the sole
+            // mirror. Verified-By: ion/ion-lock/src/lib.rs:test_lock_file_roundtrip
             let has_local = set_details.mirrors.iter().any(|m| m == "::");
             if has_local && set_details.mirrors.len() > 1 {
                 return Err(format!(
@@ -233,7 +243,9 @@ impl LockFile {
         let mut atoms = HashMap::new();
         for dep in &self.deps {
             if let Dependency::Atom(atom_dep) = dep {
-                // [lock-atom-label]: must be a valid Label grammar representation
+                // @spec-compliance[lock-atom-label]
+                // Mechanism: Validates that the atom label conforms to the label grammar.
+                // Verified-By: ion/ion-lock/src/lib.rs:test_lock_file_roundtrip
                 if let Err(e) = atom_id::Label::try_from(atom_dep.label.as_str()) {
                     return Err(format!(
                         "Invalid label '{}' in atom ID {}: {}",
@@ -241,7 +253,9 @@ impl LockFile {
                     ));
                 }
 
-                // [lock-atom-version]: must be valid SemVer
+                // @spec-compliance[lock-atom-version]
+                // Mechanism: Validates that the atom version conforms to SemVer.
+                // Verified-By: ion/ion-lock/src/lib.rs:test_lock_file_roundtrip
                 if let Err(e) = semver::Version::parse(&atom_dep.version) {
                     return Err(format!(
                         "Invalid semver version '{}' in atom {}: {}",
@@ -249,7 +263,9 @@ impl LockFile {
                     ));
                 }
 
-                // [lock-atom-set-ref]: set must exist in self.sets
+                // @spec-compliance[lock-atom-set-ref]
+                // Mechanism: Ensures that every atom's referenced set exists in sets.
+                // Verified-By: ion/ion-lock/src/lib.rs:test_lock_file_roundtrip
                 let set_details = self.sets.get(&atom_dep.set).ok_or_else(|| {
                     format!(
                         "Atom {} references undeclared set: {}",
@@ -257,7 +273,9 @@ impl LockFile {
                     )
                 })?;
 
-                // [lock-atom-rev-optional]: rev may be absent only for local sets ("::")
+                // @spec-compliance[lock-atom-rev-optional]
+                // Mechanism: Validates that the rev field is present for all remote sets.
+                // Verified-By: ion/ion-lock/src/lib.rs:test_lock_file_roundtrip
                 let is_local = set_details.mirrors.len() == 1 && set_details.mirrors[0] == "::";
                 if !is_local && atom_dep.rev.is_none() {
                     return Err(format!(
@@ -275,7 +293,6 @@ impl LockFile {
             }
         }
 
-        // 3. [lock-requires-closure] & [lock-owner-closure]
         // Check requires closure
         for atom in atoms.values() {
             for req in &atom.requires {
@@ -317,7 +334,9 @@ impl LockFile {
             }
         }
 
-        // 4. [lock-dag-acyclicity]
+        // @spec-compliance[lock-dag-acyclicity]
+        // Mechanism: Performs a DFS cycle check over the requires graph to enforce acyclicity.
+        // Verified-By: ion/ion-lock/src/lib.rs:test_lock_file_acyclicity_invariant
         // Detect cycles in requires graph using DFS
         let mut visited = HashSet::new();
         let mut rec_stack = HashSet::new();

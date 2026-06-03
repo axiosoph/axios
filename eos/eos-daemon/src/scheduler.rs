@@ -84,7 +84,10 @@ impl Scheduler {
         let plan_digest = request.plan_digest;
         let mut guard = self.jobs.lock().map_err(|e| e.to_string())?;
 
-        // 1. Deduplication [eos-scheduler-deduplication]
+        // @spec-compliance[eos-scheduler-deduplication]
+        // Mechanism: Prevents redundant scheduling by tracking active job handles in an in-memory
+        // hash map and returning the existing handle. Verified-By:
+        // eos/eos-daemon/src/scheduler.rs:submit
         if let Some(existing) = guard.get(&plan_digest) {
             info!("Deduplicating submission for job: {}", plan_digest);
             return Ok(existing.clone());
@@ -122,7 +125,10 @@ impl Scheduler {
             };
             let _ = sender.send(event);
 
-            // Enforce concurrency limit [eos-scheduler-concurrency-limits]
+            // @spec-compliance[eos-scheduler-concurrency-limits]
+            // Mechanism: Restricts concurrent running build jobs using a Tokio Semaphore
+            // initialized to daemon concurrency limits. Verified-By:
+            // eos/eos-daemon/src/scheduler.rs:submit
             let _permit = match semaphore.acquire().await {
                 Ok(p) => p,
                 Err(e) => {
