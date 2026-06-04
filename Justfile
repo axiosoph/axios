@@ -2,6 +2,12 @@
 default:
     @just --list
 
+# Build the documentation site and generate the search index
+doc:
+    python3 www/process_docs.py
+    sukr -c www/site.toml
+    pagefind --site www/public
+
 # Run all unit and property tests across all workspaces
 test:
     @echo "Running tests in 'atom' workspace..."
