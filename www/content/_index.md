@@ -11,7 +11,7 @@ audience = "Developers, architects, and users seeking to understand the Axios mo
 Axios is a set of independent projects for decentralized source publishing, builds, and package management. The stack has three layers and a utility crate:
 
 1. **L1: Atom** (`atom/`) — Content-addressed source publishing protocol. Core identity (`atom-id`), protocol traits (`atom-core`), URI parsing (`atom-uri`), and the Git backend (`atom-git`) are implemented with tests and fuzz harnesses.
-2. **L2: Eos** (`eos/`) — Idempotent build scheduler. Scheduler traits (`eos-core`) and the Snix backend (`eos-snix`) are implemented. The daemon (`eos-daemon`) and gRPC protocol (`eos-proto`) are under development.
+2. **L2: Eos** (`eos/`) — Idempotent build scheduler. Scheduler traits (`eos-core`) and the Snix backend (`eos-snix`) are implemented. The daemon (`eos-daemon`) and Cap'n Proto RPC protocol (`eos-proto`) are under development.
 3. **L3: Ion** (`ion/`) — User-facing CLI, manifest schema, and dependency resolver. Manifest parsing (`ion-manifest`), lockfile schema (`ion-lock`), and the Eos bridge (`ion-eos`) are prototyped with fuzz harnesses. The resolver (`ion-resolve`) and CLI (`ion-cli`) are under construction.
 4. **alurl** — URL alias resolution, used by `atom-uri` to expand shorthand source identifiers like `+gh/owner/repo`.
 
