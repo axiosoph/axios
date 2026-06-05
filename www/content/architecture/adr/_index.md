@@ -1,5 +1,5 @@
 +++
-title = "Architecture decision records"
+title = "Architecture Decision Records"
 description = "Architectural decisions and design rationale for Axios"
 section_type = "adr"
 weight = 2

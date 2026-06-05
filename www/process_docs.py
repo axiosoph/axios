@@ -25,7 +25,9 @@ def rewrite_links(text, section):
         if url_part.startswith("../specs/"):
             norm_url = "reference/" + url_part[9:]
         elif url_part.startswith("../adr/"):
-            norm_url = "adr/" + url_part[7:]
+            norm_url = "architecture/adr/" + url_part[7:]
+        elif url_part.startswith("../architecture/"):
+            norm_url = "architecture/documents/" + url_part[16:]
         elif url_part.startswith("../"):
             norm_url = url_part[3:]
         else:
@@ -86,7 +88,7 @@ audience = "Developers and integrators of the Axios stack layers"
 
 def process_adrs():
     src_dir = "../docs/adr"
-    dst_dir = "content/adr"
+    dst_dir = "content/architecture/adr"
     os.makedirs(dst_dir, exist_ok=True)
     
     for filename in os.listdir(src_dir):
@@ -110,7 +112,7 @@ def process_adrs():
                 break
                 
         body_content = "".join(lines[body_start:])
-        body_content = rewrite_links(body_content, "adr")
+        body_content = rewrite_links(body_content, "architecture/adr")
         
         frontmatter = f"""+++
 title = "{title}"
@@ -158,10 +160,55 @@ audience = "Contributors and architects tracking Axios system design and specs c
         f.write(frontmatter + body_content)
     print(f"Processed explanation: spec-audit.md -> {title}")
 
+def process_architecture():
+    src_dir = "../docs/architecture"
+    dst_dir = "content/architecture/documents"
+    os.makedirs(dst_dir, exist_ok=True)
+
+    if not os.path.isdir(src_dir):
+        print("No docs/architecture directory found, skipping.")
+        return
+
+    for filename in os.listdir(src_dir):
+        if not filename.endswith(".md"):
+            continue
+
+        src_path = os.path.join(src_dir, filename)
+        dst_path = os.path.join(dst_dir, filename)
+
+        with open(src_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+
+        title = "Architecture Document"
+        body_start = 0
+        for i, line in enumerate(lines):
+            if line.strip().startswith("#"):
+                title_match = re.match(r"^#+\s*(.*)$", line.strip())
+                if title_match:
+                    title = title_match.group(1).strip()
+                body_start = i + 1
+                break
+
+        body_content = "".join(lines[body_start:])
+        body_content = rewrite_links(body_content, "architecture/documents")
+
+        frontmatter = f"""+++
+title = "{title}"
+description = "System architecture document: {title}"
+quadrant = "Explanation"
+audience = "Architects, developers, and operators understanding Axios system design"
++++
+
+"""
+        with open(dst_path, "w", encoding="utf-8") as f:
+            f.write(frontmatter + body_content)
+        print(f"Processed architecture: {filename} -> {title}")
+
 if __name__ == "__main__":
     # Change Cwd to this script's directory for safety
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
     process_specs()
     process_adrs()
+    process_architecture()
     process_explanations()
 

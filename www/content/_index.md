@@ -20,4 +20,4 @@ Axios is a set of independent projects for decentralized source publishing, buil
 - [Explanations](explanation/index.html) — Architecture, security model, and ecosystem integration.
 - [How-to guides](how-to/index.html) — Step-by-step instructions for contributors and operators.
 - [Reference](reference/index.html) — Specifications, schemas, and spec compliance tracking.
-- [Architecture decision records](adr/index.html) — Design rationale for structural changes.
+- [Architecture](architecture/index.html) — System design, blueprints, and decision records.

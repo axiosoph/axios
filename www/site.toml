@@ -19,12 +19,13 @@ enabled = true
 enabled = true
 
 [extra]
-adr_ref         = "https://github.com/axiosoph/axios/tree/main/docs/adr"
-branding_color  = "#58a6ff"
-branding_logo   = "/logo.png"
-description     = "Axios: project umbrella containing the Atom protocol, Eos build scheduler, and Ion CLI"
-header_subtitle = "Project Umbrella"
-header_title    = "Axios"
-issue_tracker   = "https://github.com/axiosoph/axios/issues"
-repo_url        = "https://github.com/axiosoph/axios"
-spec_ref        = "https://github.com/axiosoph/axios/tree/main/docs/specs"
+adr_ref          = "https://github.com/axiosoph/axios/tree/main/docs/adr"
+architecture_ref = "https://github.com/axiosoph/axios/tree/main/docs/architecture"
+branding_color   = "#58a6ff"
+branding_logo    = "/logo.png"
+description      = "Axios: project umbrella containing the Atom protocol, Eos build scheduler, and Ion CLI"
+header_subtitle  = "Project Umbrella"
+header_title     = "Axios"
+issue_tracker    = "https://github.com/axiosoph/axios/issues"
+repo_url         = "https://github.com/axiosoph/axios"
+spec_ref         = "https://github.com/axiosoph/axios/tree/main/docs/specs"

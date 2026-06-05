@@ -3,9 +3,13 @@ reference/*.md
 !reference/_index.md
 !reference/compliance-format.md
 
-# Dynamically copied Architecture Decision Records and indices
-adr/*.md
-!adr/_index.md
+# Dynamically copied Architecture Decision Records
+architecture/adr/*.md
+!architecture/adr/_index.md
+
+# Dynamically copied architecture documents (SAD, etc.)
+architecture/documents/*.md
+!architecture/documents/_index.md
 
 # Dynamically copied spec audits and decoupling explanations
 explanation/spec-audit.md
