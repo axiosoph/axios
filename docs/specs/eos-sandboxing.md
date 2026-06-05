@@ -13,19 +13,20 @@
 
 ## Domain
 
-**Problem Domain:** Hermetic evaluation and build execution represent core security boundaries in Eos (L2). Because evaluating code (Nix/Snix expressions) or building outputs (executing plan builders) requires interacting with arbitrary execution parameters, we must prevent host system contamination, arbitrary filesystem access, and network leaks. Eos enforces strict containment boundaries by executing evaluations and builds inside isolated sandboxes.
+**Problem Domain:** Hermetic evaluation and build execution represent core security boundaries in Eos (L2). Because evaluating code (Nix/Snix expressions) or building outputs (executing plan builders) requires interacting with arbitrary execution parameters, we must prevent host system contamination, arbitrary filesystem access, and network leaks. Eos enforces strict containment boundaries through isolated worker processes.
 
-We distinguish between two sandboxing boundaries:
+Under the gRPC-first integration architecture ([ADR-0002](../adr/0002-decoupling-snix-backend.md)), sandboxing responsibilities are distributed:
 
-1. **Evaluation Sandboxing**: Isolates the language evaluator during expression-to-plan translation to prevent host file disclosure and impurity leaks.
-2. **Build Sandboxing**: Isolates the build process when applying a plan to produce concrete artifacts.
+1. **Evaluation Sandboxing**: Eval worker processes MAY self-sandbox (using Bubblewrap on Linux or Birdcage on macOS) before accepting Cap'n Proto connections. Eval workers are long-lived processes managed by external orchestrators — the Eos daemon does NOT spawn them.
+2. **Build Sandboxing**: Build execution is sandboxed by the snix builder process itself (OCI runtime, Bubblewrap, or remote delegation). Eos build worker shims forward derivations to snix builders via gRPC; sandboxing is the builder's concern.
 
-To reconcile the thread-locality (`!Send`) of the language evaluator with the concurrent host daemon (`eosd`), Eos launches a sandboxed sub-process executing a hidden `--eval-worker` subcommand. This worker operates inside Bubblewrap on Linux and Birdcage on macOS, exchanging serialized request and result payloads via standard I/O streams.
+The Eos daemon (scheduler) has zero snix dependencies and performs no sandboxing itself. It dispatches jobs to eval workers and build workers via Cap'n Proto RPC.
 
 **Model Reference:**
 
 - [eos-build-engine.md](eos-build-engine.md) — §2.4 (BuildEngine), §2.5 (ArtifactStore)
-- [eos-snix-backend.md](eos-snix-backend.md) — Snix-specific execution bounds and store mappings
+- [eos-snix-backend.md](eos-snix-backend.md) — Eval worker threading and store access
+- [ADR-0002](../adr/0002-decoupling-snix-backend.md) — gRPC-first snix integration architecture
 
 **Criticality Tier:** High — security and hermeticity govern the reproducibility of the entire stack. Failure to isolate execution permits malicious actors to execute arbitrary code with host-level privileges.
 
@@ -33,64 +34,56 @@ To reconcile the thread-locality (`!Send`) of the language evaluator with the co
 
 ## Constraints
 
-### Subprocess Execution Model
+### Worker Execution Model
 
-Eos executes language evaluation out-of-process to isolate thread-local memory structures and sandbox permissions.
+Eos delegates evaluation and build execution to external worker processes. The daemon does not spawn workers — it discovers them via Cap'n Proto handshake.
 
 ```
 +-------------------------------------------------------+
-| Eos Daemon (eosd)                                     |
-|   1. Receives EvalRequest                             |
-|   2. Spawns sandboxed worker                          |
-|   3. Passes EvalRequestDto via Stdin                  |
-+---------------------------+---------------------------+
-                            |
-                     Stdin  | JSON payload
-                            v
+| Eos Daemon (scheduler)                                |
+|   1. Receives EvalRequest from client (Cap'n Proto)   |
+|   2. Checks eval cache (plan already computed?)       |
+|   3. Dispatches to eval worker pool (Cap'n Proto)     |
++-----------------------+-------------------------------+
+                        |
+          Cap'n Proto   | EvalWorker.evaluate(request)
+                        v
 +-------------------------------------------------------+
-| Sandboxed Worker Subprocess (std::env::current_exe()) |
-|   Arg: --eval-worker                                  |
-|                                                       |
-|   [ Linux Bubblewrap ]     [ macOS Birdcage ]         |
-|   - Namespace isolation    - Seatbelt sandbox policy  |
-|   - Mount namespaces       - Path exception whitelist |
-|   - Network disabled       - Network socket block     |
-+---------------------------+---------------------------+
-                            |
-                    Stdout  | ATerm derivation bytes
-                            v
+| Eval Worker Process (long-lived)                      |
+|   - Started by external orchestrator                  |
+|   - MAY self-sandbox on startup (bwrap / birdcage)    |
+|   - Runs snix-eval on dedicated OS thread             |
+|   - Connects to snix store daemons via gRPC           |
 +-------------------------------------------------------+
-| Eos Daemon (eosd)                                     |
-|   4. Parses stdout into Plan (Derivation)             |
-|   5. Registers computed Plan in cache                 |
+                        |
+          Cap'n Proto   | EvalResult { derivation, ... }
+                        v
++-----------------------+-------------------------------+
+| Eos Daemon (scheduler)                                |
+|   4. Caches computed Plan (Derivation)                |
+|   5. Dispatches to build worker pool (Cap'n Proto)    |
 +-------------------------------------------------------+
 ```
 
-### Standard I/O Protocol Schema
+### Cap'n Proto Worker Interfaces
 
-The daemon and worker subprocess communicate strictly via standard input/output channels:
+Eval workers and build workers communicate with the scheduler via Cap'n Proto RPC:
 
-```
--- Input JSON payload written to worker stdin
-TYPE EvalRequestDto = {
-    expression: EvalTargetDto,
-    inputs: Map<String, ResolvedInputDto>,
-    composer: Option<ComposerConfigDto>,
-    eval_args: Vec<(String, String)>
+```capnp
+interface EvalWorker {
+  evaluate @0 (request :EvalRequest) -> (result :EvalResult);
+  heartbeat @1 () -> ();
 }
 
-TYPE EvalTargetDto =
-    File(PathBuf)
-  | Expression(String)
-
-TYPE ResolvedInputDto = {
-    digest: String,
-    store_path: String
+interface BuildWorker {
+  build @0 (request :BuildRequest) -> (result :BuildResult);
+  cancel @1 (jobId :Data) -> ();
+  attachProgress @2 (jobId :Data, callback :ProgressStream) -> ();
+  heartbeat @3 () -> ();
 }
-
--- Output ATerm representation written to worker stdout
--- (Nix-compatible canonical derivation text format)
 ```
+
+Eval workers return a computed `Derivation` (ATerm bytes). Build workers wrap snix's gRPC `BuildService.DoBuild()` in the Cap'n Proto interface, adding cancellation, progress streaming, and lease management.
 
 ---
 
@@ -98,112 +91,109 @@ TYPE ResolvedInputDto = {
 
 ### Evaluation Sandboxing Invariants
 
-**[eos-eval-worker-isolation]**: Eos MUST NOT execute evaluations within the primary daemon thread or process. All evaluations MUST be delegated to a dedicated worker subprocess invoked with the `--eval-worker` parameter.
+**[eos-eval-worker-isolation]**: Eos MUST NOT execute evaluations within the daemon process. All evaluations MUST be dispatched to registered eval workers via the `EvalWorker` Cap'n Proto interface. Eval workers are separate, long-lived processes managed by external orchestrators (systemd, process-compose, Kubernetes).
 `VERIFIED: unverified`
 
-**[eos-eval-worker-executable]**: The worker subprocess MUST be launched using a binary resolved in this order: (1) the `EOS_EVAL_WORKER_BIN` environment variable, (2) an explicit `worker_bin` path configured in `SandboxedEvalConfig`, (3) `std::env::current_exe()`. Sandbox dispatch is gated solely by the presence of a `SandboxedEvalConfig` on `SnixEngine` — no process-name heuristics.
+**[eos-eval-worker-lifecycle]**: The Eos daemon MUST NOT manage eval worker lifecycles (starting, stopping, restarting). Workers register with the scheduler via Cap'n Proto handshake at startup. Worker health is monitored via heartbeats and lease expiry (see [eos-scheduler.md](eos-scheduler.md)).
 `VERIFIED: unverified`
 
-**[eos-eval-sandbox-network-containment]**: The evaluation worker subprocess MUST NOT have access to the external network. Network namespace sharing or socket creation MUST be disabled.
+**[eos-eval-sandbox-network-containment]**: Eval workers SHOULD restrict external network access to the minimum required for operation. The eval worker MUST have access to snix store daemon gRPC endpoints and the scheduler's Cap'n Proto endpoint, but SHOULD NOT have general internet access unless evaluating fixed-output derivations.
 `VERIFIED: unverified`
 
-**[eos-eval-sandbox-host-isolation]**: The evaluation worker subprocess MUST NOT have write permissions to the host filesystem, except for designated temporary directories explicitly allocated for evaluation state.
+**[eos-eval-sandbox-host-isolation]**: Eval workers SHOULD NOT have write permissions to the host filesystem, except for designated temporary directories used for evaluation state. When self-sandboxing is enabled, the worker process applies sandbox restrictions before accepting Cap'n Proto connections.
 `VERIFIED: unverified`
 
-**[eos-eval-sandbox-linux-bwrap]**: On Linux, evaluation sandboxing MUST employ Bubblewrap (`bwrap`). The Bubblewrap jail MUST enforce the following constraints:
+**[eos-eval-sandbox-linux-bwrap]**: On Linux, eval workers MAY self-sandbox using Bubblewrap (`bwrap`) at startup. When enabled, the Bubblewrap jail MUST enforce:
 
-- Bind a read-only view of the Axios workspace directory.
-- Bind a read-only view of the parent directory containing the target evaluation file.
-- Bind writable paths to the temporary sandbox workdir.
-- Bind writable paths to the local database sockets and directories (e.g., Redb stores).
-- Unshare all namespaces (network, IPC, user, PID, UTS) except for paths mapped to standard descriptors.
+- Bind read-only views of system libraries (`/usr`, `/bin`, `/lib`, `/lib64`).
+- Bind writable paths to the eval worker's temporary workdir.
+- Allow network access to configured gRPC endpoints (snix store daemon) and the scheduler's Cap'n Proto endpoint.
+- Unshare PID, IPC, and UTS namespaces. Network namespace is NOT unshared (gRPC/Cap'n Proto connectivity is required).
   `VERIFIED: unverified`
 
-**[eos-eval-sandbox-macos-birdcage]**: On macOS, evaluation sandboxing MUST employ Birdcage (`birdcage`). The Birdcage jail MUST enforce the following constraints:
+**[eos-eval-sandbox-macos-birdcage]**: On macOS, eval workers MAY self-sandbox using Birdcage (`birdcage`) at startup. When enabled, the Birdcage jail MUST enforce:
 
-- Grant read-only access to the Axios workspace directory and the daemon executable.
-- Grant read/write access to local database sockets and directories.
-- Deny network access (excluding Unix sockets).
+- Grant read-only access to system libraries and the eval worker executable.
+- Grant read/write access to the eval worker's temporary workdir.
+- Allow network access to configured gRPC and Cap'n Proto endpoints.
 - Deny write access to all other host directories.
-- Execute within a `tokio::task::spawn_blocking` pool to isolate synchronous seatbelt profile interactions.
   `VERIFIED: unverified`
 
 ### Build Sandboxing Invariants
 
-**[eos-build-sandbox-platform-dispatch]**: Eos MUST dispatch build sandboxes based on platform availability:
-
-- **Linux**: Select OCI runtimes (`crun`, `runc`) if present; fall back to Bubblewrap (`bwrap`).
-- **macOS**: Delegate execution to a remote builder, or report an error if no remote builder is configured. Local build sandboxing via Birdcage is reserved as a future extension.
-  `VERIFIED: unverified`
-
-**[eos-build-sandbox-network-containment]**: Build execution MUST NOT have access to the external network, unless the plan is explicitly declared as a fixed-output derivation containing a pre-computed hash of the expected artifact.
+**[eos-build-sandbox-delegation]**: Under the gRPC-first architecture ([ADR-0002](../adr/0002-decoupling-snix-backend.md)), build sandboxing is the responsibility of the snix builder process, NOT the Eos daemon or build worker shim. The Eos scheduler dispatches derivations to build workers via Cap'n Proto; the build worker shim forwards to snix builders via gRPC. The snix builder applies platform-appropriate sandboxing (OCI runtime, Bubblewrap, or future alternatives).
 `VERIFIED: unverified`
 
-**[eos-build-sandbox-host-isolation]**: Build builders MUST NOT write outside the temporary directory allocated for the build task. Inputs MUST be mounted read-only.
+**[eos-build-sandbox-network-containment]**: Build execution MUST NOT have access to the external network, unless the plan is explicitly declared as a fixed-output derivation containing a pre-computed hash of the expected artifact. This invariant is enforced by the snix builder's sandbox backend, not by the Eos daemon.
+`VERIFIED: unverified`
+
+**[eos-build-sandbox-host-isolation]**: Build execution MUST NOT write outside the temporary directory allocated for the build task. Inputs MUST be mounted read-only. This invariant is enforced by the snix builder's sandbox backend.
 `VERIFIED: unverified`
 
 ---
 
 ## Transitions
 
-### Evaluation Pipeline Transition
+### Evaluation Dispatch Transition
 
-**[eval-sandbox-spawn]**: Spawns the sandboxed evaluator process.
+**[eval-worker-dispatch]**: Dispatches an evaluation request to an eval worker.
 
-- **PRE**: The `EvalRequest` is constructed. If Linux, `bwrap` is installed. If macOS, `birdcage` support is compiled. Local DB paths are resolved.
-- **POST**: The child subprocess is spawned with the `--eval-worker` argument and sandbox-specific limits. Stdin and stdout pipes are successfully initialized.
+- **PRE**: The scheduler holds an `EvalRequest`. The eval cache has been consulted and no cached plan exists. At least one healthy eval worker is registered.
+- **POST**: The scheduler selects an eval worker via Rendezvous hashing and sends the request via Cap'n Proto `EvalWorker.evaluate()`. The eval worker processes the request and returns a `Derivation` (or error) via Cap'n Proto.
   `VERIFIED: unverified`
 
-**[eval-sandbox-exchange]**: Transmits the request and retrieves the computed plan.
+### Eval Worker Self-Sandbox Transition
 
-- **PRE**: The child process is running. The daemon holds the serialized JSON payload.
-- **POST**: The JSON payload is written to stdin. The daemon blocks on the worker's stdout stream. The worker executes the Nix/Snix evaluation, prints the ATerm serialization of the computed `Plan` to stdout, and exits with code 0.
+**[eval-worker-self-sandbox]**: An eval worker MAY apply sandbox restrictions at startup.
+
+- **PRE**: The eval worker process has started (launched by external orchestrator). Platform-specific sandbox tools are available.
+- **POST**: If sandboxing is enabled, the eval worker applies bwrap (Linux) or birdcage (macOS) restrictions to its own process. The worker then connects to the scheduler via Cap'n Proto and begins accepting evaluation requests.
   `VERIFIED: unverified`
 
 ---
 
 ## Forbidden States
 
-**[no-unbounded-eval-io]**: The evaluation worker subprocess MUST NOT access `/etc`, `/home`, or host system configuration directories not explicitly whitelisted in the sandbox exceptions list. The allowed system paths are:
+**[no-unbounded-eval-io]**: When self-sandboxing is enabled, the eval worker process MUST NOT access `/etc`, `/home`, or host system configuration directories not explicitly whitelisted. The allowed access is:
 
-- `/usr` (read-only) — system binaries and libraries
-- `/bin` (read-only) — essential binaries
-- `/lib`, `/lib64` (read-only) — dynamic linker and shared libraries
-- The workspace directory (read-only) — source files under evaluation
-- The sandbox workdir (read-write) — evaluation temporary state
-- Database socket/file directories (read-write) — store access
+- `/usr`, `/bin`, `/lib`, `/lib64` (read-only) — system binaries and libraries
+- The eval worker's temporary workdir (read-write) — evaluation state
+- gRPC endpoints to snix store daemons (network) — store access
+- Cap'n Proto endpoint to scheduler (network) — job dispatch
 
 All other host filesystem paths MUST be denied.
 `VERIFIED: unverified`
 
-**[no-shared-network-sockets]**: The evaluation worker MUST NOT inherit network file descriptors or access the loopback interface (`127.0.0.1`), preventing IPC leak paths to host-level daemons.
+**[no-eval-daemon-process]**: Evaluations MUST NOT execute within the Eos daemon process. The daemon dispatches all evaluation work to external eval workers via Cap'n Proto.
 `VERIFIED: unverified`
 
 ---
 
 ## Verification
 
-| Constraint                              | Method                  | Result     | Detail                                                                      |
-| :-------------------------------------- | :---------------------- | :--------- | :-------------------------------------------------------------------------- |
-| `eos-eval-worker-isolation`             | Process inspection      | UNVERIFIED | Verify that evaluation spawns a separate OS process                         |
-| `eos-eval-sandbox-network-containment`  | Network socket test     | UNVERIFIED | Attempt network requests inside the sandbox, verify abort                   |
-| `eos-eval-sandbox-host-isolation`       | Write restriction check | UNVERIFIED | Attempt writes to `/var` or `/tmp` from the worker, verify error            |
-| `eos-eval-sandbox-linux-bwrap`          | Sandbox mount check     | UNVERIFIED | Audit Bubblewrap argument vectors for compliance                            |
-| `eos-eval-sandbox-macos-birdcage`       | Sandbox profile audit   | UNVERIFIED | Audit Birdcage exception rules and profile constraints                      |
-| `eos-build-sandbox-network-containment` | Build socket test       | UNVERIFIED | Attempt network access in builds without pre-declared outputs, verify abort |
+| Constraint                              | Method                  | Result     | Detail                                                                          |
+| :-------------------------------------- | :---------------------- | :--------- | :------------------------------------------------------------------------------ |
+| `eos-eval-worker-isolation`             | Process inspection      | UNVERIFIED | Verify daemon dispatches to external worker, no in-process eval                 |
+| `eos-eval-worker-lifecycle`             | Integration test        | UNVERIFIED | Verify daemon does not spawn/stop workers; workers register via Cap'n Proto     |
+| `eos-eval-sandbox-network-containment`  | Network socket test     | UNVERIFIED | Verify eval worker restricts network to gRPC/Cap'n Proto endpoints              |
+| `eos-eval-sandbox-host-isolation`       | Write restriction check | UNVERIFIED | Attempt writes to `/var` or `/tmp` from self-sandboxed worker, verify error     |
+| `eos-eval-sandbox-linux-bwrap`          | Sandbox mount check     | UNVERIFIED | Audit Bubblewrap argument vectors when self-sandboxing is enabled               |
+| `eos-eval-sandbox-macos-birdcage`       | Sandbox profile audit   | UNVERIFIED | Audit Birdcage exception rules when self-sandboxing is enabled                  |
+| `eos-build-sandbox-delegation`          | Architecture audit      | UNVERIFIED | Verify Eos delegates build sandboxing to snix builder, no in-process sandboxing |
+| `eos-build-sandbox-network-containment` | Build socket test       | UNVERIFIED | Verify snix builder enforces network containment for non-FOD builds             |
 
 ---
 
 ## Implications
 
 1. **Host Dependency Requirements**:
-   To perform local evaluation on Linux, the host machine must have Bubblewrap (`bwrap`) installed and present in the system `$PATH`. On macOS, the compiled binary links against the native Apple sandbox libraries through the `birdcage` dependency, meaning no external tools are needed for macOS evaluations.
+   If eval workers enable self-sandboxing on Linux, the host machine must have Bubblewrap (`bwrap`) installed. On macOS, the eval worker binary links against native Apple sandbox libraries through `birdcage`. Build sandboxing dependencies (FUSE, OCI runtimes) are the snix builder's concern.
 
 2. **FUSE Mounts in Build Sandboxes**:
-   Build sandboxes (such as `OCIBuildService` and `BubblewrapBuildService`) rely on FUSE to mount input directory trees from the content-addressed store. This requires the host kernel to support FUSE and the current user to have access to `/dev/fuse`.
+   Build sandboxes (managed by the snix builder process) rely on FUSE to mount input directory trees from the content-addressed store. This requires the host kernel to support FUSE and the current user to have access to `/dev/fuse`. These requirements apply to the machine running the snix builder, not the Eos daemon.
 
-3. **Performance Overhead**:
-   Spawning a fresh process for each evaluation introduces execution overhead. Eos mitigates this cost by maintaining a persistent evaluation cache. We bypass the worker subprocess entirely if the cache key (the snapshot digest combined with evaluation arguments) already maps to a pre-computed plan.
+3. **Long-Lived Eval Workers**:
+   Eval workers are persistent processes that handle many evaluations over their lifetime. There is no per-evaluation process spawn overhead. Self-sandboxing (bwrap/birdcage) is applied once at worker startup, not per evaluation. The evaluation cache is consulted by the scheduler before dispatching to a worker, avoiding unnecessary round-trips.
 
-4. **Eval Cache and Sandbox Interaction**:
-   The evaluation cache MUST be consulted in the daemon process _before_ spawning the sandbox worker. The cache is trusted data in the daemon's process space — it MUST NOT be moved inside the sandbox. If the cache hits, no subprocess is spawned. This ensures the cache lookup runs at full speed without sandbox overhead, and prevents the sandbox from needing write access to the cache store.
+4. **Eval Cache and Dispatch Interaction**:
+   The evaluation cache MUST be consulted by the scheduler _before_ dispatching to an eval worker. If the cache hits, no worker dispatch occurs. The cache is trusted data in the daemon's process space.

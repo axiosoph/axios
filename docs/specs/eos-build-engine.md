@@ -189,10 +189,11 @@ The daemon MUST transmit `eval_args` faithfully to the backend. The daemon MUST 
 
 #### Store Delegation Model
 
-Eos does **not** own or implement an artifact store directly. The `ArtifactStore` trait abstracts over concrete store backends. The daemon delegates all store operations to the backend's `ArtifactStore` implementation:
+Eos does **not** own or implement an artifact store directly. The `ArtifactStore` trait abstracts over concrete store backends. Under the gRPC-first architecture ([ADR-0002](../adr/0002-decoupling-snix-backend.md)), the daemon (scheduler) does not interact with the `ArtifactStore` trait directly — workers do:
 
-- **Current**: Snix store — delegates to `BlobService` + `DirectoryService` + `PathInfoService` (see [eos-snix-backend.md](eos-snix-backend.md) §Three-Service Store Mapping)
-- **Future**: Cyphr/Coz store — content-addressed via Coz digests
+- Eval workers connect to snix store daemons via gRPC for store access during evaluation.
+- Build workers interact with stores via the snix builder's gRPC store connections.
+- The daemon dispatches jobs to workers via Cap'n Proto and consults the evaluation cache, but does not hold `ArtifactStore` instances.
 
 The `ArtifactStore` trait surface (`has`, `get_info`, `import`, `list`) is intentionally minimal. Backend crates provide the concrete wiring to underlying storage services.
 
@@ -279,7 +280,7 @@ See the Cap'n Proto projection of this trait as the `AtomDiscovery` capability i
 
 **[engine-plan]**: Evaluate an `AtomRef` to determine its build status.
 
-- **PRE**: The `AtomRef` is resolved and its verified content snapshot is present. The daemon holds a valid `BuildEngine` backend.
+- **PRE**: The `AtomRef` is resolved and its verified content snapshot is present. The scheduler holds a connection to registered eval and build workers.
 - **POST**: Returns `Cached` if output is verified in the store, `NeedsBuild` if the plan is computed but output is missing, or `NeedsEvaluation` if dependency inputs are not yet resolved.
   `VERIFIED: unverified`
 
@@ -355,7 +356,7 @@ See the Cap'n Proto projection of this trait as the `AtomDiscovery` capability i
 ## Implications
 
 1. **Daemon-Served Trait Surface**:
-   The `BuildEngine`, `ArtifactStore`, and `AtomIndex` traits in `eos-core` are behavioral contracts — they specify what operations the daemon supports, what invariants hold, and what state transitions are permitted. Clients never invoke these traits directly. Instead, the Cap'n Proto protocol (see [eos-network-protocol.md](eos-network-protocol.md)) projects these contracts onto the wire as the `EosDaemon`, `BuildJob`, and `AtomDiscovery` capabilities. A `submitBuild` RPC corresponds to the `engine-plan` → `engine-eval` → `engine-apply` transition chain; `attachProgress` corresponds to `ProgressEvent` streaming; `resolve`/`search` queries correspond to `AtomDiscovery` methods.
+   The `BuildEngine`, `ArtifactStore`, and `AtomIndex` traits in `eos-core` are behavioral contracts — they specify what operations the system supports, what invariants hold, and what state transitions are permitted. Under the gRPC-first architecture ([ADR-0002](../adr/0002-decoupling-snix-backend.md)), `BuildEngine` is implemented inside worker processes (eval workers and build workers), not in the daemon. The daemon orchestrates the `engine-plan` → `engine-eval` → `engine-apply` transition chain by dispatching to workers via Cap'n Proto. The Cap'n Proto protocol (see [eos-network-protocol.md](eos-network-protocol.md)) projects these contracts onto the wire as the `EosDaemon`, `BuildJob`, and `AtomDiscovery` capabilities for client interaction.
 
 2. **Backend Abstraction via Associated Types**:
    `BuildEngine::Digest`, `BuildEngine::Plan`, `BuildEngine::Output`, and `BuildEngine::Error` are associated types, not concrete types. `eos-core` carries zero dependency on any backend crate. The Snix backend binds `Digest = Blake3Digest`, `Plan = Derivation`, `Output = PathInfo + Node`, and `Error = SnixError` (see [eos-snix-backend.md](eos-snix-backend.md) §Type Declarations). Future backends (subprocess, Guix, remote delegation) bind different concrete types while preserving the same behavioral invariants. The `Digest` associated type is bounded by `crate::Digest`, ensuring all backends produce values that satisfy the trait's comparison and serialization requirements.
@@ -367,10 +368,10 @@ See the Cap'n Proto projection of this trait as the `AtomDiscovery` capability i
    The `eval_args` field in `EvalRequest` is the conduit through which frontend-specified configuration (target system, feature flags, override paths) reaches the evaluator. This field maps directly to the lock file's `[compose.args]` section. The daemon treats `eval_args` as opaque — it includes them in the `EvalCacheKey` for deterministic caching but does not interpret their contents. Backend implementations determine how `eval_args` influence evaluation (e.g., Snix injects them as Nix attrset overlays).
 
 5. **Store Delegation, Not Ownership**:
-   Eos does not own, implement, or manage the internal structure of the artifact store. The `ArtifactStore` trait is a delegation boundary. The Snix backend delegates to three independent Snix services (`BlobService`, `DirectoryService`, `PathInfoService`) — see [eos-snix-backend.md](eos-snix-backend.md) §Three-Service Store Mapping. A future Cyphr/Coz backend would delegate to a Coz content-addressed store. The daemon interacts with the store exclusively through the trait surface.
+   Eos does not own, implement, or manage the internal structure of the artifact store. The `ArtifactStore` trait is a delegation boundary. Under the gRPC-first architecture, the daemon does not hold `ArtifactStore` instances — workers access stores via gRPC to snix store daemons. The Snix backend delegates to three independent Snix services (`BlobService`, `DirectoryService`, `PathInfoService`) — see [eos-snix-backend.md](eos-snix-backend.md) §Three-Service Store Mapping. A future Cyphr/Coz backend would delegate to a Coz content-addressed store.
 
-6. **Platform Sandbox Dispatch is Backend-Specific**:
-   This spec mandates sandbox isolation ([eos-sandbox-network-containment], [eos-sandbox-host-isolation], [eos-sandbox-reproducibility]) but does not prescribe the sandbox implementation. Platform-specific sandbox selection (Linux OCI/bwrap, macOS birdcage, remote gRPC builder) is the responsibility of the backend crate. See [eos-snix-backend.md](eos-snix-backend.md) §Platform Sandbox Dispatch for the Snix-specific dispatch table and detection logic.
+6. **Platform Sandbox Dispatch is Builder-Specific**:
+   This spec mandates sandbox isolation ([eos-sandbox-network-containment], [eos-sandbox-host-isolation], [eos-sandbox-reproducibility]) but does not prescribe the sandbox implementation. Under the gRPC-first architecture, sandbox selection is the responsibility of the snix builder process (see [eos-sandboxing.md](eos-sandboxing.md)). Eval workers MAY self-sandbox using platform-specific tools (see [eos-snix-backend.md](eos-snix-backend.md)).
 
 7. **Testing Strategy**:
    Write property-based tests for `BuildPlan` matching and transition permutations to verify that caching decisions are 100% deterministic. Mock `BuildEngine` implementations SHOULD be used to validate daemon-level invariants (deduplication, progress streaming, abort cleanup) independently of any concrete backend. Backend-specific invariants (eval threading, store mapping, sandbox isolation) are verified in their respective backend specs.

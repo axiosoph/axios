@@ -272,7 +272,10 @@ VERIFIED: _pending_
 - Scheduling: job queues, work-stealing, lease management
 - **Artifact store**: content-addressed storage for build outputs
   (derivations, compiled artifacts). Defined by the `ArtifactStore`
-  trait in `eos-core`. Backend: snix store (primary).
+  trait in `eos-core`. Under the gRPC-first architecture
+  ([ADR-0002](../adr/0002-decoupling-snix-backend.md)), the store
+  runtime is an external snix store daemon accessed via gRPC; the
+  daemon (scheduler) does not hold `ArtifactStore` instances.
 - Build input contract: `EvalRequest`, `ResolvedInput`,
   `ComposerConfig`, `BuildRequest`, `FetchDescriptor`, cache key
   computation
@@ -557,6 +560,10 @@ accepts `lock_content: &str` and parses it into `LockFile`.
 After migration, the orchestrator MUST accept pre-parsed
 `eos-core` types — an `EvalRequest` (or a structured
 `BuildRequest` type in `eos-core`) rather than raw TOML.
+Per [ADR-0002](../adr/0002-decoupling-snix-backend.md), the
+orchestrator crate must also eliminate all snix-specific types
+including `CastoreBridge`, which will be refactored behind
+`eos-core` traits.
 
 ### §6.4 — Eos daemon persists lock files to disk
 

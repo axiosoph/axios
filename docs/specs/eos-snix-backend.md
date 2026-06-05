@@ -18,16 +18,19 @@
 
 ## Domain
 
-**Problem Domain:** This document specifies how the `eos-snix` crate implements the general `BuildEngine` and `ArtifactStore` contracts defined in [eos-build-engine.md](eos-build-engine.md), using the Snix Rust libraries as the concrete evaluation, build, and store backend.
+**Problem Domain:** This document specifies how the `eos-snix` crate implements the Nix evaluation capability for the Eos stack using the Snix evaluator libraries (`snix-eval`, `snix-glue`, `nix-compat`). Under the gRPC-first integration architecture (see [ADR-0002](../adr/0002-decoupling-snix-backend.md)), `eos-snix` powers **eval workers** — separate processes that accept evaluation requests over Cap'n Proto, run `snix-eval` in-process, and connect to snix store daemons via gRPC for all store operations.
 
-The Snix ecosystem decomposes into six layers relevant to `eos-snix`: a Nix-compatible data layer (`nix-compat`), a content-addressed blob/directory store (`snix-castore`), a Nix-specific store (`snix-store`), an evaluator (`snix-eval`), a builder (`snix-build`), and a glue layer (`snix-glue`) that wires the preceding five together. Each imposes distinct concurrency constraints, error semantics, and type boundaries that `eos-snix` must accommodate.
+`eos-snix` does NOT embed snix store services (`snix-castore`, `snix-store`) or build services (`snix-build`) in-process. Store access uses gRPC clients that implement the same Rust traits (`BlobService`, `DirectoryService`, `PathInfoService`), so the evaluator's `SnixStoreIO` wiring is unchanged. Build execution is dispatched by the Eos scheduler to separate build worker shims via Cap'n Proto.
 
-The central impedance mismatch is the evaluator's `!Send`/`!Sync` threading model: `snix-eval` uses `Rc<Closure>` internally, rendering all evaluation types thread-local. The store and build services, conversely, are fully `async + Send + Sync`. The `eos-snix` bridge MUST reconcile this split without leaking the `!Send` constraint into the `eos-core` trait surface.
+The Snix crates relevant to `eos-snix` are: a Nix-compatible data layer (`nix-compat`), an evaluator (`snix-eval`), and a glue layer (`snix-glue`) that wires the evaluator to store service trait objects. Each imposes distinct concurrency constraints, error semantics, and type boundaries that `eos-snix` must accommodate.
+
+The central impedance mismatch is the evaluator's `!Send`/`!Sync` threading model: `snix-eval` uses `Rc<Closure>` internally, rendering all evaluation types thread-local. Store services (accessed via gRPC) are fully `async + Send + Sync`. The `eos-snix` bridge MUST reconcile this split without leaking the `!Send` constraint into the eval worker's Cap'n Proto interface.
 
 **Model Reference:**
 
 - [eos-build-engine.md](eos-build-engine.md) — General `BuildEngine`/`ArtifactStore` trait contracts
 - [publishing-stack-layers.md](../models/publishing-stack-layers.md) — §2.4 (BuildEngine), §2.5 (ArtifactStore)
+- [ADR-0002](../adr/0002-decoupling-snix-backend.md) — gRPC-first snix integration architecture
 
 **Criticality Tier:** High — this backend is the sole initial implementation. Threading violations cause unsoundness; store mapping errors cause data corruption; sandbox misconfiguration compromises host isolation.
 
@@ -111,7 +114,7 @@ TYPE BuildRequestAdapter          -- Derivation → BuildRequest converter
 
 #### Store Mapping
 
-**[snix-store-three-service]**: `SnixStore` MUST compose Snix's three independent service traits — `BlobService`, `DirectoryService`, and `PathInfoService` — behind the unified `ArtifactStore` interface. Each service instance MUST be held as a `dyn Trait` object (or generic parameter) wrapped in `Arc`, enabling shared ownership across async tasks.
+**[snix-store-three-service]**: The eval worker MUST connect to Snix's three independent store services — `BlobService`, `DirectoryService`, and `PathInfoService` — via gRPC clients. Each gRPC client implements the same Rust trait (`BlobService`, `DirectoryService`, `PathInfoService`) as the in-process implementations, held as `dyn Trait` objects wrapped in `Arc`. The eval worker does NOT embed store services in-process; all store access is remote via gRPC URIs provided in the eval worker's configuration.
 `VERIFIED: unverified`
 
 **[snix-store-service-consistency]**: Operations that span multiple Snix services (e.g., `import` writes blobs via `BlobService`, constructs directory trees via `DirectoryService`, then registers metadata via `PathInfoService`) MUST execute in dependency order. If any intermediate step fails, subsequent steps MUST NOT proceed and previously-written data SHOULD be treated as orphaned (eligible for garbage collection).
@@ -122,7 +125,7 @@ TYPE BuildRequestAdapter          -- Derivation → BuildRequest converter
 
 #### Build Execution
 
-**[snix-build-request-conversion]**: Before invoking `BuildService::do_build()`, the `SnixEngine` MUST convert the `Derivation` into a `BuildRequest` using logic equivalent to `snix-glue::builder::derivation_into_build_request()`. This conversion resolves output placeholders, constructs environment variables (including Nix-magic variables like `NIX_BUILD_TOP`), handles structured attributes (`__json`), and maps input store paths to content-addressed `Node` references.
+**[snix-build-request-conversion]**: Before invoking `BuildService::do_build()`, the **build worker shim** MUST convert the `Derivation` into a `BuildRequest` using logic equivalent to `snix-glue::builder::derivation_into_build_request()`. This conversion resolves output placeholders, constructs environment variables (including Nix-magic variables like `NIX_BUILD_TOP`), handles structured attributes (`__json`), and maps input store paths to content-addressed `Node` references. This conversion occurs in the build worker shim binary, not in the eval worker (`eos-snix`).
 `VERIFIED: unverified`
 
 **[snix-build-inputs-resolved]**: The `BuildRequest` submitted to `BuildService::do_build()` MUST have all `inputs` populated with resolved `Node` entries. Each entry's `name` component MUST correspond to a valid store path basename, and the associated `Node` MUST be retrievable from the configured `DirectoryService`/`BlobService`. Submitting a `BuildRequest` with unresolved or dangling input references is a programming error.
@@ -133,19 +136,19 @@ TYPE BuildRequestAdapter          -- Derivation → BuildRequest converter
 
 #### Sandbox
 
-**[snix-sandbox-platform-dispatch]**: `SnixEngine` MUST select the sandbox backend based on the host platform:
+**[snix-sandbox-platform-dispatch]**: Under the gRPC-first architecture ([ADR-0002](../adr/0002-decoupling-snix-backend.md)), sandbox backend selection is the responsibility of the **snix builder process**, not the eval worker (`eos-snix`). The eval worker produces derivations; it does not execute builds. Build worker shims forward derivations to snix builders via gRPC, and the snix builder selects the platform-appropriate sandbox:
 
 - **Linux**: Snix's native `OCIBuildService` (using `crun` or `runc`) or `BubblewrapBuildService` (using `bwrap`). Both backends mount castore inputs via FUSE.
-- **macOS**: `birdcage`-based sandbox (ported from the eka PoC's `nixec` crate). Snix provides no macOS sandbox; only `DummyBuildService` (which returns an error) is available upstream.
-- **Other / remote**: `GRPCBuildService` delegating to a remote builder via the `snix.build.v1.BuildService` gRPC protocol.
+- **macOS**: `birdcage`-based sandbox or remote delegation. Snix provides no macOS sandbox; only `DummyBuildService` is available upstream.
+- **Other / remote**: `GRPCBuildService` delegating to another remote builder.
 
-Platform detection MUST occur at `SnixEngine` construction time, not per-build.
+This platform dispatch occurs within the snix builder's configuration, not within `eos-snix`.
 `VERIFIED: unverified`
 
 **[snix-sandbox-shell-path]**: The Snix OCI and Bubblewrap sandbox backends require a sandbox shell path, compiled into the binary via `env!("SNIX_BUILD_SANDBOX_SHELL")`. `eos-snix` MUST propagate this compile-time requirement or provide an equivalent configuration mechanism. If the shell path is absent or invalid at build time, compilation MUST fail.
 `VERIFIED: unverified`
 
-**[snix-sandbox-concurrency-configurable]**: Snix hardcodes build concurrency at `Semaphore::new(2)` (Bubblewrap) or `Semaphore::new(MAX_CONCURRENT_BUILDS)` where `MAX_CONCURRENT_BUILDS = 2` (OCI). `eos-snix` SHOULD expose build concurrency as a runtime configuration parameter. If delegating to Snix's built-in services directly, `eos-snix` MUST document the inherited concurrency ceiling and provide an eos-level scheduling layer that accounts for it.
+**[snix-sandbox-concurrency-configurable]**: Snix hardcodes build concurrency at `Semaphore::new(2)` (Bubblewrap) or `Semaphore::new(MAX_CONCURRENT_BUILDS)` where `MAX_CONCURRENT_BUILDS = 2` (OCI). Under the gRPC-first architecture, build concurrency is managed by the Eos scheduler's build worker pool — each build worker reports its `max_concurrency` during registration. The snix builder's internal semaphore provides a secondary constraint within the builder process itself.
 `VERIFIED: unverified`
 
 ---
@@ -158,10 +161,10 @@ Platform detection MUST occur at `SnixEngine` construction time, not per-build.
 - **POST**: A dedicated eval thread is spawned. `EvaluationBuilder` is configured with the `SnixStoreIO` as the `EvalIO` implementation. Derivation builtins, fetcher builtins, and import builtins are registered. The expression is evaluated, producing an `EvaluationResult`. If `value` is `Some` and no errors are present, the `Derivation` is extracted (from the `KnownPaths` accumulated during evaluation) and sent across the channel. If errors are present, a structured `SnixError::Evaluation` is returned. All `!Send` types are dropped on the eval thread.
   `VERIFIED: unverified`
 
-**[snix-build]**: Execute a `Derivation` via the Snix build service.
+**[snix-build]**: Execute a `Derivation` via the build worker shim and snix builder.
 
-- **PRE**: The `Derivation` has been validated (`derivation.validate(true).is_ok()`). All transitive input store paths have resolved `Node` entries in the store. The platform-appropriate `BuildService` is initialized.
-- **POST**: The `Derivation` is converted to a `BuildRequest` (via `derivation_into_build_request` equivalent). `BuildService::do_build()` executes the build in a sandboxed environment. On success, `BuildResult.outputs` contains `BuildOutput` entries with `Node` (content-addressed filesystem root) and `output_needles` (reference scan indices). The outputs are registered in `PathInfoService`. On failure, the `io::Error` is wrapped in `SnixError::Build`.
+- **PRE**: The `Derivation` has been validated (`derivation.validate(true).is_ok()`). The Eos scheduler has dispatched the derivation to a registered build worker via Cap'n Proto.
+- **POST**: The build worker shim converts the `Derivation` to a `BuildRequest` (via `derivation_into_build_request` equivalent) and forwards it to the snix builder via gRPC `BuildService::do_build()`. The snix builder executes the build in a sandboxed environment. On success, `BuildResult.outputs` contains `BuildOutput` entries with `Node` (content-addressed filesystem root) and `output_needles` (reference scan indices). The outputs are registered in `PathInfoService` by the snix builder. On failure, the error is propagated back through the shim to the scheduler.
   `VERIFIED: unverified`
 
 **[snix-store-import]**: Import content into the Snix store.
@@ -201,12 +204,12 @@ Platform detection MUST occur at `SnixEngine` construction time, not per-build.
 - **Type**: Safety
   `VERIFIED: unverified`
 
-**[store-service-thread-safety]**: The three Snix store services (`BlobService`, `DirectoryService`, `PathInfoService`) are `Send + Sync` by trait bound. Multiple concurrent evaluations and builds MAY share the same store service instances (via `Arc`). The eval thread accesses store services synchronously via `handle.block_on()`; build tasks access them asynchronously. These access patterns MUST NOT deadlock because the eval thread uses a separate Tokio runtime handle (not the same runtime's current-thread executor).
+**[store-service-thread-safety]**: The three Snix store service traits (`BlobService`, `DirectoryService`, `PathInfoService`) are `Send + Sync` by trait bound. Within a single eval worker process, multiple concurrent evaluations MAY share the same gRPC store client instances (via `Arc`). The eval thread accesses store services synchronously via `handle.block_on()`; these access patterns MUST NOT deadlock because the eval thread uses a separate Tokio runtime handle (not the same runtime's current-thread executor). Build workers are separate processes with independent gRPC store connections.
 
 - **Type**: Safety
   `VERIFIED: unverified`
 
-**[build-service-semaphore-backpressure]**: The Snix `OCIBuildService` and `BubblewrapBuildService` limit concurrency via `tokio::sync::Semaphore`. When all permits are exhausted, `do_build()` suspends (`.await` on `semaphore.acquire()`). The eos scheduler MUST account for this backpressure — dispatching more builds than the semaphore capacity results in queued suspension, not rejection.
+**[build-service-semaphore-backpressure]**: The Snix `OCIBuildService` and `BubblewrapBuildService` limit concurrency via `tokio::sync::Semaphore`. When all permits are exhausted, `do_build()` suspends (`.await` on `semaphore.acquire()`). Under the gRPC-first architecture, this backpressure is internal to the snix builder process. The eos scheduler manages dispatch concurrency through the build worker pool's declared `max_concurrency`, which SHOULD be set to match or slightly exceed the snix builder's semaphore capacity.
 
 - **Type**: Liveness
   `VERIFIED: unverified`
@@ -215,24 +218,32 @@ Platform detection MUST occur at `SnixEngine` construction time, not per-build.
 
 ## Crate Dependencies
 
-The `eos-snix` crate depends on the following Snix workspace members:
+Under the gRPC-first architecture ([ADR-0002](../adr/0002-decoupling-snix-backend.md)), `eos-snix` retains only the three snix crates required for evaluation. Store and build services are accessed via gRPC — their Rust crate dependencies are eliminated from `eos-snix`.
 
-| Snix Crate     | Version     | Purpose in `eos-snix`                                                                                                                                                                        |
-| :------------- | :---------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `nix-compat`   | (workspace) | `StorePath`, `Derivation`, `NixHash`, derivation validation, store path computation. The protocol-level data types shared between evaluator and builder.                                     |
-| `snix-castore` | (workspace) | `BlobService`, `DirectoryService`, `B3Digest`, `Node`, `Directory`, `Entry`. Content-addressed filesystem primitives underlying both the store and build inputs.                             |
-| `snix-store`   | (workspace) | `PathInfoService`, `PathInfo`, `NarCalculationService`. Nix-specific store metadata layer mapping store paths to content-addressed nodes.                                                    |
-| `snix-build`   | (workspace) | `BuildService` trait, `BuildRequest`, `BuildResult`, `BuildOutput`, `BuildConstraints`. The sandbox execution interface and its protobuf-defined gRPC variant for remote builders.           |
-| `snix-eval`    | (workspace) | `Evaluation`, `EvaluationBuilder`, `EvaluationResult`, `Value`, `EvalIO` trait. The Nix language evaluator. Used exclusively on the dedicated eval thread.                                   |
-| `snix-glue`    | (workspace) | `SnixStoreIO`, `KnownPaths`, `add_derivation_builtins()`, `add_fetcher_builtins()`, `add_import_builtins()`. Wires the evaluator to the store services and registers Nix built-in functions. |
+### Snix Crates (Retained)
+
+| Snix Crate   | Version     | Purpose in `eos-snix`                                                                                                                                                                        |
+| :----------- | :---------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `nix-compat` | (workspace) | `StorePath`, `Derivation`, `NixHash`, derivation validation, store path computation. The protocol-level data types shared between evaluator and builder.                                     |
+| `snix-eval`  | (workspace) | `Evaluation`, `EvaluationBuilder`, `EvaluationResult`, `Value`, `EvalIO` trait. The Nix language evaluator. Used exclusively on the dedicated eval thread.                                   |
+| `snix-glue`  | (workspace) | `SnixStoreIO`, `KnownPaths`, `add_derivation_builtins()`, `add_fetcher_builtins()`, `add_import_builtins()`. Wires the evaluator to the store services and registers Nix built-in functions. |
+
+### Snix Crates (Eliminated — accessed via gRPC)
+
+| Former Crate   | ADR-0002 Replacement                                                                                |
+| :------------- | :-------------------------------------------------------------------------------------------------- |
+| `snix-castore` | gRPC clients for `BlobService` and `DirectoryService` (provided by `snix-castore` gRPC client impl) |
+| `snix-store`   | gRPC client for `PathInfoService` (provided by `snix-store` gRPC client impl)                       |
+| `snix-build`   | Build dispatch moved to the build worker shim (separate binary)                                     |
+
+> **Note:** `snix-glue` transitively depends on `snix-castore` and `snix-store` for the trait definitions (`BlobService`, `DirectoryService`, `PathInfoService`) needed by `SnixStoreIO`. The eval worker uses `snix_store::utils::construct_services()` with gRPC URIs to instantiate remote clients that implement these same traits. The eval worker process therefore still compiles against these crates, but the runtime services are remote.
 
 ### External Dependencies (non-Snix)
 
-| Crate      | Purpose                                                                                                                  |
-| :--------- | :----------------------------------------------------------------------------------------------------------------------- |
-| `tokio`    | Async runtime, `Handle::clone()` for eval thread bridge, `sync::oneshot` for result channel, `sync::Semaphore` awareness |
-| `birdcage` | macOS sandbox (from eka PoC). Provides `Birdcage::new()` with capability-based filesystem and network restrictions       |
-| `tonic`    | gRPC client for `GRPCBuildService` remote builder communication (transitively, via `snix-build`)                         |
+| Crate   | Purpose                                                                                                                  |
+| :------ | :----------------------------------------------------------------------------------------------------------------------- |
+| `tokio` | Async runtime, `Handle::clone()` for eval thread bridge, `sync::oneshot` for result channel, `sync::Semaphore` awareness |
+| `tonic` | gRPC client for connecting to remote snix store daemons (transitively, via `snix-store` client)                          |
 
 ---
 
@@ -262,19 +273,22 @@ The function `snix_glue::builder::derivation_into_build_request()` is declared `
 
 ### Dispatch Table
 
-| Platform                   | Sandbox Backend          | Provider                                    | Mount Strategy                   | Network Isolation                  |
-| :------------------------- | :----------------------- | :------------------------------------------ | :------------------------------- | :--------------------------------- |
-| Linux (with `crun`/`runc`) | `OCIBuildService`        | `snix-build`                                | FUSE mount of castore inputs     | OCI spec `network: none` namespace |
-| Linux (with `bwrap`)       | `BubblewrapBuildService` | `snix-build`                                | FUSE mount of castore inputs     | User namespace + network namespace |
-| macOS                      | Birdcage sandbox         | `eos-snix` (ported from `eka/crates/nixec`) | Direct filesystem bind (no FUSE) | Birdcage network exception deny    |
-| Other / Remote             | `GRPCBuildService`       | `snix-build`                                | Delegated to remote host         | Delegated to remote host           |
+> **Note (ADR-0002):** Under the gRPC-first architecture, the sandbox dispatch table below documents the snix builder's internal dispatch logic. This dispatch occurs within the snix builder process, not within the eval worker or Eos daemon. The build worker shim forwards derivations to snix builders via gRPC; the builder selects the sandbox backend.
 
-### Detection Logic
+| Platform                   | Sandbox Backend          | Provider     | Mount Strategy               | Network Isolation                  |
+| :------------------------- | :----------------------- | :----------- | :--------------------------- | :--------------------------------- |
+| Linux (with `crun`/`runc`) | `OCIBuildService`        | `snix-build` | FUSE mount of castore inputs | OCI spec `network: none` namespace |
+| Linux (with `bwrap`)       | `BubblewrapBuildService` | `snix-build` | FUSE mount of castore inputs | User namespace + network namespace |
+| Other / Remote             | `GRPCBuildService`       | `snix-build` | Delegated to remote host     | Delegated to remote host           |
 
-`SnixEngine::new()` MUST determine the sandbox backend during construction:
+### Detection Logic (Snix Builder Internal)
+
+> **Note (ADR-0002):** This detection logic runs inside the snix builder process, not within `eos-snix` or the Eos daemon. The eval worker (`eos-snix`) does not perform builds.
+
+The snix builder selects the sandbox backend during initialization:
 
 ```
-FUNCTION select_sandbox(config: SnixConfig) → SandboxBackend:
+FUNCTION select_sandbox(config: SnixBuilderConfig) → SandboxBackend:
   IF config.remote_builder IS SOME:
     RETURN GRPCBuildService(config.remote_builder.endpoint)
 
@@ -287,9 +301,6 @@ FUNCTION select_sandbox(config: SnixConfig) → SandboxBackend:
       ELSE:
         RETURN Error("no sandbox runtime found; install crun, runc, or bwrap")
 
-    "macos" →
-      RETURN BirdcageBuildService(config.workdir)
-
     _ →
       IF config.remote_builder IS SOME:
         RETURN GRPCBuildService(config.remote_builder.endpoint)
@@ -297,7 +308,7 @@ FUNCTION select_sandbox(config: SnixConfig) → SandboxBackend:
         RETURN Error("unsupported platform; configure a remote builder")
 ```
 
-The resolved backend MUST be stored in `SnixEngine` and reused for all subsequent `build()` calls. Re-detection per build is wasteful and risks inconsistency if the host environment changes during the daemon's lifetime.
+The resolved backend is stored in the snix builder and reused for all subsequent `do_build()` calls.
 
 ---
 
@@ -326,13 +337,20 @@ Where `BuildRequest` and `BuildResponse` are defined in `snix/build/protos/build
 
 The `BuildResponse` returns `repeated Output outputs`, each containing an `Entry` (content-addressed output root) and `repeated uint64 needles` (indices of detected reference scan matches).
 
-### Eos Usage
+### Eos Usage (ADR-0002 Architecture)
 
-Eos MAY leverage this existing gRPC protocol for remote builder communication in two configurations:
+Under the gRPC-first architecture, build dispatch is handled by **build worker shims** — separate binaries that bridge Eos's Cap'n Proto `BuildWorker` interface to snix's gRPC `BuildService.DoBuild()`. The Eos scheduler speaks only Cap'n Proto to workers; the shim translates.
 
-1. **Eos daemon → Snix builder**: The eos daemon constructs a `BuildRequest` from the `Derivation`, then forwards it to a remote Snix build host via `GRPCBuildService`. This reuses Snix's wire format without translation.
+```
+Eos Scheduler  ──Cap'n Proto──▸  Build Worker Shim  ──gRPC──▸  snix Builder
+```
 
-2. **Eos daemon → eos worker**: A future eos-native worker protocol (Cap'n Proto) would supersede this for eos-to-eos communication, but the Snix gRPC protocol provides an expedient bootstrap path for remote builds before the full eos protocol is implemented.
+The shim is a standalone binary (not part of `eos-snix`) that:
+
+- Implements the Eos `BuildWorker` Cap'n Proto interface
+- Converts the `Derivation` to a `BuildRequest` (using `nix-compat` types)
+- Forwards the request to a snix builder via `GRPCBuildService`
+- Adds cancellation, progress streaming, and lease management semantics
 
 The `GRPCBuildService` in `snix-build` accepts any `tonic::transport::Channel` and implements the `BuildService` trait, making it a drop-in replacement for the local OCI/Bubblewrap backends. Connection management, TLS, and authentication are configured at the `Channel` level.
 
@@ -407,7 +425,7 @@ The `inputs` parameter requires pre-resolved content-addressed nodes for every i
 
 ### G7: No Built-In Scheduler
 
-Snix builds dependencies ad-hoc during evaluation. When the evaluator encounters a `builtins.derivation` call whose output is needed (import-from-derivation), `SnixStoreIO` triggers an inline build. The source comments explicitly state this should be replaced with a proper scheduler. The eos daemon's job queue and scheduler subsystem fill this architectural gap.
+Snix builds dependencies ad-hoc during evaluation. When the evaluator encounters a `builtins.derivation` call whose output is needed (import-from-derivation), `SnixStoreIO` triggers an inline build via the `BuildService` handle in the `SnixStoreIO` configuration. Under the gRPC-first architecture, this IFD build is dispatched to the snix builder via the gRPC store connection within the eval worker — not through the Eos scheduler. The Eos scheduler dispatches top-level evaluation and build jobs; IFD builds within evaluation remain internal to the eval worker's `SnixStoreIO` wiring.
 
 ---
 
@@ -527,13 +545,13 @@ Available backend implementations: in-memory, gRPC (remote), `object_store` (S3/
 
 ## Implications
 
-1. **Upstream Engagement Required**: Two upstream contributions to the Snix project are desirable: (a) making `derivation_into_build_request()` public (visibility-only change), and (b) making build concurrency configurable (parameter addition to constructors). Neither is architecturally invasive. If declined, `eos-snix` has viable fallback paths (reimplementation and eos-level scheduling, respectively), but upstream acceptance reduces maintenance surface.
+1. **Upstream Engagement Required**: Making `derivation_into_build_request()` public in snix remains desirable (the build worker shim needs this function). This is a visibility-only change and aligns with snix's interest in composable library usage. If declined, the build worker shim MUST reimplement the conversion with byte-identical output.
 
-2. **Thread Pool for Evaluation**: While the spec mandates a dedicated OS thread per evaluation, a production implementation SHOULD use a bounded thread pool (e.g., `rayon` or a custom `std::thread` pool) to amortize thread creation overhead. The pool size constrains maximum concurrent evaluations — a tunable that the eos scheduler MUST be aware of.
+2. **Thread Pool for Evaluation**: While the spec mandates a dedicated OS thread per evaluation, a production eval worker implementation SHOULD use a bounded thread pool (e.g., `rayon` or a custom `std::thread` pool) to amortize thread creation overhead. The pool size constrains maximum concurrent evaluations per eval worker — a tunable that the eos scheduler MUST be aware of via the `max_concurrency` field reported during worker registration.
 
-3. **macOS Sandbox Parity**: The birdcage sandbox on macOS provides weaker isolation guarantees than Linux kernel namespaces. Birdcage uses macOS Seatbelt sandbox profiles (`sandbox-exec`), which are a process-level policy — not a full container. Network isolation, UID mapping, and filesystem overlay are less granular. The eos daemon SHOULD log a warning when operating with the birdcage backend, noting reduced isolation strength.
+3. **Eval Worker Deployment**: Under the gRPC-first architecture, eval workers are separate processes. For optimal performance, eval workers SHOULD be co-located with snix store daemons to minimize gRPC round-trip latency during evaluation (each `EvalIO` call may trigger a store lookup via `handle.block_on()`).
 
-4. **gRPC as Bootstrap Protocol**: The existing Snix gRPC `BuildService` protocol provides an expedient remote builder path. However, it lacks progress reporting (the RPC is unary: `BuildRequest → BuildResponse`), job deduplication, and attach/detach semantics. For the eos-native remote builder protocol, Cap'n Proto capabilities supersede this. The gRPC path is a transitional bridge, not the target architecture.
+4. **Build Worker Shim Is Separate**: Build execution is no longer within `eos-snix`'s scope. The build worker shim is a separate binary that wraps snix's gRPC `BuildService` protocol with Eos's Cap'n Proto `BuildWorker` interface, adding cancellation, progress streaming, and lease semantics. See [ADR-0002](../adr/0002-decoupling-snix-backend.md) §Tier 2 for details.
 
 5. **Error Taxonomy**: The coarseness of `io::Result` from `BuildService::do_build()` necessitates a `SnixError` enum in `eos-snix` that provides structured diagnostics. This error type MUST implement `std::error::Error` and SHOULD implement `Display` with machine-parseable output (e.g., error codes) alongside human-readable messages, since errors are serialized over the wire to frontends.
 

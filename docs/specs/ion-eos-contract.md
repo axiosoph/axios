@@ -90,8 +90,13 @@ content receive capabilities referencing the same underlying job
 **Backend**: A specific build system that eos delegates to. The
 initial and primary backend is Snix (see
 [eos-snix-backend.md](eos-snix-backend.md)), with the architecture
-designed for extensibility to future backends. Each backend has its
-own evaluation semantics, store format, and dependency model.
+designed for extensibility to future backends. Under the gRPC-first
+architecture ([ADR-0002](../adr/0002-decoupling-snix-backend.md)),
+the backend is implemented as a composition of eval workers (using
+`snix-eval`/`snix-glue`) and build workers (forwarding to snix
+builders via gRPC). The daemon itself has no backend dependencies.
+Each backend has its own evaluation semantics, store format, and
+dependency model.
 
 **Capability Negotiation**: On connection, ion queries the daemon's
 capabilities via `EosDaemon.getCapabilities()` to discover supported
@@ -526,8 +531,10 @@ Bazel RE API's `FindMissingBlobs`):
    `AtomSource` composite (local store, then registry mirrors)
 3. Ion calls `BuildJob.getMissing()` — blocks until eos has
    attempted all non-peer sources
-4. Eos returns the list of `AtomId`s it could not resolve from
-   local store or registries
+4. Eos returns the list of `AtomId`s it could not resolve. Under
+   the gRPC-first architecture, the daemon queries the snix store
+   daemon via gRPC (or delegates the resolution check to eval
+   workers) to determine which atoms are missing.
 5. If the missing list is non-empty, eos's composite source
    ingests the missing atoms from ion's store via the atom
    protocol. Ion makes its store available as an `AtomSource`

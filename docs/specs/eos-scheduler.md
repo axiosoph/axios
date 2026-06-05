@@ -61,35 +61,39 @@ TYPE Job = {
     lease: Maybe<Lease>
 }
 
-TYPE WorkerKind = LOCAL | REMOTE
+TYPE WorkerKind = EVAL | BUILD
 
 TYPE WorkerStatus = {
     id: WorkerId,
     kind: WorkerKind,
     max_concurrency: Integer,
     active_jobs: Set<JobId>,
-    cached_paths: Set<StorePath>,
+    cached_paths: Set<StorePath>,         -- Build workers only; eval workers: empty
     last_heartbeat: Timestamp,
     healthy: Bool
 }
 
 TYPE SchedulerState = {
-    workers: Map<WorkerId, WorkerStatus>,
-    queue: Map<JobId, Job>,
+    eval_workers: Map<WorkerId, WorkerStatus>,
+    build_workers: Map<WorkerId, WorkerStatus>,
+    eval_queue: Map<JobId, Job>,
+    build_queue: Map<JobId, Job>,
     lease_duration: Duration,
     heartbeat_deadline: Duration
 }
 ```
 
-### Worker Abstraction
+### Worker Pools
 
-The scheduler distinguishes two classes of workers but treats both uniformly through the `WorkerStatus` type:
+The scheduler manages two functionally distinct worker pools, each accessed exclusively over Cap'n Proto RPC:
 
-- **Local workers** (`WorkerKind = LOCAL`): threads or processes on the same machine as the daemon. Communication occurs via in-process channels (`tokio::sync::mpsc`). Local workers share the daemon's `NodeId` and do not require independent authentication.
+- **Eval workers** (`WorkerKind = EVAL`): Separate processes (local or remote) that run `snix-eval` + `snix-glue` in-process on a dedicated OS thread. They connect to snix store daemons via gRPC for store access. Communication between the scheduler and eval workers occurs over Cap'n Proto via the `EvalWorker` interface (see [eos-network-protocol.md](eos-network-protocol.md)). Eval workers are memory-bound with low I/O variance.
 
-- **Remote workers** (`WorkerKind = REMOTE`): separate Eos daemon instances on different machines. Communication occurs over the network via the Cap'n Proto RPC surface defined in [eos-network-protocol.md](eos-network-protocol.md). Remote workers authenticate via `NodeIdentity` handshake and are addressed by their own `NodeId`.
+- **Build workers** (`WorkerKind = BUILD`): Separate processes (local or remote) that wrap snix's gRPC `BuildService.DoBuild()` in a Cap'n Proto shim adding cancellation, progress streaming, and lease management. Communication between the scheduler and build workers occurs over Cap'n Proto via the `BuildWorker` interface. Build workers are CPU/disk-bound with high I/O variance.
 
-The scheduler assigns, delegates, and monitors jobs identically regardless of worker kind. The dispatch layer resolves `WorkerId` to the appropriate communication channel.
+Both pools use the same lease-based health monitoring, heartbeat liveness, and Rendezvous hashing for routing. The pools differ in scheduling policy: eval workers do NOT support work-stealing (eval durations have low variance); build workers support work-stealing for load balancing across heterogeneous machines.
+
+Workers register dynamically via Cap'n Proto handshake. The scheduler does NOT manage worker lifecycles — starting, stopping, and scaling workers is delegated to an external orchestrator (process-compose, systemd, k8s).
 
 ---
 
@@ -101,7 +105,7 @@ The scheduler assigns, delegates, and monitors jobs identically regardless of wo
 **[eos-scheduler-deduplication]**: For any unique `JobId`, there MUST exist at most one active (QUEUED or RUNNING) `Job` in the scheduler state. If a client submits a build request for an `EnginePlan` that is already in progress, the scheduler MUST append the client's ID to the job's `subscribers` set rather than executing a duplicate build.
 `VERIFIED: unverified`
 
-**[eos-scheduler-input-affinity]**: The scheduler MUST assign a job to the worker that maximizes input-data locality, determined by Highest Random Weight (Rendezvous) hashing. For each candidate worker satisfying concurrency limits, the scheduler computes `score(worker, job) = hash(worker_id || job_input_digest)` and selects the worker with the highest score. This provides deterministic, stable placement: a given `(worker_id, job_input_digest)` pair always produces the same score, and adding or removing workers redistributes only `1/N` of assignments (minimal disruption). The `cached_paths` set on `WorkerStatus` further informs tie-breaking — among workers with equal HRW scores, prefer those with the largest fraction of the job's input store paths already cached.
+**[eos-scheduler-input-affinity]**: The scheduler MUST assign a job to the worker that maximizes input-data locality, determined by Highest Random Weight (Rendezvous) hashing. For each candidate worker satisfying concurrency limits, the scheduler computes `score(worker, job) = hash(worker_id || job_input_digest)` and selects the worker with the highest score. This provides deterministic, stable placement: a given `(worker_id, job_input_digest)` pair always produces the same score, and adding or removing workers redistributes only `1/N` of assignments (minimal disruption). The `cached_paths` set on `WorkerStatus` further informs tie-breaking — among workers with equal HRW scores, prefer those with the largest fraction of the job's input store paths already cached. For eval workers, HRW hashing uses input digests alone (eval workers do not maintain `cached_paths`).
 `VERIFIED: unverified`
 
 **[eos-scheduler-concurrency-limits]**: The number of concurrently RUNNING jobs assigned to any worker node MUST NOT exceed that worker's declared `max_concurrency` limit.
@@ -132,10 +136,10 @@ The scheduler assigns, delegates, and monitors jobs identically regardless of wo
 - **POST**: The scheduler selects the optimal worker via HRW hashing (per `[eos-scheduler-input-affinity]`). The job state transitions to `RUNNING`, `assigned_worker` is set to the worker's ID, a `Lease` is created with `granted_at = now` and `expires_at = now + lease_duration`, and the task execution is dispatched to the worker.
   `VERIFIED: unverified`
 
-**[delegate-job]**: Steal/re-assign a running job to balance cluster load.
+**[delegate-job]**: Steal/re-assign a running build job to balance cluster load.
 
-- **PRE**: A job is in the `RUNNING` state, and another healthy worker is idle and has requested work.
-- **POST**: The job state transitions to `DELEGATED` and then back to `RUNNING` with `assigned_worker` updated to the target worker. The existing lease is revoked and a new `Lease` is issued for the target worker. The job's execution continuation is transferred to the new worker. For remote workers, delegation is abort-and-re-execute (safe due to input immutability); for local workers, thread-level continuation transfer MAY be used.
+- **PRE**: A build job (not an eval job) is in the `RUNNING` state, and another healthy build worker is idle and has requested work. Eval jobs MUST NOT be delegated — eval durations have low variance, making work-stealing counterproductive.
+- **POST**: The job state transitions to `DELEGATED` and then back to `RUNNING` with `assigned_worker` updated to the target build worker. The existing lease is revoked and a new `Lease` is issued for the target worker. The job's execution continuation is transferred via abort-and-re-execute (safe due to input immutability).
   `VERIFIED: unverified`
 
 **[renew-lease]**: Extend the lease on a running job.
@@ -208,8 +212,8 @@ The scheduler assigns, delegates, and monitors jobs identically regardless of wo
 
 ## Implications
 
-1. **Work-Stealing Continuation Design:**
-   Delegating jobs in the `RUNNING` state requires Eos to support transferring build continuations. For local workers, this is trivial (threads share the same process). For remote workers, delegation is abort-and-re-execute — the target worker re-fetches inputs and restarts execution from the beginning. This is safe because build inputs are immutable and content-addressed, ensuring identical results regardless of which worker executes the plan.
+1. **Work-Stealing for Build Workers Only:**
+   Work-stealing delegation applies exclusively to the build worker pool. Delegating a build job in the `RUNNING` state uses abort-and-re-execute: the target build worker re-fetches inputs via gRPC from the snix store and restarts execution from the beginning. This is safe because build inputs are immutable and content-addressed, ensuring identical results regardless of which worker executes the plan. Eval workers do NOT participate in work-stealing — evaluation durations have low variance, making delegation overhead unjustified.
 
 2. **Deduplication Key Stability:**
    Because `JobId` is computed from the hash of the `EnginePlan`, build input formats must be normalized (e.g., alphanumeric sorting of derivation inputs and environment variables) to ensure deterministic duplication detection.
@@ -220,8 +224,8 @@ The scheduler assigns, delegates, and monitors jobs identically regardless of wo
 4. **HRW Hashing and Cluster Membership Changes:**
    Rendezvous hashing's cardinal property is minimal disruption under membership changes: when a worker joins or departs, only the `1/N` fraction of jobs that hashed highest to that worker are redistributed. This is strictly superior to consistent hashing for scheduling workloads where the number of workers is small (tens, not thousands) and the affinity mapping must remain stable.
 
-5. **Cap'n Proto Projection:**
-   Job submissions, status updates, delegation, and lease management are projected over the wire via the Cap'n Proto schema defined in [eos-network-protocol.md](eos-network-protocol.md). The `EosDaemon.submitBuild()` capability maps to `[submit-job]`; the `BuildJob` capability provides status queries and cancellation. Scheduler state is internal to the daemon and is not directly exposed over the protocol — clients interact with jobs through capabilities, not with the scheduler itself.
+5. **Cap'n Proto as Universal Internal Protocol:**
+   All scheduler-to-worker communication uses Cap'n Proto RPC. The scheduler speaks Cap'n Proto to both `EvalWorker` and `BuildWorker` interfaces — it has zero snix dependencies and no gRPC client code. Worker shims translate between Cap'n Proto (Eos protocol) and gRPC (snix protocol) where needed. Client-facing job submissions, status updates, and cancellation are projected via the `EosDaemon` capability (see [eos-network-protocol.md](eos-network-protocol.md)). Scheduler state is internal to the daemon and is not directly exposed over the protocol.
 
-6. **Daemon-Embedded Architecture:**
-   The scheduler runs as a component within the Eos daemon's event loop, not as a separable microservice. It shares the daemon's `NodeId` for identity, accesses the local `ArtifactStore` directly, and communicates with local workers via channels and remote workers via Cap'n Proto RPC. This co-location eliminates a network hop for scheduling decisions and allows the scheduler to observe local store state (cached paths) without protocol overhead.
+6. **Daemon-Embedded Scheduler, Service-External Workers:**
+   The scheduler runs as a component within the Eos daemon's event loop, sharing the daemon's `NodeId` for identity. However, all workers (eval and build) are external processes accessed exclusively via Cap'n Proto RPC — even when co-located on the same machine. The scheduler does not access the snix store directly; store operations are performed by workers. This uniform access pattern means there is no architectural distinction between "local" and "remote" workers — co-located workers simply have lower network latency.

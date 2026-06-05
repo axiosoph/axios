@@ -140,6 +140,67 @@ struct KeyValue {
   key @0 :Text;
   value @1 :Text;
 }
+
+# --- Internal Worker Interfaces (ADR-0002) ---
+# These interfaces are used by the scheduler to communicate with
+# eval workers and build workers. They are NOT client-facing.
+
+struct EvalRequest {
+  atomDigest @0 :Data;             # Content-addressed atom snapshot digest
+  expression @1 :Text;             # Nix expression or file path to evaluate
+  evalArgs @2 :List(KeyValue);     # Evaluation arguments (compose.args)
+  inputs @3 :List(ResolvedInput);  # Pre-resolved atom inputs
+}
+
+struct ResolvedInput {
+  name @0 :Text;                   # Input name (label)
+  digest @1 :Data;                 # Content digest of the resolved atom
+  storePath @2 :Text;              # Store path of the resolved atom
+}
+
+struct EvalResult {
+  union {
+    success :group {
+      derivationBytes @0 :Data;    # ATerm-serialized Derivation
+      planDigest @1 :Data;         # Digest of the computed plan
+    }
+    failure :group {
+      error @2 :Text;              # Evaluation error message
+      errorCode @3 :Int32;         # Structured error code
+    }
+  }
+}
+
+struct WorkerBuildRequest {
+  derivationBytes @0 :Data;        # ATerm-serialized Derivation
+  jobId @1 :Data;                  # Scheduler-assigned job ID
+  leaseId @2 :Data;                # Lease token for health monitoring
+}
+
+struct WorkerBuildResult {
+  union {
+    success :group {
+      outputPaths @0 :List(Text);  # Built output store paths
+      outputDigest @1 :Data;       # Content digest of outputs
+    }
+    failure :group {
+      error @2 :Text;              # Build error message
+      exitCode @3 :Int32;          # Builder exit code
+    }
+  }
+}
+
+interface EvalWorker {
+  evaluate @0 (request :EvalRequest) -> (result :EvalResult);
+  heartbeat @1 () -> ();
+}
+
+interface BuildWorker {
+  build @0 (request :WorkerBuildRequest) -> (result :WorkerBuildResult);
+  cancel @1 (jobId :Data) -> ();
+  attachProgress @2 (jobId :Data, callback :ProgressStream) -> ();
+  heartbeat @3 () -> ();
+}
 ```
 
 ### Schema–Type Correspondence
@@ -147,17 +208,23 @@ struct KeyValue {
 The Cap'n Proto schema defines the wire representation. The `eos-core` Rust
 types define the behavioral contract. Both MUST remain synchronized:
 
-| Cap'n Proto Type | `eos-core` Rust Type     | Role                               |
-| :--------------- | :----------------------- | :--------------------------------- |
-| `PlanDigest`     | `Digest`                 | Content-addressed plan identifier  |
-| `BuildStatus`    | `JobStatus`              | Job lifecycle state                |
-| `ProgressStream` | `ProgressEvent`          | Streaming status callback          |
-| `EosDaemon`      | Daemon entry point       | Top-level RPC surface              |
-| `BuildJob`       | Job handle               | Per-build capability               |
-| `AtomDiscovery`  | `AtomSource` (read-only) | Atom resolution and search         |
-| `AtomMeta`       | Atom metadata            | Per-atom identity and version info |
-| `AtomQuery`      | Search parameters        | Discovery query constraints        |
-| `KeyValue`       | `(String, String)`       | Evaluation arguments               |
+| Cap'n Proto Type     | `eos-core` Rust Type     | Role                                               |
+| :------------------- | :----------------------- | :------------------------------------------------- |
+| `PlanDigest`         | `Digest`                 | Content-addressed plan identifier                  |
+| `BuildStatus`        | `JobStatus`              | Job lifecycle state                                |
+| `ProgressStream`     | `ProgressEvent`          | Streaming status callback                          |
+| `EosDaemon`          | Daemon entry point       | Top-level client-facing RPC surface                |
+| `BuildJob`           | Job handle               | Per-build capability (client-facing)               |
+| `AtomDiscovery`      | `AtomSource` (read-only) | Atom resolution and search                         |
+| `AtomMeta`           | Atom metadata            | Per-atom identity and version info                 |
+| `AtomQuery`          | Search parameters        | Discovery query constraints                        |
+| `KeyValue`           | `(String, String)`       | Evaluation arguments                               |
+| `EvalWorker`         | Eval worker interface    | Scheduler-to-eval-worker RPC (internal, ADR-0002)  |
+| `BuildWorker`        | Build worker interface   | Scheduler-to-build-worker RPC (internal, ADR-0002) |
+| `EvalRequest`        | `EvalRequest`            | Evaluation job specification                       |
+| `EvalResult`         | Evaluation result        | Derivation or error from eval worker               |
+| `WorkerBuildRequest` | Build job specification  | Derivation + lease for build worker                |
+| `WorkerBuildResult`  | Build result             | Output paths or error from build worker            |
 
 ---
 
@@ -575,9 +642,11 @@ Client                              Daemon
 1. **Configuration.** Parse daemon configuration: transport endpoint, backend
    selection, worker pool size, trust policy, substituter list.
 
-2. **Backend Initialization.** Instantiate the `BuildEngine` backend (e.g.,
-   `eos-snix`). Initialize the `ArtifactStore`. These are `Send + Sync` and
-   shared across threads via `Arc`.
+2. **Service Connection.** Connect to snix store daemons via gRPC URIs
+   (configured blob, directory, and path-info service addresses). Register
+   with eval worker and build worker pools via Cap'n Proto handshake. The
+   scheduler holds no snix dependencies — all worker communication is via
+   Cap'n Proto RPC.
 
 3. **Transport Binding.** Create the transport endpoint (bind UDS or TCP).
    For UDS, create the socket file and set permissions. Signal readiness
@@ -619,11 +688,14 @@ The daemon accommodates this via a dedicated threading model:
     ┌──────────────┼──────────────────┐
     │              ▼                  │
     │  ┌───────────────────────┐     │
-    │  │  Worker Pool (Send)   │     │
+    │  │  Scheduler (Send)     │     │
     │  │  ┌─────────────────┐  │     │
-    │  │  │ BuildEngine     │  │     │
-    │  │  │ ArtifactStore   │  │     │
-    │  │  │ Eval threads    │  │     │
+    │  │  │ Eval Worker Pool│  │     │
+    │  │  │ (Cap'n Proto)   │  │     │
+    │  │  ├─────────────────┤  │     │
+    │  │  │ Build Worker    │  │     │
+    │  │  │ Pool (Cap'n     │  │     │
+    │  │  │ Proto)          │  │     │
     │  │  └─────────────────┘  │     │
     │  └───────────────────────┘     │
     │    tokio multi-thread runtime  │
@@ -634,16 +706,18 @@ The daemon accommodates this via a dedicated threading model:
 All `!Send` Cap'n Proto state (capability tables, `Rc`-based references,
 `TwoPartyVatNetwork` instances) lives exclusively on this thread.
 
-**Worker pool:** Runs on the standard `tokio` multi-threaded runtime. The
-`BuildEngine` and `ArtifactStore` traits are `Send + Sync` — their
-implementations are shared via `Arc` across worker threads. Evaluation
-requests that require `!Send` state (e.g., Snix's `Rc<Closure>`) are
-internally bridged by the backend implementation (dedicated eval thread +
-channels inside `eos-snix`).
+**Scheduler:** Runs on the standard `tokio` multi-threaded runtime. The
+scheduler manages two Cap'n Proto worker pools (eval workers and build
+workers). All worker communication is via Cap'n Proto RPC — the scheduler
+has no snix dependencies and no in-process eval threads. Eval workers
+handle the `!Send` snix-eval constraint internally within their own
+processes.
 
-**Communication:** The RPC thread dispatches build requests to the worker
-pool via `tokio::sync::mpsc` channels. Workers send `ProgressEvent`s back to
-the RPC thread, which forwards them to attached `ProgressStream` callbacks.
+**Communication:** The RPC thread dispatches job requests to the scheduler
+via `tokio::sync::mpsc` channels. The scheduler communicates with external
+workers via Cap'n Proto RPC. Workers send status updates back via Cap'n
+Proto capabilities, which the scheduler relays to the RPC thread for
+forwarding to attached `ProgressStream` callbacks.
 
 ---
 
@@ -781,10 +855,11 @@ Artifact transfer (for substitution and cache distribution) uses the
 
 2. **Cap'n Proto Constraints Shape Daemon Architecture.**
    The `!Send` nature of `capnp-rpc` is not a limitation to work around but
-   an architectural driver. The dedicated RPC thread + channel-based worker
-   dispatch pattern is the canonical design for Cap'n Proto daemons. This
-   aligns with Eos's existing need to isolate `!Send` Snix evaluation state
-   on dedicated threads.
+   an architectural driver. The dedicated RPC thread + channel-based
+   scheduler dispatch pattern is the canonical design for Cap'n Proto
+   daemons. With the gRPC-first integration model, `!Send` snix-eval state
+   is fully encapsulated within eval worker processes — the daemon itself
+   has no `!Send` snix state.
 
 3. **Decentralized Substitution Networks.**
    Because caches are content-addressed and verified via plan-to-output
