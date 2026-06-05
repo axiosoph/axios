@@ -25,6 +25,8 @@ M == INSTANCE EosScheduling WITH
     PredictedLoad <- LinearPredictedLoad,
     Outputs <- LinearOutputs
 
+ASSUME M!VerifyAxioms
+
 Init == M!Init
 Next == M!Next
 Spec == M!Spec

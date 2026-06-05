@@ -25,6 +25,8 @@ M == INSTANCE EosScheduling WITH
     PredictedLoad <- ConvergencePredictedLoad,
     Outputs <- ConvergenceOutputs
 
+ASSUME M!VerifyAxioms
+
 Init == M!Init
 Next == M!Next
 Spec == M!Spec

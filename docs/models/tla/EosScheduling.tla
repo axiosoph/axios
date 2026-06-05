@@ -22,14 +22,17 @@ IsAcyclic ==
         /\ \A i \in 1..(Len(seq)-1) : <<seq[i], seq[i+1]>> \in DependencyEdges
 
 \* Formal preconditions and axioms of the scheduling domain
-ASSUME IsFiniteSet(EntryPoints)
-ASSUME IsFiniteSet(Workers)
-ASSUME DependencyEdges \subseteq (EntryPoints \times EntryPoints)
-ASSUME IsAcyclic
-ASSUME WorkerCap \in [Workers -> Nat]
-ASSUME PredictedLoad \in [EntryPoints -> Nat]
-ASSUME \A s \in EntryPoints : IsFiniteSet(Outputs[s])
-ASSUME \A s \in EntryPoints : \exists w \in Workers : PredictedLoad[s] <= WorkerCap[w]
+VerifyAxioms ==
+    /\ IsFiniteSet(EntryPoints)
+    /\ IsFiniteSet(Workers)
+    /\ DependencyEdges \subseteq (EntryPoints \times EntryPoints)
+    /\ IsAcyclic
+    /\ WorkerCap \in [Workers -> Nat]
+    /\ PredictedLoad \in [EntryPoints -> Nat]
+    /\ \A s \in EntryPoints : IsFiniteSet(Outputs[s])
+    /\ \A s \in EntryPoints : \exists w \in Workers : PredictedLoad[s] <= WorkerCap[w]
+
+ASSUME VerifyAxioms
 
 VARIABLES
     epStatus,          \* Map of entry point to status

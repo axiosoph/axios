@@ -26,6 +26,8 @@ M == INSTANCE EosScheduling WITH
     PredictedLoad <- DiamondPredictedLoad,
     Outputs <- DiamondOutputs
 
+ASSUME M!VerifyAxioms
+
 Init == M!Init
 Next == M!Next
 Spec == M!Spec

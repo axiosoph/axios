@@ -25,6 +25,8 @@ M == INSTANCE EosScheduling WITH
     PredictedLoad <- IndependentPredictedLoad,
     Outputs <- IndependentOutputs
 
+ASSUME M!VerifyAxioms
+
 Init == M!Init
 Next == M!Next
 Spec == M!Spec
