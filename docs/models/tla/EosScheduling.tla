@@ -9,6 +9,28 @@ CONSTANTS
     PredictedLoad,     \* Map of entry point to its predicted resource load (Nat)
     Outputs            \* Map of entry point to its produced artifact set
 
+-----------------------------------------------------------------------------
+
+\* Bounded sequences of length at most N+1 representing paths
+BoundedSeq == UNION { [1..n -> EntryPoints] : n \in 2..(Cardinality(EntryPoints) + 1) }
+
+\* A relation is acyclic if there are no cycles of length >= 1
+IsAcyclic ==
+    ~ \exists seq \in BoundedSeq :
+        /\ Len(seq) >= 2
+        /\ seq[1] = seq[Len(seq)]
+        /\ \A i \in 1..(Len(seq)-1) : <<seq[i], seq[i+1]>> \in DependencyEdges
+
+\* Formal preconditions and axioms of the scheduling domain
+ASSUME IsFiniteSet(EntryPoints)
+ASSUME IsFiniteSet(Workers)
+ASSUME DependencyEdges \subseteq (EntryPoints \times EntryPoints)
+ASSUME IsAcyclic
+ASSUME WorkerCap \in [Workers -> Nat]
+ASSUME PredictedLoad \in [EntryPoints -> Nat]
+ASSUME \A s \in EntryPoints : IsFiniteSet(Outputs[s])
+ASSUME \A s \in EntryPoints : \exists w \in Workers : PredictedLoad[s] <= WorkerCap[w]
+
 VARIABLES
     epStatus,          \* Map of entry point to status
     workerLoad,        \* Map of worker to current load
@@ -105,6 +127,11 @@ OrderingSoundness ==
 CapacitySafety ==
     \A w \in Workers : workerLoad[w] <= WorkerCap[w]
 
+\* Artifact safety: if all entry points completed successfully, the artifact store contains all outputs
+ArtifactSafety ==
+    (\A s \in EntryPoints : epStatus[s] = "complete")
+        => artifactStore = UNION {Outputs[s] : s \in EntryPoints}
+
 -----------------------------------------------------------------------------
 
 \* Liveness Properties
@@ -112,5 +139,11 @@ CapacitySafety ==
 \* Every entry point eventually reaches a terminal state (complete or failed)
 CompletionPropagation ==
     <> (\A s \in EntryPoints : epStatus[s] \in {"complete", "failed"})
+
+\* If an entry point is ready and there is capacity, it must eventually be dispatched
+Progress ==
+    \A s \in EntryPoints :
+        epStatus[s] = "ready" /\ (\exists w \in Workers : workerLoad[w] + PredictedLoad[s] <= WorkerCap[w])
+            => <> (epStatus[s] /= "ready")
 
 =============================================================================

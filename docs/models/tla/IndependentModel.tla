@@ -33,6 +33,8 @@ FairSpec == Init /\ [][Next]_vars /\ WF_vars(Next)
 TypeOK == M!TypeOK
 OrderingSoundness == M!OrderingSoundness
 CapacitySafety == M!CapacitySafety
+ArtifactSafety == M!ArtifactSafety
 CompletionPropagation == M!CompletionPropagation
+Progress == M!Progress
 
 =============================================================================
