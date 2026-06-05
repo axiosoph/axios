@@ -24,7 +24,9 @@ IsAcyclic ==
 \* Formal preconditions and axioms of the scheduling domain
 VerifyAxioms ==
     /\ IsFiniteSet(EntryPoints)
+    /\ EntryPoints /= {}
     /\ IsFiniteSet(Workers)
+    /\ Workers /= {}
     /\ DependencyEdges \subseteq (EntryPoints \times EntryPoints)
     /\ IsAcyclic
     /\ WorkerCap \in [Workers -> Nat]
