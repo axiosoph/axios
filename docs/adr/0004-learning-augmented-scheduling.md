@@ -385,13 +385,16 @@ Where:
   already has entry point `e`'s source tree and transitive
   inputs cached locally.
 
-- **resource_fit(w, e)**: Normalized alignment (cosine similarity)
+- **resource_fit(w, e)**: Capacity-normalized resource alignment
   between the entry point's predicted resource vector $\mathbf{r}_e$ and
-  the worker's available resource vector $\mathbf{a}_w$:
-  $$\text{resource\_fit}(w, e) = \frac{\mathbf{r}_e \cdot \mathbf{a}_w}{\|\mathbf{r}_e\|_2 \|\mathbf{a}_w\|_2}$$
-  Both vectors contain matching dimensions for CPU cores, memory (bytes), and
-  disk (bytes). Normalizing to $[0,1]$ prevents the larger scalar ranges of
-  memory or disk from dominating the CPU dimension.
+  the worker's available capacity vector $\mathbf{a}_w$, normalized by the
+  worker's total capacity vector $\mathbf{c}_w$ (as established in Tetris):
+  $$\text{resource\_fit}(w, e) = \sum_{i \in \{\text{cpu}, \text{mem}, \text{disk}\}} \left( \frac{r_{e,i}}{c_{w,i}} \cdot \frac{a_{w,i}}{c_{w,i}} \right)$$
+  Normalizing each dimension by total worker capacity $c_{w,i}$ converts
+  raw resource values (e.g., CPU cores vs. memory bytes) into unitless, comparable
+  fractions in $[0,1]$ before combination. This prevents large byte ranges from
+  dominating CPU count while preserving the absolute magnitude of tasks to steer
+  heavy builds to capable workers (preventing the magnitude erasure of cosine similarity).
 
 - **availability(w)**: Headroom ratio:
   `1 - (w.current_load / w.max_capacity)`
@@ -399,13 +402,14 @@ Where:
 
 Weights `α`, `β`, `γ` are operator-tunable. To protect against adversarial or
 highly inaccurate predictions, the effective weight of the resource fit term
-is dynamically decayed based on historical prediction error variance:
-$$\beta_e = \beta \cdot e^{-\lambda \cdot \text{Var}(\eta_e)}$$
-where $\text{Var}(\eta_e)$ is the running variance of the relative prediction
-error $\eta$ for that atom/derivation group, and $\lambda > 0$ is a decay
-constant. Under high prediction variance, $\beta_e \to 0$, causing placement
-to fall back to the prediction-free baseline (affinity and availability).
-Operators running homogeneous clusters may also set $\beta = 0$.
+is dynamically decayed based on the exponential moving average (EMA) of the absolute
+relative prediction error:
+$$\beta_e = \beta \cdot e^{-\lambda \cdot \text{EMA}(|\eta_e|)}$$
+where $\text{EMA}(|\eta_e|)$ is the running average of the absolute relative prediction
+error magnitude for that atom/derivation group, and $\lambda > 0$ is a decay
+constant. If predictions are systematically incorrect (even if stable and having zero variance),
+$\text{EMA}(|\eta_e|)$ grows, causing $\beta_e \to 0$ and safely falling back to the
+prediction-free baseline. Operators running homogeneous clusters may set $\beta = 0$.
 
 **Prior art**: Tetris (Grandl et al., SIGCOMM 2014) —
 multi-resource dot-product alignment heuristic.

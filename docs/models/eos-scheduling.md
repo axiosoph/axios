@@ -398,7 +398,9 @@ optimization problem is finding $S$ that minimizes makespan.
 
 _Given a fixed entry point DAG $T = (S, E_S)$ constructed from
 uncached sub-DAG $G'$, if predictions are accurate ($\eta(v) \leq \epsilon$ for
-all $v$), then the heuristic assignment $\sigma_H$ achieves:_
+all $v$) and the overlap between entry point transitive scopes in the coverage
+relation is negligible (ensuring task duration independence), then the heuristic
+assignment $\sigma_H$ achieves:_
 
 $$M(\sigma_H) \leq (1 + O(\epsilon)) \cdot M(\sigma^*)$$
 
@@ -433,14 +435,14 @@ _where $\sigma_\text{base}$ is the prediction-free baseline
 (tag matching with LRH affinity and availability only) and $\alpha \geq 1$
 is a small constant.\_
 
-**Proof approach**: We normalize the `resource_fit` term using cosine similarity:
-$$\text{resource\_fit}(w, e) = \frac{\mathbf{r}_e \cdot \mathbf{a}_w}{\|\mathbf{r}_e\|_2 \|\mathbf{a}_w\|_2}$$
-bounding it in $[0,1]$ to match the range of the cache `affinity` and `availability` terms.
+**Proof approach**: We normalize the `resource_fit` term using capacity-relative fractions:
+$$\text{resource\_fit}(w, e) = \sum_{i} \left( \frac{r_{e,i}}{c_{w,i}} \cdot \frac{a_{w,i}}{c_{w,i}} \right)$$
+bounding it to match the range of the cache `affinity` and `availability` terms while preserving task magnitude and resolving dimensional mismatch.
 Furthermore, the scheduler dynamically decays the weight $\beta_e$ of the `resource_fit`
-term based on historical prediction error variance:
-$$\beta_e = \beta \cdot e^{-\lambda \cdot \text{Var}(\eta_e)}$$
-where $\text{Var}(\eta_e)$ is the running variance of relative prediction error.
-When predictions are arbitrarily wrong or highly volatile, $\text{Var}(\eta_e) \to \infty$,
+term based on the exponential moving average (EMA) of absolute relative prediction error:
+$$\beta_e = \beta \cdot e^{-\lambda \cdot \text{EMA}(|\eta_e|)}$$
+where $\text{EMA}(|\eta_e|)$ is the running average of relative prediction error magnitude.
+If predictions are systematically incorrect (even with zero variance), $\text{EMA}(|\eta_e|) \to \infty$,
 causing $\beta_e \to 0$. The scoring function thus dynamically filters out the noisy prediction
 term, mathematically collapsing the assignment algorithm back to the prediction-free baseline.
 Because the degradation scales with the decayed weight and the normalized terms, the makespan
