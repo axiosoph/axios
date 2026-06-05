@@ -563,12 +563,13 @@ TLA+ module. Key modeling decisions:
 ### For Implementation
 
 - The state machine structure maps to a Rust `enum` for entry
-  point status, a `DashMap<DrvHash, SharedFuture>` for the
-  singleflight map, and a `tokio::sync::watch` for completion
-  broadcast.
-- The coverage function $\kappa$ is computed once during entry
-  point selection and stored as a lookup table (derivation hash
-  → entry point hash).
+  point status and a `tokio::sync::watch` for completion
+  broadcast. If the optional scheduler-level singleflight
+  optimization is implemented, it uses a `DashMap<DrvHash, SharedFuture>`
+  to track in-flight builds.
+- The coverage relation $\kappa$ is computed once during entry
+  point selection and stored as a lookup table (e.g., mapping each
+  derivation hash to its set of covering entry point hashes).
 - The ordering soundness invariant (P1) translates to a runtime
   assertion: before dispatching entry point $s$, verify all
   $(s', s) \in E_S$ have $Q(s') = \text{complete}$.
