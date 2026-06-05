@@ -435,6 +435,97 @@
       });
     })();
   </script>
+  
+  <!-- Robust Scrollspy & Highlight Script -->
+  <script>
+    (function() {
+      document.addEventListener("DOMContentLoaded", function() {
+        const headings = Array.from(document.querySelectorAll(".prose-content h1[id], .prose-content h2[id], .prose-content h3[id], .prose-content h4[id]"));
+        const anchorLinks = Array.from(document.querySelectorAll(".nav-anchors .anchor-link"));
+        
+        if (headings.length === 0 || anchorLinks.length === 0) return;
+
+        const linkMap = new Map();
+        anchorLinks.forEach(link => {
+          const href = link.getAttribute("href");
+          if (href && href.startsWith("#")) {
+            linkMap.set(href.substring(1), link);
+          }
+        });
+
+        let activeLink = null;
+
+        function setActive(link) {
+          if (activeLink === link) return;
+          if (activeLink) activeLink.classList.remove("active");
+          if (link) link.classList.add("active");
+          activeLink = link;
+        }
+
+        // Click handler to instantly highlight clicked link
+        anchorLinks.forEach(link => {
+          link.addEventListener("click", function() {
+            setActive(link);
+          });
+        });
+
+        // Initial check for window.location.hash
+        if (window.location.hash) {
+          const hashId = window.location.hash.substring(1);
+          const initialLink = linkMap.get(hashId);
+          if (initialLink) {
+            setActive(initialLink);
+          }
+        }
+
+        // Intersection Observer for robust scrollspy
+        if ("IntersectionObserver" in window) {
+          const observerOptions = {
+            root: null,
+            rootMargin: "-80px 0px -70% 0px",
+            threshold: 0
+          };
+
+          const observer = new IntersectionObserver(entries => {
+            const visibleHeadings = entries
+              .filter(e => e.isIntersecting)
+              .map(e => e.target);
+
+            if (visibleHeadings.length > 0) {
+              const target = visibleHeadings[0];
+              const link = linkMap.get(target.id);
+              if (link) {
+                setActive(link);
+              }
+            }
+          }, observerOptions);
+
+          headings.forEach(h => observer.observe(h));
+        } else {
+          // Fallback scroll listener for older browsers
+          window.addEventListener("scroll", function() {
+            let currentHeading = null;
+            const scrollPos = window.scrollY + 100;
+
+            for (const h of headings) {
+              if (h.offsetTop <= scrollPos) {
+                currentHeading = h;
+              } else {
+                break;
+              }
+            }
+
+            if (currentHeading) {
+              const link = linkMap.get(currentHeading.id);
+              if (link) {
+                setActive(link);
+              }
+            }
+          });
+        }
+      });
+    })();
+  </script>
 </body>
 
 </html>
