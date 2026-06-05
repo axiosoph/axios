@@ -1,7 +1,7 @@
 # ADR-0002: Snix Integration via Service Boundaries
 
 - **Status**: PROPOSED (REVISED DRAFT)
-- **Date**: 2026-06-04
+- **Date**: 2026-06-05
 - **Deciders**: nrd
 - **Source**: [Eos Build Scheduler Specification](../specs/eos-scheduler.md) | [Eos Snix Backend Specification](../specs/eos-snix-backend.md) | [Eos Network Protocol](../specs/eos-network-protocol.md)
 - **Supersedes**: ADR-0002 (2026-06-03 draft, "Decoupling Snix Backend from Eos Core and Scheduler")
@@ -191,10 +191,14 @@ Eos does NOT manage the lifecycle of snix store daemons, builders, or eval worke
 The scheduler manages two worker pools with separate registries:
 
 - **Eval worker pool**: Dynamic registration via Cap'n Proto handshake. Rendezvous hashing for routing. Deduplication via `compute_eval_cache_key()` (BLAKE3 hash of normalized request). No work-stealing (eval durations have low variance).
+  - **Metadata**: `ifdSystems: List<Text>` (systems the worker's IFD builders handle; empty if no IFD), `speedFactor: UInt32` (relative priority).
 
 - **Build worker pool**: Dynamic registration via Cap'n Proto handshake. Rendezvous hashing with cache affinity. Deduplication via `plan_digest()`. Work-stealing enabled for load balancing across heterogeneous machines.
+  - **Metadata**: `systems: List<Text>` (hard predicate — derivation system ∈ worker systems), `supportedFeatures: List<Text>` (hard predicate — derivation required features ⊆ worker features), `speedFactor: UInt32`.
 
-Both pools use the same lease-based health monitoring defined in the [scheduler spec](../specs/eos-scheduler.md).
+- **`maxConcurrency`** is operational config (admission control), not a scheduling predicate. It limits concurrent job slots per worker but does not influence job routing.
+
+Both pools use the same lease-based health monitoring defined in the [scheduler spec](../specs/eos-scheduler.md). Workers send periodic heartbeats to the scheduler via `registration.heartbeat()` on the `Registration` capability returned at registration time (worker→scheduler keepalive model). The scheduler tracks `last_heartbeat` per worker and marks workers unhealthy if the deadline is exceeded.
 
 ---
 
@@ -246,6 +250,16 @@ Two interrelated concerns deferred from this ADR:
 1. **Eval/build result caching.** Atom metatags (cryptographically signed by the atom owner) can declare derivation digests, providing a distributed, decentralized cache. For third-party evaluations, an Eos-level cache backed by the snix blob service provides the fallback. The interface design (latency requirements, cache invalidation, consistency model) warrants dedicated analysis.
 
 2. **High availability.** The stateless scheduler design enables external orchestrators to swap instances, but the transition semantics (in-flight job recovery, worker re-registration, lease handoff) need specification.
+
+---
+
+## Related Documents
+
+- [Eos Software Architecture Document](../architecture/eos-sad.md) — the comprehensive architecture blueprint that this ADR supports
+- [Eos Scheduler Specification](../specs/eos-scheduler.md)
+- [Eos Snix Backend Specification](../specs/eos-snix-backend.md)
+- [Eos Network Protocol Specification](../specs/eos-network-protocol.md)
+- [Ion–Eos Contract](../specs/ion-eos-contract.md)
 
 ---
 
