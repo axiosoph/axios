@@ -72,18 +72,18 @@ Eval workers and build workers communicate with the scheduler via Cap'n Proto RP
 ```capnp
 interface EvalWorker {
   evaluate @0 (request :EvalRequest) -> (result :EvalResult);
-  heartbeat @1 () -> ();
 }
 
 interface BuildWorker {
   build @0 (request :BuildRequest) -> (result :BuildResult);
   cancel @1 (jobId :Data) -> ();
   attachProgress @2 (jobId :Data, callback :ProgressStream) -> ();
-  heartbeat @3 () -> ();
 }
 ```
 
-Eval workers return a computed `Derivation` (ATerm bytes). Build workers wrap snix's gRPC `BuildService.DoBuild()` in the Cap'n Proto interface, adding cancellation, progress streaming, and lease management.
+Workers register via `WorkerRegistry` (see [eos-network-protocol.md](eos-network-protocol.md)). Registration returns a `Registration` capability; the worker calls `registration.heartbeat()` periodically (keepalive model, per `[eos-scheduler-heartbeat-liveness]`).
+
+Eval workers return a computed plan (ATerm bytes). Build workers wrap snix's gRPC `BuildService.DoBuild()` in the Cap'n Proto interface, adding cancellation, progress streaming, and lease management.
 
 ---
 

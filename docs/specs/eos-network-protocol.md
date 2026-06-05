@@ -190,16 +190,32 @@ struct WorkerBuildResult {
   }
 }
 
+interface WorkerRegistry {
+  registerEval @0 (worker :EvalWorker,
+    caps :EvalWorkerCapabilities)
+    -> (registration :Registration);
+  registerBuild @1 (worker :BuildWorker,
+    caps :BuildWorkerCapabilities)
+    -> (registration :Registration);
+}
+
+# Returned to worker at registration time.
+# Worker holds this capability and calls heartbeat() periodically
+# (keepalive model, per [eos-scheduler-heartbeat-liveness]).
+# Dropping this capability = deregistration.
+interface Registration {
+  heartbeat @0 () -> ();
+  updateMeta @1 (meta :WorkerMeta) -> ();
+}
+
 interface EvalWorker {
   evaluate @0 (request :EvalRequest) -> (result :EvalResult);
-  heartbeat @1 () -> ();
 }
 
 interface BuildWorker {
   build @0 (request :WorkerBuildRequest) -> (result :WorkerBuildResult);
   cancel @1 (jobId :Data) -> ();
   attachProgress @2 (jobId :Data, callback :ProgressStream) -> ();
-  heartbeat @3 () -> ();
 }
 ```
 
