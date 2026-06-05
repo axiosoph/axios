@@ -276,16 +276,16 @@ Worker Assignments
      handles trivial leaves, patches, and fetches
      internally as part of the entry point's build.
 
-    **Merging constraint (Relaxed)**: Since the formal model relaxes
-    entry-point coverage to a relation, a non-entry-point derivation is
-    permitted to exist in multiple entry points' transitive scopes
-    simultaneously. At runtime, the builder's store-path locks deduplicate
-    the build of this shared node. To optimize scheduling efficiency and
-    avoid redundant worker load reservations, the selection heuristic
-    *may* choose to promote high fan-in convergence points to standalone
-    entry points. However, there is no mathematical constraint forcing
-    this promotion, preventing the macroscopic scheduling DAG from
-    shattering under dense dependencies.
+     **Merging constraint (Relaxed)**: Since the formal model relaxes
+     entry-point coverage to a relation, a non-entry-point derivation is
+     permitted to exist in multiple entry points' transitive scopes
+     simultaneously. At runtime, the builder's store-path locks deduplicate
+     the build of this shared node. To optimize scheduling efficiency and
+     avoid redundant worker load reservations, the selection heuristic
+     _may_ choose to promote high fan-in convergence points to standalone
+     entry points. However, there is no mathematical constraint forcing
+     this promotion, preventing the macroscopic scheduling DAG from
+     shattering under dense dependencies.
 
 3. **Derive inter-entry-point dependencies** — if entry
    point A's transitive subgraph depends on the output of
@@ -717,6 +717,7 @@ point selection is a potential novel contribution.
 
    Mechanism: maintain a concurrent map of in-flight entry
    point builds keyed by derivation hash:
+
    ```
    in_flight: Map<DrvHash, SharedFuture<BuildResult>>
    ```
@@ -816,7 +817,7 @@ should be formally modeled and proven sound.
    of overlapping entry points, builder-level store locks ensure
    at-most-one execution per output path.
 
-4. **Consistency bound**: *Given a fixed entry point DAG $T$*,
+4. **Consistency bound**: _Given a fixed entry point DAG $T$_,
    when predictions are accurate ($\hat{d}(v) \approx d(v)$
    for all $v$), the makespan of the entry point DAG schedule
    achieved by greedy assignment $\sigma_H$ is within a bounded

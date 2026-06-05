@@ -415,7 +415,7 @@ $$M(\sigma_H) \leq (1 + O(\epsilon)) \cdot M(\sigma^*)$$
 _where $\sigma^*$ is the optimal offline assignment for $T$._
 
 **Concession on Coarsening**: We explicitly narrow this bound to the assignment phase
-on a *fixed* entry point DAG $T$. The entry point *selection* (graph coarsening)
+on a _fixed_ entry point DAG $T$. The entry point _selection_ (graph coarsening)
 phase, which groups $G'$ into $T$, currently lacks a formal competitive bound.
 While greedy heuristic selection performs well in practice by isolating troublesome
 nodes and convergence points, mathematically bounding the makespan penalty of graph
@@ -441,7 +441,7 @@ $$M(\sigma_H) \leq \alpha \cdot M(\sigma_\text{base})$$
 
 _where $\sigma_\text{base}$ is the prediction-free baseline
 (tag matching with LRH affinity and availability only) and $\alpha \geq 1$
-is a small constant._
+is a small constant.\_
 
 **Proof approach**: We normalize the `resource_fit` term using cosine similarity:
 $$\text{resource\_fit}(w, e) = \frac{\mathbf{r}_e \cdot \mathbf{a}_w}{\|\mathbf{r}_e\|_2 \|\mathbf{a}_w\|_2}$$
@@ -488,29 +488,29 @@ yielding large savings.
 
 ## Validation
 
-| Check                                | Result  | Detail                                                 |
-| :----------------------------------- | :------ | :----------------------------------------------------- |
-| Coverage properties (1-4) coherent   | PASS    | Trivial selection exists (Thm 1); properties 1-4 are   |
-|                                      |         | consistent and non-contradictory                       |
-| Ordering soundness (P1) well-formed  | PASS    | The entry point DAG is acyclic (induced from a DAG);   |
-|                                      |         | topological dispatch is well-defined                   |
+| Check                                  | Result  | Detail                                                 |
+| :------------------------------------- | :------ | :----------------------------------------------------- |
+| Coverage properties (1-4) coherent     | PASS    | Trivial selection exists (Thm 1); properties 1-4 are   |
+|                                        |         | consistent and non-contradictory                       |
+| Ordering soundness (P1) well-formed    | PASS    | The entry point DAG is acyclic (induced from a DAG);   |
+|                                        |         | topological dispatch is well-defined                   |
 | Coverage completeness (P2) well-formed | PASS    | Guaranteed by entry point selection algorithm;         |
-|                                      |         | relation-based coverage maps all uncached nodes        |
-| Liveness (P5, P6) depend on fairness | PARTIAL | P5 requires a fairness assumption (the scheduler       |
-|                                      |         | eventually considers every ready entry point). Must be |
-|                                      |         | explicitly stated in TLA+ as a fairness constraint.    |
-| Federation liveness (P7) depends on  | PARTIAL | Requires bounded artifact store propagation time δ as  |
-| network model                        |         | an assumption. Under partition, δ → ∞ and P7 fails.    |
-|                                      |         | Need to specify partition behavior explicitly.         |
-| Consistency bound (Thm 2) sketch     | PARTIAL | Mapping to Gupta et al. framework not yet formalized.  |
-|                                      |         | The entry point DAG structure adds complexity beyond   |
-|                                      |         | their unrelated-machines model.                        |
-| Robustness bound (Thm 3)             | PARTIAL | Conjecture only. Scoring function degradation behavior |
-|                                      |         | needs formal characterization.                         |
-| Minimality                           | PASS    | Two-track decomposition is minimal — protocol and      |
-|                                      |         | optimization are formally independent concerns.        |
-| External adequacy                    | PASS    | Model captures all mechanisms described in ADR-0004.   |
-|                                      |         | No ADR mechanism is unmodeled.                         |
+|                                        |         | relation-based coverage maps all uncached nodes        |
+| Liveness (P5, P6) depend on fairness   | PARTIAL | P5 requires a fairness assumption (the scheduler       |
+|                                        |         | eventually considers every ready entry point). Must be |
+|                                        |         | explicitly stated in TLA+ as a fairness constraint.    |
+| Federation liveness (P7) depends on    | PARTIAL | Requires bounded artifact store propagation time δ as  |
+| network model                          |         | an assumption. Under partition, δ → ∞ and P7 fails.    |
+|                                        |         | Need to specify partition behavior explicitly.         |
+| Consistency bound (Thm 2) sketch       | PARTIAL | Mapping to Gupta et al. framework not yet formalized.  |
+|                                        |         | The entry point DAG structure adds complexity beyond   |
+|                                        |         | their unrelated-machines model.                        |
+| Robustness bound (Thm 3)               | PARTIAL | Conjecture only. Scoring function degradation behavior |
+|                                        |         | needs formal characterization.                         |
+| Minimality                             | PASS    | Two-track decomposition is minimal — protocol and      |
+|                                        |         | optimization are formally independent concerns.        |
+| External adequacy                      | PASS    | Model captures all mechanisms described in ADR-0004.   |
+|                                        |         | No ADR mechanism is unmodeled.                         |
 
 **Validation gaps to address:**
 
