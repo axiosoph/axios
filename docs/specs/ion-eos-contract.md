@@ -505,12 +505,13 @@ issues read-only queries.
 ### Content Delivery Negotiation
 
 **[content-delivery-negotiation]**: After receiving a `BuildRequest`,
-eos begins resolving atom dependencies concurrently from its
-configured `AtomSource` composite. Eos MAY encounter atoms that
-cannot be resolved from its local store or configured registry
-mirrors (local dev atoms, unreachable mirrors). For these, eos
-falls back to the ion peer — ion's `AtomStore` exposed as an
-`AtomSource` — as a last-resort source.
+eos begins resolving the **top-level atoms** (those explicitly
+requested for evaluation) into its atom store. Eos resolves atoms
+from its configured `AtomSource` composite (local atom store, then
+registry mirrors). For atoms that cannot be resolved from these
+sources (e.g., local dev atoms that exist only on the developer's
+machine), eos falls back to the ion peer — ion's `AtomStore`
+exposed as an `AtomSource` — as a last-resort source.
 
 The content transfer for peer-assisted resolution is a
 **store-to-store transfer** through the atom protocol's
@@ -527,26 +528,34 @@ Bazel RE API's `FindMissingBlobs`):
 
 1. Ion submits `BuildRequest` via `submitBuild()` → receives
    `BuildJob` capability
-2. Eos begins concurrent resolution of all atom deps from its
-   `AtomSource` composite (local store, then registry mirrors)
+2. Eos begins concurrent resolution of all top-level atom
+   references from its `AtomSource` composite (local atom
+   store, then registry mirrors)
 3. Ion calls `BuildJob.getMissing()` — blocks until eos has
    attempted all non-peer sources
-4. Eos returns the list of `AtomId`s it could not resolve. Under
-   the gRPC-first architecture, the daemon queries the snix store
-   daemon via gRPC (or delegates the resolution check to eval
-   workers) to determine which atoms are missing.
+4. Eos returns the list of `AtomId`s it could not resolve
+   from its atom store or registries
 5. If the missing list is non-empty, eos's composite source
    ingests the missing atoms from ion's store via the atom
    protocol. Ion makes its store available as an `AtomSource`
    through a mechanism determined by the atom protocol backend
    (e.g., git fetch for git-backed stores, or a protocol-level
    `AtomSource` capability over the RPC connection).
-6. Eos ingests the received atoms into its local store and
-   begins evaluation
+6. Eos ingests the received atoms into its atom store and
+   dispatches evaluation
 
 If `getMissing()` returns an empty list, step 5 is skipped — all
 atoms were resolvable without ion's assistance. This is the common
 case for CI/CD and warm-cache deployments.
+
+**Atom access during evaluation:** Once the top-level atoms are
+in the atom store, the eval worker executes the top-level atom
+from the atom store (e.g., via a git URI pointing to the store).
+The atom's _dependencies_ (locked in the atom's own lock file)
+are fetched by snix from the lock-specified mirrors using normal
+Nix fetching semantics. Eos is NOT concerned with resolving
+transitive dependencies — this is internal to snix's evaluation
+model.
 
 All ingestion invariants apply to peer-assisted transfers. The
 atom protocol verifies integrity on ingestion — eos's store does

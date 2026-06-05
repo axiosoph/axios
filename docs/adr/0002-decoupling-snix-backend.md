@@ -102,7 +102,11 @@ An eval worker:
 4. Writes produced derivations back to the store via gRPC
 5. Returns derivation digests to the scheduler
 
-The existing `SandboxedEvalConfig` already takes store service addresses as strings. The eval worker subprocess (`eos-daemon --eval-worker`) already calls `snix_store::utils::construct_services(urls)`, which supports gRPC backends. **Pointing eval workers at remote stores requires zero code changes to the evaluation path itself.**
+The existing `SandboxedEvalConfig` already takes store service addresses as strings. The eval worker connects to snix store daemons via gRPC URIs, which support multiple backend implementations. **Pointing eval workers at remote stores requires zero code changes to the evaluation path itself.**
+
+#### Pure Evaluation and Sandboxing
+
+Eval workers run snix in pure evaluation mode. Pure eval confines the evaluator to the atom's encapsulation boundary — it cannot import code or data external to the atom being evaluated. Content-addressed fetches (where a hash is pre-declared) are permitted because they are safe by construction. This language-level confinement eliminates the need for OS-level process sandboxing (Bubblewrap, Birdcage) during evaluation, significantly reducing operational complexity.
 
 #### Cap'n Proto Interfaces
 
@@ -203,7 +207,9 @@ Both pools use the same lease-based health monitoring defined in the [scheduler 
 - **Eval parallelism.** Large batches of atom evaluations are distributed across an eval worker pool, eliminating the single-evaluator bottleneck that plagues Nix deployments.
 - **Independent scaling.** Eval worker count and build worker count are independent knobs. A cluster can run 32 eval workers and 8 builders, or vice versa.
 - **Stateless scheduler.** The scheduler holds only ephemeral in-flight state. The artifact store (snix blob service) is the durable source of truth. External orchestrators can swap scheduler instances freely.
+- **No eval sandboxing overhead.** Pure eval provides language-level confinement. No Bubblewrap, Birdcage, or namespace management needed for eval workers.
 - **Clean testing.** The scheduler is testable with mock Cap'n Proto workers. No snix installation needed.
+- **Global shared artifact store.** All workers and builders in the cluster use the same network store. Artifacts accumulated anywhere are instantly available cluster-wide, eliminating redundant builds.
 
 ### Negative
 
@@ -220,14 +226,18 @@ Both pools use the same lease-based health monitoring defined in the [scheduler 
 
 ## Deferred Decisions
 
-### ADR-0003 (proposed): Import-from-Derivation in Distributed Evaluation
+### ADR-0003 (proposed): Import-from-Derivation Topology
 
-When evaluation encounters a `builtins.derivation` whose output is needed during evaluation (IFD), the eval worker must trigger a build mid-evaluation. In the current in-process model, `SnixStoreIO` handles this inline via `handle.block_on()`. In the remote model, the eval worker could either:
+IFD is an internal concern of the snix evaluator — the Eos scheduler is not aware of IFD builds. Eval workers handle IFD internally via `SnixStoreIO`'s `BuildService` gRPC handle. Operators configure IFD builder topology:
 
-1. Handle IFD internally via its own snix-glue wiring and gRPC build connection (simplest, preserves snix's IFD optimizations)
-2. Callback to the scheduler to dispatch the build across the cluster (most flexible, but creates re-entrant call patterns)
+1. **Shared cluster builders**: IFD builds dispatch to the same snix builders used for top-level builds (simple, may cause contention)
+2. **Dedicated IFD builders**: Reserved builder instances handle only IFD builds (isolates IFD load)
 
-Snix has invested significant effort improving IFD efficiency. The initial architecture SHOULD let eval workers handle IFD internally (option 1). Cluster-wide IFD dispatch (option 2) is a future optimization, potentially framed as an upstream contribution to snix.
+The critical invariant: IFD build outputs MUST populate the global cluster artifact store, making results available cluster-wide.
+
+Snix handles IFD asynchronously — unlike the Nix C++ implementation which blocks entirely, snix can continue evaluating other derivations while waiting for an IFD build, making the overall cost less severe.
+
+An ADR-0003 MAY still be warranted to formalize IFD topology recommendations, monitoring of IFD builds outside the scheduler's visibility, and interaction with eval cache invalidation.
 
 ### ADR-0004 (proposed): Eos Caching and High Availability
 

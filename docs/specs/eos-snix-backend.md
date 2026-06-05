@@ -112,12 +112,21 @@ TYPE BuildRequestAdapter          -- Derivation → BuildRequest converter
 **[snix-eval-no-send-leak]**: No `!Send` type from `snix-eval` (including `Value`, `NixString`, `Thunk`, `Closure`, `EvaluationResult`) SHALL appear in the signature or return type of any `eos-core` trait method. The `!Send` boundary is entirely encapsulated within `SnixEngine`.
 `VERIFIED: unverified`
 
+**[snix-eval-pure-eval]**: Eval workers MUST run snix in pure evaluation mode. Pure evaluation confines the evaluator to the atom's encapsulation boundary — the evaluator MUST NOT import code or data external to the atom being evaluated. Content-addressed fetches (where a hash is pre-declared) are permitted because they are safe by construction. This language-level confinement eliminates the need for OS-level process sandboxing during evaluation (see [eos-sandboxing.md](eos-sandboxing.md)).
+`VERIFIED: unverified`
+
 #### Store Mapping
 
 **[snix-store-three-service]**: The eval worker MUST connect to Snix's three independent store services — `BlobService`, `DirectoryService`, and `PathInfoService` — via gRPC clients. Each gRPC client implements the same Rust trait (`BlobService`, `DirectoryService`, `PathInfoService`) as the in-process implementations, held as `dyn Trait` objects wrapped in `Arc`. The eval worker does NOT embed store services in-process; all store access is remote via gRPC URIs provided in the eval worker's configuration.
 `VERIFIED: unverified`
 
 **[snix-store-service-consistency]**: Operations that span multiple Snix services (e.g., `import` writes blobs via `BlobService`, constructs directory trees via `DirectoryService`, then registers metadata via `PathInfoService`) MUST execute in dependency order. If any intermediate step fails, subsequent steps MUST NOT proceed and previously-written data SHOULD be treated as orphaned (eligible for garbage collection).
+
+**[snix-global-artifact-store]**: All eval workers, build workers, and snix builder instances in a cluster MUST be configured to use the same network artifact store (snix store daemon). Artifacts accumulated anywhere in the cluster — whether produced by a top-level build, an IFD build, or an ingestion — MUST be instantly available to all other workers via the shared store. This is a critical efficiency invariant: it eliminates redundant builds and enables the cluster to function as a unified build cache. Latency of store access is an operational concern managed by network topology (e.g., co-locating workers and store daemons in the same availability zone).
+`VERIFIED: unverified`
+
+**[snix-ifd-store-population]**: Import-from-derivation (IFD) is an internal concern of the snix evaluator and builder, not an Eos scheduling concern. Eval workers handle IFD internally via `SnixStoreIO`'s `BuildService` gRPC handle. Operators MAY configure IFD in multiple ways: using existing cluster build instances, or sanctioning dedicated IFD-only builders. Regardless of the IFD builder topology, the invariant is: **IFD build outputs MUST be populated into the global cluster artifact store** (as specified by `[snix-global-artifact-store]`). This ensures IFD results are available to all eval workers and build workers cluster-wide, preventing redundant IFD rebuilds.
+`VERIFIED: unverified`
 `VERIFIED: unverified`
 
 **[snix-store-digest-fidelity]**: The `From<B3Digest>` and `Into<B3Digest>` conversions between `Blake3Digest` (the `eos_core::Digest` impl) and `snix_castore::B3Digest` MUST be lossless. Both types are `#[repr(transparent)]` `[u8; 32]` newtypes representing a BLAKE3 hash. No truncation, re-encoding, or algorithm substitution is permitted.
@@ -423,9 +432,18 @@ pub(crate) fn derivation_into_build_request(
 
 The `inputs` parameter requires pre-resolved content-addressed nodes for every input store path. These nodes MUST be retrieved from the `PathInfoService` and `DirectoryService` before calling the conversion. The resolution step is non-trivial: each store path's `PathInfo` record contains the root `Node`, but nested directory nodes require recursive resolution via `DirectoryService::get_recursive()`.
 
-### G7: No Built-In Scheduler
+### G7: IFD is an Internal Snix Concern
 
-Snix builds dependencies ad-hoc during evaluation. When the evaluator encounters a `builtins.derivation` call whose output is needed (import-from-derivation), `SnixStoreIO` triggers an inline build via the `BuildService` handle in the `SnixStoreIO` configuration. Under the gRPC-first architecture, this IFD build is dispatched to the snix builder via the gRPC store connection within the eval worker — not through the Eos scheduler. The Eos scheduler dispatches top-level evaluation and build jobs; IFD builds within evaluation remain internal to the eval worker's `SnixStoreIO` wiring.
+Import-from-derivation (IFD) occurs when the evaluator encounters a `builtins.derivation` whose output is needed to continue evaluation. Snix handles IFD asynchronously — unlike the Nix C++ implementation which blocks entirely during IFD, snix can schedule IFD builds asynchronously and continue evaluating other derivations in parallel, making the overall cost of IFD less severe.
+
+IFD is managed entirely within the eval worker's `SnixStoreIO` wiring. The eval worker is configured with a `BuildService` gRPC handle that dispatches IFD builds. Operators configure this handle to point at the appropriate builder endpoint:
+
+- **Shared cluster builders**: IFD builds are dispatched to the same snix builders used for top-level builds. Simple but may cause contention.
+- **Dedicated IFD builders**: Reserved builder instances handle only IFD builds, isolating IFD load from top-level build scheduling.
+
+Regardless of topology, the invariant `[snix-ifd-store-population]` requires that IFD build outputs are populated into the global cluster artifact store. This makes IFD results available cluster-wide.
+
+The Eos scheduler is NOT aware of IFD builds — they occur outside its scheduling context. This is the intentional trade-off: Eos sacrifices visibility into IFD builds in exchange for a dramatically simpler scheduler that does not need to handle re-entrant eval→build→eval call patterns.
 
 ---
 
