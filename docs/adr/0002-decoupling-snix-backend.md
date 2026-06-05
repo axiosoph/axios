@@ -234,14 +234,7 @@ Both pools use the same lease-based health monitoring defined in the [scheduler 
 
 IFD is an internal concern of the snix evaluator — the Eos scheduler is not aware of IFD builds. Eval workers handle IFD internally via `SnixStoreIO`'s `BuildService` gRPC handle. Operators configure IFD builder topology:
 
-1. **Shared cluster builders**: IFD builds dispatch to the same snix builders used for top-level builds (simple, may cause contention)
-2. **Dedicated IFD builders**: Reserved builder instances handle only IFD builds (isolates IFD load)
-
-The critical invariant: IFD build outputs MUST populate the global cluster artifact store, making results available cluster-wide.
-
-Snix handles IFD asynchronously — unlike the Nix C++ implementation which blocks entirely, snix can continue evaluating other derivations while waiting for an IFD build, making the overall cost less severe.
-
-An ADR-0003 MAY still be warranted to formalize IFD topology recommendations, monitoring of IFD builds outside the scheduler's visibility, and interaction with eval cache invalidation.
+An ADR-0003 is no longer needed for IFD topology. The decision has been made: IFD builds are internal to the IFD-enabled evaluator, not scheduled as separate eos cluster builds. The scheduler has no direct IFD visibility; it only needs to know which evaluators have IFD builders configured (via `ifdSystems` worker metadata). See [ADR-0003](0003-composable-deployment-modes.md) for the deployment model decision that now occupies this slot.
 
 ### ADR-0004 (proposed): Eos Caching and High Availability
 
@@ -260,6 +253,7 @@ Two interrelated concerns deferred from this ADR:
 - [Eos Snix Backend Specification](../specs/eos-snix-backend.md)
 - [Eos Network Protocol Specification](../specs/eos-network-protocol.md)
 - [Ion–Eos Contract](../specs/ion-eos-contract.md)
+- [ADR-0003: Composable Deployment Modes](0003-composable-deployment-modes.md) — supersedes the monolithic binary alternative deferred by this ADR
 
 ---
 

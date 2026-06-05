@@ -990,11 +990,16 @@ The daemon holds only ephemeral in-flight state. On restart:
 
 ## 10. Deferred Architecture Decisions
 
-### ADR-0003 (proposed): IFD Topology Recommendations
+### ADR-0003: Composable Deployment Modes
 
-Formalizing operator guidance for IFD builder topology, monitoring
-IFD builds outside the scheduler's visibility, and interaction
-with eval cache invalidation.
+Accepted. Supersedes ADR-0001 §Embedded default. Defines three
+deployment modes — monolithic ion (zero daemons), monolithic eos
+(one daemon, many clients), distributed eos (microservices) — all
+sharing identical codepaths via dependency injection. See
+[ADR-0003](../adr/0003-composable-deployment-modes.md).
+
+§1.5 of this document will be updated to reflect ADR-0003 once
+the ADR is accepted.
 
 ### ADR-0004 (proposed): Caching and High Availability
 
