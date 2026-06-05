@@ -439,6 +439,12 @@
   <!-- Robust Scrollspy & Highlight Script -->
   <script>
     (function() {
+      // Constraint: If the browser supports pure CSS scrollspy (:target-current),
+      // do not load or execute the JS scrollspy.
+      if (window.CSS && CSS.supports && CSS.supports("selector(:target-current)")) {
+        return;
+      }
+
       document.addEventListener("DOMContentLoaded", function() {
         const headings = Array.from(document.querySelectorAll(".prose-content h1[id], .prose-content h2[id], .prose-content h3[id], .prose-content h4[id]"));
         const anchorLinks = Array.from(document.querySelectorAll(".nav-anchors .anchor-link"));
@@ -457,7 +463,8 @@
 
         function setActive(link) {
           if (activeLink === link) return;
-          if (activeLink) activeLink.classList.remove("active");
+          // Clear active class from ALL anchor links to guarantee only one is ever active
+          anchorLinks.forEach(l => l.classList.remove("active"));
           if (link) link.classList.add("active");
           activeLink = link;
         }
@@ -478,51 +485,38 @@
           }
         }
 
-        // Intersection Observer for robust scrollspy
-        if ("IntersectionObserver" in window) {
-          const observerOptions = {
-            root: null,
-            rootMargin: "-80px 0px -70% 0px",
-            threshold: 0
-          };
+        // Use a high-performance scroll listener with requestAnimationFrame
+        let ticking = false;
+        function updateScrollspy() {
+          let currentHeading = null;
+          const scrollPos = window.scrollY + 120; // Offset for header/viewport
 
-          const observer = new IntersectionObserver(entries => {
-            const visibleHeadings = entries
-              .filter(e => e.isIntersecting)
-              .map(e => e.target);
-
-            if (visibleHeadings.length > 0) {
-              const target = visibleHeadings[0];
-              const link = linkMap.get(target.id);
-              if (link) {
-                setActive(link);
-              }
+          for (const h of headings) {
+            if (h.offsetTop <= scrollPos) {
+              currentHeading = h;
+            } else {
+              break;
             }
-          }, observerOptions);
+          }
 
-          headings.forEach(h => observer.observe(h));
-        } else {
-          // Fallback scroll listener for older browsers
-          window.addEventListener("scroll", function() {
-            let currentHeading = null;
-            const scrollPos = window.scrollY + 100;
-
-            for (const h of headings) {
-              if (h.offsetTop <= scrollPos) {
-                currentHeading = h;
-              } else {
-                break;
-              }
+          if (currentHeading) {
+            const link = linkMap.get(currentHeading.id);
+            if (link) {
+              setActive(link);
             }
-
-            if (currentHeading) {
-              const link = linkMap.get(currentHeading.id);
-              if (link) {
-                setActive(link);
-              }
-            }
-          });
+          }
+          ticking = false;
         }
+
+        window.addEventListener("scroll", function() {
+          if (!ticking) {
+            window.requestAnimationFrame(updateScrollspy);
+            ticking = true;
+          }
+        }, { passive: true });
+
+        // Run once on load
+        updateScrollspy();
       });
     })();
   </script>
