@@ -17,7 +17,7 @@ bounded performance relative to an optimal offline algorithm.
 **Domain Characteristics:**
 
 - **Concurrent state machine** — the scheduler maintains mutable
-  state (in-flight map, worker loads, entry point DAG progress)
+  state (entry point status, worker loads, artifact store)
   accessed by concurrent request handlers and completion
   callbacks. Correctness depends on interleaving behavior.
 - **DAG-structured workflow** — derivation dependencies form a
