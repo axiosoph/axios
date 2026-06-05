@@ -41,8 +41,8 @@ graph LR
     end
 
     subgraph "L1 — Atom (Protocol)"
-        AS["Atom Store<br/>(git-backed)"]
-        AR["Atom Registry<br/>(mirrors)"]
+        AS["Local Atom Store"]
+        AR["Atom Registries<br/>(mirrors)"]
     end
 
     subgraph "Snix Ecosystem"
@@ -52,22 +52,23 @@ graph LR
 
     CLI -->|"Cap'n Proto RPC"| EOD
     CI -->|"Cap'n Proto RPC"| EOD
-    EOD -->|"Atom Protocol<br/>(git fetch)"| AS
-    EOD -->|"Atom Protocol<br/>(registry mirrors)"| AR
-    EOD -.->|"gRPC (via workers)"| SSD
-    EOD -.->|"gRPC (via workers)"| SB
+    AR -->|"Atom Protocol<br/>(read, fetch)"| EOD
+    EOD -->|"ingest fetched atoms"| AS
+    EOD -..->|"gRPC (via workers)"| SSD
+    EOD -..->|"gRPC (via workers)"| SB
+    SB -->|"write build outputs"| SSD
 ```
 
 ### 1.3 System Boundaries
 
-| Boundary                  | Inside Eos                                                                 | Outside Eos                                                |
-| :------------------------ | :------------------------------------------------------------------------- | :--------------------------------------------------------- |
-| **Evaluation**            | Dispatching eval requests to workers, caching plans                        | Nix language semantics (snix's concern)                    |
-| **Building**              | Dispatching derivations to builders, tracking progress                     | Sandbox implementation (snix builder's concern)            |
-| **Atom Resolution**       | Layered resolution of top-level atoms (atom store → registries → ion peer) | Atom identity, signing, verification (L1 concern)          |
-| **Dependency Resolution** | Not an Eos concern                                                         | Lock file resolution, SAT solving (L3/Ion concern)         |
-| **Artifact Storage**      | All workers use the global shared store                                    | Store implementation, GC, replication (snix store concern) |
-| **IFD**                   | Scheduler knows which eval workers have IFD-capable builders               | IFD execution is internal to snix evaluator                |
+| Boundary                  | Inside Eos                                                                | Outside Eos                                                |
+| :------------------------ | :------------------------------------------------------------------------ | :--------------------------------------------------------- |
+| **Evaluation**            | Dispatching eval requests to workers, caching plans                       | Nix language semantics (snix's concern)                    |
+| **Building**              | Dispatching derivations to builders, tracking progress                    | Sandbox implementation (snix builder's concern)            |
+| **Atom Fetching**         | Fetching top-level atoms into local store (registries → local → ion peer) | Atom identity, signing, verification (L1 concern)          |
+| **Dependency Resolution** | Not an Eos concern                                                        | Lock file resolution, SAT solving (L3/Ion concern)         |
+| **Artifact Storage**      | All workers use the global shared store                                   | Store implementation, GC, replication (snix store concern) |
+| **IFD**                   | Scheduler knows which eval workers have IFD-capable builders              | IFD execution is internal to snix evaluator                |
 
 ### 1.4 Layer Discipline
 
@@ -81,18 +82,20 @@ Dependencies flow strictly downward: Ion (L3) → Eos (L2) → Atom (L1).
 
 ### 1.5 Deployment Modes
 
-| Mode              | Description                                                                                                           | Status            |
-| :---------------- | :-------------------------------------------------------------------------------------------------------------------- | :---------------- |
-| **Embedded**      | BuildEngine compiled directly into `ion-cli`. No daemon process, no workers. Evaluation and build execute in-process. | Default (current) |
-| **Client-Server** | Ion connects to `eosd` daemon via Cap'n Proto RPC. Daemon dispatches to eval/build worker pools.                      | Future (ADR-0002) |
+Eos supports composable deployment modes via Cargo feature flags
+and dependency injection. All modes share identical codepaths —
+the mode determines wiring, not logic. See
+[ADR-0003](../adr/0003-composable-deployment-modes.md).
 
-The embedded mode is the development default — `ion build` works
-without any process management. The client-server mode (this SAD's
-primary focus) enables distributed evaluation and build scaling.
+| Mode                | Description                                                                                                              |
+| :------------------ | :----------------------------------------------------------------------------------------------------------------------- |
+| **Monolithic Ion**  | BuildEngine compiled into `ion-cli`. Zero daemons, zero sockets. Snix services wired in-process (e.g., redb store).      |
+| **Monolithic Eos**  | Single `eosd` daemon with snix services compiled in. Ion connects as a thin client. Simplifies multi-client single-host. |
+| **Distributed Eos** | Ion → `eosd` → eval/build worker pools → snix services. Each component independently scalable.                           |
 
-Both modes share the same `BuildEngine` trait interface. The
-embedded mode uses a concrete `SnixEngine` directly; the client
-mode uses a `RemoteEngine` that delegates to the daemon.
+All modes produce identical outputs (mode bisimilarity). The
+monolithic modes are compiler features (Cargo feature flags),
+not architectural modes — they MUST NOT modify codepaths.
 
 ### 1.6 Store Taxonomy
 
@@ -104,15 +107,26 @@ The system uses three functionally distinct store types:
 | **AtomStore**     | L1    | Mutable working store, collects atoms from sources | `ingest()`, `import_path()`                |
 | **ArtifactStore** | L2    | Content-addressed build output blobs (snix store)  | `store()`, `fetch()`, `check_substitute()` |
 
-All three share a common read super-trait `AtomSource` with
-`resolve()` and `discover()`. The **AtomStore** and
-**ArtifactStore** are distinct and MUST NOT be conflated:
+Eos consumes atoms via `AtomContent` — the forgetful functor
+that drops mutation observers (`ingest`, `contains`) from
+`AtomStore` while retaining identity, metadata, and content
+access. The daemon's atom-fetching component writes to its own
+local `AtomStore` internally, but the inter-layer boundary is
+`AtomContent` (read-only from the perspective of external atom
+sources). Eos never writes to registries — publishing is a
+developer concern.
 
-- **AtomStore**: Contains source trees (atom content). Backed by
-  git. Used during atom resolution and evaluation.
-- **ArtifactStore**: Contains build outputs (derivation results).
-  Backed by snix's BlobService/DirectoryService/PathInfoService.
-  This is the "global shared artifact store" referenced throughout.
+The **AtomStore** and **ArtifactStore** are distinct and
+MUST NOT be conflated:
+
+- **AtomStore**: Contains source trees (atom content). Used
+  during atom fetching and evaluation.
+- **ArtifactStore**: Contains build outputs (derivation
+  results). Backed by snix's BlobService/DirectoryService/
+  PathInfoService. Eos reads from it (cache checks); snix
+  builders write to it. Eos MUST NOT write directly to the
+  artifact store — artifact production is the builder's
+  responsibility.
 
 ---
 
@@ -131,7 +145,7 @@ graph TB
 
     subgraph "Eos Cluster"
         subgraph "Scheduler"
-            DAEMON["Eos Daemon<br/>━━━━━━━━━━━━━━━<br/>• Job lifecycle management<br/>• Eval/build dispatch<br/>• Eval cache<br/>• Worker pool management<br/>• Atom resolution orchestration<br/>━━━━━━━━━━━━━━━<br/>Zero snix dependencies (target)"]
+            DAEMON["Eos Daemon<br/>━━━━━━━━━━━━━━━<br/>• Job lifecycle management<br/>• Eval/build dispatch<br/>• Eval cache<br/>• Worker pool management<br/>• Atom fetching orchestration<br/>━━━━━━━━━━━━━━━<br/>Zero snix dependencies (target)"]
         end
 
         subgraph "Eval Worker Pool"
@@ -153,10 +167,11 @@ graph TB
     end
 
     subgraph "Atom Infrastructure"
-        ASTORE["Atom Store<br/>(git-backed)"]
+        ASTORE["Local Atom Store"]
+        AREG["Atom Registries"]
     end
 
-    ION <-->|"Cap'n Proto<br/>(UDS / TCP+Cyphr)"| DAEMON
+    ION <-->|"Cap'n Proto<br/>(UDS / TCP+auth)"| DAEMON
     DAEMON <-->|"Cap'n Proto<br/>(internal)"| EW1
     DAEMON <-->|"Cap'n Proto"| EW2
     DAEMON <-->|"Cap'n Proto"| EWN
@@ -169,7 +184,9 @@ graph TB
     BW2 -->|"gRPC"| BUILDER
     BUILDER -->|"gRPC"| STORE
     EW1 -.->|"gRPC (IFD)"| BUILDER
-    DAEMON -->|"Atom Protocol"| ASTORE
+    AREG -->|"Atom Protocol (read)"| DAEMON
+    DAEMON -->|"ingest"| ASTORE
+    EW1 -->|"read content"| ASTORE
 ```
 
 ### 2.1 Eos Daemon (Scheduler)
@@ -177,7 +194,7 @@ graph TB
 The central coordination process. Stateless except for ephemeral
 in-flight job state. Manages two worker pools, dispatches evaluation
 and build jobs, maintains the eval cache, and orchestrates atom
-resolution.
+fetching.
 
 **Key constraint (target state, per [ADR-0002](../adr/0002-decoupling-snix-backend.md))**:
 The daemon will have **zero snix dependencies**. It will not link
@@ -187,7 +204,7 @@ codebase has coupling violations being migrated (see Appendix D).
 
 **Transports**:
 
-- Client-facing: Cap'n Proto RPC over UDS (v1) or TCP+Cyphr (future)
+- Client-facing: Cap'n Proto RPC over UDS (dev) or TCP+pluggable auth
 - Worker-facing: Cap'n Proto RPC (internal cluster network)
 
 **State**:
@@ -290,7 +307,7 @@ graph TB
         RPC["Cap'n Proto RPC Layer<br/>(accept, auth, capability bootstrap)"]
         SCHED["Scheduler<br/>(job dispatch, eval cache,<br/>worker health monitoring)"]
         WPOOL["Worker Pool Manager<br/>(registration, heartbeat,<br/>Rendezvous hashing)"]
-        ARES["Atom Resolution<br/>(composite AtomSource:<br/>local → registries → peer)"]
+        ARES["Atom Fetching<br/>(composite AtomContent:<br/>local → registries → peer)"]
         ECACHE["Eval Cache<br/>(EvalCacheKey: snapshot digest + eval_args<br/>→ cached derivation)"]
     end
 
@@ -310,9 +327,7 @@ and their capabilities. Handles registration (via capability
 passing), deregistration (implicit via capability drop), and
 health monitoring (heartbeat + lease expiry).
 
-**Atom Resolution**: Implements the layered `FindMissing` pattern
-for top-level atoms. Checks local atom store, then registry
-mirrors, then falls back to ion peer for dev-only atoms.
+**Atom Fetching**: Implements the layered `FindMissing` pattern for top-level atoms. Checks local atom store, then registry mirrors, then falls back to ion peer for dev-only atoms.
 
 **Eval Cache**: Memoizes evaluation results by plan digest. The
 cache is consulted before dispatching to an eval worker. Cache
@@ -396,8 +411,8 @@ sequenceDiagram
     Ion->>Daemon: submitBuild(BuildRequest)
     Daemon-->>Ion: BuildJob capability
 
-    Note over Ion,SnixBuilder: Phase 2: Atom Resolution
-    Daemon->>AtomStore: resolve top-level atoms
+    Note over Ion,SnixBuilder: Phase 2: Atom Fetching
+    Daemon->>AtomStore: fetch top-level atoms
     AtomStore-->>Daemon: found / missing
     opt Missing atoms
         Daemon->>Ion: getMissing() → list of missing AtomIds
@@ -467,7 +482,7 @@ sequenceDiagram
     Note over Daemon: Both capabilities invalid,<br/>worker removed from pool
 ```
 
-### 4.3 Atom Resolution (FindMissing Pattern)
+### 4.3 Atom Fetching (FindMissing Pattern)
 
 ```mermaid
 sequenceDiagram
@@ -499,7 +514,7 @@ sequenceDiagram
         Peer-->>Daemon: atoms transferred
     end
 
-    Daemon->>Daemon: all top-level atoms resolved, dispatch eval
+    Daemon->>Daemon: all top-level atoms fetched, dispatch eval
 ```
 
 **Atom access during evaluation**: Once top-level atoms are in the
@@ -518,23 +533,24 @@ transitive dependencies — this is internal to snix's evaluation model.
 ```mermaid
 stateDiagram-v2
     [*] --> Queued: submitBuild()
-    Queued --> ResolvingAtoms: atoms need resolution
-    Queued --> Evaluating: atoms already resolved
-    ResolvingAtoms --> WaitingPeer: missing atoms, getMissing()
-    ResolvingAtoms --> Evaluating: all atoms found
+    Queued --> FetchingAtoms: atoms need fetching
+    Queued --> Evaluating: atoms already local
+    FetchingAtoms --> WaitingPeer: missing atoms, getMissing()
+    FetchingAtoms --> Evaluating: all atoms fetched
     WaitingPeer --> Evaluating: peer transfer complete
     Evaluating --> Building: eval returns plan
     Evaluating --> Completed: artifact already in store
     Building --> Completed: build succeeds
     Building --> Failed: build fails
     Evaluating --> Failed: eval fails
-    ResolvingAtoms --> Failed: atom resolution fails
-    Queued --> Cancelled: cancel()
-    ResolvingAtoms --> Cancelled: cancel()
-    Evaluating --> Cancelled: cancel()
-    Building --> Cancelled: cancel()
+    FetchingAtoms --> Failed: atom fetch fails
+    Queued --> Cancelled: user cancel()
+    FetchingAtoms --> Cancelled: user cancel()
+    Evaluating --> Cancelled: user cancel()
+    Building --> Cancelled: user cancel()
+    Failed --> Queued: retry (retries remain)
+    Failed --> [*]: retries exhausted
     Completed --> [*]
-    Failed --> [*]
     Cancelled --> [*]
 ```
 
@@ -605,7 +621,7 @@ not orchestrate IFD builds — they occur inside the eval worker's
 `SnixStoreIO` wiring.
 
 **Scheduler awareness**: The scheduler knows which eval workers
-have IFD capability and for which systems (via `ifdSystems` in
+have IFD capability and for which systems (via tags such as `ifd:x86_64-linux` in
 the worker's registration). This allows the scheduler to route
 eval requests for atoms that may trigger IFD to workers whose IFD
 builders match the derivation's target system.
@@ -673,37 +689,58 @@ does not accept unverified atoms regardless of their source.
 Content-addressed fetches during evaluation are safe by
 construction.
 
+Developer-signed atom metadata tags MAY include expected derivation and artifact hashes. When present, these enable accelerated cache-skipping: if the signed artifact hash exists in the store, both evaluation and build are skipped entirely. If the signed derivation hash exists, only evaluation is skipped. The trust level of these metadata tags is a client (Ion) decision — Eos uses them as optimization hints, not as authoritative guarantees.
+
 The cryptographic chain:
 
 ```
-AtomId → Version → Revision → Plan → Output
- (czd)    (semver)   (commit)  (plan) (artifact)
+AtomId          → Version  → Revision     → Plan      → Artifact
+digest(a,l)      semver     commit sha     drv hash    store path
+(identity)       (human)    (content hash) (eval out)  (build out)
 ```
 
 Each step is independently verifiable and cacheable. If a plan
 exists → skip evaluation. If an artifact exists → skip build.
 This enables cache-skipping at every stage.
 
-### 6.7 Substitution and Trust Model
+### 6.7 Trust and Attestation Model
 
-Eos supports artifact substitution from untrusted peers using a
-Trustix-style Web of Trust (WoT) model:
+Trust authority flows from developers to operators to clients:
 
-**OriginAttestation**: Cached artifacts carry a signed attestation
-from the builder that produced them — `builderId` (Principal Root),
-`planHash`, `outputDigest`, `signature`, and `timestamp`.
+1. **Developer attestation** (primary): Developers sign atom
+   metadata tags containing expected derivation and artifact
+   hashes. This is the authoritative source of truth for what
+   a correct build of a given atom version should produce.
 
-**SubstitutionService**: Peers expose a `query()` + `fetchArtifact()`
-interface. Before accepting a substituted artifact, the daemon:
+2. **Builder attestation** (supplementary): Eos builders sign
+   build outputs — `builderId`, `planHash`, `outputDigest`,
+   `signature`, and `timestamp`. This attests "I built plan X
+   and got artifact Y" but does not establish authority over
+   what the correct output should be.
 
-1. Verifies the content digest matches the expected digest from
-   the verified plan
-2. Validates OriginAttestations against the configured trust policy
+3. **Operator policy** (enforcement gate): Cluster operators
+   configure trust policies — e.g., "only accept build requests
+   for atoms signed by one of these org keys." This is a
+   deployment-time configuration, not a runtime user concern.
+
+4. **Client trust decision** (final): Ion (the client) decides
+   which keys to trust. Trust level is always explicit:
+   developer key, own key, another party's key, or unsigned.
+   The client makes the final trust trade-off.
+
+**Substitution from peers**: Cached artifacts may be
+substituted from untrusted peers. Before accepting a
+substituted artifact, the system:
+
+1. Verifies the content digest matches the expected digest
+   from the verified plan
+2. Validates builder attestations against the configured
+   trust policy
 
 **Trust policies** (deployment-configurable):
 
 - Trust-on-first-use
-- Named-builder (whitelist specific Principal Roots)
+- Named-builder (whitelist specific builder identities)
 - M-of-N threshold (require M of N trusted builders to agree)
 - Double-build (N=2, build on two distrusted workers, verify
   output identity for reproducibility auditing)
@@ -775,31 +812,34 @@ disconnect) IS deregistration.
 
 ### 7.2 Worker Capabilities
 
-Workers advertise metadata at registration. The metadata differs
-by worker kind because eval workers and build workers have
-fundamentally different scheduling predicates:
+Workers advertise capabilities at registration via a generic
+tag model — flat key-value properties that express scheduling
+predicates without hardcoding engine-specific concerns.
 
-**Build workers advertise**:
+**Tag model** (both worker kinds):
 
-- `systems: List<Text>` — Nix system identifiers this builder
-  handles (e.g., `x86_64-linux`, `aarch64-linux`). A builder MAY
-  support multiple systems. The derivation's `system` attribute
-  must be in this list. **This is a hard scheduling predicate.**
-- `supportedFeatures: List<Text>` — Nix `requiredSystemFeatures`
-  this builder satisfies (e.g., `kvm`, `big-parallel`). Scheduling
-  uses subset match: derivation's required features ⊆ worker's
-  supported features. **This is a hard scheduling predicate.**
-- `speedFactor: UInt32` — Relative speed for scheduling priority.
-  Higher = preferred. **Soft scheduling hint.**
+Workers register with `tags: Map<Text, Text>` — arbitrary
+key-value metadata. The scheduler matches job requirements
+against worker tags using **set containment**: a job's
+required tags must be a subset of the worker's tags.
 
-**Eval workers advertise**:
+Common tag conventions (not hardcoded in the protocol):
 
-- `ifdSystems: List<Text>` — Systems the eval worker's IFD
-  builder(s) can handle. Empty if IFD is not configured. The
-  scheduler uses this to route eval requests that may trigger
-  IFD to workers whose IFD builders match the derivation's target
-  system. **Soft scheduling predicate** (IFD may not occur).
-- `speedFactor: UInt32` — Same as build workers.
+| Tag Key                | Example Value  | Worker Kind | Semantics                        |
+| :--------------------- | :------------- | :---------- | :------------------------------- |
+| `system`               | `x86_64-linux` | Build       | Nix system identifier            |
+| `feature:kvm`          | `true`         | Build       | `requiredSystemFeatures` match   |
+| `feature:big-parallel` | `true`         | Build       | `requiredSystemFeatures` match   |
+| `ifd:x86_64-linux`     | `true`         | Eval        | IFD builder capability           |
+| `tier`                 | `large`        | Both        | Hardware tier for weight scoring |
+
+**Scheduling weight** (optional):
+
+Workers MAY register `weights: Map<Text, Float32>` mapping
+tag keys to numeric multipliers. The scheduler uses these for
+soft preference scoring: among feasible workers (those passing
+tag containment), prefer workers with higher total weight for
+the matched tags.
 
 **Not in capabilities** (operational config, not scheduling
 predicates):
@@ -812,20 +852,19 @@ predicates):
 
 **Build dispatch**:
 
-1. Filter by `system`: derivation's `system` ∈ worker's `systems`
-2. Filter by `supportedFeatures`: derivation's `requiredSystemFeatures` ⊆ worker's `supportedFeatures`
-3. Filter by capacity: worker has available job slots
-4. Filter by health: worker is healthy (heartbeat within deadline)
-5. Rank by Rendezvous hash (input affinity for cache hits)
-6. Tie-break by `speedFactor` and `cached_paths` overlap
+1. Filter by tags: job's required tags ⊆ worker's tags
+2. Filter by capacity: worker has available job slots
+3. Filter by health: worker is healthy (heartbeat within deadline)
+4. Rank by Rendezvous hash (input affinity for cache hits)
+5. Tie-break by scheduling weight (sum of matched tag weights)
 
 **Eval dispatch**:
 
 1. Filter by capacity and health (same as build)
-2. Prefer workers whose `ifdSystems` includes the target system
-   (for IFD routing), but do not hard-filter (IFD may not occur)
+2. Filter by tags: if job declares eval-specific tags (e.g.,
+   `ifd:x86_64-linux`), only workers with those tags qualify
 3. Rank by Rendezvous hash
-4. Tie-break by `speedFactor`
+4. Tie-break by scheduling weight
 
 ### 7.4 Health Monitoring
 
@@ -864,23 +903,36 @@ over ping (scheduler→worker) because:
 
 Two independent transport layers:
 
-| Surface                | Protocol        | Transport               | Auth                                   |
-| :--------------------- | :-------------- | :---------------------- | :------------------------------------- |
-| Client → Daemon        | Cap'n Proto RPC | UDS (v1) / TCP (future) | Filesystem perms (v1) / Cyphr (future) |
-| Daemon → Workers       | Cap'n Proto RPC | UDS or TCP              | Internal cluster trust                 |
-| Workers → Snix Store   | gRPC            | TCP                     | Store daemon config                    |
-| Workers → Snix Builder | gRPC            | TCP                     | Builder config                         |
+| Surface                | Protocol        | Transport              | Auth                                                    |
+| :--------------------- | :-------------- | :--------------------- | :------------------------------------------------------ |
+| Client → Daemon        | Cap'n Proto RPC | UDS (dev) / TCP (prod) | Pluggable (NullAuth / CyphrAuth / MtlsAuth / TokenAuth) |
+| Daemon → Workers       | Cap'n Proto RPC | UDS or TCP             | Internal cluster trust                                  |
+| Workers → Snix Store   | gRPC            | TCP                    | Store daemon config                                     |
+| Workers → Snix Builder | gRPC            | TCP                    | Builder config                                          |
 
 ### 8.2 Authentication
 
-**v1 (UDS)**: Implicit filesystem permission-based authentication.
-Clients connect via `UnixStream`. Authentication relies on
-filesystem permissions — only authorized users can connect to
-the socket.
+Authentication is a pluggable middleware interface. Operators
+choose their trust stack based on deployment requirements.
+The auth interface accepts connection metadata and returns an
+authenticated identity.
 
-**Future (TCP+Cyphr)**: Mutual authentication via Cyphr Principal
-Roots. The connection handshake establishes identity before Cap'n
-Proto RPC begins.
+Implementations:
+
+- **NullAuth** — Accept all connections. Development only
+  (UDS with filesystem permissions provides implicit access
+  control).
+- **CyphrAuth** — Mutual authentication via Cyphr Principal
+  Roots. Preferred for production deployments.
+- **MtlsAuth** — X.509 client certificate verification.
+  Standard enterprise pattern.
+- **TokenAuth** — Bearer token validation. For CI/CD pipeline
+  integration.
+
+The auth boundary is at the transport layer (connection
+establishment), not the application layer. Auth credentials
+flow as connection metadata; the Cap'n Proto RPC layer is
+auth-agnostic.
 
 ### 8.3 Cap'n Proto Interface Summary
 
@@ -961,13 +1013,13 @@ are orphaned (eligible for GC).
 If an eval worker encounters IFD but its configured IFD builder
 cannot handle the derivation's system, the eval fails with a
 recoverable error. The scheduler MAY retry on a different eval
-worker whose `ifdSystems` includes the required system.
+worker whose IFD tags include the required system.
 
-### 9.3 Atom Resolution Failure
+### 9.3 Atom Fetching Failure
 
-If atom resolution fails (atom not in local store, not in
+If atom fetching fails (atom not in local store, not in
 registries, and peer-assisted transfer fails or is not
-available), the job fails with a resolution error. No partial
+available), the job fails with a fetch error. No partial
 work is performed.
 
 ### 9.4 Store Unavailability
@@ -988,23 +1040,43 @@ The daemon holds only ephemeral in-flight state. On restart:
 
 ---
 
-## 10. Deferred Architecture Decisions
+## 10. Known Gaps and Future Explorations
 
-### ADR-0003: Composable Deployment Modes
+The following areas require further analysis. Each may result
+in a future ADR or specification amendment.
 
-Accepted. Supersedes ADR-0001 §Embedded default. Defines three
-deployment modes — monolithic ion (zero daemons), monolithic eos
-(one daemon, many clients), distributed eos (microservices) — all
-sharing identical codepaths via dependency injection. See
-[ADR-0003](../adr/0003-composable-deployment-modes.md).
+| #   | Gap                       | Notes                                                                                                                               |
+| :-- | :------------------------ | :---------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Caching strategy**      | Where does the eval cache live? How is it distributed? How do developer-signed metadata tags interact with cache-skipping?          |
+| 2   | **Scheduling depth**      | Priority, preemption, work-stealing trade-offs, and fairness require rigorous analysis against scheduling literature. Proposed ADR. |
+| 3   | **Store topology**        | How do artifact stores relate in multi-site deployments? Store-to-store substitution and trust policy interaction.                  |
+| 4   | **Observability**         | Metrics, tracing, structured logging for operator debugging.                                                                        |
+| 5   | **Graceful degradation**  | Behavior under partial availability (fewer workers, store unreachable).                                                             |
+| 6   | **Pluggable auth design** | Auth trait interface, initial implementations, transport vs application layer boundary.                                             |
 
-§1.5 of this document will be updated to reflect ADR-0003 once
-the ADR is accepted.
+---
 
-### ADR-0004 (proposed): Caching and High Availability
+## 11. Scope Boundaries
 
-Persistent eval cache, daemon replication, job recovery across
-daemon restarts, and warm-standby failover.
+Eos is a build evaluation and execution engine. The following
+concerns are explicitly outside its scope:
+
+- **Cluster orchestration**: Worker deployment, scaling, and
+  lifecycle management are operator concerns (systemd, Nomad,
+  Kubernetes). Eos discovers workers via registration, not
+  deployment.
+- **Package publishing**: Atom registration and publishing are
+  developer concerns (Ion/L3). Eos reads from registries,
+  never writes.
+- **Trust authority**: Developer-signed metadata is the source
+  of truth. Eos signs build outputs as supplementary
+  attestation. Clients decide trust policy.
+- **Authentication system**: Auth is pluggable middleware.
+  Operators choose their trust stack. Eos provides the
+  interface, not the implementation.
+- **Multi-tenancy**: The scaling model is federated sharing
+  between clusters, not shared tenancy within a cluster.
+  Intra-cluster fairness is not a current concern.
 
 ---
 
@@ -1041,7 +1113,7 @@ daemon restarts, and warm-standby failover.
 | §2.2 Eval Workers    | [eos-snix-backend.md](../specs/eos-snix-backend.md)                                                        |
 | §2.3 Build Workers   | [eos-build-engine.md](../specs/eos-build-engine.md)                                                        |
 | §4.1 Build Lifecycle | [ion-eos-contract.md](../specs/ion-eos-contract.md)                                                        |
-| §4.3 Atom Resolution | [ion-eos-contract.md](../specs/ion-eos-contract.md) §Content Delivery                                      |
+| §4.3 Atom Fetching   | [ion-eos-contract.md](../specs/ion-eos-contract.md) §Content Delivery                                      |
 | §6.1 Global Store    | [eos-snix-backend.md](../specs/eos-snix-backend.md) §Store Mapping                                         |
 | §6.2 Pure Eval       | [eos-sandboxing.md](../specs/eos-sandboxing.md)                                                            |
 | §6.4 Build Sandbox   | [eos-sandboxing.md](../specs/eos-sandboxing.md), [eos-snix-backend.md](../specs/eos-snix-backend.md)       |
@@ -1062,7 +1134,7 @@ that require migration work:
 | 2   | `ion-eos` ad-hoc TOML parsing        | `ion-eos/src/lib.rs:78-92`  | Use lock types                     |
 | 3   | Eos receives raw lock content        | `run_orchestrated_build()`  | Accept structured `eos-core` types |
 | 4   | Eos daemon persists lock files       | `scheduler.rs`, `config.rs` | Remove lock file I/O               |
-| 5   | Eos reimplements atom fetching       | `eos/eos/src/fetch.rs`      | Use `AtomSource` from L1           |
+| 5   | Eos reimplements atom fetching       | `eos/eos/src/fetch.rs`      | Use `AtomContent` from L1          |
 
 These are tracked in [layer-boundaries.md](../specs/layer-boundaries.md) §6.
 
