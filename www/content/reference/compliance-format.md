@@ -3,6 +3,7 @@ title = "Compliance Annotation Format & Schema"
 description = "Reference guide for the Axios codebase compliance annotation syntax and JSON database schema"
 quadrant = "Reference"
 audience = "Developers adding code annotations or spec writers defining constraints"
+tags = ["compliance"]
 +++
 
 This reference page defines the codebase compliance annotation syntax, the JSON schema for tracking data, and instructions for annotating new implementations.

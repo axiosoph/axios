@@ -245,6 +245,7 @@ def main():
     markdown_content = f"""+++
 title = "Spec Compliance Matrix"
 description = "Automated compliance status of codebase implementations against specifications"
+tags = ["compliance"]
 +++
 
 **Metadata:**

@@ -79,9 +79,13 @@ def process_section(src_dir, dst_dir, section, description_tpl, default_title="D
         body_content = "".join(lines[body_start:])
         body_content = rewrite_links(body_content, section)
 
+        file_tags = tags
+        if callable(tags):
+            file_tags = tags(filename)
+
         tags_str = ""
-        if tags:
-            tags_json = "[" + ", ".join(f'"{t}"' for t in tags) + "]"
+        if file_tags:
+            tags_json = "[" + ", ".join(f'"{t}"' for t in file_tags) + "]"
             tags_str = f"tags = {tags_json}\n"
 
         frontmatter = f'+++\ntitle = "{title}"\ndescription = "{description_tpl.format(title=title)}"\nquadrant = "Explanation"\naudience = "Developers and architects of the Axios stack"\n{tags_str}+++\n\n'
@@ -124,9 +128,21 @@ if __name__ == "__main__":
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
     print("specs:")
+    def get_spec_tags(filename):
+        if filename in ("atom-sourcing.md", "atom-transactions.md", "git-storage-format.md"):
+            return ["atom", "layer1"]
+        elif filename in ("eos-build-engine.md", "eos-network-protocol.md", "eos-sandboxing.md", "eos-scheduler.md", "eos-snix-backend.md"):
+            return ["eos", "layer2"]
+        elif filename in ("ion-manifest.md", "ion-resolution.md", "lock-file-schema.md"):
+            return ["ion", "layer3"]
+        elif filename in ("aliased-url-resolution.md", "ion-eos-contract.md", "layer-boundaries.md"):
+            return ["cross-cutting"]
+        return []
+
     process_section(
         "../docs/specs", "content/reference", "reference",
         "Behavioral specification for {title}", "Specification",
+        tags=get_spec_tags,
     )
 
     print("adrs:")

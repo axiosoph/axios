@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block content %}
+<article class="section-index-wrapper">
+  <header class="section-header">
+    <h1 class="section-title">{{ section.title }}</h1>
+    {% if section.description %}
+    <p class="section-description-lead">{{ section.description }}</p>
+    {% endif %}
+  </header>
+
+  <!-- Layer 1: Atom Protocol (Foundation) -->
+  <section class="reference-group">
+    <h2 class="group-title" style="margin-block-start: 2.5rem; margin-block-end: 1rem;">Layer 1: Atom Protocol (Foundation)</h2>
+    <nav class="section-grid-links" style="margin-block-start: 1rem;">
+      {% for item in items %}
+        {% if "layer1" in item.frontmatter.tags %}
+        <a href="{{ prefix }}{{ item.path }}" class="section-card-link">
+          <strong class="card-title">{{ item.frontmatter.title }}</strong>
+          {% if item.frontmatter.description %}
+          <span class="card-desc">{{ item.frontmatter.description }}</span>
+          {% endif %}
+        </a>
+        {% endif %}
+      {% endfor %}
+    </nav>
+  </section>
+
+  <!-- Layer 2: Eos Build Engine (Evaluation) -->
+  <section class="reference-group" style="margin-block-start: 3.5rem;">
+    <h2 class="group-title" style="margin-block-start: 0; margin-block-end: 1rem;">Layer 2: Eos Build Engine (Evaluation)</h2>
+    <nav class="section-grid-links" style="margin-block-start: 1rem;">
+      {% for item in items %}
+        {% if "layer2" in item.frontmatter.tags %}
+        <a href="{{ prefix }}{{ item.path }}" class="section-card-link">
+          <strong class="card-title">{{ item.frontmatter.title }}</strong>
+          {% if item.frontmatter.description %}
+          <span class="card-desc">{{ item.frontmatter.description }}</span>
+          {% endif %}
+        </a>
+        {% endif %}
+      {% endfor %}
+    </nav>
+  </section>
+
+  <!-- Layer 3: Ion CLI (User-facing) -->
+  <section class="reference-group" style="margin-block-start: 3.5rem;">
+    <h2 class="group-title" style="margin-block-start: 0; margin-block-end: 1rem;">Layer 3: Ion CLI (User-facing)</h2>
+    <nav class="section-grid-links" style="margin-block-start: 1rem;">
+      {% for item in items %}
+        {% if "layer3" in item.frontmatter.tags %}
+        <a href="{{ prefix }}{{ item.path }}" class="section-card-link">
+          <strong class="card-title">{{ item.frontmatter.title }}</strong>
+          {% if item.frontmatter.description %}
+          <span class="card-desc">{{ item.frontmatter.description }}</span>
+          {% endif %}
+        </a>
+        {% endif %}
+      {% endfor %}
+    </nav>
+  </section>
+
+  <!-- Cross-Cutting & System Level -->
+  <section class="reference-group" style="margin-block-start: 3.5rem;">
+    <h2 class="group-title" style="margin-block-start: 0; margin-block-end: 1rem;">Cross-Cutting &amp; System Level</h2>
+    <nav class="section-grid-links" style="margin-block-start: 1rem;">
+      {% for item in items %}
+        {% if "cross-cutting" in item.frontmatter.tags %}
+        <a href="{{ prefix }}{{ item.path }}" class="section-card-link">
+          <strong class="card-title">{{ item.frontmatter.title }}</strong>
+          {% if item.frontmatter.description %}
+          <span class="card-desc">{{ item.frontmatter.description }}</span>
+          {% endif %}
+        </a>
+        {% endif %}
+      {% endfor %}
+    </nav>
+  </section>
+
+  <!-- Compliance & Tooling -->
+  <section class="reference-group" style="margin-block-start: 3.5rem;">
+    <h2 class="group-title" style="margin-block-start: 0; margin-block-end: 1rem;">Compliance &amp; Tooling</h2>
+    <nav class="section-grid-links" style="margin-block-start: 1rem;">
+      {% for item in items %}
+        {% if "compliance" in item.frontmatter.tags %}
+        <a href="{{ prefix }}{{ item.path }}" class="section-card-link">
+          <strong class="card-title">{{ item.frontmatter.title }}</strong>
+          {% if item.frontmatter.description %}
+          <span class="card-desc">{{ item.frontmatter.description }}</span>
+          {% endif %}
+        </a>
+        {% endif %}
+      {% endfor %}
+    </nav>
+  </section>
+</article>
+{% endblock content %}
