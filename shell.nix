@@ -27,5 +27,6 @@ mkShell {
     nixfmt
     taplo
     just
+    pagefind
   ];
 }

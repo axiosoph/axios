@@ -30,33 +30,33 @@ not own atoms (L1 concern) or dependency resolution (L3 concern).
 ### 1.2 External Actors
 
 ```mermaid
-graph LR
-    subgraph "L3 — Ion (Frontend)"
+graph TB
+    subgraph "L3 — Ion"
         CLI["ion-cli"]
         CI["CI/CD Pipeline"]
     end
 
-    subgraph "L2 — Eos (This System)"
+    subgraph "L2 — Eos"
         EOD["Eos Daemon"]
     end
 
-    subgraph "L1 — Atom (Protocol)"
+    subgraph "L1 — Atom"
         AS["Local Atom Store"]
-        AR["Atom Registries<br/>(mirrors)"]
+        AR["Atom Registries"]
     end
 
     subgraph "Snix Ecosystem"
-        SSD["Snix Store Daemon<br/>(BlobService, DirectoryService,<br/>PathInfoService)"]
-        SB["Snix Builder<br/>(OCI/bwrap sandbox)"]
+        SSD["Snix Store Daemon"]
+        SB["Snix Builder"]
     end
 
     CLI -->|"Cap'n Proto RPC"| EOD
     CI -->|"Cap'n Proto RPC"| EOD
-    AR -->|"Atom Protocol<br/>(read, fetch)"| EOD
-    EOD -->|"ingest fetched atoms"| AS
+    AR -->|"Atom Protocol"| EOD
+    EOD --> AS
     EOD -..->|"gRPC (via workers)"| SSD
     EOD -..->|"gRPC (via workers)"| SB
-    SB -->|"write build outputs"| SSD
+    SB --> SSD
 ```
 
 ### 1.3 System Boundaries
@@ -140,30 +140,18 @@ transport protocols:
 ```mermaid
 graph TB
     subgraph "Client Processes"
-        ION["Ion CLI / CI Client"]
+        ION["Ion Client"]
     end
 
     subgraph "Eos Cluster"
-        subgraph "Scheduler"
-            DAEMON["Eos Daemon<br/>━━━━━━━━━━━━━━━<br/>• Job lifecycle management<br/>• Eval/build dispatch<br/>• Eval cache<br/>• Worker pool management<br/>• Atom fetching orchestration<br/>━━━━━━━━━━━━━━━<br/>Zero snix dependencies (target)"]
-        end
-
-        subgraph "Eval Worker Pool"
-            EW1["Eval Worker 1<br/>━━━━━━━━━━━━━━━<br/>• snix-eval (pure eval)<br/>• snix-glue<br/>• Dedicated OS thread<br/>• gRPC → store daemons"]
-            EW2["Eval Worker 2"]
-            EWN["Eval Worker N"]
-        end
-
-        subgraph "Build Worker Pool"
-            BW1["Build Worker 1<br/>━━━━━━━━━━━━━━━<br/>• Cap'n Proto shim<br/>• gRPC → snix builders"]
-            BW2["Build Worker 2"]
-            BWN["Build Worker N"]
-        end
+        DAEMON["Eos Daemon"]
+        EWP["Eval Worker Pool"]
+        BWP["Build Worker Pool"]
     end
 
     subgraph "Snix Infrastructure"
-        STORE["Snix Store Daemon<br/>━━━━━━━━━━━━━━━<br/>• BlobService<br/>• DirectoryService<br/>• PathInfoService<br/>━━━━━━━━━━━━━━━<br/>Global shared store"]
-        BUILDER["Snix Builder<br/>━━━━━━━━━━━━━━━<br/>• OCI / bwrap sandbox<br/>• BuildService gRPC<br/>• FUSE-mounted inputs"]
+        STORE["Snix Store Daemon"]
+        BUILDER["Snix Builder"]
     end
 
     subgraph "Atom Infrastructure"
@@ -171,22 +159,16 @@ graph TB
         AREG["Atom Registries"]
     end
 
-    ION <-->|"Cap'n Proto<br/>(UDS / TCP+auth)"| DAEMON
-    DAEMON <-->|"Cap'n Proto<br/>(internal)"| EW1
-    DAEMON <-->|"Cap'n Proto"| EW2
-    DAEMON <-->|"Cap'n Proto"| EWN
-    DAEMON <-->|"Cap'n Proto<br/>(internal)"| BW1
-    DAEMON <-->|"Cap'n Proto"| BW2
-    DAEMON <-->|"Cap'n Proto"| BWN
-    EW1 -->|"gRPC"| STORE
-    EW2 -->|"gRPC"| STORE
-    BW1 -->|"gRPC"| BUILDER
-    BW2 -->|"gRPC"| BUILDER
+    ION <-->|"Cap'n Proto"| DAEMON
+    DAEMON <-->|"Cap'n Proto"| EWP
+    DAEMON <-->|"Cap'n Proto"| BWP
+    EWP -->|"gRPC"| STORE
+    BWP -->|"gRPC"| BUILDER
     BUILDER -->|"gRPC"| STORE
-    EW1 -.->|"gRPC (IFD)"| BUILDER
-    AREG -->|"Atom Protocol (read)"| DAEMON
+    EWP -.->|"gRPC (IFD)"| BUILDER
+    AREG -->|"Atom Protocol"| DAEMON
     DAEMON -->|"ingest"| ASTORE
-    EW1 -->|"read content"| ASTORE
+    EWP -->|"read content"| ASTORE
 ```
 
 ### 2.1 Eos Daemon (Scheduler)
@@ -304,11 +286,11 @@ infrastructure managed by cluster operators.
 ```mermaid
 graph TB
     subgraph "Eos Daemon Process"
-        RPC["Cap'n Proto RPC Layer<br/>(accept, auth, capability bootstrap)"]
-        SCHED["Scheduler<br/>(job dispatch, eval cache,<br/>worker health monitoring)"]
-        WPOOL["Worker Pool Manager<br/>(registration, heartbeat,<br/>Rendezvous hashing)"]
-        ARES["Atom Fetching<br/>(composite AtomContent:<br/>local → registries → peer)"]
-        ECACHE["Eval Cache<br/>(EvalCacheKey: snapshot digest + eval_args<br/>→ cached derivation)"]
+        RPC["RPC Layer"]
+        SCHED["Scheduler"]
+        WPOOL["Worker Pool Manager"]
+        ARES["Atom Fetching"]
+        ECACHE["Eval Cache"]
     end
 
     RPC --> SCHED
@@ -338,10 +320,10 @@ hits skip evaluation entirely.
 ```mermaid
 graph TB
     subgraph "Eval Worker Process"
-        EWRPC["Cap'n Proto Interface<br/>(EvalWorker capability)"]
-        EVAL["snix-eval<br/>(dedicated OS thread,<br/>pure eval mode)"]
-        GLUE["snix-glue<br/>(Nix↔snix derivation conversion)"]
-        STOREIO["SnixStoreIO<br/>(EvalIO trait impl,<br/>gRPC store clients)"]
+        EWRPC["Cap'n Proto RPC"]
+        EVAL["snix-eval engine"]
+        GLUE["snix-glue layer"]
+        STOREIO["SnixStoreIO"]
     end
 
     EWRPC --> EVAL
@@ -367,9 +349,9 @@ handle for IFD.
 ```mermaid
 graph TB
     subgraph "Build Worker Process"
-        BWRPC["Cap'n Proto Interface<br/>(BuildWorker capability)"]
-        SHIM["Build Shim<br/>(cancellation, progress,<br/>lease management)"]
-        GRPC["gRPC BuildService Client<br/>(forwards DoBuild to snix builder)"]
+        BWRPC["Cap'n Proto RPC"]
+        SHIM["Build Shim"]
+        GRPC["gRPC Client"]
     end
 
     BWRPC --> SHIM
@@ -657,7 +639,7 @@ derivation with a pre-computed hash.
 
 The scheduler maintains an eval cache keyed by `EvalCacheKey`:
 
-```
+```rust
 EvalCacheKey = (snapshot_digest: Digest, eval_args: Vec<(String, String)>)
 ```
 
@@ -693,7 +675,7 @@ Developer-signed atom metadata tags MAY include expected derivation and artifact
 
 The cryptographic chain:
 
-```
+```text
 AtomId          → Version  → Revision     → Plan      → Artifact
 digest(a,l)      semver     commit sha     drv hash    store path
 (identity)       (human)    (content hash) (eval out)  (build out)
@@ -938,7 +920,7 @@ auth-agnostic.
 
 **Client-facing** (defined in `eos.capnp`):
 
-```capnp
+```typescript
 interface EosDaemon {
   submitBuild(request :BuildRequest) -> (job :BuildJob);
   queryStatus(jobId :Data) -> (status :BuildStatus);
@@ -956,7 +938,7 @@ interface BuildJob {
 
 **Worker-facing** (to be added):
 
-```capnp
+```typescript
 interface WorkerRegistry {
   registerEval(worker :EvalWorker,
     caps :EvalWorkerCapabilities)
@@ -979,6 +961,7 @@ interface EvalWorker {
   evaluate(request :EvalRequest) -> (result :EvalResult);
 }
 
+# Held by the scheduler. Methods invoked by scheduler.
 interface BuildWorker {
   build(request :WorkerBuildRequest)
     -> (result :WorkerBuildResult);

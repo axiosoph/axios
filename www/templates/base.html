@@ -528,6 +528,196 @@
       });
     })();
   </script>
+  
+  <!-- Interactive Mermaid Viewer Script -->
+  <script>
+    document.addEventListener("DOMContentLoaded", function() {
+      // Find all mermaid diagrams
+      const diagrams = document.querySelectorAll(".mermaid-diagram");
+      if (diagrams.length === 0) return;
+
+      // Create lightbox modal structure and append to body
+      const modal = document.createElement("div");
+      modal.id = "mermaid-lightbox";
+      modal.className = "mermaid-modal";
+      modal.innerHTML = `
+        <div class="mermaid-modal-overlay"></div>
+        <div class="mermaid-modal-content">
+          <div class="mermaid-modal-header">
+            <span class="mermaid-modal-title">Interactive Diagram Viewer</span>
+            <div class="mermaid-modal-instructions">Drag to pan • Scroll to zoom</div>
+            <button class="mermaid-modal-close" aria-label="Close viewer">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                <path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+              </svg>
+            </button>
+          </div>
+          <div class="mermaid-modal-body">
+            <div class="mermaid-modal-pan-container"></div>
+          </div>
+          <div class="mermaid-modal-footer">
+            <button class="mermaid-modal-btn modal-zoom-in" title="Zoom In">🔍 Zoom In</button>
+            <button class="mermaid-modal-btn modal-zoom-out" title="Zoom Out">🔍 Zoom Out</button>
+            <button class="mermaid-modal-btn modal-zoom-reset" title="Reset">Reset View</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+
+      const modalBody = modal.querySelector(".mermaid-modal-pan-container");
+      const modalClose = modal.querySelector(".mermaid-modal-close");
+      const modalOverlay = modal.querySelector(".mermaid-modal-overlay");
+      
+      let currentTransform = { x: 0, y: 0, scale: 1 };
+      let isDragging = false;
+      let startPos = { x: 0, y: 0 };
+
+      function updateModalTransform() {
+        modalBody.style.transform = `translate(${currentTransform.x}px, ${currentTransform.y}px) scale(${currentTransform.scale})`;
+      }
+
+      function openModal(svgElement) {
+        // Clone the SVG so we don't remove it from the page
+        const svgClone = svgElement.cloneNode(true);
+        svgClone.style.maxWidth = "none";
+        svgClone.style.maxHeight = "none";
+        svgClone.style.height = "auto";
+        svgClone.style.width = "auto";
+        
+        modalBody.innerHTML = "";
+        modalBody.appendChild(svgClone);
+        
+        // Reset transform state
+        currentTransform = { x: 0, y: 0, scale: 1 };
+        updateModalTransform();
+        
+        modal.style.display = "flex";
+        document.body.style.overflow = "hidden";
+      }
+
+      function closeModal() {
+        modal.style.display = "none";
+        document.body.style.overflow = "";
+      }
+
+      modalClose.addEventListener("click", closeModal);
+      modalOverlay.addEventListener("click", closeModal);
+
+      // Pan & Zoom controls in modal
+      modal.querySelector(".modal-zoom-in").addEventListener("click", () => {
+        currentTransform.scale *= 1.25;
+        updateModalTransform();
+      });
+      modal.querySelector(".modal-zoom-out").addEventListener("click", () => {
+        currentTransform.scale /= 1.25;
+        updateModalTransform();
+      });
+      modal.querySelector(".modal-zoom-reset").addEventListener("click", () => {
+        currentTransform = { x: 0, y: 0, scale: 1 };
+        updateModalTransform();
+      });
+
+      // Mouse pan event handlers
+      modalBody.addEventListener("mousedown", (e) => {
+        if (e.button !== 0) return;
+        isDragging = true;
+        startPos = { x: e.clientX - currentTransform.x, y: e.clientY - currentTransform.y };
+        modalBody.style.cursor = "grabbing";
+        e.preventDefault();
+      });
+
+      window.addEventListener("mousemove", (e) => {
+        if (!isDragging) return;
+        currentTransform.x = e.clientX - startPos.x;
+        currentTransform.y = e.clientY - startPos.y;
+        updateModalTransform();
+      });
+
+      window.addEventListener("mouseup", () => {
+        if (isDragging) {
+          isDragging = false;
+          modalBody.style.cursor = "grab";
+        }
+      });
+
+      // Touch events for mobile support
+      let touchStartDist = 0;
+      modalBody.addEventListener("touchstart", (e) => {
+        if (e.touches.length === 1) {
+          isDragging = true;
+          startPos = { x: e.touches[0].clientX - currentTransform.x, y: e.touches[0].clientY - currentTransform.y };
+        } else if (e.touches.length === 2) {
+          isDragging = false;
+          touchStartDist = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY
+          );
+        }
+      });
+
+      modalBody.addEventListener("touchmove", (e) => {
+        if (isDragging && e.touches.length === 1) {
+          currentTransform.x = e.touches[0].clientX - startPos.x;
+          currentTransform.y = e.touches[0].clientY - startPos.y;
+          updateModalTransform();
+        } else if (e.touches.length === 2) {
+          const dist = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY
+          );
+          const factor = dist / touchStartDist;
+          currentTransform.scale *= factor;
+          currentTransform.scale = Math.max(0.25, Math.min(currentTransform.scale, 8));
+          touchStartDist = dist;
+          updateModalTransform();
+        }
+      });
+
+      modalBody.addEventListener("touchend", () => {
+        isDragging = false;
+      });
+
+      // Mouse wheel zoom handler
+      modalBody.addEventListener("wheel", (e) => {
+        e.preventDefault();
+        const zoomIntensity = 0.1;
+        const delta = e.deltaY < 0 ? 1 : -1;
+        
+        currentTransform.scale *= (1 + delta * zoomIntensity);
+        currentTransform.scale = Math.max(0.25, Math.min(currentTransform.scale, 8));
+        updateModalTransform();
+      }, { passive: false });
+
+      // Add overlay controls to each page diagram
+      diagrams.forEach((container) => {
+        const svg = container.querySelector("svg");
+        if (!svg) return;
+
+        const controls = document.createElement("div");
+        controls.className = "mermaid-controls";
+        controls.innerHTML = `
+          <button class="mermaid-control-btn view-btn" title="Open Interactive Viewer">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+              <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+            </svg>
+            <span>Interactive View</span>
+          </button>
+        `;
+        container.appendChild(controls);
+
+        controls.querySelector(".view-btn").addEventListener("click", () => {
+          openModal(svg);
+        });
+      });
+
+      // Escape key to close modal
+      window.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && modal.style.display === "flex") {
+          closeModal();
+        }
+      });
+    });
+  </script>
 </body>
 
 </html>
