@@ -414,6 +414,34 @@ prediction-free baseline. Operators running homogeneous clusters may set $\beta 
 **Prior art**: Tetris (Grandl et al., SIGCOMM 2014) —
 multi-resource dot-product alignment heuristic.
 
+#### 3a. Operational Tuning and Sensitivity Analysis
+
+Production scheduling performance is highly sensitive to the prediction decay constant ($\lambda$) and the entry-point coarsening thresholds.
+
+##### Prediction Decay Constant ($\lambda$) Tuning
+
+The decay constant $\lambda$ governs the rate at which the resource-fit optimization term degrades under prediction errors. A primary design goal is balancing responsiveness to systematic prediction error against resilience to ambient noise (e.g., I/O jitter, network drops, or CPU throttling):
+
+- **High Sensitivity ($\lambda \gg 1$)**: Setting $\lambda$ too high causes the scheduler to treat minor ambient variance as a systematic failure. A transient network slowdown during a build will temporarily inflate $\text{EMA}(|\eta_e|)$, causing $\beta_e \to 0$ rapidly. The scheduler will discard valuable historical profiles and fall back to the prediction-free baseline prematurely, resulting in suboptimal multi-resource bin-packing and increased cluster fragmentation.
+- **Low Sensitivity ($\lambda \approx 0$)**: Setting $\lambda$ too low makes the scheduler sluggish to react to true systematic prediction errors (e.g., when a package version bump drastically changes its dependency tree or memory usage, or when developer-provided cold-start metadata is highly inaccurate). The scheduler will continue to place tasks using incorrect estimates, leading to resource overloading, queue stalls, and load imbalance.
+
+To tune $\lambda$, operators should align it with the expected coefficient of variation ($CV$) of healthy build execution times. Let $CV = \sigma_{\text{ambient}} / \mu_{\text{duration}}$ represent the standard deviation of ambient duration jitter under nominal conditions. The decay constant should satisfy:
+
+- $e^{-\lambda \cdot CV} \approx 1$ (nominal jitter does not decay weight).
+- $e^{-\lambda \cdot E_{\text{sys}}} \approx 0$ for a systematic error magnitude $E_{\text{sys}}$ (e.g., $E_{\text{sys}} \ge 1.0$, corresponding to a $100\%$ or greater estimation error).
+
+##### Entry-Point Coarsening Thresholds
+
+The entry-point selection heuristic determines which nodes in the uncached sub-DAG are promoted to standalone entry points ($S$) and which are merged into transitive parent scopes. The thresholds for promote-vs-merge (subgraph cost threshold, convergence/fan-in threshold, and resource limits) dictate the scheduling granularity:
+
+- **Aggressive Coarsening (High Thresholds)**: Too few entry points are promoted. Trivial dependencies, convergence points, and even heavy derivations are absorbed into a small number of top-level tasks. This serializes execution, forcing individual workers to build large subgraphs sequentially and starving the rest of the cluster of parallel execution opportunities.
+- **Weak Coarsening (Low Thresholds)**: Too many entry points are promoted. The scheduler shatters the DAG into a high volume of tiny tasks (e.g., short compile tasks, small script runs). This leads to:
+  1. High scheduling queue overhead.
+  2. Destruction of input cache locality, as sub-DAG nodes are scattered across different workers rather than executing on the same machine.
+  3. Contention and latency on store-level locks (`PathInfoService`), as multiple workers block waiting for shared transient outputs to sync.
+
+Production environments should calibrate coarsening thresholds to the _scheduling latency_ of the cluster. The minimum subgraph cost threshold must be significantly larger than the average round-trip scheduling latency (dispatch + worker pickup overhead) to ensure that the parallel execution benefit outweighs the coordination cost.
+
 ### 4. Local Rendezvous Hashing (LRH)
 
 Replace standard Highest Random Weight (HRW) hashing with
@@ -858,3 +886,46 @@ to this ADR, potentially using:
 
 This is deferred to a follow-up effort but is considered
 essential for a system targeting global-scale deployment.
+
+## Future Work: Federated Scale via Min-Cost Max-Flow (MCMF)
+
+While the multi-criteria placement heuristic (§3) is highly suitable for medium-sized, homogeneous clusters, large-scale federated deployments (scaling past 1,000+ nodes across disparate administrative or geographical boundaries) introduce complex constraints. At this scale, we propose exploring a flow-based scheduling model based on the Quincy (SOSP 2009) and Firmament (OSDI 2016) architectures as a successor to the heuristic scoring model.
+
+### Graph Formulation
+
+Instead of evaluating independent scores for each task-worker pair, scheduling is modeled as a Min-Cost Max-Flow (MCMF) optimization problem on a directed graph $F = (V_F, E_F)$. The network is constructed dynamically at each scheduling iteration:
+
+1. **Sources and Sinks**: A global source node $s$ injects flow, and a global sink node $t$ consumes it.
+2. **Task Nodes**: Each ready entry point $e \in S$ is represented by a node. Edges from the source $s$ to each task node $e$ have capacity $1$ and cost $0$.
+3. **Worker Nodes**: Each worker $w \in W$ is represented by a node.
+4. **Placement Edges**: Edges are added from task nodes to candidate worker nodes. The capacity is $1$. The cost of this edge encodes all scheduling preferences:
+   - **Locality Cost**: Lower cost is assigned if the candidate worker $w$ has cached input files (LRH ring affinity).
+   - **Resource Fit Cost**: Tetris-style resource alignment is encoded as a cost term (higher alignment = lower cost).
+   - **Federation latency cost**: Higher costs are assigned to edges crossing geographic or regional network boundaries.
+5. **Cluster and Federation Nodes**: Intermediate aggregator nodes represent local clusters, racks, or geographical regions. They can enforce hierarchy-aware placement and bound cross-region bandwidth.
+6. **Trust and Policy Boundaries**: Trust constraints can be modeled directly in the topology. For example, if a task $e$ requires a high-trust builder (e.g., for signed artifact compilation), placement edges are only constructed to workers belonging to the trusted sub-network. Edges to untrusted public peer nodes are omitted or assigned a penalty cost representing verification overhead.
+7. **Unschedulable/Delay Nodes**: To allow tasks to wait for local resources rather than being immediately dispatched to a suboptimal remote worker, tasks connect to the sink $t$ via "unscheduled" nodes. The cost on these edges represents the penalty of delaying the task.
+
+```mermaid
+graph TD
+    s["Source (s)"] --> T1["Task (EP-1)"]
+    s --> T2["Task (EP-2)"]
+
+    T1 -- "Cost: Cache Affinity" --> W1["Worker 1 (Local)"]
+    T1 -- "Cost: Remote Latency" --> W2["Worker 2 (Remote)"]
+    T2 -- "Cost: Resource Fit" --> W2
+
+    T1 -- "Delay Penalty" --> U1["Unscheduled Node"]
+    T2 -- "Delay Penalty" --> U2["Unscheduled Node"]
+
+    W1 --> Sink["Sink (t)"]
+    W2 --> Sink
+    U1 --> Sink
+    U2 --> Sink
+```
+
+### Advantages of MCMF at Federated Scale
+
+- **Global Optimization**: Rather than scheduling tasks greedily one-by-one (which can lead to bad placements for later tasks due to capacity exhaustion), MCMF solves placement globally across all ready tasks in a single optimization pass.
+- **Expressive Policy Encoding**: Locality, resource capacity, federation topology, and trust boundaries are unified into a single mathematical abstraction (costs and capacities) rather than balancing separate, competing heuristic terms.
+- **Incremental Solver Performance**: Firmament demonstrated that by using incremental MCMF solvers (e.g., cost-scaling algorithms like CS2), the solver can reuse the previous iteration's solution, achieving sub-second scheduling times for tens of thousands of tasks on 10,000+ machines. This eliminates the scalability bottlenecks typically associated with flow network solvers.
