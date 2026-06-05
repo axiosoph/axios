@@ -137,34 +137,36 @@ removed (the dependency is already satisfied).
 #### Entry Points and Coverage
 
 An **entry point selection** is a subset $S \subseteq V'$
-and a **coverage function** $\kappa: V' \to S$ satisfying:
+and a **coverage relation** $\kappa \subseteq V' \times S$ satisfying:
 
-1. **Total coverage**: $\forall v \in V', \kappa(v)$ is
-   defined (every uncached derivation is assigned to an
-   entry point)
+1. **Total coverage**: $\forall v \in V',\; \exists s \in S:\; (v, s) \in \kappa$
+   (every uncached derivation is assigned to at least one entry point).
 
-2. **Self-coverage**: $\forall s \in S, \kappa(s) = s$
-   (every entry point covers itself)
+2. **Self-coverage**: $\forall s \in S,\; (s, s) \in \kappa$, and
+   if $(s, s') \in \kappa$ then $s' = s$ (every entry point covers itself uniquely).
 
-3. **Transitive containment**: If $\kappa(v) = s$ and
+3. **Transitive containment**: If $(v, s) \in \kappa$ and
    $v \neq s$, then $v$ is in the transitive dependency
    closure of $s$ in $G'$ (a derivation is only covered
-   by an entry point that transitively depends on it)
+   by an entry point that transitively depends on it).
 
-4. **Downward closure within coverage**: If $\kappa(v) = s$
-   and $(u, v) \in E'$ and $u \notin S$, then $\kappa(u) = s$
-   (if $v$ is covered by $s$ and $v$ depends on non-entry-point
+4. **Downward closure within coverage**: If $(v, s) \in \kappa$,
+   $(u, v) \in E'$, and $u \notin S$, then $(u, s) \in \kappa$
+   (if $v$ is covered by $s$ and depends on non-entry-point
    $u$, then $u$ is also covered by $s$ — entry point scopes
-   don't split non-entry-point dependency chains)
+   propagate downward through non-entry-point dependency chains).
 
-**Corollary (Convergence Obligation)**: If non-entry-point
-$u \notin S$ has multiple dependents $v_1, v_2 \in V'$ with
-$\kappa(v_1) \neq \kappa(v_2)$, then properties 1 and 4 are
-contradicted ($\kappa(u)$ cannot equal both $\kappa(v_1)$ and
-$\kappa(v_2)$). Therefore $u$ MUST be promoted to $S$.
-This is the formal basis for the convergence point promotion
-rule: any shared non-entry-point dependency with fan-out > 1
-across different entry point scopes must become an entry point.
+**Relation Overlap**: Unlike a single-valued function, the relation $\kappa$
+permits overlapping entry point scopes. If a non-entry-point $u \notin S$ has
+multiple dependents $v_1, v_2 \in V'$ covered by different entry points $s_1, s_2$,
+it is simply covered by both: $(u, s_1) \in \kappa$ and $(u, s_2) \in \kappa$.
+This removes the strict **Convergence Obligation** from the formal model,
+preventing the macroscopic scheduling DAG from shattering into tiny, high-overhead
+synchronization steps for shared leaves. Instead, overlapping transitive builds
+are resolved safely and transparently by the builder's store-path locks at runtime.
+(While the scheduling heuristic may still choose to promote high fan-out convergence
+points to $S$ as a performance optimization to avoid redundant worker allocation,
+it is not a formal correctness constraint).
 
 The **entry point DAG** is $T = (S, E_S)$ where
 $(s_i, s_j) \in E_S$ iff $s_j$ transitively depends on

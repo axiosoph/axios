@@ -167,9 +167,10 @@ separate classification. The profile store reflects this:
 
 ```
 P[drv_name] → {
-    build_duration: ExponentialMovingAverage,
-    build_memory:   ExponentialMovingAverage,
-    output_size:    ExponentialMovingAverage,
+    build_duration:  ExponentialMovingAverage,
+    build_memory:    ExponentialMovingAverage,
+    build_cpu_cores: ExponentialMovingAverage,  // average or peak cpu cores
+    output_size:     ExponentialMovingAverage,
 
     // enrichment (present when derivation is also an atom)
     atom_id:        Option<AtomId>,
@@ -194,15 +195,15 @@ observed metrics.
 
 **Prediction resolution** for a derivation:
 
-1. `P[drv_name]` — exact derivation name match (historical)
-2. `P[drv_name].atom_metadata` — developer-provided hints
-   (if derivation is an atom)
-3. System defaults — conservative fallback
+1. **Exact match**: `P[drv_name]` — exact derivation name match (historical).
+2. **Cross-version aggregate**: Aggregate EMA of the `atom_id` group — if the derivation is an atom, query the secondary index to aggregate historical profiles from other versions of the same atom (calibrating prediction for version bumps like `openssl-3.0.12` → `openssl-3.0.13`).
+3. **Developer metadata**: `P[drv_name].atom_metadata` — developer-provided hints (if derivation is an atom).
+4. **Defaults**: System defaults — conservative fallback.
 
 **Cross-version querying**: The `atom_id` field is a
 secondary index, not just a passive annotation. Grouping
 profiles by `atom_id` gives the full historical trajectory
-of an atom across versions — how build duration, memory,
+of an atom across versions — how build duration, memory, CPU,
 and DAG shape have evolved over time. This is essential for
 trend detection (is this atom's build getting heavier?),
 EMA calibration, and operator visibility. Derivation names
@@ -275,13 +276,16 @@ Worker Assignments
      handles trivial leaves, patches, and fetches
      internally as part of the entry point's build.
 
-   **Merging constraint**: If a non-entry-point derivation
-   is depended on by derivations covered by different entry
-   points, it MUST be promoted to an entry point (the
-   convergence point rule). Failure to promote forces all
-   consumers into the same entry point's scope, which
-   cascades in dense DAGs. The convergence point split
-   rule exists precisely to prevent this cascading merge.
+    **Merging constraint (Relaxed)**: Since the formal model relaxes
+    entry-point coverage to a relation, a non-entry-point derivation is
+    permitted to exist in multiple entry points' transitive scopes
+    simultaneously. At runtime, the builder's store-path locks deduplicate
+    the build of this shared node. To optimize scheduling efficiency and
+    avoid redundant worker load reservations, the selection heuristic
+    *may* choose to promote high fan-in convergence points to standalone
+    entry points. However, there is no mathematical constraint forcing
+    this promotion, preventing the macroscopic scheduling DAG from
+    shattering under dense dependencies.
 
 3. **Derive inter-entry-point dependencies** — if entry
    point A's transitive subgraph depends on the output of
@@ -376,21 +380,27 @@ Where:
   already has entry point `e`'s source tree and transitive
   inputs cached locally.
 
-- **resource_fit(w, e)**: Dot-product alignment between the
-  entry point's predicted resource vector and the worker's
-  available resource vector (from Tetris):
-  `dot(e.predicted_resources, w.available_resources)`
-  Prefers workers whose available resource shape matches the
-  entry point's demand, reducing fragmentation.
+- **resource_fit(w, e)**: Normalized alignment (cosine similarity)
+  between the entry point's predicted resource vector $\mathbf{r}_e$ and
+  the worker's available resource vector $\mathbf{a}_w$:
+  $$\text{resource\_fit}(w, e) = \frac{\mathbf{r}_e \cdot \mathbf{a}_w}{\|\mathbf{r}_e\|_2 \|\mathbf{a}_w\|_2}$$
+  Both vectors contain matching dimensions for CPU cores, memory (bytes), and
+  disk (bytes). Normalizing to $[0,1]$ prevents the larger scalar ranges of
+  memory or disk from dominating the CPU dimension.
 
 - **availability(w)**: Headroom ratio:
   `1 - (w.current_load / w.max_capacity)`
-  Prefers workers with more spare capacity.
+  Prefers workers with more spare capacity (dimensionless $\in [0,1]$).
 
-Weights `α`, `β`, `γ` are operator-tunable. Default: equal
-weighting. Operators running homogeneous clusters may reduce
-`β` (resource fit matters less). Operators with large atom
-source trees may increase `α` (locality matters more).
+Weights `α`, `β`, `γ` are operator-tunable. To protect against adversarial or
+highly inaccurate predictions, the effective weight of the resource fit term
+is dynamically decayed based on historical prediction error variance:
+$$\beta_e = \beta \cdot e^{-\lambda \cdot \text{Var}(\eta_e)}$$
+where $\text{Var}(\eta_e)$ is the running variance of the relative prediction
+error $\eta$ for that atom/derivation group, and $\lambda > 0$ is a decay
+constant. Under high prediction variance, $\beta_e \to 0$, causing placement
+to fall back to the prediction-free baseline (affinity and availability).
+Operators running homogeneous clusters may also set $\beta = 0$.
 
 **Prior art**: Tetris (Grandl et al., SIGCOMM 2014) —
 multi-resource dot-product alignment heuristic.
