@@ -406,20 +406,27 @@ optimization problem is finding $S$ that minimizes makespan.
 
 #### Theorem 2: Consistency Bound
 
-_If predictions are accurate ($\eta(v) \leq \epsilon$ for
-all $v$), then the heuristic assignment $\sigma_H$
-achieves:_
+_Given a fixed entry point DAG $T = (S, E_S)$ constructed from
+uncached sub-DAG $G'$, if predictions are accurate ($\eta(v) \leq \epsilon$ for
+all $v$), then the heuristic assignment $\sigma_H$ achieves:_
 
 $$M(\sigma_H) \leq (1 + O(\epsilon)) \cdot M(\sigma^*)$$
 
-_where $\sigma^_$ is the optimal offline assignment.\*
+_where $\sigma^*$ is the optimal offline assignment for $T$._
+
+**Concession on Coarsening**: We explicitly narrow this bound to the assignment phase
+on a *fixed* entry point DAG $T$. The entry point *selection* (graph coarsening)
+phase, which groups $G'$ into $T$, currently lacks a formal competitive bound.
+While greedy heuristic selection performs well in practice by isolating troublesome
+nodes and convergence points, mathematically bounding the makespan penalty of graph
+coarsening against arbitrary offline schedules remains open.
 
 **Proof approach**: Instantiate the framework of Gupta et
 al. (arXiv:1703.01634). Their result shows greedy scheduling
-with stochastic duration estimates is competitive, with
+with stochastic duration estimates on a fixed set of tasks is competitive, with
 ratio depending on the squared coefficient of variation.
 When $\epsilon$ is small (predictions are accurate), the
-coefficient of variation is $O(\epsilon)$, giving the bound.
+coefficient of variation is $O(\epsilon)$, giving the bound on $T$.
 
 **Status**: Proof sketch. Full proof requires formalizing the
 mapping from our entry point DAG model to their unrelated
@@ -433,14 +440,22 @@ the heuristic assignment $\sigma_H$ achieves:_
 $$M(\sigma_H) \leq \alpha \cdot M(\sigma_\text{base})$$
 
 _where $\sigma_\text{base}$ is the prediction-free baseline
-(tag matching with LRH affinity only) and $\alpha \geq 1$
-is a small constant.\_
+(tag matching with LRH affinity and availability only) and $\alpha \geq 1$
+is a small constant._
 
-**Proof approach**: When predictions are arbitrarily wrong,
-the `resource_fit` scoring term becomes noise, but `affinity`
-and `availability` terms remain valid. The scoring function
-degrades to the baseline plus noise. Show that the noise
-term cannot increase makespan by more than a constant factor.
+**Proof approach**: We normalize the `resource_fit` term using cosine similarity:
+$$\text{resource\_fit}(w, e) = \frac{\mathbf{r}_e \cdot \mathbf{a}_w}{\|\mathbf{r}_e\|_2 \|\mathbf{a}_w\|_2}$$
+bounding it in $[0,1]$ to match the range of the cache `affinity` and `availability` terms.
+Furthermore, the scheduler dynamically decays the weight $\beta_e$ of the `resource_fit`
+term based on historical prediction error variance:
+$$\beta_e = \beta \cdot e^{-\lambda \cdot \text{Var}(\eta_e)}$$
+where $\text{Var}(\eta_e)$ is the running variance of relative prediction error.
+When predictions are arbitrarily wrong or highly volatile, $\text{Var}(\eta_e) \to \infty$,
+causing $\beta_e \to 0$. The scoring function thus dynamically filters out the noisy prediction
+term, mathematically collapsing the assignment algorithm back to the prediction-free baseline.
+Because the degradation scales with the decayed weight and the normalized terms, the makespan
+under incorrect predictions is bounded within a small constant factor $\alpha$ of the baseline
+placement.
 
 **Status**: Conjecture. Requires formalization of the scoring
 function's degradation behavior. The learning-augmented
@@ -448,13 +463,13 @@ framework (Lindermayr & Megow, arXiv:2202.10199) provides
 the template: define consistency and robustness as functions
 of prediction error, then prove the tradeoff is tight.
 
-#### Theorem 4: Singleflight Deduplication Savings
+#### Theorem 4: Singleflight Deduplication Savings (Track B Optimization)
 
 _Let $R$ concurrent requests produce derivation DAGs
-$G_1, \ldots, G_R$ with shared uncached sub-DAGs. Without
-singleflight, total build work is
-$\sum_{i=1}^{R} |V'_i|$ derivation builds. With singleflight,
-total build work is $|\bigcup_{i=1}^{R} V'_i|$._
+$G_1, \ldots, G_R$ with shared uncached sub-DAGs. If the optional
+scheduler-level singleflight optimization is enabled, total build work is
+$|\bigcup_{i=1}^{R} V'_i|$ instead of $\sum_{i=1}^{R} |V'_i|$ builds,
+preventing duplicate worker slot allocation._
 
 **Proof sketch**: Content-addressed hashing ensures
 $\text{hash}(v) = \text{hash}(u) \iff v = u$ (derivations
