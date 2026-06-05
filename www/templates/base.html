@@ -489,13 +489,21 @@
         let ticking = false;
         function updateScrollspy() {
           let currentHeading = null;
-          const scrollPos = window.scrollY + 120; // Offset for header/viewport
+          
+          // Check if user is scrolled to the absolute bottom of the document
+          const isScrollable = document.documentElement.scrollHeight > window.innerHeight;
+          const isAtBottom = isScrollable && ((window.innerHeight + window.scrollY) >= (document.documentElement.scrollHeight - 25));
 
-          for (const h of headings) {
-            if (h.offsetTop <= scrollPos) {
-              currentHeading = h;
-            } else {
-              break;
+          if (isAtBottom && headings.length > 0) {
+            currentHeading = headings[headings.length - 1];
+          } else {
+            const scrollPos = window.scrollY + 120; // Offset for header/viewport
+            for (const h of headings) {
+              if (h.offsetTop <= scrollPos) {
+                currentHeading = h;
+              } else {
+                break;
+              }
             }
           }
 
