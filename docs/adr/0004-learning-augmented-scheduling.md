@@ -344,20 +344,25 @@ scope. The builder handles all transitive work below each
 entry point internally, on the assigned worker, with full
 locality.
 
-**Two-level deduplication**: Dedup operates at two
-independent levels:
+**Two-level deduplication**: Dedup operates at two independent levels:
 
-- **Entry point level (singleflight)**: The scheduler's
-  in-flight map deduplicates across concurrent requests
-  that select the same entry point (same derivation hash).
-- **Derivation level (store locks)**: Within a builder,
-  snix's `PathInfoService` acquires exclusive locks on
-  output store paths. If two builders (from different entry
-  points or different requests) attempt to build the same
-  transitive derivation, the second blocks on the lock
-  and uses the first's result. This catches overlaps that
-  the entry-point-level singleflight cannot — e.g.,
-  different entry point selections with shared transitives.
+- **Entry point level (singleflight - Track B optimization)**: The scheduler's
+  in-flight map deduplicates across concurrent requests that select the same
+  entry point (same derivation hash). Since this is a pure software-level
+  optimization rather than a protocol correctness invariant, it is omitted
+  from the formal Track A correctness model. If implemented in software, the
+  coalescing logic must isolate failure domains: it must distinguish between
+  deterministic build failures (which can be safely broadcast to subscribers)
+  and transient infrastructure failures (e.g., worker crash, disk failure).
+  If the build owner fails due to infrastructure, subscribers must not inherit
+  the failure; they must be re-dispatched to a healthy worker.
+- **Derivation level (store locks - Track A correctness)**: Within a builder,
+  snix's `PathInfoService` acquires exclusive locks on output store paths.
+  If two builders (from different entry points or different requests) attempt
+  to build the same transitive derivation, the second blocks on the lock
+  and uses the first's result. This catches overlaps that the entry-point-level
+  singleflight cannot — e.g., different entry point selections with shared
+  transitives.
 
 **Prior art**: Graphene/DagPS (Grandl et al., OSDI 2016) —
 troublesome task identification and pre-allocation in
@@ -706,14 +711,12 @@ point selection is a potential novel contribution.
    match and uses the atom metadata if available.
 
 5. **Cross-request deduplication** — RESOLVED (singleflight
-   pattern). This is a well-understood, production-proven
-   pattern called **request coalescing** (Go: "singleflight",
-   Bazel backends: "action merging", CDN: "request
-   collapsing").
+   pattern as a Track B optimization). This is a well-understood,
+   production-proven pattern called **request coalescing** (Go: "singleflight",
+   Bazel backends: "action merging", CDN: "request collapsing").
 
    Mechanism: maintain a concurrent map of in-flight entry
    point builds keyed by derivation hash:
-
    ```
    in_flight: Map<DrvHash, SharedFuture<BuildResult>>
    ```
@@ -725,6 +728,14 @@ point selection is a potential novel contribution.
    3. Neither: insert a new future into `in_flight`, dispatch
       the build to a worker, broadcast the result to all
       subscribers on completion, remove from map
+
+   **Failure Domain Isolation (Crucial)**: To preserve sequential request
+   equivalence (bisimulation), the coalesced future must differentiate between
+   deterministic build failures and transient infrastructure/worker failures. If a
+   build owner fails due to an infrastructure issue (e.g. worker network dropout,
+   hardware failure, or disk crash), the scheduler must not propagate this failure
+   to subscribers. Instead, the subscribers must safely transition back to
+   `ready` and be re-dispatched independently to a healthy worker.
 
    **Prior art**: BuildBuddy's action merging (Bazel RBE),
    Nix's store-level output path locks, Go's
@@ -738,14 +749,14 @@ point selection is a potential novel contribution.
    **Key design decisions**:
    - **Scope**: Single-node in-memory map (sufficient with
      centralized scheduler — our architecture)
-   - **Failure**: If in-flight build fails, all waiters get
-     the error. Scheduler may retry transparently.
+   - **Failure**: If in-flight build fails deterministically, all waiters get
+     the error. If it fails due to infrastructure, waiters are re-dispatched.
    - **Cancellation**: If original requester cancels but
      other waiters exist, the build continues (reference
      counting on the shared future)
    - **Eviction**: Entries removed from `in_flight`
-     immediately on completion — this is not a cache, only
-     concurrent dedup
+     immediately on completion/resolution — this is not a cache, only
+     concurrent dedup.
 
 ---
 
@@ -788,50 +799,45 @@ should be formally modeled and proven sound.
 **Properties to prove**:
 
 1. **Coverage**: Every uncached derivation in $G$ is
-   transitively reachable from exactly one entry point in
-   $S$. Formally: $\forall v \in V, \exists! s \in S$ such
-   that $v$ is in the transitive closure of $s$ in $G$, or
-   $v \in S$ itself.
-
-   This ensures no derivation is built redundantly (covered
-   by exactly one entry point) and no derivation is missed
-   (total coverage).
+   covered by at least one entry point in $S$. Formally:
+   $\forall v \in V, \exists s \in S$ such that $v$ is in
+   the transitive closure of $s$ in $G$, or $v \in S$ itself.
+   This ensures no derivation is missed (total coverage).
 
 2. **Ordering soundness**: The dispatch protocol respects
    data dependencies. No entry point is dispatched to a
    worker before all its dependency entry points have
    completed and their outputs are available.
-
    Formally: if $(s_i, s_j) \in E_S$ (entry point $s_j$
    depends on $s_i$), then $s_j$ is dispatched only after
    $s_i$'s build result is in the artifact store.
 
-3. **Deduplication correctness**: The singleflight mechanism
-   ensures that for any derivation hash $h$, at most one
-   build is in-flight at any time across all concurrent
-   requests. Formally: $|\{r \in \text{in-flight} : r.hash
-   = h\}| \leq 1$.
+3. **Store-level lock correctness**: Under concurrent execution
+   of overlapping entry points, builder-level store locks ensure
+   at-most-one execution per output path.
 
-4. **Consistency bound**: When predictions are accurate
-   ($\hat{d}(v) \approx d(v)$ for all $v$), the makespan
-   of the entry point DAG schedule is within a bounded
-   factor of the optimal offline schedule. The bound should
-   be characterized in terms of the prediction error
-   $\eta = \max_v |\hat{d}(v) - d(v)| / d(v)$.
+4. **Consistency bound**: *Given a fixed entry point DAG $T$*,
+   when predictions are accurate ($\hat{d}(v) \approx d(v)$
+   for all $v$), the makespan of the entry point DAG schedule
+   achieved by greedy assignment $\sigma_H$ is within a bounded
+   factor of the optimal offline schedule of $T$. We concede that
+   the entry point selection (graph coarsening) phase currently
+   lacks a formal competitive bound.
 
 5. **Robustness bound**: When predictions are arbitrarily
-   wrong ($\eta \to \infty$), the schedule is no worse than
-   a baseline algorithm that ignores predictions (tag
-   matching with LRH affinity only). This ensures the
-   prediction layer can never degrade performance below
-   the prediction-free baseline.
+   wrong ($\eta \to \infty$), the schedule makespan is no worse
+   than a small constant factor of a baseline algorithm that ignores
+   predictions (tag matching with LRH affinity only), thanks to
+   the dynamic decay of the resource fit term's weight ($\beta_e \to 0$).
 
 6. **Liveness under federation**: In a federated deployment
    where workers span multiple clusters with varying
    latency, the dispatch protocol must not deadlock. If all
    dependency entry points have completed, their outputs
    must be reachable by the assigned worker within bounded
-   time (artifact store propagation latency).
+   time (artifact store propagation latency). Failure propagation
+   via `CascadeFail` ensures that failed tasks do not cause
+   dependent entry points to hang indefinitely.
 
 ### Formalization Approach
 
@@ -839,11 +845,11 @@ The formal model should be developed as a companion document
 to this ADR, potentially using:
 
 - **TLA+ or Alloy** for verifying ordering soundness,
-  deduplication correctness, and liveness properties
+  liveness, and failure cascade propagation (Track A)
 - **Competitive analysis** (from learning-augmented
   algorithms theory) for consistency and robustness bounds
-- **Graph theory** for coverage and entry point selection
-  optimality bounds
+  on a fixed DAG (Track B)
+- **Graph theory** for coverage relations
 
 This is deferred to a follow-up effort but is considered
 essential for a system targeting global-scale deployment.

@@ -4,14 +4,14 @@
 
 **Problem Statement:** The Eos build scheduler constructs entry
 point DAGs from derivation graphs, dispatches them topologically
-across federated workers, deduplicates concurrent builds via
-singleflight, and uses historical predictions keyed by
-derivation name to improve placement. These mechanisms interact
-concurrently under nondeterministic request arrival and worker
-failure. Before implementation, the scheduling algorithm needs
-formal validation to confirm: (1) the dispatch protocol is
-correct — ordering, deduplication, and liveness invariants hold
-under all interleavings; (2) the optimization heuristics achieve
+across federated workers, relies on builder-level locks to
+deduplicate concurrent transitive builds, and uses historical
+predictions keyed by derivation name to improve placement. These
+mechanisms interact concurrently under nondeterministic request
+arrival and worker failure. Before implementation, the scheduling
+algorithm needs formal validation to confirm: (1) the dispatch
+protocol is correct — ordering and liveness invariants hold under
+all interleavings; (2) the optimization heuristics achieve
 bounded performance relative to an optimal offline algorithm.
 
 **Domain Characteristics:**
@@ -25,9 +25,8 @@ bounded performance relative to an optimal offline algorithm.
   subgraphs. Dispatch order must respect the induced entry point
   dependency DAG.
 - **Content-addressed deduplication** — derivation hashes provide
-  globally unique identity. The singleflight mechanism must
-  guarantee at-most-one in-flight build per hash across all
-  concurrent requests.
+  globally unique identity. Builder-level locks guarantee at-most-one
+  execution per output path across all concurrent builds.
 - **Prediction-augmented optimization** — historical build
   profiles (keyed by derivation name) augment a baseline
   scheduling algorithm. Quality guarantees must hold when
@@ -43,7 +42,7 @@ bounded performance relative to an optimal offline algorithm.
 | :----------------------------------------- | :---------------------------------------- |
 | Entry point DAG construction correctness   | Snix evaluation internals                 |
 | Dispatch protocol ordering and liveness    | Builder-internal dependency resolution    |
-| Singleflight deduplication correctness     | Artifact store implementation details     |
+| Builder-level store locking correctness    | Artifact store implementation details     |
 | Coverage property (partition completeness) | Wire protocol (Cap'n Proto serialization) |
 | Consistency/robustness competitive bounds  | Authentication/authorization middleware   |
 | Federated liveness under partition         | Specific hash algorithm (BLAKE3, etc.)    |
@@ -221,28 +220,25 @@ This track formalizes the dispatch protocol as a state
 machine and specifies the temporal properties it must
 satisfy.
 
-**Scope note**: This track models entry-point-level
-scheduling only. Derivation-level deduplication within
-builders (via snix's `PathInfoService` store-path locks)
-is handled by the builder runtime and is outside this
-model's scope. The two dedup layers are independent:
-entry-point singleflight catches identical EP selections;
-store-level locks catch shared transitives within
-different EP scopes.
+**Scope note**: This track models entry-point-level scheduling and
+dependency constraints. To simplify the correctness state space,
+scheduler-level singleflight deduplication is treated as a
+software-level performance optimization (Track B) and is omitted
+from the Track A correctness model. Instead, correct build execution
+under overlapping entry point scopes relies entirely on builder-level
+store path locks (via snix's `PathInfoService` locks) which block
+redundant execution and ensure consistency.
 
 #### State Space
 
 The system state is a tuple:
 
-$$\text{State} = (Q, F, A, L)$$
+$$\text{State} = (Q, A, L)$$
 
 where:
 
 - $Q: S \to \{\text{pending}, \text{ready}, \text{dispatched},
   \text{complete}, \text{failed}\}$ — entry point status
-- $F: \text{Hashes} \rightharpoonup \text{Futures}$ — the
-  singleflight in-flight map (partial function from
-  derivation hashes to shared futures)
 - $A \subseteq \text{Hashes}$ — the artifact store contents
   (set of completed derivation hashes)
 - $L: W \to \text{LoadVectors}$ — per-worker load state
@@ -257,7 +253,7 @@ Q_0(s) = \begin{cases}
 \end{cases}
 $$
 
-$F_0 = \emptyset$, $A_0$ = set of cached derivation hashes,
+$A_0$ = set of cached derivation hashes,
 $L_0(w) = \mathbf{0}$ for all $w$.
 
 #### Transitions
@@ -265,20 +261,10 @@ $L_0(w) = \mathbf{0}$ for all $w$.
 **Dispatch** $(s, w)$ — assign ready entry point $s$ to
 worker $w$:
 
-- **Guard**: $Q(s) = \text{ready}$ and $\text{hash}(s) \notin F$
-  and $\sigma(s) = w$ and worker $w$ has capacity
+- **Guard**: $Q(s) = \text{ready}$ and $\sigma(s) = w$ and worker $w$ has capacity
 - **Effect**:
   - $Q(s) \gets \text{dispatched}$
-  - $F[\text{hash}(s)] \gets \text{new\_future}()$
   - $L(w) \gets L(w) + \text{predicted\_load}(s)$
-
-**Coalesce** $(s)$ — entry point $s$ is ready but its
-derivation hash is already in-flight (cross-request dedup):
-
-- **Guard**: $Q(s) = \text{ready}$ and $\text{hash}(s) \in F$
-- **Effect**:
-  - $Q(s) \gets \text{dispatched}$
-  - $s$ subscribes to $F[\text{hash}(s)]$ (no new build)
 
 **Complete** $(s)$ — entry point $s$ finishes building:
 
@@ -286,8 +272,6 @@ derivation hash is already in-flight (cross-request dedup):
 - **Effect**:
   - $Q(s) \gets \text{complete}$
   - $A \gets A \cup \text{outputs}(s)$ (outputs enter store)
-  - Remove $\text{hash}(s)$ from $F$, broadcast result to
-    all subscribers
   - $L(\sigma(s)) \gets L(\sigma(s)) - \text{actual\_load}(s)$
   - For each $(s, s') \in E_S$: if $\forall (s'', s') \in E_S,\;
     Q(s'') = \text{complete}$, then $Q(s') \gets \text{ready}$
@@ -297,10 +281,16 @@ derivation hash is already in-flight (cross-request dedup):
 - **Guard**: $Q(s) = \text{dispatched}$
 - **Effect**:
   - $Q(s) \gets \text{failed}$
-  - Remove $\text{hash}(s)$ from $F$, broadcast error
   - $L(\sigma(s)) \gets L(\sigma(s)) - \text{actual\_load}(s)$
   - (Retry policy is orthogonal — may transition back to
     $\text{ready}$)
+
+**CascadeFail** $(s)$ — propagate failure to dependent entry point:
+
+- **Guard**: $Q(s) \in \{\text{pending}, \text{ready}\}$ and
+  $\exists (s', s) \in E_S$ such that $Q(s') = \text{failed}$
+- **Effect**:
+  - $Q(s) \gets \text{failed}$
 
 **Arrive** $(G_\text{new})$ — a new request arrives with
 derivation DAG $G_\text{new}$:
@@ -309,8 +299,8 @@ derivation DAG $G_\text{new}$:
   - Construct uncached sub-DAG $G'_\text{new}$
   - Select entry points $S_\text{new}$, compute coverage
   - Merge into global state: for each $s \in S_\text{new}$,
-    if $\text{hash}(s) \in A$, skip; if $\text{hash}(s) \in F$,
-    coalesce; otherwise add to $Q$ as pending/ready
+    if $\text{hash}(s) \in A$, skip; otherwise add to $Q$ as
+    pending/ready
 
 #### Safety Properties (□ — must always hold)
 
@@ -323,26 +313,13 @@ $$
   \implies Q(s_i) = \text{complete}
 $$
 
-**P2. Deduplication correctness**: At most one build is
-in-flight per derivation hash at any time.
-
-$$
-\Box\; \forall h:\;
-  |\{s : Q(s) = \text{dispatched} \land \text{hash}(s) = h
-    \land s \text{ is the build owner}\}| \leq 1
-$$
-
-(Coalesced entry points are dispatched but are subscribers,
-not build owners.)
-
-**P3. Coverage completeness**: Every uncached derivation is
-transitively covered by exactly one in-progress or completed
-entry point (no derivation is lost or double-assigned within
-a single request).
+**P2. Coverage completeness**: Every uncached derivation is
+covered by at least one in-progress, completed, or failed
+entry point (no derivation is lost).
 
 $$
 \Box\; \forall v \in V':\;
-  |\{s \in S : v \in \text{scope}(s)\}| = 1
+  |\{s \in S : v \in \text{scope}(s)\}| \ge 1
 $$
 
 **P4. Capacity safety**: No worker is assigned load
@@ -502,8 +479,8 @@ yielding large savings.
 |                                      |         | consistent and non-contradictory                       |
 | Ordering soundness (P1) well-formed  | PASS    | The entry point DAG is acyclic (induced from a DAG);   |
 |                                      |         | topological dispatch is well-defined                   |
-| Dedup correctness (P2) well-formed   | PASS    | Hash uniqueness from content-addressing; singleflight  |
-|                                      |         | map is keyed on hash                                   |
+| Coverage completeness (P2) well-formed | PASS    | Guaranteed by entry point selection algorithm;         |
+|                                      |         | relation-based coverage maps all uncached nodes        |
 | Liveness (P5, P6) depend on fairness | PARTIAL | P5 requires a fairness assumption (the scheduler       |
 |                                      |         | eventually considers every ready entry point). Must be |
 |                                      |         | explicitly stated in TLA+ as a fairness constraint.    |
@@ -544,11 +521,10 @@ The state machine defined above translates directly to a
 TLA+ module. Key modeling decisions:
 
 - **State variables**: `epStatus` (function $S \to$ status),
-  `inFlight` (set of hashes), `artifactStore` (set of hashes),
-  `workerLoad` (function $W \to$ load vectors)
-- **Actions**: `Dispatch(s, w)`, `Coalesce(s)`, `Complete(s)`,
-  `Fail(s)`, `Arrive(G_new)`
-- **Invariants**: P1, P2, P3, P4 as `INVARIANT` declarations
+  `artifactStore` (set of hashes), `workerLoad` (function $W \to$ load vectors)
+- **Actions**: `Dispatch(s, w)`, `Complete(s)`, `Fail(s)`,
+  `CascadeFail(s)`, `Arrive(G_new)`
+- **Invariants**: P1, P2, P4 as `INVARIANT` declarations
 - **Liveness**: P5, P6 as `PROPERTY` declarations with
   fairness via `WF_vars`
 - **Model checking**: Finite instances (e.g., 3 workers,
@@ -593,13 +569,11 @@ TLA+ module. Key modeling decisions:
    point, and non-entry-point subchains are fully contained
    within one entry point's scope.
 
-2. **The singleflight Coalesce transition creates a dependency
-   between requests**: If request B coalesces on request A's
-   in-flight build, B's progress is now coupled to A's
-   completion. If A fails, B must either fail or retry
-   independently. This coupling must be modeled in the TLA+
-   spec to verify that failure propagation doesn't violate
-   liveness.
+2. **Cascade failure propagation prevents deadlocks**: If a dependency
+   entry point fails, dependent entry points cannot be built. The state
+   machine must actively propagate this failure via `CascadeFail` to
+   prevent dependent tasks from hanging in `pending` or `ready`
+   independently, satisfying liveness (P6).
 
 3. **Federation liveness (P7) is the weakest property**: It
    depends on an environmental assumption (bounded propagation
