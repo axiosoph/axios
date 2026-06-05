@@ -31,9 +31,9 @@ def rewrite_links(text, section):
         if url_part.startswith("../specs/"):
             norm_url = "reference/" + url_part[9:]
         elif url_part.startswith("../adr/"):
-            norm_url = "architecture/adr/" + url_part[7:]
+            norm_url = "architecture/" + url_part[7:]
         elif url_part.startswith("../architecture/"):
-            norm_url = "architecture/documents/" + url_part[16:]
+            norm_url = "architecture/" + url_part[16:]
         elif url_part.startswith("../"):
             norm_url = url_part[3:]
         else:
@@ -50,7 +50,7 @@ def rewrite_links(text, section):
     return _LINK_PATTERN.sub(repl, text)
 
 
-def process_section(src_dir, dst_dir, section, description_tpl, default_title="Document"):
+def process_section(src_dir, dst_dir, section, description_tpl, default_title="Document", tags=None):
     """Process all .md files from src_dir into dst_dir with frontmatter."""
     os.makedirs(dst_dir, exist_ok=True)
 
@@ -79,7 +79,12 @@ def process_section(src_dir, dst_dir, section, description_tpl, default_title="D
         body_content = "".join(lines[body_start:])
         body_content = rewrite_links(body_content, section)
 
-        frontmatter = f'+++\ntitle = "{title}"\ndescription = "{description_tpl.format(title=title)}"\nquadrant = "Explanation"\naudience = "Developers and architects of the Axios stack"\n+++\n\n'
+        tags_str = ""
+        if tags:
+            tags_json = "[" + ", ".join(f'"{t}"' for t in tags) + "]"
+            tags_str = f"tags = {tags_json}\n"
+
+        frontmatter = f'+++\ntitle = "{title}"\ndescription = "{description_tpl.format(title=title)}"\nquadrant = "Explanation"\naudience = "Developers and architects of the Axios stack"\n{tags_str}+++\n\n'
 
         dst_path = os.path.join(dst_dir, filename)
         with open(dst_path, "w", encoding="utf-8") as f:
@@ -126,14 +131,16 @@ if __name__ == "__main__":
 
     print("adrs:")
     process_section(
-        "../docs/adr", "content/architecture/adr", "architecture/adr",
+        "../docs/adr", "content/architecture", "architecture",
         "Architecture decision record: {title}", "Architecture Decision Record",
+        tags=["adr"],
     )
 
     print("architecture:")
     process_section(
-        "../docs/architecture", "content/architecture/documents", "architecture/documents",
+        "../docs/architecture", "content/architecture", "architecture",
         "System architecture: {title}", "Architecture Document",
+        tags=["sad"],
     )
 
     print("explanations:")

@@ -8,6 +8,3 @@ audience = "Contributors, developers, and architects tracking Axios system desig
 +++
 
 System architecture, design blueprints, and decision records for the Axios stack.
-
-- [Architecture Documents](documents/index.html) — Holistic system design and structure.
-- [Decision Records](adr/index.html) — Design rationale for structural changes.
