@@ -272,7 +272,7 @@ worker $w$:
 - **Effect**:
   - $Q(s) \gets \text{complete}$
   - $A \gets A \cup \text{outputs}(s)$ (outputs enter store)
-  - $L(\sigma(s)) \gets L(\sigma(s)) - \text{actual\_load}(s)$
+  - $L(\sigma(s)) \gets L(\sigma(s)) - \text{predicted\_load}(s)$
   - For each $(s, s') \in E_S$: if $\forall (s'', s') \in E_S,\;
     Q(s'') = \text{complete}$, then $Q(s') \gets \text{ready}$
 
@@ -281,7 +281,7 @@ worker $w$:
 - **Guard**: $Q(s) = \text{dispatched}$
 - **Effect**:
   - $Q(s) \gets \text{failed}$
-  - $L(\sigma(s)) \gets L(\sigma(s)) - \text{actual\_load}(s)$
+  - $L(\sigma(s)) \gets L(\sigma(s)) - \text{predicted\_load}(s)$
   - (Retry policy is orthogonal — may transition back to
     $\text{ready}$)
 
@@ -291,16 +291,6 @@ worker $w$:
   $\exists (s', s) \in E_S$ such that $Q(s') = \text{failed}$
 - **Effect**:
   - $Q(s) \gets \text{failed}$
-
-**Arrive** $(G_\text{new})$ — a new request arrives with
-derivation DAG $G_\text{new}$:
-
-- **Effect**:
-  - Construct uncached sub-DAG $G'_\text{new}$
-  - Select entry points $S_\text{new}$, compute coverage
-  - Merge into global state: for each $s \in S_\text{new}$,
-    if $\text{hash}(s) \in A$, skip; otherwise add to $Q$ as
-    pending/ready
 
 #### Safety Properties (□ — must always hold)
 
@@ -538,13 +528,13 @@ TLA+ module. Key modeling decisions:
 - **State variables**: `epStatus` (function $S \to$ status),
   `artifactStore` (set of hashes), `workerLoad` (function $W \to$ load vectors)
 - **Actions**: `Dispatch(s, w)`, `Complete(s)`, `Fail(s)`,
-  `CascadeFail(s)`, `Arrive(G_new)`
+  `CascadeFail(s)`
 - **Invariants**: P1, P2, P4 as `INVARIANT` declarations
 - **Liveness**: P5, P6 as `PROPERTY` declarations with
   fairness via `WF_vars`
 - **Model checking**: Finite instances (e.g., 3 workers,
-  5 entry points, 2 concurrent requests) to exhaustively
-  verify invariants
+  5 entry points) to exhaustively verify invariants for a
+  single request DAG.
 
 ### For Lean 4 Proofs (Track B — After Paper Proofs Stabilize)
 
