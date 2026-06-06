@@ -41,12 +41,12 @@ topology models instantiate.
 
 **State variables:**
 
-| Variable        | Description                                  |
-| :-------------- | :------------------------------------------- |
-| `epStatus`      | Map from plan step → execution status        |
-| `workerLoad`    | Map from worker → current load count         |
-| `artifactStore` | Set of artifacts produced by completed steps |
-| `runningOn`     | Map from plan step → assigned worker (or ⊥)  |
+| Variable        | Description                                   |
+| :-------------- | :-------------------------------------------- |
+| `epStatus`      | Map from entry point → execution status       |
+| `workerLoad`    | Map from worker → current load count          |
+| `artifactStore` | Set of artifacts produced by completed steps  |
+| `runningOn`     | Map from entry point → assigned worker (or ⊥) |
 
 **Transitions:**
 
@@ -80,8 +80,8 @@ relation, worker pool, and capacity:
 | Property                    | Type                | Verified |
 | :-------------------------- | :------------------ | :------- |
 | Ordering soundness (P1)     | Safety invariant    | ✅       |
+| Artifact completeness (P3)  | Safety invariant    | ✅       |
 | Capacity safety (P4)        | Safety invariant    | ✅       |
-| Artifact completeness       | Safety invariant    | ✅       |
 | Progress (P5)               | Liveness (temporal) | ✅       |
 | Completion propagation (P6) | Liveness (temporal) | ✅       |
 
@@ -99,5 +99,5 @@ strategy:
   on scheduling efficiency.
 
 See [`../eos-scheduling.md`](../eos-scheduling.md) and
-[ADR-0004](../../adr/0004-formal-verification-strategy.md) for the full
+[ADR-0004](../../adr/0004-learning-augmented-scheduling.md) for the full
 verification design.

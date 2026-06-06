@@ -742,7 +742,7 @@ Linear Programming for global rescheduling. Adds a solver
 dependency (CPLEX/Gurobi/SCIP) and solving time may exceed
 scheduling time at smaller scales. Rejected for the initial
 implementation but may be revisited if the MILP formulation
-aligns well with the formal model (§6).
+aligns well with the formal model (§Appendix).
 
 ### Min-Cost Flow (Firmament) — Deferred, Not Rejected
 
@@ -769,7 +769,7 @@ function when:
 
 - Cluster sizes exceed ~1000 workers
 - Federation introduces cross-cluster placement decisions
-- The formal model (§6) identifies properties that MCMF
+- The formal model (§Appendix) identifies properties that MCMF
   can guarantee and the heuristic cannot
 
 ---
