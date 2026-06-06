@@ -458,7 +458,7 @@ $$M(\sigma_H) \leq \alpha \cdot M(\sigma_\text{base})$$
 
 _where $\sigma_\text{base}$ is the prediction-free baseline
 (tag matching with LRH affinity and availability only) and $\alpha \geq 1$
-is a small constant.\_
+is a small constant._
 
 **Proof approach**: We normalize the `resource_fit` term using capacity-relative fractions:
 $$\text{resource\_fit}(w, e) = \sum_{i} \left( \frac{r_{e,i}}{c_{w,i}} \cdot \frac{a_{w,i}}{c_{w,i}} \right)$$
@@ -530,10 +530,9 @@ yielding large savings.
 |                                    |        | not expressible in standard TLA+ temporal logic.       |
 |                                    |        | Intentionally deferred — see note below                |
 | Consistency bound (Thm 2)          | PASS   | Machine-checked in Lean 4. Proves                      |
-|                                    |        | $M(\sigma_H) \leq \alpha \cdot \frac{1+\varepsilon}    |
-|                                    |        | {1-\varepsilon} \cdot M(\sigma^\*)$ via well-founded   |
-|                                    |        | induction on DAG completion times                      |
-| Robustness — assignment stability  | PASS   | Lean 4 Lemma 3.1: perturbation $2P < \Delta$ implies   |
+|                                    |        | $M(\sigma_H) \leq \alpha (1+\varepsilon)/(1-\varepsilon) \cdot M(\sigma^*)$ |
+|                                    |        | via well-founded induction on DAG completion times     |
+| Robustness — assignment stability  | PASS   | Lean 4 Lemma 3.1: perturbation $2P < \Delta_{\min}$ implies |
 |                                    |        | $\sigma_H = \sigma_\text{base}$ (assignment identity)  |
 | Robustness — EMA convergence       | PASS   | Lean 4: under sustained error $\eta \geq \eta_0$,      |
 |                                    |        | EMA $\geq (1 - \gamma^n) \eta_0 + \gamma^n E_0$        |
