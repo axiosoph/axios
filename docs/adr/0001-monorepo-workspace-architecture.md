@@ -240,7 +240,9 @@ Both satisfy `BuildEngine`. Ion's code is generic: `fn run(engine: impl BuildEng
 
 **Single AtomStore trait for publishing and working**: One trait, role enum. Rejected — publishing (append-only, signed, distributed) and working (mutable, local, collected) have different operations and semantics.
 
-**eos as single crate**: Simpler initially. Rejected — eos will be the largest component. Early modularization prevents costly extraction later.## Simplicity and Volatility Boundaries (Hickey/Lowy Audits)
+**eos as single crate**: Simpler initially. Rejected — eos will be the largest component. Early modularization prevents costly extraction later.
+
+## Simplicity and Volatility Boundaries (Hickey/Lowy Audits)
 
 The 5-layer monorepo structure implements spatial simplicity and temporal volatility insulation at the codebase scale:
 
