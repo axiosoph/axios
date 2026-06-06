@@ -330,7 +330,7 @@
   .sidebar {
     background-color: var(--bg-sidebar);
     border-inline-end: 1px solid var(--border);
-    padding: 2rem 1.5rem;
+    padding: 2rem 0;
     position: sticky;
     inset-block-start: 0;
     block-size: 100dvh;
@@ -438,6 +438,7 @@
   .sidebar-header {
     margin-block-end: 2rem;
     position: relative;
+    padding-inline: 1.5rem;
   }
 
   .logo {
@@ -508,6 +509,7 @@
       min-block-size: 40px;
       width: 100%;
       position: relative;
+      padding-inline: 0;
     }
 
     .tagline {
@@ -534,6 +536,7 @@
     overflow-y: auto;
     scrollbar-gutter: stable;
     min-block-size: 0;
+    padding-inline: 1.5rem;
   }
 
   .nav-item {
@@ -639,6 +642,7 @@
       max-height: 0;
       overflow: hidden;
       scrollbar-gutter: auto;
+      padding-inline: 0;
       opacity: 0;
       transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease, margin-block-start 0.3s ease;
     }
@@ -711,6 +715,7 @@
     display: flex;
     flex-direction: column;
     gap: 0.4rem;
+    padding-inline: 1.5rem;
   }
 
   .sidebar-footer a {
@@ -730,6 +735,7 @@
   @media (max-width: 768px) {
     .sidebar-footer {
       display: none;
+      padding-inline: 0;
     }
 
     .sidebar:has(.nav-toggle:checked) .sidebar-footer {
@@ -1092,6 +1098,7 @@
     font-size: 0.875rem;
     cursor: pointer;
     margin-block-end: 1.5rem;
+    margin-inline: 1.5rem;
     transition: all 0.2s ease;
     user-select: none;
   }
@@ -1348,6 +1355,7 @@
     .sidebar-search {
       display: none;
       margin-block-end: 1rem;
+      margin-inline: 0;
     }
 
     .sidebar:has(.nav-toggle:checked) .sidebar-search {
