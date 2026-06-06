@@ -459,6 +459,55 @@ virtual ring:
 **Prior art**: Local Rendezvous Hashing
 (arXiv:2512.23434, 2025).
 
+### 5. Computational Complexity
+
+The entire scheduling pipeline runs in **polynomial time**,
+linear in the DAG size plus the product of entry points
+and workers. No phase has exponential or super-polynomial
+cost.
+
+| Phase                 | Operation                                     | Complexity                               |
+| :-------------------- | :-------------------------------------------- | :--------------------------------------- |
+| DAG construction      | Topological sort + cache filtering            | $O(\|V'\| + \|E'\|)$                     |
+| Entry point selection | Greedy top-down walk with fan-in/cost checks  | $O(\|V'\| + \|E'\|)$                     |
+| EP DAG derivation     | Transitive closure on selected set            | $O(\|S\|^2)$ worst case                  |
+| Scoring (per EP)      | Evaluate $\text{score}(w, e)$ for all workers | $O(\|W\| \cdot d)$                       |
+| Full dispatch loop    | Score + assign all $\|S\|$ entry points       | $O(\|S\| \cdot \|W\| \cdot d)$           |
+| LRH lookup            | Per-assignment cache affinity                 | $O(\log\|R\| + C)$                       |
+| Singleflight check    | Hash map lookup/insert                        | $O(1)$ amortized                         |
+| EMA update            | Per-completion profile update                 | $O(1)$                                   |
+| **Total pipeline**    | **One scheduling pass**                       | $O(\|V'\| + \|E'\| + \|S\| \cdot \|W\|)$ |
+
+Where:
+
+- $\|V'\|, \|E'\|$ = uncached sub-DAG nodes and edges
+- $\|S\|$ = selected entry points ($\|S\| \leq \|V'\|$,
+  typically $\|S\| \ll \|V'\|$ due to coarsening)
+- $\|W\|$ = number of candidate workers
+- $d$ = resource dimensions (constant, typically 3:
+  CPU, memory, disk)
+- $\|R\|$ = LRH ring size, $C$ = cache-local window
+- EP DAG derivation is $O(\|S\|^2)$ in the worst case
+  (all-pairs reachability on the coarsened set) but
+  typically much smaller since $\|S\| \ll \|V'\|$
+
+**Key property**: The NP-hard optimal entry point
+selection is sidestepped by the greedy heuristic, which
+runs in $O(\|V'\| + \|E'\|)$. The tradeoff is between
+selection quality (captured by $\alpha$ in Theorem 2) and
+computational cost. A global MILP solver could potentially
+find a better $\alpha$ but at exponential cost —
+unacceptable when the scheduling decision itself must
+complete in sub-second time.
+
+**Implementation note**: The dominant cost in practice is
+the scoring loop $O(\|S\| \cdot \|W\|)$. For a cluster
+of 100 workers and a DAG coarsened to 50 entry points,
+this is 5,000 score evaluations per scheduling pass —
+trivially fast. At federated scale ($\|W\| > 1000$), the
+min-cost flow formulation (§Future Work) replaces the
+per-pair scoring with a global flow optimization.
+
 ---
 
 ## Guarantees
@@ -527,6 +576,121 @@ degrades proportionally via the $(1+\varepsilon)/(1-\varepsilon)$
 factor, not catastrophically. When error becomes sustained,
 the EMA decay mechanism automatically collapses the scoring
 function to the prediction-free baseline.
+
+---
+
+## Optimality Assessment
+
+The formal proofs (§Appendix) establish that the algorithm
+is **correct** (Track A) and achieves **bounded quality**
+relative to an optimal offline schedule on a fixed DAG
+(Track B). But "bounded" is not "optimal." This section
+documents the specific tradeoffs.
+
+### Where the Algorithm Departs from Optimality
+
+To achieve $O(\|V'\| + \|E'\| + \|S\| \cdot \|W\|)$
+greedy dispatch (§5), the design makes four intentional
+mathematical compromises relative to a theoretical
+omniscient MILP solver:
+
+1. **Graph coarsening blindspot**: Finding the optimal
+   antichain cover of a weighted DAG to minimize
+   distributed makespan is NP-hard. The entry point
+   selection uses a greedy heuristic — it cannot foresee
+   if bundling a subgraph will accidentally serialize
+   tasks that could have been parallelized, or fragment
+   what should be colocated. This gap is captured by
+   $\alpha$ in Theorem 2.
+
+2. **Myopic dispatch**: The moment an entry point becomes
+   `ready`, it is assigned to the highest-scoring worker.
+   Greedy dispatch cannot hold a worker idle in
+   anticipation of an imminent high-priority entry point.
+   Example: a 2-core leaf assigned to a 128-core worker
+   via cache affinity, blocking a critical 120-core entry
+   point that unblocks 5 seconds later. An optimal offline
+   scheduler (HEFT-style) computes the temporal chain and
+   intentionally delays assignment.
+
+3. **Submodular lock contention**: The relaxed coverage
+   mapping permits non-entry-point derivations to exist in
+   multiple entry points' transitive scopes. When two
+   workers concurrently build entry points with shared
+   transitives (e.g., `openssl`), the store-level lock
+   causes one to block. The blocked worker's reserved
+   CPU/memory sits idle. A global solver could calculate
+   submodular overlap costs and perfectly stagger or route
+   tasks to eliminate lock-wait time.
+
+4. **Federation topology blindness**: LRH measures logical
+   hash-ring distance, not physical WAN bandwidth or
+   inter-cluster latency. Transferring a 50GB artifact
+   from Tokyo to Virginia incurs massive wall-clock
+   penalties invisible to the scoring function. The
+   deferred min-cost flow formulation (§Future Work)
+   addresses this by encoding federation topology as edge
+   costs.
+
+### Why It Is Highly Efficacious for This Domain
+
+The algorithm exploits three domain-specific realities
+that close most of the gap to theoretical optimality:
+
+1. **Nix granularity solution**: Nix derivation DAGs are
+   wildly bimodal — a few colossal linchpin tasks plus
+   thousands of trivial micro-tasks (patches, fetches,
+   hooks). Academic schedulers choke on this; scheduling
+   10,000 micro-tasks across a network incurs RPC overhead
+   that dwarfs compute time. Entry point coarsening forces
+   the distributed scheduler to handle only macroscopic
+   peaks, offloading trivial leaves to the builder's
+   native transitive execution with perfect local data
+   locality and zero network overhead.
+
+2. **Atom-id prediction oracle**: The hardest part of DAG
+   scheduling is predicting task durations. Advanced
+   systems (Decima) use graph neural networks requiring
+   expensive training. Because Nix evaluation is pure and
+   `atom-id = digest(anchor, label)` is cryptographically
+   stable across versions, a cheap EMA over historical
+   observations achieves the performance of a sophisticated
+   learning system. The atom protocol IS the prediction
+   oracle.
+
+3. **Fail-safe packing**: The $\beta_e$ decay mechanism
+   (§3) guarantees that when predictions fail, the scoring
+   function smoothly degrades to a cache-affinity baseline
+   rather than actively making adversarial placements that
+   crash workers via OOM kills — the primary cause of
+   CI/CD bottlenecking in production.
+
+### The Simulation Gap
+
+Formal proofs validate bounds on **fixed, abstract DAGs**
+but cannot validate that the heuristic thresholds
+(troublesome node cost, convergence fan-in limit, subgraph
+cost threshold) are well-calibrated for **real Nix
+derivation shapes**. The $\alpha$ factor in Theorem 2
+absorbs heuristic quality — the proofs guarantee bounded
+quality for any $\alpha$ but do not tell us what $\alpha$
+is in practice.
+
+Bridging this gap requires trace-driven simulation:
+
+1. Extract real derivation DAGs from `nixpkgs` (e.g.,
+   `chromium`, `kde-plasma`, `linux`) as trace corpus
+2. Extract actual build durations and resource profiles
+   from Hydra/Cachix as ground truth
+3. Implement the entry point selection + scoring in a
+   single-threaded Rust simulator
+4. Sweep heuristic thresholds and measure simulated
+   makespan against an HRW-only baseline
+
+If the simulator demonstrates order-of-magnitude DAG
+reduction without serializing the critical path, the
+algorithm's practical efficacy is confirmed beyond what
+formal proofs alone can establish.
 
 ---
 
@@ -668,6 +832,55 @@ function when:
   the dependency structure — there IS no parallelism to
   extract from a linear chain. The scheduler correctly
   identifies this.
+
+### Implementation Notes
+
+Derived from formal verification (§Appendix) and the
+optimality assessment above:
+
+1. **Critical path priority**: When multiple entry points
+   become `ready` simultaneously, the dispatcher should
+   sort them by estimated critical-path contribution
+   (longest weighted path to the DAG root) before assigning.
+   Greedy FIFO readiness ordering risks assigning trivial
+   entry points to capable workers, blocking imminent
+   critical tasks. The critical path computation is
+   $O(\|S\|)$ on the coarsened DAG (a single reverse
+   topological pass with max-aggregation).
+
+2. **Store lock contention monitoring**: When overlapping
+   coverage causes store-level lock blocking, the blocked
+   worker's reserved resources are idle. The implementation
+   should track lock-wait duration as a per-entry-point
+   metric and feed it back into the convergence-point
+   promotion threshold — high contention on a specific
+   transitive dependency is a signal to promote it to an
+   explicit entry point.
+
+3. **Federation-aware transfer cost**: The $\tau(s', s)$
+   transfer time in the formal model should be populated
+   from actual inter-cluster RTT measurements (e.g., via
+   periodic pings or artifact store latency probes), not
+   from a constant default. For intra-cluster assignments,
+   $\tau \approx 0$. For cross-region assignments, $\tau$
+   may dominate makespan — the scoring function's
+   `affinity` term partially captures this via LRH but
+   does not model WAN bandwidth constraints.
+
+4. **Coverage properties as debug assertions**: The four
+   `EosModel` properties (total coverage, self-coverage,
+   transitive containment, downward closure) from the Lean
+   proof should be implemented as `debug_assert!` checks on
+   the output of the entry point selection algorithm. These
+   are $O(\|S\| \cdot \|V'\|)$ and should be gated behind
+   a debug or test build flag.
+
+5. **ε-monitoring**: After each completed build, compute
+   the observed prediction error $\varepsilon = |d - \hat{d}|
+   / \hat{d}$ and report it as a metric. The consistency
+   bound $(1+\varepsilon)/(1-\varepsilon)$ is a live,
+   monitorable quantity — operators can directly observe how
+   close the system is to the proven worst-case ratio.
 
 ---
 
