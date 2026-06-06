@@ -1,8 +1,19 @@
+/-
+Copyright (c) 2026 nrd. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+Authors: nrd, Antigravity
+-/
 import Mathlib.Data.Finset.Basic
 import Mathlib.Data.Fintype.Basic
 import Mathlib.Algebra.BigOperators.Group.Finset.Basic
 import Mathlib.Data.Real.Basic
 import Mathlib.Order.Bounds.Basic
+
+/-!
+# Shared Definitions for Eos Scheduling Formal Proofs
+
+This module defines the DAG structure, path reachability, and entry point coverage relations.
+-/
 
 -- Inductive definition of a path in E with no intermediate nodes in S
 inductive PathNoS {V : Type*} (E : V → V → Prop) (S : Finset V) : V → V → Prop where
