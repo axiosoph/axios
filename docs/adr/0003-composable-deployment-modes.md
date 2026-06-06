@@ -9,6 +9,7 @@
   [Eos SAD](../architecture/eos-sad.md) §1.5
 - **Supersedes**: ADR-0001 §Embedded default
   ("embedded default, daemon opt-in")
+- **Related**: [ADR-0004](0004-learning-augmented-scheduling.md)
 
 ---
 
@@ -200,12 +201,13 @@ and uses in-process trait implementations directly.
 | Worker transport | In-memory Cap'n Proto pipe          | TCP/UDS Cap'n Proto socket  |
 | Client transport | In-process (mode 1) or RPC (mode 2) | RPC                         |
 | Scaling          | Single machine                      | Horizontal                  |
+| Scheduling & Latency | Local-only (transfer cost \tau \approx 0) | Cluster-aware (with network transfer cost \tau) |
 | Business logic   | **Identical**                       | **Identical**               |
 
 The only conditional compilation is in transport
 initialization and DI wiring. No `#[cfg(monolithic)]` on
-any business logic, scheduling algorithm, evaluation
-codepath, or build pipeline.
+any business logic, scheduling algorithm (defined in [ADR-0004](0004-learning-augmented-scheduling.md)),
+evaluation codepath, or build pipeline.
 
 ### Invariants
 
@@ -351,5 +353,7 @@ Support monolithic eos (one daemon) but not monolithic ion
   original "embedded default" (superseded §Embedded default)
 - [ADR-0002](0002-decoupling-snix-backend.md) — service
   boundary architecture (Mode 3 of this ADR)
+- [ADR-0004](0004-learning-augmented-scheduling.md) — defines
+  learning-augmented scheduling logic and its parameters across modes
 - [Eos SAD](../architecture/eos-sad.md) — system architecture
   (§1.5 to be updated per this ADR)
