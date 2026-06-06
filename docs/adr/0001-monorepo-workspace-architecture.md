@@ -47,7 +47,7 @@ dependencies, so the lock file captures the full graph.
 - **The store is the interface.** Ion hands atoms to eos through `AtomStore`. Published and dev atoms enter the same store via `ingest`. Eos never knows where atoms came from.
 - **Atom is generic.** Manifest-agnostic, version-scheme-agnostic. Any ecosystem can publish atoms.
 - **Embedded default, daemon opt-in (superseded by ADR-0003).** Cargo, single-user Nix, Go — none require daemons. Neither should ion. (Refined in [ADR-0003](0003-composable-deployment-modes.md) to support three composable deployment modes: Monolithic Ion, Monolithic Eos, and Distributed Eos.)
-- **Eos will be large.** Early modularization (eos-core + eos-store + eos) prevents a monolith.
+- **Eos will be large.** Early modularization (eos-core + eos-snix + eos-proto + eos-daemon + eos) prevents a monolith.
 
 ## Decision
 
@@ -99,11 +99,13 @@ ingestion from any source uses the same codepath.
 
 ### eos/ — Runtime engine workspace (L2)
 
-| Crate       | Responsibility                                     | Dependencies                 |
-| :---------- | :------------------------------------------------- | :--------------------------- |
-| `eos-core`  | `BuildEngine` trait with plan/apply + assoc. types | atom-core                    |
-| `eos-store` | `ArtifactStore` trait + thin snix wrapper          | eos-core                     |
-| `eos`       | The engine: evaluation, building, cache management | eos-core, eos-store, snix-\* |
+| Crate        | Responsibility                                     | Dependencies                        |
+| :----------- | :------------------------------------------------- | :---------------------------------- |
+| `eos-core`   | `BuildEngine` trait with plan/apply + assoc. types | atom-core                           |
+| `eos-snix`   | Snix-specific store and evaluator implementations   | eos-core, `nix-compat`, `snix-*`    |
+| `eos-proto`  | Cap'n Proto interface schemas and serialization    | `capnp`, `capnp-rpc`                |
+| `eos-daemon` | Dynamic build scheduler and RPC server daemon      | eos-core, eos-proto, eos-snix, eos  |
+| `eos`        | Core orchestration engine and worker registry      | eos-core, eos-snix                  |
 
 **BuildEngine** — plan/apply with cache-skipping:
 
@@ -143,11 +145,13 @@ contract; snix is the default backend. (Note: Refined in [ADR-0002](0002-decoupl
 
 ### ion/ — Frontend workspace (L3)
 
-| Crate          | Responsibility                                       | Dependencies                |
-| :------------- | :--------------------------------------------------- | :-------------------------- |
-| `ion-manifest` | Concrete `ion.toml` format, Compose system (With/As) | atom-core, atom-id          |
-| `ion-resolve`  | SAT resolver, unified lock (atom + nix dep variants) | atom-core, ion-manifest     |
-| `ion-cli`      | CLI, BuildEngine dispatch, dev workspace management  | ion-\*, eos-core, atom-core |
+| Crate          | Responsibility                                       | Dependencies                        |
+| :------------- | :--------------------------------------------------- | :---------------------------------- |
+| `ion-manifest` | Concrete `ion.toml` format, Compose system (With/As) | atom-core, atom-id                  |
+| `ion-resolve`  | SAT resolver, dependency variant formulation         | atom-core, ion-manifest             |
+| `ion-lock`     | Unified lockfile management and serialization        | atom-id, ion-manifest               |
+| `ion-eos`      | Bridge between frontend and build engine             | ion-manifest, eos-core              |
+| `ion-cli`      | CLI interface and command dispatch                   | ion-*, eos-core, atom-core          |
 
 ### Monorepo layout
 
@@ -155,23 +159,24 @@ contract; snix is the default backend. (Note: Refined in [ADR-0002](0002-decoupl
 axios/
 ├── atom/                        ← protocol workspace (L1)
 │   ├── Cargo.toml
-│   └── crates/
-│       ├── atom-id/
-│       ├── atom-uri/
-│       ├── atom-core/
-│       └── atom-git/
+│   ├── atom-id/
+│   ├── atom-uri/
+│   ├── atom-core/
+│   └── atom-git/
 ├── eos/                         ← runtime engine workspace (L2)
 │   ├── Cargo.toml
-│   └── crates/
-│       ├── eos-core/
-│       ├── eos-store/
-│       └── eos/
+│   ├── eos-core/
+│   ├── eos-snix/
+│   ├── eos-proto/
+│   ├── eos-daemon/
+│   └── eos/
 ├── ion/                         ← frontend workspace (L3)
 │   ├── Cargo.toml
-│   └── crates/
-│       ├── ion-manifest/
-│       ├── ion-resolve/
-│       └── ion-cli/
+│   ├── ion-manifest/
+│   ├── ion-resolve/
+│   ├── ion-lock/
+│   ├── ion-eos/
+│   └── ion-cli/
 ├── docs/
 │   ├── plans/
 │   └── adr/
@@ -235,7 +240,17 @@ Both satisfy `BuildEngine`. Ion's code is generic: `fn run(engine: impl BuildEng
 
 **Single AtomStore trait for publishing and working**: One trait, role enum. Rejected — publishing (append-only, signed, distributed) and working (mutable, local, collected) have different operations and semantics.
 
-**eos as single crate**: Simpler initially. Rejected — eos will be the largest component. Early modularization prevents costly extraction later.
+**eos as single crate**: Simpler initially. Rejected — eos will be the largest component. Early modularization prevents costly extraction later.## Simplicity and Volatility Boundaries (Hickey/Lowy Audits)
+
+The 5-layer monorepo structure implements spatial simplicity and temporal volatility insulation at the codebase scale:
+
+1. **Spatial Simplicity (Hickey Audit):**
+   - **Strict Downward Dependency Layers**: The 5-layer architecture (`Cyphr (L0) → Atom (L1) → Eos (L2) → Ion (L3) → Plugins (L4)`) strictly prohibits circular dependencies. Lower layers have no reference to or knowledge of upper layers. This isolates concerns cleanly and keeps the foundation simple.
+   - **Decoupled Stores**: Immutable source registries (`AtomRegistry`), mutable local working stores (`AtomStore`), and content-addressed artifact stores (`ArtifactStore`) are modeled as separate logical interfaces. They are never conflated or unified into a single store type, avoiding complected states.
+
+2. **Temporal Volatility (Lowy Audit):**
+   - **Volatility Axis (User Frontends and Manifests)**: CLI requirements, manifest syntaxes (`ion.toml`), and dependency resolution strategies are the most volatile parts of the publishing stack. By isolating these entirely in L3 (`ion/`), we protect the stability of the L1 protocol and L2 engine cores from frequent frontend changes.
+   - **Stability Cores**: The identity layer (`atom-id`) and build contracts (`eos-core`) represent the stable cores of the stack. They contain virtually no dependencies and change only when fundamental protocol changes occur, insulating the system from external package upgrades or dependency decay.
 
 ## Formal backing
 
