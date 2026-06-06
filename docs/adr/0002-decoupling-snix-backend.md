@@ -129,6 +129,18 @@ interface BuildWorker {
 
 **Coupling budget:** `eos-snix` retains `snix-eval`, `snix-glue`, and `nix-compat` as in-process dependencies. These are required — there is no gRPC interface for evaluation, and this is by design. All store and build access from within the eval worker goes through gRPC.
 
+#### Backend-Agnostic Shim Topology
+
+The gRPC transport between worker shims and their downstream backends (snix store daemons, snix builders) is specific to the snix integration. It is NOT an architectural requirement imposed by Eos on all backends.
+
+The only universal contract is the Cap'n Proto `EvalWorker` and `BuildWorker` interfaces that face the scheduler. How a shim communicates with its backend is an implementation detail of that shim. Alternative backends have different transport characteristics:
+
+- **Legacy Nix**: The Nix daemon protocol is designed for local Unix domain socket communication and is prohibitively inefficient over the network. A Nix build worker shim SHOULD be co-located on the same host as its Nix daemon, communicating via `/nix/var/nix/daemon-socket/socket` or direct process invocation. A Nix eval worker shim would similarly invoke `nix-instantiate` (or link `libnixexpr`) as a local process.
+- **Guix**: A Guix shim would translate ATerm derivations to Guix's S-expression format and dispatch builds to a co-located Guix daemon.
+- **Future backends**: Any system that can accept a build specification and produce content-addressed outputs can be wrapped in a shim. The shim's internal transport (gRPC, Unix socket, pipe, FFI) is unconstrained.
+
+Operators deploying non-snix backends should expect shim and backend to run as a single logical unit on the same host. The snix case — where gRPC enables optional separation of shim and builder onto different machines — is an affordance of snix's service-oriented architecture, not a design requirement of Eos.
+
 ### Tier 4: Type Dependencies (Compile-Time Only)
 
 `nix-compat` provides protocol-level data structures (`Derivation`, `StorePath`, `NixHash`, `nixbase32`). These are compile-time type definitions, not runtime service dependencies. They are analogous to protobuf-generated types — necessary for serialization but not coupling to a runtime.
