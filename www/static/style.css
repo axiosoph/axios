@@ -334,8 +334,7 @@
     position: sticky;
     inset-block-start: 0;
     block-size: 100dvh;
-    overflow-y: auto;
-    scrollbar-gutter: stable;
+    overflow: hidden;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
@@ -531,6 +530,10 @@
     flex-direction: column;
     gap: 0.35rem;
     margin-block-end: 2rem;
+    flex: 1 1 auto;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+    min-block-size: 0;
   }
 
   .nav-item {
@@ -632,8 +635,10 @@
 
   @media (max-width: 768px) {
     .sidebar-nav {
+      flex: none;
       max-height: 0;
       overflow: hidden;
+      scrollbar-gutter: auto;
       opacity: 0;
       transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease, margin-block-start 0.3s ease;
     }
