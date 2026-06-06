@@ -480,17 +480,17 @@ linear in the DAG size plus the product of entry points
 and workers. No phase has exponential or super-polynomial
 cost.
 
-| Phase                 | Operation                                     | Complexity                               |
-| :-------------------- | :-------------------------------------------- | :--------------------------------------- |
-| DAG construction      | Topological sort + cache filtering            | $O(\|V'\| + \|E'\|)$                     |
-| Entry point selection | Greedy top-down walk with fan-in/cost checks  | $O(\|V'\| + \|E'\|)$                     |
-| EP DAG derivation     | Transitive closure on selected set            | $O(\|S\|^2)$ worst case                  |
-| Scoring (per EP)      | Evaluate $\text{score}(w, e)$ for all workers | $O(\|W\| \cdot d)$                       |
-| Full dispatch loop    | Score + assign all $\|S\|$ entry points       | $O(\|S\| \cdot \|W\| \cdot d)$           |
-| LRH lookup            | Per-assignment cache affinity                 | $O(\log\|R\| + C)$                       |
-| Singleflight check    | Hash map lookup/insert                        | $O(1)$ amortized                         |
-| EMA update            | Per-completion profile update                 | $O(1)$                                   |
-| **Total pipeline**    | **One scheduling pass**                       | $O(\|V'\| + \|E'\| + \|S\| \cdot \|W\|)$ |
+| Phase                 | Operation                                     | Complexity                                            |
+| :-------------------- | :-------------------------------------------- | :---------------------------------------------------- |
+| DAG construction      | Topological sort + cache filtering            | $O(\|V'\| + \|E'\|)$                                  |
+| Entry point selection | Greedy top-down walk with fan-in/cost checks  | $O(\|V'\| + \|E'\|)$                                  |
+| EP DAG derivation     | Transitive closure on selected set            | $O(\|S\|^2)$ worst case                               |
+| Scoring (per EP)      | Evaluate $\text{score}(w, e)$ for all workers | $O(\|W\| \cdot d)$                                    |
+| Full dispatch loop    | Score + assign all $\|S\|$ entry points       | $O(\|S\| \cdot \|W\| \cdot d)$                        |
+| LRH lookup            | Per-assignment cache affinity                 | $O(\log\|R\| + C)$                                    |
+| Singleflight check    | Hash map lookup/insert                        | $O(1)$ amortized                                      |
+| EMA update            | Per-completion profile update                 | $O(1)$                                                |
+| **Total pipeline**    | **One scheduling pass**                       | $O(\|V'\| + \|E'\| + \|S\| \cdot \max(\|S\|, \|W\|))$ |
 
 Where:
 
@@ -861,8 +861,9 @@ optimality assessment above:
    Greedy FIFO readiness ordering risks assigning trivial
    entry points to capable workers, blocking imminent
    critical tasks. The critical path computation is
-   $O(\|S\|)$ on the coarsened DAG (a single reverse
-   topological pass with max-aggregation).
+   $O(\|S\| + \|E_S\|)$ on the coarsened DAG (a single
+   reverse topological pass with max-aggregation over EP
+   edges).
 
 2. **Store lock contention monitoring**: When overlapping
    coverage causes store-level lock blocking, the blocked
@@ -1084,13 +1085,13 @@ independent) using TLC with weak fairness.
 
 **Verified properties:**
 
-| Property                | Type     | Status |
-| :---------------------- | :------- | :----- |
-| Ordering soundness (P1) | Safety   | ✅     |
-| Capacity safety (P4)    | Safety   | ✅     |
-| Artifact completeness   | Safety   | ✅     |
-| Progress (P5)           | Liveness | ✅     |
-| Completion prop. (P6)   | Liveness | ✅     |
+| Property                   | Type     | Status |
+| :------------------------- | :------- | :----- |
+| Ordering soundness (P1)    | Safety   | ✅     |
+| Capacity safety (P4)       | Safety   | ✅     |
+| Artifact completeness (P3) | Safety   | ✅     |
+| Progress (P5)              | Liveness | ✅     |
+| Completion prop. (P6)      | Liveness | ✅     |
 
 Key finding: `CascadeFail` is **required** for liveness.
 Without active failure propagation, dependent tasks hang
@@ -1106,12 +1107,12 @@ model instantiations.
 Four theorems machine-checked with Mathlib. Zero `sorry`
 placeholders, zero custom `axiom` declarations.
 
-| Theorem | Statement                                                                             | Status        |
-| :------ | :------------------------------------------------------------------------------------ | :------------ | --------- | ----- | ------------------------ | --- |
-| Thm 1   | Valid entry point selection exists (identity witness)                                 | ✅            |
-| Thm 2   | $M(\sigma_H) \leq \alpha \cdot \frac{1+\varepsilon}{1-\varepsilon} \cdot M(\sigma^*)$ | ✅            |
-| Thm 3   | Assignment stability under perturbation; EMA convergence                              | ✅            |
-| Thm 4   | Singleflight saves $                                                                  | \bigcup V'\_i | \leq \sum | V'\_i | $, equality iff disjoint | ✅  |
+| Theorem | Statement                                                                                   | Status |
+| :------ | :------------------------------------------------------------------------------------------ | :----- |
+| Thm 1   | Valid entry point selection exists (identity witness)                                       | ✅     |
+| Thm 2   | $M(\sigma_H) \leq \alpha \cdot \frac{1+\varepsilon}{1-\varepsilon} \cdot M(\sigma^*)$       | ✅     |
+| Thm 3   | Assignment stability under perturbation; EMA convergence                                    | ✅     |
+| Thm 4   | Singleflight: $\lvert\bigcup V'_i\rvert \leq \sum \lvert V'_i\rvert$, equality iff disjoint | ✅     |
 
 All assumptions enter as explicit hypotheses on theorem
 signatures (non-negative durations, $\varepsilon < 1$,

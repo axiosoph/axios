@@ -202,11 +202,13 @@ to a worker, subject to:
 $P: \text{Names} \to \text{Profiles}$ maps derivation names
 to historical profiles:
 
-$$P[\text{name}(v)] = (\hat{d}(v),\; \hat{m}(v),\; \hat{o}(v))$$
+$$P[\text{name}(v)] = (\hat{d}(v),\; \hat{m}(v),\; \hat{c}(v),\; \hat{o}(v))$$
 
 where $\hat{d}(v)$ is predicted build duration,
-$\hat{m}(v)$ is predicted peak memory, and $\hat{o}(v)$ is
-predicted output size.
+$\hat{m}(v)$ is predicted peak memory, $\hat{c}(v)$ is
+predicted CPU cores, and $\hat{o}(v)$ is predicted output
+size. These four fields populate the resource vector used
+by the scoring function's `resource_fit` term.
 
 For derivations with no history, $P[\text{name}(v)]$
 falls back to developer metadata (if the derivation is an
@@ -511,7 +513,7 @@ yielding large savings.
 ## Validation
 
 | Check                              | Result | Detail                                                 |
-| :--------------------------------- | :----- | :----------------------------------------------------- | ------------- | ------------------------------------- |
+| :--------------------------------- | :----- | :----------------------------------------------------- |
 | Coverage properties (1-4) coherent | PASS   | Identity witness mechanized in Lean 4 (Thm 1);         |
 |                                    |        | properties 1-4 are satisfiable and non-contradictory   |
 | Coverage existence (Thm 1)         | PASS   | Machine-checked in Lean 4. Constructs `EosModel` with  |
@@ -538,8 +540,9 @@ yielding large savings.
 | Robustness — μ-makespan bound      | OPEN   | Quantitative bound during transient not mechanized.    |
 |                                    |        | Low risk — transient is short (geometric convergence)  |
 |                                    |        | and capacity safety holds throughout (Track A)         |
-| Singleflight deduplication (Thm 4) | PASS   | Machine-checked in Lean 4. Proves $                    | \bigcup V'\_i |                                       |
-|                                    |        | \leq \sum                                              | V'\_i         | $ with equality iff pairwise disjoint |
+| Singleflight deduplication (Thm 4) | PASS   | Machine-checked in Lean 4. Proves                      |
+|                                    |        | $\lvert\bigcup V'_i\rvert \leq \sum \lvert V'_i\rvert$ |
+|                                    |        | with equality iff pairwise disjoint                    |
 | Graph coarsening optimality        | OPEN   | Underlying problem is NP-hard. Formal competitive      |
 |                                    |        | bound on entry point selection is not tractable.       |
 |                                    |        | Thm 2 bounds assignment quality on any fixed DAG       |
