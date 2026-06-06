@@ -5,6 +5,7 @@
 - **Deciders**: nrd
 - **Source**: [Eos Build Scheduler Specification](../specs/eos-scheduler.md) | [Eos Snix Backend Specification](../specs/eos-snix-backend.md) | [Eos Network Protocol](../specs/eos-network-protocol.md)
 - **Supersedes**: ADR-0002 (2026-06-03 draft, "Decoupling Snix Backend from Eos Core and Scheduler")
+- **Related**: [ADR-0003](0003-composable-deployment-modes.md), [ADR-0004](0004-learning-augmented-scheduling.md)
 
 ---
 
@@ -248,13 +249,15 @@ IFD is an internal concern of the snix evaluator — the Eos scheduler is not aw
 
 An ADR-0003 is no longer needed for IFD topology. The decision has been made: IFD builds are internal to the IFD-enabled evaluator, not scheduled as separate eos cluster builds. The scheduler has no direct IFD visibility; it only needs to know which evaluators have IFD builders configured (via `ifdSystems` worker metadata). See [ADR-0003](0003-composable-deployment-modes.md) for the deployment model decision that now occupies this slot.
 
-### ADR-0004 (proposed): Eos Caching and High Availability
+### Future ADR (proposed): Eos Caching and High Availability
 
 Two interrelated concerns deferred from this ADR:
 
 1. **Eval/build result caching.** Atom metatags (cryptographically signed by the atom owner) can declare derivation digests, providing a distributed, decentralized cache. For third-party evaluations, an Eos-level cache backed by the snix blob service provides the fallback. The interface design (latency requirements, cache invalidation, consistency model) warrants dedicated analysis.
 
 2. **High availability.** The stateless scheduler design enables external orchestrators to swap instances, but the transition semantics (in-flight job recovery, worker re-registration, lease handoff) need specification.
+
+(Note: The `ADR-0004` slot was ultimately utilized for [ADR-0004: Learning-Augmented Build Scheduling](0004-learning-augmented-scheduling.md), which defines the scheduler's heuristic placement and cache affinity scoring.)
 
 ---
 
@@ -266,6 +269,7 @@ Two interrelated concerns deferred from this ADR:
 - [Eos Network Protocol Specification](../specs/eos-network-protocol.md)
 - [Ion–Eos Contract](../specs/ion-eos-contract.md)
 - [ADR-0003: Composable Deployment Modes](0003-composable-deployment-modes.md) — supersedes the monolithic binary alternative deferred by this ADR
+- [ADR-0004: Learning-Augmented Build Scheduling](0004-learning-augmented-scheduling.md) — defines the scheduling algorithm running in the daemon
 
 ---
 
