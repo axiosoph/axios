@@ -253,7 +253,7 @@ An ADR-0003 is no longer needed for IFD topology. The decision has been made: IF
 
 Two interrelated concerns deferred from this ADR:
 
-1. **Eval/build result caching.** Atom metatags (cryptographically signed by the atom owner) can declare derivation digests, providing a distributed, decentralized cache. For third-party evaluations, an Eos-level cache backed by the snix blob service provides the fallback. The interface design (latency requirements, cache invalidation, consistency model) warrants dedicated analysis.
+1. **Eval/build output caching.** Atom metatags (cryptographically signed by the atom owner) can declare derivation digests, providing a distributed, decentralized cache. For third-party evaluations, an Eos-level cache backed by the snix blob service provides the fallback. The interface design (latency requirements, cache invalidation, consistency model) warrants dedicated analysis.
 
 2. **High availability.** The stateless scheduler design enables external orchestrators to swap instances, but the transition semantics (in-flight job recovery, worker re-registration, lease handoff) need specification.
 
