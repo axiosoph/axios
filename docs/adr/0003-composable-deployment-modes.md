@@ -232,6 +232,18 @@ MUST produce identical outputs given identical inputs. This
 is validated by the formal model's bisimulation property:
 deployment mode is an observation-preserving morphism.
 
+### Simplicity and Volatility Boundaries (Hickey/Lowy Audits)
+
+The composable deployment architecture achieves simplicity and volatility isolation by separating concerns along physical and logical boundaries:
+
+1. **Spatial Simplicity (Hickey Audit):** 
+   - **Decoupled Transport and Logic:** Cap'n Proto capability interfaces (e.g. `EvalWorker`, `BuildWorker`) are entirely transport-agnostic. The scheduling logic interacts with a client interface whether that client communicates over an in-memory duplex stream or a network socket. Concerns of thread concurrency and IPC are uncomplected.
+   - **Storage Abstraction:** The storage layer is decoupled via abstract traits (`BlobService`, `DirectoryService`, `PathInfoService`). Workers only require `Arc<dyn BlobService>`; whether this points to an in-memory store, local redb instance, or remote gRPC client is a construction-time dependency injection choice.
+
+2. **Temporal Volatility (Lowy Audit):**
+   - **Axis of Deployment:** The scaling requirement (single developer workstation vs. CI farm cluster) is a volatile axis of change. By structuring the core boundaries as composable shims and trait injections, we isolate this volatility entirely within the initialization layer.
+   - **Stability Cores:** The core scheduling logic (ADR-0004) and evaluator paths are stable and insulated from deployment topology variations. A bug in network socket pooling or TCP re-connections will not propagate into or corrupt the scheduling algorithm.
+
 ### Supersede ADR-0001 §Embedded Default
 
 ADR-0001's "embedded default, daemon opt-in" is superseded
