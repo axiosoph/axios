@@ -1,5 +1,10 @@
 # MODEL: Eos Build Scheduling
 
+> **Terminology note**: This model uses "derivation" to refer to
+> the Nix-native build unit. In Axios's layered terminology, the
+> Eos engine abstraction is "Plan" (`BuildEngine::Plan`). See
+> ADR-0004 for the full scheduling design.
+
 ## Domain Classification
 
 **Problem Statement:** The Eos build scheduler constructs entry
@@ -397,7 +402,7 @@ _For any uncached sub-DAG $G' = (V', E')$, a valid entry
 point selection $(S, \kappa)$ satisfying properties 1-4
 exists._
 
-**Proof sketch**: The trivial selection $S = V'$ (every
+**Proof intuition**: The trivial selection $S = V'$ (every
 uncached node is an entry point), with $\kappa = \text{id}$
 (each node covers itself), satisfies all four properties.
 This is the degenerate case (maximum parallelism but zero
@@ -488,7 +493,7 @@ scheduler-level singleflight optimization is enabled, total build work is
 $|\bigcup_{i=1}^{R} V'_i|$ instead of $\sum_{i=1}^{R} |V'_i|$ builds,
 preventing duplicate worker slot allocation._
 
-**Proof sketch**: Content-addressed hashing ensures
+**Proof intuition**: Content-addressed hashing ensures
 $\text{hash}(v) = \text{hash}(u) \iff v = u$ (derivations
 are identical iff their hashes match, by deterministic
 evaluation). The singleflight map keys on hash, so identical
@@ -515,6 +520,7 @@ yielding large savings.
 |                                    |        | (linear, diamond, convergence, independent)            |
 | Coverage completeness (P2)         | PASS   | Structural — guaranteed by `EosModel` total coverage   |
 |                                    |        | property, verified satisfiable by Thm 1                |
+| Artifact completeness (P3)         | PASS   | Model-checked in TLA+ (`ArtifactSafety` invariant)     |
 | Capacity safety (P4)               | PASS   | Model-checked in TLA+ under all interleavings          |
 | Liveness (P5, P6)                  | PASS   | Model-checked in TLA+ with `WF_vars(Next)` weak        |
 |                                    |        | fairness. All 4 topology models verify both properties |

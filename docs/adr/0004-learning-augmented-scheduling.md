@@ -16,6 +16,13 @@
 
 ## Context
 
+> **Terminology note**: This ADR and its companion formal model
+> use "derivation" to refer to the Nix-native build unit. In
+> Axios's layered terminology, the Eos engine abstraction is
+> "Plan" (`BuildEngine::Plan`). The scheduling documents
+> operate at the Nix/snix integration layer where "derivation"
+> is the precise domain term.
+
 The Eos scheduler currently uses tag-based set-containment
 matching with Rendezvous hashing for cache affinity (SAD §7).
 This is a correct baseline but leaves significant performance
@@ -411,6 +418,13 @@ constant. If predictions are systematically incorrect (even if stable and having
 $\text{EMA}(|\eta_e|)$ grows, causing $\beta_e \to 0$ and safely falling back to the
 prediction-free baseline. Operators running homogeneous clusters may set $\beta = 0$.
 
+**Symbol note**: The scoring weights $\alpha, \beta, \gamma$
+are operator-tunable parameters distinct from the identically
+named symbols in the formal guarantees: $\alpha$ in Theorem 2
+is the heuristic's base approximation ratio (a bound, not a
+knob), and $\gamma$ in Theorem 3 is the EMA smoothing factor
+(a convergence parameter). Context disambiguates.
+
 **Prior art**: Tetris (Grandl et al., SIGCOMM 2014) —
 multi-resource dot-product alignment heuristic.
 
@@ -568,14 +582,16 @@ assignment equals baseline. The convergence is automatic
 and requires $O(\ln(\beta R_{\max}/\Delta_{\min}))$
 observations.
 
-### Smoothness
+### Smoothness (Corollary of Theorem 2)
 
 As prediction error increases gradually (incremental version
 changes, slowly shifting build profiles), scheduling quality
 degrades proportionally via the $(1+\varepsilon)/(1-\varepsilon)$
-factor, not catastrophically. When error becomes sustained,
-the EMA decay mechanism automatically collapses the scoring
-function to the prediction-free baseline.
+factor — not catastrophically. This follows directly from
+Theorem 2's bound: the consistency ratio is a smooth, monotone
+function of $\varepsilon$. When error becomes sustained, the
+EMA decay mechanism (Theorem 3) automatically collapses the
+scoring function to the prediction-free baseline.
 
 ---
 

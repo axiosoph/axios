@@ -48,9 +48,8 @@ witness (`S = univ, κ = id`) proving a valid `EosModel` exists for
 any finite DAG.
 
 **`Theorem2.lean`** — _Consistency Bound._ Proves
-`makespan(d, τ) ≤ α · (1+ε)/(1-ε) · makespan(d*, τ)` under
-ε-accurate predictions via well-founded induction on completion
-times.
+`M(σ_H) ≤ α · (1+ε)/(1-ε) · M(σ*)` under ε-accurate
+predictions via well-founded induction on completion times.
 
 **`Theorem3.lean`** — _Robustness._ Lemma 3.1 (scoring perturbation
 stability — bounded perturbation doesn't change the greedy
