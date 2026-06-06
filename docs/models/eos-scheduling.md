@@ -480,93 +480,124 @@ yielding large savings.
 
 ## Validation
 
-| Check                                  | Result  | Detail                                                 |
-| :------------------------------------- | :------ | :----------------------------------------------------- |
-| Coverage properties (1-4) coherent     | PASS    | Trivial selection exists (Thm 1); properties 1-4 are   |
-|                                        |         | consistent and non-contradictory                       |
-| Ordering soundness (P1) well-formed    | PASS    | The entry point DAG is acyclic (induced from a DAG);   |
-|                                        |         | topological dispatch is well-defined                   |
-| Coverage completeness (P2) well-formed | PASS    | Guaranteed by entry point selection algorithm;         |
-|                                        |         | relation-based coverage maps all uncached nodes        |
-| Liveness (P5, P6) depend on fairness   | PARTIAL | P5 requires a fairness assumption (the scheduler       |
-|                                        |         | eventually considers every ready entry point). Must be |
-|                                        |         | explicitly stated in TLA+ as a fairness constraint.    |
-| Federation liveness (P7) depends on    | PARTIAL | Requires bounded artifact store propagation time δ as  |
-| network model                          |         | an assumption. Under partition, δ → ∞ and P7 fails.    |
-|                                        |         | Need to specify partition behavior explicitly.         |
-| Consistency bound (Thm 2) sketch       | PARTIAL | Mapping to Gupta et al. framework not yet formalized.  |
-|                                        |         | The entry point DAG structure adds complexity beyond   |
-|                                        |         | their unrelated-machines model.                        |
-| Robustness bound (Thm 3)               | PARTIAL | Conjecture only. Scoring function degradation behavior |
-|                                        |         | needs formal characterization.                         |
-| Minimality                             | PASS    | Two-track decomposition is minimal — protocol and      |
-|                                        |         | optimization are formally independent concerns.        |
-| External adequacy                      | PASS    | Model captures all mechanisms described in ADR-0004.   |
-|                                        |         | No ADR mechanism is unmodeled.                         |
+| Check                              | Result | Detail                                                 |
+| :--------------------------------- | :----- | :----------------------------------------------------- | ------------- | ------------------------------------- |
+| Coverage properties (1-4) coherent | PASS   | Identity witness mechanized in Lean 4 (Thm 1);         |
+|                                    |        | properties 1-4 are satisfiable and non-contradictory   |
+| Coverage existence (Thm 1)         | PASS   | Machine-checked in Lean 4. Constructs `EosModel` with  |
+|                                    |        | `S = V'`, `κ = id`. Zero `sorry`, zero `axiom`.        |
+| Ordering soundness (P1)            | PASS   | Model-checked in TLA+ across 4 topology models         |
+|                                    |        | (linear, diamond, convergence, independent)            |
+| Coverage completeness (P2)         | PASS   | Structural — guaranteed by `EosModel` total coverage   |
+|                                    |        | property, verified satisfiable by Thm 1                |
+| Capacity safety (P4)               | PASS   | Model-checked in TLA+ under all interleavings          |
+| Liveness (P5, P6)                  | PASS   | Model-checked in TLA+ with `WF_vars(Next)` weak        |
+|                                    |        | fairness. All 4 topology models verify both properties |
+| Federation liveness (P7)           | OPEN   | Requires real-time bounds ($\Diamond_{\leq\delta}$)    |
+|                                    |        | not expressible in standard TLA+ temporal logic.       |
+|                                    |        | Intentionally deferred — see note below                |
+| Consistency bound (Thm 2)          | PASS   | Machine-checked in Lean 4. Proves                      |
+|                                    |        | $M(\sigma_H) \leq \alpha \cdot \frac{1+\varepsilon}    |
+|                                    |        | {1-\varepsilon} \cdot M(\sigma^\*)$ via well-founded   |
+|                                    |        | induction on DAG completion times                      |
+| Robustness — assignment stability  | PASS   | Lean 4 Lemma 3.1: perturbation $2P < \Delta$ implies   |
+|                                    |        | $\sigma_H = \sigma_\text{base}$ (assignment identity)  |
+| Robustness — EMA convergence       | PASS   | Lean 4: under sustained error $\eta \geq \eta_0$,      |
+|                                    |        | EMA $\geq (1 - \gamma^n) \eta_0 + \gamma^n E_0$        |
+| Robustness — μ-makespan bound      | OPEN   | Quantitative bound during transient not mechanized.    |
+|                                    |        | Low risk — transient is short (geometric convergence)  |
+|                                    |        | and capacity safety holds throughout (Track A)         |
+| Singleflight deduplication (Thm 4) | PASS   | Machine-checked in Lean 4. Proves $                    | \bigcup V'\_i |                                       |
+|                                    |        | \leq \sum                                              | V'\_i         | $ with equality iff pairwise disjoint |
+| Graph coarsening optimality        | OPEN   | Underlying problem is NP-hard. Formal competitive      |
+|                                    |        | bound on entry point selection is not tractable.       |
+|                                    |        | Thm 2 bounds assignment quality on any fixed DAG       |
+| Minimality                         | PASS   | Two-track decomposition is minimal — protocol and      |
+|                                    |        | optimization are formally independent concerns         |
+| External adequacy                  | PASS   | Model captures all mechanisms described in ADR-0004    |
 
-**Validation gaps to address:**
+**Remaining open items:**
 
-1. **Fairness**: P5 (progress) requires weak fairness on the
-   dispatch action. The TLA+ spec must include this as
-   `WF_vars(Dispatch)`.
-2. **Partition model**: P7 assumes bounded propagation. Under
-   network partition, the model must specify degraded behavior
-   (entry points on unreachable workers are retried on
-   reachable workers after timeout).
-3. **Consistency bound formalization**: The mapping from entry
-   point DAGs with coverage to unrelated-machine scheduling
-   requires a reduction proof showing that the coverage
-   structure does not violate the preconditions of Gupta et al.
+1. **Federation liveness (P7)**: Requires bounded artifact
+   store propagation time $\delta$ as an environmental
+   assumption. Under partition, $\delta \to \infty$ and P7
+   fails. This is inherently unverifiable by the system —
+   it depends on network infrastructure. Implementation
+   should use timeouts with worker reassignment as a
+   pragmatic mitigation.
+2. **Graph coarsening optimality**: The entry point selection
+   (DAG decomposition) phase is NP-hard and lacks a formal
+   competitive bound. The consistency bound (Thm 2) applies
+   to assignment quality on any fixed entry point DAG,
+   cleanly separating DAG quality ($\alpha$) from prediction
+   error cost ($\frac{1+\varepsilon}{1-\varepsilon}$).
+   Heuristic quality is an engineering tuning concern.
 
 ---
 
 ## Implications
 
-### For TLA+ Specification (Track A — Next Step)
+### Verification Status
 
-The state machine defined above translates directly to a
-TLA+ module. Key modeling decisions:
+Both tracks of formal verification are complete:
 
-- **State variables**: `epStatus` (function $S \to$ status),
-  `artifactStore` (set of hashes), `workerLoad` (function $W \to$ load vectors)
-- **Actions**: `Dispatch(s, w)`, `Complete(s)`, `Fail(s)`,
-  `CascadeFail(s)`
-- **Invariants**: P1, P2, P4 as `INVARIANT` declarations
-- **Liveness**: P5, P6 as `PROPERTY` declarations with
-  fairness via `WF_vars`
-- **Model checking**: Finite instances (e.g., 3 workers,
-  5 entry points) to exhaustively verify invariants for a
-  single request DAG.
+- **Track A (TLA+)**: Protocol correctness model-checked
+  across 4 DAG topologies. All safety invariants (P1, P4,
+  `ArtifactSafety`) and liveness properties (P5, P6) verified
+  under `WF_vars(Next)` weak fairness. See `models/tla/`.
+- **Track B (Lean 4)**: Optimization quality machine-checked.
+  Zero `sorry`, zero custom `axiom`. Theorems 1-4 verified
+  with Mathlib. See `models/lean/`.
 
-### For Lean 4 Proofs (Track B — After Paper Proofs Stabilize)
+### For Implementation (Derived from Proofs)
 
-- **Coverage**: Formalize the entry point selection as a
-  function on finite DAGs in Mathlib's `Combinatorics.SimpleGraph`
-  or `Order.PartialOrder`. Prove existence (Thm 1) and
-  uniqueness of coverage assignment.
-- **Consistency/Robustness**: Formalize the scoring function
-  and makespan computation. Instantiate the learning-augmented
-  framework. This likely requires formalizing a fragment of
-  competitive analysis in Lean — potentially reusable beyond
-  this project.
-- **Dedup savings**: Straightforward set theory proof (Thm 4).
-  Good "warmup" for the Lean formalization.
+1. **Entry point status enum**: The TLA+ state machine maps
+   directly to a Rust `enum { Pending, Ready, Dispatched,
+Complete, Failed }` with `tokio::sync::watch` for
+   completion broadcast.
 
-### For Implementation
+2. **Coverage relation as lookup table**: The `EosModel`
+   coverage relation $\kappa$ is computed once during entry
+   point selection and stored as a `HashMap<DrvHash,
+Vec<EntryPointHash>>`. The `EosModel` properties (1-4)
+   should be enforced as `debug_assert!` checks on the
+   output of the selection algorithm.
 
-- The state machine structure maps to a Rust `enum` for entry
-  point status and a `tokio::sync::watch` for completion
-  broadcast. If the optional scheduler-level singleflight
-  optimization is implemented, it uses a `DashMap<DrvHash, SharedFuture>`
-  to track in-flight builds.
-- The coverage relation $\kappa$ is computed once during entry
-  point selection and stored as a lookup table (e.g., mapping each
-  derivation hash to its set of covering entry point hashes).
-- The ordering soundness invariant (P1) translates to a runtime
-  assertion: before dispatching entry point $s$, verify all
-  $(s', s) \in E_S$ have $Q(s') = \text{complete}$.
+3. **Ordering soundness as runtime assertion**: Before
+   dispatching entry point $s$, verify all $(s', s) \in E_S$
+   have $Q(s') = \text{complete}$. This is the P1 invariant
+   from the TLA+ proof, translated to a pre-dispatch guard.
 
-### Design Insights Revealed
+4. **Consistency bound is monitorable**: The proven bound
+   $M(\sigma_H) \leq \alpha \cdot \frac{1+\varepsilon}
+   {1-\varepsilon} \cdot M(\sigma^*)$ has measurable inputs.
+   After each build, compute observed $\varepsilon$ from
+   `|d - d_hat| / d_hat` and track the EMA. If $\varepsilon$
+   exceeds a threshold, the bound degrades and the system
+   should surface this in metrics/telemetry.
+
+5. **Transfer time non-negativity**: Theorem 2's proof
+   depends on $\tau(s', s) \geq 0$. This is trivially
+   satisfied by network transfer times but would break if
+   the model encoded "time savings from caching" as negative
+   $\tau$. The implementation must not conflate transfer cost
+   with cache benefit in the same variable.
+
+6. **Singleflight map keyed by derivation hash**: Theorem 4
+   operates on abstract set families. In implementation, the
+   `DashMap<DrvHash, SharedFuture<BuildResult>>` singleflight
+   map is the concrete instantiation. The theorem guarantees
+   deduplication savings exactly equal the overlap between
+   concurrent requests' uncached sub-DAGs.
+
+7. **EMA decay as self-healing mechanism**: The EMA lower
+   bound proof guarantees that under sustained prediction
+   error, the prediction weight decays geometrically. The
+   implementation's EMA smoothing factor $\gamma$ controls
+   convergence speed — smaller $\gamma$ means faster decay
+   but more sensitivity to noise.
+
+### Design Insights Revealed by Verification
 
 1. **Coverage property 4 (downward closure) constrains entry
    point selection**: You cannot split a dependency chain
@@ -577,15 +608,32 @@ TLA+ module. Key modeling decisions:
    point, and non-entry-point subchains are fully contained
    within one entry point's scope.
 
-2. **Cascade failure propagation prevents deadlocks**: If a dependency
-   entry point fails, dependent entry points cannot be built. The state
-   machine must actively propagate this failure via `CascadeFail` to
-   prevent dependent tasks from hanging in `pending` or `ready`
-   independently, satisfying liveness (P6).
+2. **Cascade failure propagation prevents deadlocks**: The
+   TLA+ model checking confirmed that without `CascadeFail`,
+   dependent tasks hang in `pending` or `ready` forever after
+   a dependency failure. The implementation must actively
+   propagate failure — this is not optional.
 
 3. **Federation liveness (P7) is the weakest property**: It
    depends on an environmental assumption (bounded propagation
-   $\delta$) that the system cannot enforce. Under partition,
-   the system must degrade gracefully — the formal model
-   should specify what "graceful" means (e.g., entry points
-   are reassigned to reachable workers after timeout $> \delta$).
+   $\delta$) that the system cannot enforce. Implementation
+   should use configurable timeouts with worker reassignment
+   rather than relying on unbounded store propagation.
+
+4. **The identity witness (Thm 1) is the degenerate case**:
+   Making every node an entry point satisfies all coverage
+   properties trivially but provides zero locality benefit.
+   The optimization problem is finding entry points that
+   maximize parallelism while preserving locality — the
+   consistency bound (Thm 2) guarantees that any valid
+   selection with good predictions achieves near-optimal
+   makespan on the resulting DAG.
+
+5. **α separates DAG quality from prediction quality**: The
+   consistency bound cleanly factors into $\alpha$ (how good
+   is your heuristic on perfect predictions?) and
+   $(1+\varepsilon)/(1-\varepsilon)$ (how much does prediction
+   error cost?). This separation means the implementation can
+   independently tune the entry point selection heuristic
+   (affects $\alpha$) and the prediction infrastructure
+   (affects $\varepsilon$) without cross-concern interference.
