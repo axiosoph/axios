@@ -213,6 +213,26 @@ The scheduler manages two worker pools with separate registries:
 
 Both pools use the same lease-based health monitoring defined in the [scheduler spec](../specs/eos-scheduler.md). Workers send periodic heartbeats to the scheduler via `registration.heartbeat()` on the `Registration` capability returned at registration time (worker→scheduler keepalive model). The scheduler tracks `last_heartbeat` per worker and marks workers unhealthy if the deadline is exceeded.
 
+### Transition Path and Implementation Timeline
+
+The transition from the monolithic bootstrap state to the target distributed service boundary architecture proceeds in three distinct phases:
+
+1. **Phase 1: Local In-Process Orchestration (Bootstrap)**: The scheduler evaluates and executes builds locally by linking the in-process `SnixEngine` (via `eos-snix`). Builders are invoked directly or via host-level Bubblewrap sandboxes. This establishes correct build and evaluation logic without network distribution overhead.
+2. **Phase 2: Distributed Service Boundary Migration**: Introduce the Cap'n Proto worker interfaces (`EvalWorker` and `BuildWorker`) and the standalone Build Worker Shim. The scheduler is refactored to delegate jobs via Cap'n Proto RPC client handles instead of running them in-process. The local `SnixEngine` is removed from `eos-daemon`.
+3. **Phase 3: Remote Store/Worker Deployments**: Migrate store access to remote gRPC endpoints (`BlobService`, `DirectoryService`, `PathInfoService`). All workers (eval and build) connect to these shared stores, enabling stateless daemon failovers and dynamic scaling of worker pools.
+
+### Simplicity and Volatility Boundaries (Hickey/Lowy Audits)
+
+The service-boundary architecture decouples Eos from the snix runtime by separating concerns along physical and logical interfaces:
+
+1. **Spatial Simplicity (Hickey Audit):**
+   - **Uncomplecting Protocols**: Decouple the wire protocol used for job scheduling and cluster orchestration (Cap'n Proto) from the wire protocol used for low-level build execution (snix gRPC). Eos scheduling concerns (capability handshakes, cancellation, progress streams) are decoupled from the stateless unary build invocation.
+   - **Core Scheduler Decoupling**: The scheduler does not hold or import snix types, store traits, or evaluation runtimes. It operates solely over abstract Cap'n Proto interface handles. Concerns of resource allocation and execution engine details are fully uncomplected.
+
+2. **Temporal Volatility (Lowy Audit):**
+   - **Volatility Axis (Sandboxing Environment)**: Build isolation technologies (Bubblewrap namespaces, OCI runtimes, or microvms) evolve rapidly and represent a high volatility axis of change. By confining these execution environments to the remote worker shim/builder daemon boundary, we ensure that changes or updates to sandboxing technologies do not propagate into or require changes in the Eos scheduler.
+   - **Temporal Decoupling via Leases**: Traditional execution models tie the lifecycle of a build task to the lifetime of the underlying network connection. By using lease-based job state management and keepalive heartbeats, we decouple transient connection drops from job failures. A dropped connection triggers lease expiry, allowing the job to be cleanly reclaimed and re-queued or routed elsewhere.
+
 ---
 
 ## Consequences
