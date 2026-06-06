@@ -54,9 +54,11 @@ lemma biUnion_card_eq_sum_card_imp_disjoint {V : Type*} [DecidableEq V]
     rw [biUnion_insert, sum_insert ha] at h_eq
     have h_le : (s.biUnion f).card ≤ s.sum (fun i => (f i).card) := card_biUnion_le
     have h_union := card_union_add_card_inter (f a) (s.biUnion f)
-    have h_arith : (f a).card + (s.biUnion f).card = (f a).card + s.sum (fun i => (f i).card) + (f a ∩ s.biUnion f).card := by
+    have h_arith : (f a).card + (s.biUnion f).card =
+        (f a).card + s.sum (fun i => (f i).card) + (f a ∩ s.biUnion f).card := by
       omega
-    have h_arith2 : (s.biUnion f).card = s.sum (fun i => (f i).card) + (f a ∩ s.biUnion f).card := by
+    have h_arith2 : (s.biUnion f).card =
+        s.sum (fun i => (f i).card) + (f a ∩ s.biUnion f).card := by
       omega
     have h_res := nat_add_le_self h_arith2.symm h_le
     have h_empty_card := h_res.1

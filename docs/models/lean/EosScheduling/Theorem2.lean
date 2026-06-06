@@ -213,7 +213,8 @@ lemma completion_time_ge_of_eps {d d_hat : S → Real} {τ : S → S → Real} {
           (mem_attach preds ⟨s', h_rel⟩)
       have h_x_le := unbotD_max_ge_self h_x_mem
       have h_t_nonneg := h_tau_nonneg s' s
-      have h_calc : (1 - ε) * (completion_time d_hat τ s' + τ s' s) ≤ completion_time d τ s' + τ s' s := by
+      have h_calc : (1 - ε) * (completion_time d_hat τ s' + τ s' s)
+          ≤ completion_time d τ s' + τ s' s := by
         have : (1 - ε) * τ s' s ≤ τ s' s := by nlinarith
         linarith
       dsimp only [vals_d, vals_d_hat] at *
@@ -235,7 +236,8 @@ lemma makespan_le_of_eps {d d_hat : S → Real} {τ : S → S → Real} {ε : Re
       rcases hx with ⟨s, rfl⟩
       exact completion_time_nonneg h_d_hat_nonneg h_tau_nonneg s
     exact unbotD_max_nonneg h_nonneg
-  have h_bound_nonneg : 0 ≤ (1 + ε) * WithBot.unbotD 0 (univ.image (completion_time d_hat τ)).max := by
+  have h_bound_nonneg : 0 ≤ (1 + ε) *
+      WithBot.unbotD 0 (univ.image (completion_time d_hat τ)).max := by
     have : 0 ≤ 1 + ε := by linarith
     exact mul_nonneg this h_d_hat_ms_nonneg
   rw [unbotD_max_le_iff h_bound_nonneg]
@@ -275,7 +277,8 @@ lemma makespan_ge_of_eps {d d_hat : S → Real} {τ : S → S → Real} {ε : Re
   rw [h_max_eq, ← h_y_eq]
   linarith
 
-theorem theorem2_consistency_bound {d d_hat d_star d_hat_star : S → Real} {τ : S → S → Real} {ε α : Real}
+theorem theorem2_consistency_bound {d d_hat d_star d_hat_star : S → Real}
+    {τ : S → S → Real} {ε α : Real}
     (h_eps_pos : 0 ≤ ε) (h_eps_lt : ε < 1)
     (h_alpha : 0 ≤ α)
     (h_tau_nonneg : ∀ s' s, 0 ≤ τ s' s)
