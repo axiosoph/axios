@@ -1,10 +1,11 @@
 # ADR-0001: Monorepo with independent workspace architecture
 
-- **Status**: PROPOSED
+- **Status**: PROPOSED (SUPERSEDED IN PART by ADR-0003)
 - **Date**: 2026-02-07 (revised)
 - **Deciders**: nrd
 - **Source**: [Plan](../plans/ion-atom-restructuring.md) | [Sketch](../../.sketches/2026-02-07-ion-atom-restructuring.md)
 - **Supersedes**: Revisions 1–3
+- **Related**: [ADR-0002](0002-decoupling-snix-backend.md), [ADR-0003](0003-composable-deployment-modes.md)
 
 ## Context
 
@@ -45,7 +46,7 @@ dependencies, so the lock file captures the full graph.
 - **Three distinct stores.** Registries (publishing, immutable), working stores (collected from disparate sources), and artifact stores (content-addressed blobs). Different semantics — cannot be conflated.
 - **The store is the interface.** Ion hands atoms to eos through `AtomStore`. Published and dev atoms enter the same store via `ingest`. Eos never knows where atoms came from.
 - **Atom is generic.** Manifest-agnostic, version-scheme-agnostic. Any ecosystem can publish atoms.
-- **Embedded default, daemon opt-in.** Cargo, single-user Nix, Go — none require daemons. Neither should ion.
+- **Embedded default, daemon opt-in (superseded by ADR-0003).** Cargo, single-user Nix, Go — none require daemons. Neither should ion. (Refined in [ADR-0003](0003-composable-deployment-modes.md) to support three composable deployment modes: Monolithic Ion, Monolithic Eos, and Distributed Eos.)
 - **Eos will be large.** Early modularization (eos-core + eos-store + eos) prevents a monolith.
 
 ## Decision
@@ -138,7 +139,7 @@ trait ArtifactStore {
 ```
 
 Thin wrapper over snix BlobService/DirectoryService. The trait is eos's
-contract; snix is the default backend.
+contract; snix is the default backend. (Note: Refined in [ADR-0002](0002-decoupling-snix-backend.md) to decouple the snix runtime by accessing these store backends over remote gRPC service boundaries.)
 
 ### ion/ — Frontend workspace (L3)
 
@@ -193,8 +194,8 @@ AtomRegistry (publishing front)
 
 Ion populates the AtomStore. Eos reads from it. The store is the handoff.
 
-- **Embedded** (`--features embedded-engine`, default): `eos::Engine` compiled into ion-cli. `ion build` works immediately.
-- **Client** (future): `RemoteEngine` connects to eos daemon. Distributed builds, shared caches.
+- **Embedded** (`--features embedded-engine`, default): `eos::Engine` compiled into ion-cli. `ion build` works immediately. (Note: Superseded in part by [ADR-0003](0003-composable-deployment-modes.md) where monolithic and distributed wiring are achieved via feature flags and dependency injection rather than divergent engine types.)
+- **Client** (future): `RemoteEngine` connects to eos daemon. Distributed builds, shared caches. (Note: Superseded in part by [ADR-0003](0003-composable-deployment-modes.md).)
 
 Both satisfy `BuildEngine`. Ion's code is generic: `fn run(engine: impl BuildEngine)`.
 
