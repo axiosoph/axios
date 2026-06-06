@@ -464,36 +464,69 @@ virtual ring:
 ## Guarantees
 
 The learning-augmented framework provides three formal
-properties:
+properties, now backed by machine-checked proofs
+(Lean 4, Track B) and model-checked protocol verification
+(TLA+, Track A). See `docs/models/lean/` and
+`docs/models/tla/`.
 
-### Consistency
+### Consistency (Machine-Checked — Theorem 2)
 
-When historical predictions are accurate (same atom, similar
-version), the scheduler approaches the quality of an optimal
-offline algorithm that knows all durations and resource
-profiles in advance. Per Kedad-Sidhoum et al.
-(arXiv:2106.07059), DAG scheduling with heterogeneous tasks
-achieves bounded approximation ratios. When prediction error
-is low, the greedy entry point assignment with scoring
-approximates these bounds — the ratio depends on DAG
-structure (depth/width) and prediction accuracy.
+When historical predictions are $\varepsilon$-accurate
+($|d(s) - \hat{d}(s)| \leq \varepsilon \cdot \hat{d}(s)$),
+the heuristic assignment $\sigma_H$ satisfies:
 
-### Robustness
+$$
+M(\sigma_H) \leq \alpha \cdot \frac{1 + \varepsilon}
+{1 - \varepsilon} \cdot M(\sigma^*)
+$$
 
-When predictions are wrong (new atom with no metadata,
-radical version change), the algorithm degrades to baseline
-tag-matching with LRH affinity. The scoring function still
-works — the `resource_fit` term becomes noise, but `affinity`
-and `availability` terms remain valid. Per Lindermayr & Megow
-(arXiv:2202.10199), the algorithm achieves a bounded
-competitive ratio independent of prediction quality.
+where $\alpha$ is the heuristic's base approximation ratio
+on perfectly-predicted inputs, and $\sigma^*$ is the optimal
+offline assignment. For small $\varepsilon$, this simplifies
+to $\alpha \cdot (1 + 2\varepsilon + O(\varepsilon^2))$.
+
+This bound cleanly separates two concerns: heuristic quality
+($\alpha$, a function of DAG structure and scoring function)
+and prediction degradation ($(1+\varepsilon)/(1-\varepsilon)$,
+a function of profile accuracy). The implementation can
+independently tune each axis.
+
+**Implementation note**: After each build, compute observed
+$\varepsilon$ from `|d_actual - d_predicted| / d_predicted`
+and track it via EMA. This provides a live monitorable
+metric for how close the system is to the proven bound.
+
+### Robustness (Machine-Checked — Theorem 3)
+
+When predictions are arbitrarily wrong ($\eta \to \infty$),
+the system self-heals:
+
+1. **Assignment stability** (Lemma 3.1): If the prediction
+   perturbation satisfies $2P < \Delta_{\min}$ (twice the
+   perturbation is less than the baseline scoring gap), then
+   $\sigma_H = \sigma_{\text{base}}$ — the heuristic makes
+   the same assignment as the prediction-free baseline.
+
+2. **EMA convergence**: Under sustained prediction error
+   $\eta \geq \eta_0 > 0$, the EMA of error magnitudes
+   satisfies $\text{EMA}_n \geq (1 - \gamma^n) \eta_0 +
+   \gamma^n E_0$, causing the prediction weight $\beta_e$
+   to decay geometrically toward zero.
+
+Together: bad predictions → EMA grows → $\beta_e$ decays →
+perturbation shrinks → eventually $2P < \Delta_{\min}$ →
+assignment equals baseline. The convergence is automatic
+and requires $O(\ln(\beta R_{\max}/\Delta_{\min}))$
+observations.
 
 ### Smoothness
 
 As prediction error increases gradually (incremental version
 changes, slowly shifting build profiles), scheduling quality
-degrades proportionally, not catastrophically. The EMA update
-rule adapts the historical profile over time, tracking drift.
+degrades proportionally via the $(1+\varepsilon)/(1-\varepsilon)$
+factor, not catastrophically. When error becomes sustained,
+the EMA decay mechanism automatically collapses the scoring
+function to the prediction-free baseline.
 
 ---
 
@@ -808,84 +841,76 @@ point selection is a potential novel contribution.
 
 ---
 
-## Appendix: Toward a Formal Model
+## Appendix: Formal Verification Results
 
-Scheduling with entry point DAGs, content-addressed
-deduplication, federated workers, and historical predictions
-is inherently complex. The heuristic algorithm described
-above is a practical starting point, but key properties
-should be formally modeled and proven sound.
+The scheduling model has been formally verified through a
+two-track approach. The formal model is defined in
+`docs/models/eos-scheduling.md`.
 
-### Proposed Formalization
+### Track A: Protocol Correctness (TLA+)
 
-**System model**:
+The dispatch protocol was model-checked across four DAG
+topologies (linear chain, diamond fork-join, convergence,
+independent) using TLC with weak fairness.
 
-- Let $G = (V, E)$ be the uncached derivation sub-DAG
-- Let $S \subseteq V$ be the selected entry points
-- Let $T_S = (S, E_S)$ be the induced entry point DAG
-- Let $W = \{w_1, ..., w_m\}$ be the set of workers
-- Let $\sigma: S \to W$ be the assignment function
-- Let $\hat{d}(v)$ be the predicted duration for derivation
-  $v$ (from `P[drv_name]`)
-- Let $d(v)$ be the actual duration (revealed on completion)
+**Verified properties:**
 
-**Properties to prove**:
+| Property                | Type     | Status |
+| :---------------------- | :------- | :----- |
+| Ordering soundness (P1) | Safety   | ✅     |
+| Capacity safety (P4)    | Safety   | ✅     |
+| Artifact completeness   | Safety   | ✅     |
+| Progress (P5)           | Liveness | ✅     |
+| Completion prop. (P6)   | Liveness | ✅     |
 
-1. **Coverage**: Every uncached derivation in $G$ is
-   covered by at least one entry point in $S$. Formally:
-   $\forall v \in V, \exists s \in S$ such that $v$ is in
-   the transitive closure of $s$ in $G$, or $v \in S$ itself.
-   This ensures no derivation is missed (total coverage).
+Key finding: `CascadeFail` is **required** for liveness.
+Without active failure propagation, dependent tasks hang
+in `pending`/`ready` indefinitely after a dependency fails.
+This must be implemented as a mandatory transition, not an
+optional recovery mechanism.
 
-2. **Ordering soundness**: The dispatch protocol respects
-   data dependencies. No entry point is dispatched to a
-   worker before all its dependency entry points have
-   completed and their outputs are available.
-   Formally: if $(s_i, s_j) \in E_S$ (entry point $s_j$
-   depends on $s_i$), then $s_j$ is dispatched only after
-   $s_i$'s build result is in the artifact store.
+See `docs/models/tla/` for specifications and topology
+model instantiations.
 
-3. **Store-level lock correctness**: Under concurrent execution
-   of overlapping entry points, builder-level store locks ensure
-   at-most-one execution per output path.
+### Track B: Optimization Quality (Lean 4)
 
-4. **Consistency bound**: _Given a fixed entry point DAG $T$_,
-   when predictions are accurate ($\hat{d}(v) \approx d(v)$
-   for all $v$), the makespan of the entry point DAG schedule
-   achieved by greedy assignment $\sigma_H$ is within a bounded
-   factor of the optimal offline schedule of $T$. We concede that
-   the entry point selection (graph coarsening) phase currently
-   lacks a formal competitive bound.
+Four theorems machine-checked with Mathlib. Zero `sorry`
+placeholders, zero custom `axiom` declarations.
 
-5. **Robustness bound**: When predictions are arbitrarily
-   wrong ($\eta \to \infty$), the schedule makespan is no worse
-   than a small constant factor of a baseline algorithm that ignores
-   predictions (tag matching with LRH affinity only), thanks to
-   the dynamic decay of the resource fit term's weight ($\beta_e \to 0$).
+| Theorem | Statement                                                                             | Status        |
+| :------ | :------------------------------------------------------------------------------------ | :------------ | --------- | ----- | ------------------------ | --- |
+| Thm 1   | Valid entry point selection exists (identity witness)                                 | ✅            |
+| Thm 2   | $M(\sigma_H) \leq \alpha \cdot \frac{1+\varepsilon}{1-\varepsilon} \cdot M(\sigma^*)$ | ✅            |
+| Thm 3   | Assignment stability under perturbation; EMA convergence                              | ✅            |
+| Thm 4   | Singleflight saves $                                                                  | \bigcup V'\_i | \leq \sum | V'\_i | $, equality iff disjoint | ✅  |
 
-6. **Liveness under federation**: In a federated deployment
-   where workers span multiple clusters with varying
-   latency, the dispatch protocol must not deadlock. If all
-   dependency entry points have completed, their outputs
-   must be reachable by the assigned worker within bounded
-   time (artifact store propagation latency). Failure propagation
-   via `CascadeFail` ensures that failed tasks do not cause
-   dependent entry points to hang indefinitely.
+All assumptions enter as explicit hypotheses on theorem
+signatures (non-negative durations, $\varepsilon < 1$,
+well-founded DAG order) or as type-level constraints
+(`Fintype`, `DecidableEq`). These correspond to inherent
+properties of the Rust type system and physical
+non-negativity.
 
-### Formalization Approach
+Key finding: Theorem 2's inductive step requires
+$\tau(s', s) \geq 0$ (transfer times are non-negative).
+The implementation must not encode cache time savings as
+negative transfer times — these are separate concerns.
 
-The formal model should be developed as a companion document
-to this ADR, potentially using:
+See `docs/models/lean/` for proof sources.
 
-- **TLA+ or Alloy** for verifying ordering soundness,
-  liveness, and failure cascade propagation (Track A)
-- **Competitive analysis** (from learning-augmented
-  algorithms theory) for consistency and robustness bounds
-  on a fixed DAG (Track B)
-- **Graph theory** for coverage relations
+### Remaining Open Items
 
-This is deferred to a follow-up effort but is considered
-essential for a system targeting global-scale deployment.
+1. **Federation liveness (P7)**: Requires real-time bounds
+   not expressible in TLA+ temporal logic. Mitigate with
+   configurable timeouts and worker reassignment.
+2. **Graph coarsening optimality**: The entry point
+   selection problem is NP-hard. Theorem 2 bounds
+   assignment quality on any fixed DAG, cleanly separating
+   it from DAG decomposition quality ($\alpha$).
+3. **μ-makespan transient bound**: During EMA convergence,
+   the quantitative makespan penalty is not mechanized.
+   Low risk: the transient is geometrically short and
+   capacity safety (Track A) holds throughout.
 
 ## Future Work: Federated Scale via Min-Cost Max-Flow (MCMF)
 
