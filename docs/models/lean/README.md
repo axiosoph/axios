@@ -77,10 +77,7 @@ the coarsening factor `α(ε̄) → 1` as the mean prediction error
 `ε̄ → 0`, conditionally closing the coarsening gap from
 Theorem 2 when predictions are accurate.
 
-**`Theorem5.lean`** — _Makespan Subadditivity._ Proves makespan subadditivity:
-the makespan of the union of task sets is bounded by the sum of their individual makespans.
-Theorem 5 establishes a baseline subadditivity bound. The scheduling-aware unified dominance
-result (M(σ_unified) ≤ M(σ_per)) is planned as a Phase 6 extension.
+**`Theorem5.lean`** — _Unified Coarsening Dominance._ Proves that the unified coarsening schedule (which has fewer scheduled nodes due to deduplication) achieves equal or better makespan than the per-request coarsening schedule under the Schedule model.
 
 **`Theorem6.lean`** — _CAS-Scheduling Bound._ Proves makespan bound
 under CAS deduplication with competitive ratio bounded by

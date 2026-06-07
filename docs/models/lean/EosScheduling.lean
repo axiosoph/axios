@@ -9,6 +9,7 @@ import EosScheduling.Theorem4Prime
 import EosScheduling.Schedule
 import EosScheduling.Theorem6
 import EosScheduling.Theorem7
+import EosScheduling.Coarsening
 
 
 

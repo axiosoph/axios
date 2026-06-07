@@ -3,65 +3,135 @@ Copyright (c) 2026 nrd. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: nrd, Antigravity
 -/
-import EosScheduling.Theorem2
+import EosScheduling.Defs
+import EosScheduling.Schedule
 import Mathlib.Algebra.Order.BigOperators.Group.Finset
+import Mathlib.Tactic.Linarith
+
 
 /-!
-# Theorem 5: Makespan Subadditivity
+# Theorem 5: Unified Coarsening Dominance
 
-This module formalizes and proves the Makespan Subadditivity theorem:
-the makespan of the unified global DAG is bounded by the sum of makespans
-of individual requests.
+This module formalizes and proves the Unified Coarsening Dominance theorem:
+under the Schedule model, a unified coarsening (which has fewer scheduled nodes
+due to deduplication) achieves equal or better makespan than the per-request coarsening.
 -/
+
+set_option linter.unusedSectionVars false
 
 open Finset
 
-variable {V : Type*} [Fintype V] [wf : WellFoundedRelation V]
+variable {V W : Type*} [DecidableEq V]
+variable {E : V → V → Prop} {τ : W → W → Real} {pool : WorkerPool W}
+variable {d load : V → Real}
 
--- Definition of makespan of a set of nodes
-noncomputable def makespan_of_set (d : V → Real) (τ : V → V → Real) (U : Finset V) : Real :=
-  WithBot.unbotD 0 (U.image (completion_time d τ)).max
 
--- Helper: completion time of any node is non-negative
-lemma completion_time_nonneg_global {d : V → Real} {τ : V → V → Real}
-    (hd : ∀ v, 0 ≤ d v) (hτ : ∀ u v, 0 ≤ τ u v) (v : V) :
-    0 ≤ completion_time d τ v := by
-  exact completion_time_nonneg hd hτ v
+/--
+Helper lemma to bound duration of unified coarsening by per-request coarsening.
+-/
+lemma d_unified_le_d_per (hd : ∀ v, 0 ≤ d v) {S_per S_unified : Finset V}
+    (h_sub : S_unified ⊆ S_per) (v : V) :
+    (if v ∈ S_unified then d v else 0) ≤ (if v ∈ S_per then d v else 0) := by
+  split_ifs with h1 h2 h3
+  · rfl
+  · exfalso; exact h2 (h_sub h1)
+  · exact hd v
+  · rfl
 
--- Helper: makespan of a set is non-negative
-lemma makespan_of_set_nonneg {d : V → Real} {τ : V → V → Real}
-    (hd : ∀ v, 0 ≤ d v) (hτ : ∀ u v, 0 ≤ τ u v) (U : Finset V) :
-    0 ≤ makespan_of_set d τ U := by
-  dsimp [makespan_of_set]
-  apply unbotD_max_nonneg
-  intro x hx
-  simp only [mem_image] at hx
-  rcases hx with ⟨v, _, rfl⟩
-  exact completion_time_nonneg_global hd hτ v
+/--
+Helper lemma to bound load of unified coarsening by per-request coarsening.
+-/
+lemma load_unified_le_load_per (hload : ∀ v, 0 ≤ load v) {S_per S_unified : Finset V}
+    (h_sub : S_unified ⊆ S_per) (v : V) :
+    (if v ∈ S_unified then load v else 0) ≤ (if v ∈ S_per then load v else 0) := by
+  split_ifs with h1 h2 h3
+  · rfl
+  · exfalso; exact h2 (h_sub h1)
+  · exact hload v
+  · rfl
 
--- Theorem 5: Makespan Subadditivity Inequality
-theorem theorem5_makespan_subadditivity [DecidableEq V] {R : Type*} [Fintype R]
-    (V_prime : R → Finset V) (d : V → Real) (τ : V → V → Real)
-    (hd : ∀ v, 0 ≤ d v) (hτ : ∀ u v, 0 ≤ τ u v) :
-    makespan_of_set d τ (univ.biUnion V_prime)
-      ≤ univ.sum (fun i => makespan_of_set d τ (V_prime i)) := by
+/--
+Restrict schedule helper.
+-/
+def restrict_schedule [Fintype V] (hd : ∀ v, 0 ≤ d v) (hload : ∀ v, 0 ≤ load v)
+    {S_per S_unified : Finset V} (h_sub : S_unified ⊆ S_per)
+    (σ_per : Schedule E (fun v => if v ∈ S_per then d v else 0)
+      (fun v => if v ∈ S_per then load v else 0) τ pool) :
+    Schedule E (fun v => if v ∈ S_unified then d v else 0)
+      (fun v => if v ∈ S_unified then load v else 0) τ pool where
+  worker := σ_per.worker
+  start := σ_per.start
+  h_start_nonneg := σ_per.h_start_nonneg
+  h_dep := by
+    intro u v h_edge
+    have h_dep_per := σ_per.h_dep u v h_edge
+    have h_d_le := d_unified_le_d_per hd h_sub u
+    linarith
+  h_cap := by
+    classical
+    intro w t
+    have h_cap_per := σ_per.h_cap w t
+    have h_sub_filter :
+      (univ.filter (fun v => σ_per.worker v = w ∧ σ_per.start v ≤ t ∧
+        t < σ_per.start v + if v ∈ S_unified then d v else 0))
+        ⊆ (univ.filter (fun v => σ_per.worker v = w ∧ σ_per.start v ≤ t ∧
+        t < σ_per.start v + if v ∈ S_per then d v else 0)) := by
+      intro v hv
+      simp only [mem_filter, mem_univ, true_and] at hv ⊢
+      rcases hv with ⟨h_w, h_st, h_dt⟩
+      have h_d_le := d_unified_le_d_per hd h_sub v
+      exact ⟨h_w, h_st, by linarith⟩
+    have h_sum_le1 :
+      (univ.filter (fun v => σ_per.worker v = w ∧ σ_per.start v ≤ t ∧
+        t < σ_per.start v + if v ∈ S_unified then d v else 0)).sum
+        (fun v => if v ∈ S_unified then load v else 0)
+      ≤ (univ.filter (fun v => σ_per.worker v = w ∧ σ_per.start v ≤ t ∧
+        t < σ_per.start v + if v ∈ S_unified then d v else 0)).sum
+        (fun v => if v ∈ S_per then load v else 0) := by
+      apply sum_le_sum
+      intro v _
+      exact load_unified_le_load_per hload h_sub v
+    have h_sum_le2 :
+      (univ.filter (fun v => σ_per.worker v = w ∧ σ_per.start v ≤ t ∧
+        t < σ_per.start v + if v ∈ S_unified then d v else 0)).sum
+        (fun v => if v ∈ S_per then load v else 0)
+      ≤ (univ.filter (fun v => σ_per.worker v = w ∧ σ_per.start v ≤ t ∧
+        t < σ_per.start v + if v ∈ S_per then d v else 0)).sum
+        (fun v => if v ∈ S_per then load v else 0) := by
+      apply sum_le_sum_of_subset_of_nonneg h_sub_filter
+      intro v _ _
+      split_ifs with h_mem
+      · exact hload v
+      · linarith
+    linarith
+
+/--
+Theorem 5: Unified Coarsening Dominance
+-/
+theorem theorem5_unified_coarsening_dominance [Fintype V]
+    (hd : ∀ v, 0 ≤ d v) (hload : ∀ v, 0 ≤ load v)
+    {S_per S_unified : Finset V} (h_sub : S_unified ⊆ S_per)
+    (σ_per : Schedule E (fun v => if v ∈ S_per then d v else 0)
+      (fun v => if v ∈ S_per then load v else 0) τ pool) :
+    schedule_makespan (restrict_schedule hd hload h_sub σ_per)
+      ≤ schedule_makespan σ_per := by
   classical
-  have h_sum_nonneg : 0 ≤ univ.sum (fun i => makespan_of_set d τ (V_prime i)) := by
-    apply Finset.sum_nonneg
-    intro i _
-    exact makespan_of_set_nonneg hd hτ (V_prime i)
-  dsimp [makespan_of_set] at *
-  rw [unbotD_max_le_iff h_sum_nonneg]
+  dsimp [schedule_makespan, restrict_schedule]
+  have h_nonneg : 0 ≤ WithBot.unbotD 0 (image (fun v => σ_per.start v +
+    (if v ∈ S_per then d v else 0)) univ).max := by
+    have h_ms_nonneg := schedule_makespan_nonneg σ_per
+      (fun v => by
+        split_ifs
+        · exact hd v
+        · rfl)
+    exact h_ms_nonneg
+  apply (unbotD_max_le_iff h_nonneg).mpr
   intro x hx
-  simp only [mem_image, mem_biUnion, mem_univ, true_and] at hx
-  rcases hx with ⟨v, ⟨i, hv⟩, rfl⟩
-  have h_mem_image : completion_time d τ v ∈ (V_prime i).image (completion_time d τ) := by
-    simp only [mem_image]
-    exact ⟨v, hv, rfl⟩
-  have h_le_ms : completion_time d τ v
-      ≤ WithBot.unbotD 0 ((V_prime i).image (completion_time d τ)).max := by
-    exact unbotD_max_ge_self h_mem_image
-  have h_le_sum : WithBot.unbotD 0 ((V_prime i).image (completion_time d τ)).max
-      ≤ univ.sum (fun j => WithBot.unbotD 0 ((V_prime j).image (completion_time d τ)).max) :=
-    Finset.single_le_sum (fun j _ => makespan_of_set_nonneg hd hτ (V_prime j)) (mem_univ i)
+  simp only [mem_image, mem_univ, true_and] at hx
+  rcases hx with ⟨v, rfl⟩
+  have h_mem : σ_per.start v + (if v ∈ S_per then d v else 0) ∈
+    image (fun v => σ_per.start v + if v ∈ S_per then d v else 0) univ := by
+    simp
+  have h_max := unbotD_max_ge_self h_mem
+  have h_d_le := d_unified_le_d_per hd h_sub v
   linarith

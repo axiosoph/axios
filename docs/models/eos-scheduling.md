@@ -585,15 +585,15 @@ _with equality holding iff the uncached sub-DAGs are pairwise disjoint._
 
 **Status**: Machine-checked in Lean 4 (Theorem4Prime.lean).
 
-#### Theorem 5: Makespan Subadditivity
+#### Theorem 5: Unified Coarsening Dominance
 
-_Let $R$ concurrent requests produce uncached sub-DAGs $G'_1, \ldots, G'_R$. Let $M(\sigma_{\text{unified}})$ be the makespan of the unified global DAG $G_\cup$, and $M(\sigma_i)$ be the makespan when each request is scheduled independently. Then:\_
+_Let $S_{\text{per}}$ be the per-request coarsened set of entry points, and $S_{\text{unified}} \subseteq S_{\text{per}}$ be the unified coarsened set of entry points under deduplication. For any valid schedule $\sigma_{\text{per}}$ on $S_{\text{per}}$, the restricted schedule $\sigma_{\text{unified}}$ on $S_{\text{unified}}$ satisfies:\_
 
-$$M(\sigma_{\text{unified}}) \leq \sum_{i=1}^R M(\sigma_i)$$
+$$M(\sigma_{\text{unified}}) \leq M(\sigma_{\text{per}})$$
 
-_with equality holding iff all requests have completely disjoint dependency trees._
+_where $M(\sigma)$ is the makespan of schedule $\sigma$._
 
-**Proof intuition**: Theorem 5 establishes a baseline subadditivity bound. The makespan of the union of task sets is bounded by the sum of their individual makespans due to the reduction of total work under structural deduplication. The scheduling-aware unified dominance result ($M(\sigma_{\text{unified}}) \leq M(\sigma_{\text{per\_request}})$) is planned as a Phase 6 extension.
+**Proof intuition**: Proves makespan dominance of the unified schedule over the per-request schedule. Because the unified coarsened set has fewer nodes to schedule due to deduplication (i.e. $S_{\text{unified}} \subseteq S_{\text{per}}$), a restricted schedule can be constructed that pointwise preserves or reduces task start times, durations, and load, thereby ensuring makespan dominance under the Schedule model.
 
 **Status**: Machine-checked in Lean 4 (Theorem5.lean).
 Zero `sorry`, zero custom `axiom`.
@@ -623,55 +623,56 @@ _Let $C \subseteq V$ be the cache state of the system. Let $\text{coarse} : \mat
 
 ## Validation
 
-| Check                              | Result    | Detail                                                                                 |
-| :--------------------------------- | :-------- | :------------------------------------------------------------------------------------- |
-| Coverage properties (1-4) coherent | PASS      | Identity witness mechanized in Lean 4 (Thm 1);                                         |
-|                                    |           | properties 1-4 are satisfiable and non-contradictory                                   |
-| Coverage existence (Thm 1)         | PASS      | Machine-checked in Lean 4. Constructs `EosModel` with                                  |
-|                                    |           | `S = V'`, `κ = id`. Zero `sorry`, zero `axiom`.                                        |
-| Ordering soundness (P1)            | PASS      | Model-checked in TLA+ across 4 topology models                                         |
-|                                    |           | (linear, diamond, convergence, independent)                                            |
-| Coverage completeness (P2)         | PASS      | Structural — guaranteed by `EosModel` total coverage                                   |
-|                                    |           | property, verified satisfiable by Thm 1                                                |
-| Artifact completeness (P3)         | PASS      | Model-checked in TLA+ (`ArtifactSafety` invariant)                                     |
-| Capacity safety (P4)               | PASS      | Model-checked in TLA+ under all interleavings                                          |
-| Liveness (P5, P6)                  | PASS      | Model-checked in TLA+ with `WF_vars(Next)` weak                                        |
-|                                    |           | fairness. All 4 topology models verify both properties                                 |
-| Federation liveness (P7)           | OPEN      | Requires real-time bounds ($\Diamond_{\leq\delta}$)                                    |
-|                                    |           | not expressible in standard TLA+ temporal logic.                                       |
-|                                    |           | Intentionally deferred — see note below                                                |
-| HoL immunity (P5')                 | PASS      | Model-checked in TLA+ under concurrent requests                                        |
-| Per-request completion (P6')       | PASS      | Model-checked in TLA+ under concurrent requests                                        |
-| Frozen stability (P8)              | PASS      | Model-checked in TLA+ under dynamic re-coarsening                                      |
-| Work conservation (P9)             | PASS      | Model-checked in TLA+ under concurrent requests                                        |
-| Transient failure recovery (P10)   | PASS      | Model-checked in TLA+ under transient failures                                         |
-| Failure isolation (P11)            | PASS      | Model-checked in TLA+ under deterministic and cascade failures                         |
-| Consistency bound (Thm 2)          | PASS      | Machine-checked in Lean 4. Proves                                                      |
-|                                    |           | $M(\sigma_H) \leq \alpha (1+\varepsilon)/(1-\varepsilon) \cdot M(\sigma^*)$            |
-|                                    |           | via well-founded induction on DAG completion times                                     |
-| Adaptive consistency (Thm 2')      | PASS      | Machine-checked in Lean 4 (Theorem2Prime.lean)                                         |
-| Robustness — assignment stability  | PASS      | Lean 4 Lemma 3.1: perturbation $2P < \Delta_{\min}$ implies                            |
-|                                    |           | $\sigma_H = \sigma_\text{base}$ (assignment identity)                                  |
-| Robustness — EMA convergence       | PASS      | Lean 4: under sustained error $\eta \geq \eta_0$,                                      |
-|                                    |           | EMA $\geq (1 - \gamma^n) \eta_0 + \gamma^n E_0$                                        |
-| Robustness — μ-makespan bound      | OPEN      | Quantitative bound during transient not mechanized.                                    |
-|                                    |           | Low risk — transient is short (geometric convergence)                                  |
-|                                    |           | and capacity safety holds throughout (Track A)                                         |
-| Structural deduplication (Thm 4)   | PASS      | Machine-checked in Lean 4. Proves                                                      |
-|                                    |           | $\lvert\bigcup V'_i\rvert \leq \sum \lvert V'_i\rvert$                                 |
-|                                    |           | with equality iff pairwise disjoint                                                    |
-| Weighted deduplication (Thm 4')    | PASS      | Machine-checked in Lean 4. Generalizes Thm 4 to                                        |
-|                                    |           | duration-weighted computation cost sums.                                               |
-| Makespan Subadditivity (Thm 5)     | PASS      | Machine-checked in Lean 4 (Theorem5.lean)                                              |
-| CAS-scheduling bound (Thm 6)       | PASS      | Machine-checked in Lean 4. Bounds unified makespan                                     |
-|                                    |           | as $M(\sigma_\cup) \leq \alpha(1+\rho \cdot \|R\|) \max_i M(\sigma_{\text{indep},i})$. |
-| Re-coarsening convergence (Thm 7)  | PASS      | Machine-checked in Lean 4. Proves monotonicity and                                     |
-|                                    |           | convergence of coarsened EPs under cache growth.                                       |
-| Graph coarsening optimality        | COND PASS | Bounded by $\alpha(\bar{\epsilon})$; competitive gap                                   |
-|                                    |           | closes dynamically as prediction quality improves                                      |
-| Minimality                         | PASS      | Two-track decomposition is minimal — protocol and                                      |
-|                                    |           | optimization are formally independent concerns                                         |
-| External adequacy                  | PASS      | Model captures all mechanisms described in ADR-0004                                    |
+| Check                                | Result    | Detail                                                                                 |
+| :----------------------------------- | :-------- | :------------------------------------------------------------------------------------- |
+| Coverage properties (1-4) coherent   | PASS      | Identity witness mechanized in Lean 4 (Thm 1);                                         |
+|                                      |           | properties 1-4 are satisfiable and non-contradictory                                   |
+| Coverage existence (Thm 1)           | PASS      | Machine-checked in Lean 4. Constructs `EosModel` with                                  |
+|                                      |           | `S = V'`, `κ = id`. Zero `sorry`, zero `axiom`.                                        |
+| Ordering soundness (P1)              | PASS      | Model-checked in TLA+ across 4 topology models                                         |
+|                                      |           | (linear, diamond, convergence, independent)                                            |
+| Coverage completeness (P2)           | PASS      | Structural — guaranteed by `EosModel` total coverage                                   |
+|                                      |           | property, verified satisfiable by Thm 1                                                |
+| Artifact completeness (P3)           | PASS      | Model-checked in TLA+ (`ArtifactSafety` invariant)                                     |
+| Capacity safety (P4)                 | PASS      | Model-checked in TLA+ under all interleavings                                          |
+| Liveness (P5, P6)                    | PASS      | Model-checked in TLA+ with `WF_vars(Next)` weak                                        |
+|                                      |           | fairness. All 4 topology models verify both properties                                 |
+| Federation liveness (P7)             | OPEN      | Requires real-time bounds ($\Diamond_{\leq\delta}$)                                    |
+|                                      |           | not expressible in standard TLA+ temporal logic.                                       |
+|                                      |           | Intentionally deferred — see note below                                                |
+| HoL immunity (P5')                   | PASS      | Model-checked in TLA+ under concurrent requests                                        |
+| Per-request completion (P6')         | PASS      | Model-checked in TLA+ under concurrent requests                                        |
+| Frozen stability (P8)                | PASS      | Model-checked in TLA+ under dynamic re-coarsening                                      |
+| Work conservation (P9)               | PASS      | Model-checked in TLA+ under concurrent requests                                        |
+| Transient failure recovery (P10)     | PASS      | Model-checked in TLA+ under transient failures                                         |
+| Failure isolation (P11)              | PASS      | Model-checked in TLA+ under deterministic and cascade failures                         |
+| Consistency bound (Thm 2)            | PASS      | Machine-checked in Lean 4. Proves                                                      |
+|                                      |           | $M(\sigma_H) \leq \alpha (1+\varepsilon)/(1-\varepsilon) \cdot M(\sigma^*)$            |
+|                                      |           | via well-founded induction on DAG completion times                                     |
+| Adaptive consistency (Thm 2')        | PASS      | Machine-checked in Lean 4 (Theorem2Prime.lean)                                         |
+| Robustness — assignment stability    | PASS      | Lean 4 Lemma 3.1: perturbation $2P < \Delta_{\min}$ implies                            |
+|                                      |           | $\sigma_H = \sigma_\text{base}$ (assignment identity)                                  |
+| Robustness — EMA convergence         | PASS      | Lean 4: under sustained error $\eta \geq \eta_0$,                                      |
+|                                      |           | EMA $\geq (1 - \gamma^n) \eta_0 + \gamma^n E_0$                                        |
+| Robustness — μ-makespan bound        | OPEN      | Quantitative bound during transient not mechanized.                                    |
+|                                      |           | Low risk — transient is short (geometric convergence)                                  |
+|                                      |           | and capacity safety holds throughout (Track A)                                         |
+| Structural deduplication (Thm 4)     | PASS      | Machine-checked in Lean 4. Proves                                                      |
+|                                      |           | $\lvert\bigcup V'_i\rvert \leq \sum \lvert V'_i\rvert$                                 |
+|                                      |           | with equality iff pairwise disjoint                                                    |
+| Weighted deduplication (Thm 4')      | PASS      | Machine-checked in Lean 4. Generalizes Thm 4 to                                        |
+|                                      |           | duration-weighted computation cost sums.                                               |
+| Unified Coarsening Dominance (Thm 5) | PASS      | Machine-checked in Lean 4. Proves                                                      |
+|                                      |           | $M(\sigma_{\text{unified}}) \leq M(\sigma_{\text{per}})$ via schedule restriction.     |
+| CAS-scheduling bound (Thm 6)         | PASS      | Machine-checked in Lean 4. Bounds unified makespan                                     |
+|                                      |           | as $M(\sigma_\cup) \leq \alpha(1+\rho \cdot \|R\|) \max_i M(\sigma_{\text{indep},i})$. |
+| Re-coarsening convergence (Thm 7)    | PASS      | Machine-checked in Lean 4. Proves monotonicity and                                     |
+|                                      |           | convergence of coarsened EPs under cache growth.                                       |
+| Graph coarsening optimality          | COND PASS | Bounded by $\alpha(\bar{\epsilon})$; competitive gap                                   |
+|                                      |           | closes dynamically as prediction quality improves                                      |
+| Minimality                           | PASS      | Two-track decomposition is minimal — protocol and                                      |
+|                                      |           | optimization are formally independent concerns                                         |
+| External adequacy                    | PASS      | Model captures all mechanisms described in ADR-0004                                    |
 
 **Remaining open items:**
 
@@ -709,7 +710,7 @@ Both tracks of formal verification are complete:
   (Consistency Bound), Theorem 2' (Adaptive Consistency),
   Theorem 3 (Robustness), Theorem 4 (Structural Deduplication),
   Theorem 4' (Weighted Structural Deduplication), Theorem 5
-  (Makespan Subadditivity), Theorem 6 (CAS-Scheduling Bound),
+  (Unified Coarsening Dominance), Theorem 6 (CAS-Scheduling Bound),
   Theorem 7 (Re-coarsening Convergence). See `models/lean/`.
 
 ### For Implementation (Derived from Proofs)
