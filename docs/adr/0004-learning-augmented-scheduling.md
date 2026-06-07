@@ -240,6 +240,7 @@ A node $v$ is promoted to a standalone entry point ($v \in S$) if:
 $$\text{predicted\_cost}(v) > \frac{\theta_{\text{cost}}}{1 + \text{conf}(v) \cdot \theta_{\text{scale}}} \;\lor\; \text{fan\_in}(v) > \theta_{\text{fanin}} \;\lor\; \text{subgraph\_cost}(v) > \frac{\theta_{\text{subgraph}}}{1 + \text{conf}(v) \cdot \theta_{\text{scale}}}$$
 
 Where:
+
 - **Troublesomeness**: High predicted cost or resource footprint.
 - **Convergence (Fan-in)**: High fan-in node (many direct dependents).
 - **Subgraph Volume**: Large aggregate transitive cost below $v$.
@@ -247,6 +248,7 @@ Where:
 
 **Frozen/Mutable Partition & Re-Coarsening**:
 The global scheduling state is partitioned into two regions:
+
 1. **FROZEN partition**: $\{ ep \mid ep.\text{status} \in \{\text{dispatched}, \text{complete}, \text{failed}\} \}$. This boundary is sacred. Dispatched EPs are immutable: their coverage scope $\kappa(v, s)$ and worker assignment can never change (Frozen Stability invariant).
 2. **MUTABLE partition**: $\{ ep \mid ep.\text{status} \in \{\text{pending}, \text{ready}\} \} \cup \{ \text{unassigned nodes} \}$. These EPs can be freely restructured (merged, split, promoted, demoted) by incremental re-coarsening when new requests arrive or cache updates occur (Mutable Freedom invariant).
 
@@ -284,6 +286,7 @@ The state transitions are governed by the following event handlers:
 
 **Two-Level Deduplication & CAS Idempotency**:
 Deduplication is achieved at two distinct levels:
+
 1. **Entry Point Level (Unified DAG)**: Structural deduplication. Because requests merge into $G_\cup$, identical derivation hashes map to the same node. This is the primary defense against redundant computation.
 2. **Derivation Level (CAS Idempotency)**: Unlike Nix's legacy model which relies on store-level locks, Snix store operations (gRPC `BlobService`, `DirectoryService`, `PathInfoService`) are content-addressed and **purely idempotent**. Concurrent writes of the same outputs both succeed. If two builders race on the same derivation, they both execute the computation, incurring **redundant CPU/resource cost** rather than lock contention. The builder's internal `has()` check provides a partial defense by skipping a build if it finishes after another, but the scheduler's convergence-point promotion is the primary mechanism to prevent overlapping scopes from triggering wasted computation.
 
@@ -383,13 +386,14 @@ pub trait SchedulerStrategy {
     // 1. Total coverage: every EP is assigned to some worker
     // 2. Dependency ordering: if A -> B in EP DAG, B does not start before A completes
     // 3. Worker capacity: peak memory/CPU does not exceed worker limits
-    
+
     // Competitive Makespan Bound:
     fn alpha_bound(&self) -> f64;
 }
 ```
 
 The Eos scheduling daemon utilizes this trait boundary to support three swappable strategy backends:
+
 1. **HEFT (Primary)**: The default active strategy. HEFT constructs a time-slotted execution plan. It is highly efficient ($O(|S|^2 \cdot |W|)$) and provides a provable competitive bound ($\alpha_{\text{heft}}$) mechanized in Lean 4.
 2. **Greedy (Fallback)**: A low-overhead fallback strategy activated under high prediction error or missing profiles. It assigns tasks greedily to the highest scoring cache-affinity worker, satisfying basic capacity safety.
 3. **MILP/MCMF (Deferred)**: A global solver strategy reserved for federated scale ($|W| > 1000$). It solves the JIT assignment globally via mixed-integer programming or min-cost max-flow, operating over the coarsened Atom DAG. Because the graph size is naturally bounded ($|S| \leq 20$), the solver completes in sub-millisecond time, bypassing NP-hardness in practice.
@@ -477,18 +481,18 @@ linear in the DAG size plus the product of entry points
 and workers. No phase has exponential or super-polynomial
 cost.
 
-| Phase                 | Operation                                     | Complexity                                            |
-| :-------------------- | :-------------------------------------------- | :---------------------------------------------------- |
-| DAG construction      | Topological sort + cache filtering            | $O(\|V'\| + \|E'\|)$                                  |
-| Entry point selection | Greedy top-down walk with fan-in/cost checks  | $O(\|V'\| + \|E'\|)$                                  |
-| EP DAG derivation     | Transitive closure on selected set            | $O(\|S\|^2)$ worst case                               |
-| Scoring (per EP)      | Evaluate $\text{score}(w, e)$ for all workers | $O(\|W\| \cdot d)$                                    |
-| Full dispatch loop    | Score + assign all $\|S\|$ entry points       | $O(\|S\| \cdot \|W\| \cdot d)$                        |
-| LRH lookup            | Per-assignment cache affinity                 | $O(\log\|R\| + C)$                                    |
-| Singleflight check    | Hash map lookup/insert                        | $O(1)$ amortized                                      |
-| EMA update            | Per-completion profile update                 | $O(1)$                                                |
+| Phase                 | Operation                                     | Complexity                                             |
+| :-------------------- | :-------------------------------------------- | :----------------------------------------------------- |
+| DAG construction      | Topological sort + cache filtering            | $O(\|V'\| + \|E'\|)$                                   |
+| Entry point selection | Greedy top-down walk with fan-in/cost checks  | $O(\|V'\| + \|E'\|)$                                   |
+| EP DAG derivation     | Transitive closure on selected set            | $O(\|S\|^2)$ worst case                                |
+| Scoring (per EP)      | Evaluate $\text{score}(w, e)$ for all workers | $O(\|W\| \cdot d)$                                     |
+| Full dispatch loop    | Score + assign all $\|S\|$ entry points       | $O(\|S\| \cdot \|W\| \cdot d)$                         |
+| LRH lookup            | Per-assignment cache affinity                 | $O(\log\|R\| + C)$                                     |
+| Singleflight check    | Hash map lookup/insert                        | $O(1)$ amortized                                       |
+| EMA update            | Per-completion profile update                 | $O(1)$                                                 |
 | HEFT re-planning      | per-event full EP DAG scheduling              | $O(\|S\|^2 \cdot \|W\|)$ amortized by event coalescing |
-| **Total pipeline**    | **One scheduling pass**                       | $O(\|V'\| + \|E'\| + \|S\| \cdot \max(\|S\|, \|W\|))$ |
+| **Total pipeline**    | **One scheduling pass**                       | $O(\|V'\| + \|E'\| + \|S\| \cdot \max(\|S\|, \|W\|))$  |
 
 Where:
 
@@ -570,6 +574,7 @@ M(\sigma_H) \leq \alpha(\bar{\epsilon}) \cdot \frac{1 + \bar{\epsilon}}{1 - \bar
 $$
 
 Where:
+
 - $\bar{\epsilon}$ is the average prediction error magnitude.
 - $\alpha(\bar{\epsilon})$ is a monotonically non-increasing function representing the quality of the selected entry-point DAG coarsening:
   $$\alpha(0) = \alpha_{\text{heft}} \quad \text{and} \quad \alpha(1) \leq \alpha_{\text{max}}$$
