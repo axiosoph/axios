@@ -1157,17 +1157,20 @@ model instantiations.
 
 ### Track B: Optimization Quality (Lean 4)
 
-Six theorems machine-checked with Mathlib. Zero `sorry`
+Nine theorems machine-checked with Mathlib. Zero `sorry`
 placeholders, zero custom `axiom` declarations.
 
-| Theorem | Statement                                                                                   | Status |
-| :------ | :------------------------------------------------------------------------------------------ | :----- |
-| Thm 1   | Valid entry point selection exists (identity witness)                                       | ✅     |
-| Thm 2   | $M(\sigma_H) \leq \alpha \cdot \frac{1+\varepsilon}{1-\varepsilon} \cdot M(\sigma^*)$       | ✅     |
-| Thm 2'  | Adaptive bound: $\alpha(\bar\varepsilon) \to 1$ as $\bar\varepsilon \to 0$                  | ✅     |
-| Thm 3   | Assignment stability under perturbation; EMA convergence                                    | ✅     |
-| Thm 4   | Singleflight: $\lvert\bigcup V'_i\rvert \leq \sum \lvert V'_i\rvert$, equality iff disjoint | ✅     |
-| Thm 5   | HEFT makespan within $(2 - 1/\|W\|)$ of optimal on the EP DAG                               | ✅     |
+| Theorem | Statement                                                                                  | Status |
+| :------ | :----------------------------------------------------------------------------------------- | :----- | --- | --- |
+| Thm 1   | Valid entry point selection exists (identity witness)                                      | ✅     |
+| Thm 2   | $M(\sigma_H) \leq \alpha \cdot \frac{1+\varepsilon}{1-\varepsilon} \cdot M(\sigma^*)$      | ✅     |
+| Thm 2'  | Adaptive bound: $\alpha(\bar\varepsilon) \to 1$ as $\bar\varepsilon \to 0$                 | ✅     |
+| Thm 3   | Assignment stability under perturbation; EMA convergence                                   | ✅     |
+| Thm 4   | Structural: $\lvert\bigcup V'_i\rvert \leq \sum \lvert V'_i\rvert$, equality iff disjoint  | ✅     |
+| Thm 4'  | Weighted: $\sum_{v \in \bigcup V'_i} d(v) \leq \sum_i \sum_{v \in V'_i} d(v)$, disjoint Eq | ✅     |
+| Thm 5   | HEFT makespan within $(2 - 1/\|W\|)$ of optimal on the EP DAG                              | ✅     |
+| Thm 6   | CAS-scheduling makespan competitive ratio bounded by $\alpha(1 + \rho                      | R      | )$  | ✅  |
+| Thm 7   | Re-coarsening convergence: monotonicity and finite-step cache convergence                  | ✅     |
 
 All assumptions enter as explicit hypotheses on theorem
 signatures (non-negative durations, $\varepsilon < 1$,

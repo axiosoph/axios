@@ -32,18 +32,24 @@ Subsequent builds are incremental.
 EosScheduling.lean            Root module — imports all theorem files
 EosScheduling/
   Defs.lean                   Shared definitions
+  Schedule.lean               Scheduling model infrastructure
   Theorem1.lean               Coverage Existence
   Theorem2.lean               Consistency Bound
   Theorem2Prime.lean          Adaptive Consistency
   Theorem3.lean               Robustness
-  Theorem4.lean               Singleflight Deduplication
+  Theorem4.lean               Structural Deduplication
+  Theorem4Prime.lean          Weighted Structural Deduplication
   Theorem5.lean               HEFT Makespan Bound
+  Theorem6.lean               CAS-Scheduling Bound
+  Theorem7.lean               Re-coarsening Convergence
 ```
 
 **`Defs.lean`** — DAG path reachability (`PathNoS`), the `EosModel`
 structure encoding the four coverage properties (total coverage,
 self-coverage, transitive containment, downward closure), and the
 `WellFounded` DAG edge relation.
+
+**`Schedule.lean`** — Defines `WorkerPool` and `Schedule` structures encoding resource capacity and dependency constraints, defines `schedule_makespan`, and proves makespan lower bounds under worker contention.
 
 **`Theorem1.lean`** — _Coverage Existence._ Constructs the identity
 witness (`S = univ, κ = id`) proving a valid `EosModel` exists for
@@ -58,9 +64,13 @@ stability — bounded perturbation doesn't change the greedy
 assignment) and EMA lower bound (geometric convergence under
 sustained prediction error).
 
-**`Theorem4.lean`** — _Singleflight Deduplication._ Proves
+**`Theorem4.lean`** — _Structural Deduplication._ Proves
 `|⋃ V'_i| ≤ Σ|V'_i|` with equality iff pairwise disjoint (both
 directions).
+
+**`Theorem4Prime.lean`** — _Weighted Structural Deduplication._ Generalizes
+Theorem 4 from cardinality to duration-weighted sums over union,
+with equality iff pairwise disjoint.
 
 **`Theorem2Prime.lean`** — _Adaptive Consistency._ Proves that
 the coarsening factor `α(ε̄) → 1` as the mean prediction error
@@ -71,6 +81,13 @@ Theorem 2 when predictions are accurate.
 on the EP DAG achieves makespan within `(2 − 1/|W|)` of the
 optimal schedule, replacing the earlier myopic greedy dispatch
 with a provably bounded global priority ordering.
+
+**`Theorem6.lean`** — _CAS-Scheduling Bound._ Proves makespan bound
+under CAS deduplication with competitive ratio bounded by
+`α(1 + ρ |R|)` against the optimal independent makespan.
+
+**`Theorem7.lean`** — _Re-coarsening Convergence._ Proves monotonicity and
+convergence of the coarsened entry point set under incremental cache growth.
 
 ## Relationship to the Project
 

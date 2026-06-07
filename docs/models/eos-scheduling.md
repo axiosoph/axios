@@ -552,19 +552,17 @@ transient window is not mechanized (low risk — the
 transient is geometrically short and capacity safety P4
 holds throughout via Track A).
 
-#### Theorem 4: Singleflight Deduplication Savings (Track B Optimization)
+#### Theorem 4: Structural Deduplication Savings (Track B Optimization)
 
 _Let $R$ concurrent requests produce derivation DAGs
-$G_1, \ldots, G_R$ with shared uncached sub-DAGs. If the optional
-scheduler-level singleflight optimization is enabled, total build work is
+$G_1, \ldots, G_R$ with shared uncached sub-DAGs. Total build work is
 $|\bigcup_{i=1}^{R} V'_i|$ instead of $\sum_{i=1}^{R} |V'_i|$ builds,
 preventing duplicate worker slot allocation._
 
 **Proof intuition**: Content-addressed hashing ensures
 $\text{hash}(v) = \text{hash}(u) \iff v = u$ (derivations
 are identical iff their hashes match, by deterministic
-evaluation). The singleflight map keys on hash, so identical
-derivations across requests coalesce. $\square$
+evaluation). Identical derivations across requests coalesce in the global DAG. $\square$
 
 The savings ratio is:
 $$\rho = \frac{|\bigcup V'_i|}{\sum |V'_i|}$$
@@ -572,6 +570,20 @@ $$\rho = \frac{|\bigcup V'_i|}{\sum |V'_i|}$$
 In practice, $\rho$ is small when requests share common
 dependencies (e.g., many projects depend on `openssl`),
 yielding large savings.
+
+**Status**: Machine-checked in Lean 4 (Theorem4.lean).
+
+#### Theorem 4': Weighted Structural Deduplication
+
+_Let $R$ concurrent requests produce uncached sub-DAGs $V'_1, \ldots, V'_R$. Let $d : V \to \mathbb{R}_{\geq 0}$ be the duration-weighted cost of each node. Then:\_
+
+$$\sum_{v \in \bigcup V'_i} d(v) \leq \sum_{i=1}^R \sum_{v \in V'_i} d(v)$$
+
+_with equality holding iff the uncached sub-DAGs are pairwise disjoint._
+
+**Proof intuition**: This generalizes Theorem 4 from cardinality to duration-weighted sums, directly capturing the total computation reduction from content-addressed storage deduplication. Formally proved in Lean 4 using set-theoretic properties.
+
+**Status**: Machine-checked in Lean 4 (Theorem4Prime.lean).
 
 #### Theorem 5: Unified Coarsening Dominance
 
@@ -586,12 +598,33 @@ _with equality holding iff all requests have completely disjoint dependency tree
 **Status**: Machine-checked in Lean 4 (Theorem5.lean).
 Zero `sorry`, zero custom `axiom`.
 
+#### Theorem 6: CAS-Scheduling Bound
+
+_Let $R$ concurrent requests produce uncached sub-DAGs $V'_1, \ldots, V'_R$. Let $\sigma_{\text{unified}}$ be the unified HEFT schedule on $G_\cup = \bigcup G'_i$ and $\sigma_{\text{indep}, i}$ be the independent schedules. Let $\rho = \frac{\sum_{v \in \bigcup V'_i} d(v)}{\sum_{i=1}^R \sum_{v \in V'_i} d(v)}$ be the deduplication factor. Then there exists a unified schedule $\sigma_\cup$ such that:\_
+
+$$M(\sigma_\cup) \leq \alpha (1 + \rho \cdot |R|) \cdot \max_i M(\sigma_{\text{indep}, i})$$
+
+**Proof intuition**: This connects CAS deduplication to scheduling quality, bounding makespan under worker contention. It uses Theorem 4' and shows that structural sharing in a CAS store directly tightens the scheduling quality bound compared to the sum of independent makespans.
+
+**Status**: Machine-checked in Lean 4 (Theorem6.lean).
+
+#### Theorem 7: Re-coarsening Convergence
+
+_Let $C \subseteq V$ be the cache state of the system. Let $\text{coarse} : \mathcal{P}(V) \to \mathcal{P}(V)$ be the confidence-gated coarsening function selecting entry points from the uncached sub-DAG. Then:_
+
+1. _Monotonicity: If $C_1 \subseteq C_2$, then $|\text{coarse}(C_2)| \leq |\text{coarse}(C_1)|$._
+2. _Convergence: Under strict incremental cache growth, the active entry point set converges to $\emptyset$ in at most $|V|$ steps._
+
+**Proof intuition**: Monotonicity is verified because a larger cache reduces the size of the uncached sub-DAG, yielding fewer or equal candidate entry points. Convergence follows because the uncached set strictly shrinks with each cache update, terminating in at most $|V|$ steps on any finite DAG.
+
+**Status**: Machine-checked in Lean 4 (Theorem7.lean).
+
 ---
 
 ## Validation
 
 | Check                              | Result    | Detail                                                                      |
-| :--------------------------------- | :-------- | :-------------------------------------------------------------------------- |
+| :--------------------------------- | :-------- | :-------------------------------------------------------------------------- | --- | ------------------------------------- |
 | Coverage properties (1-4) coherent | PASS      | Identity witness mechanized in Lean 4 (Thm 1);                              |
 |                                    |           | properties 1-4 are satisfiable and non-contradictory                        |
 | Coverage existence (Thm 1)         | PASS      | Machine-checked in Lean 4. Constructs `EosModel` with                       |
@@ -624,10 +657,16 @@ Zero `sorry`, zero custom `axiom`.
 | Robustness — μ-makespan bound      | OPEN      | Quantitative bound during transient not mechanized.                         |
 |                                    |           | Low risk — transient is short (geometric convergence)                       |
 |                                    |           | and capacity safety holds throughout (Track A)                              |
-| Singleflight deduplication (Thm 4) | PASS      | Machine-checked in Lean 4. Proves                                           |
+| Structural deduplication (Thm 4)   | PASS      | Machine-checked in Lean 4. Proves                                           |
 |                                    |           | $\lvert\bigcup V'_i\rvert \leq \sum \lvert V'_i\rvert$                      |
 |                                    |           | with equality iff pairwise disjoint                                         |
+| Weighted deduplication (Thm 4')    | PASS      | Machine-checked in Lean 4. Generalizes Thm 4 to                             |
+|                                    |           | duration-weighted computation cost sums.                                    |
 | Unified coarsening (Thm 5)         | PASS      | Machine-checked in Lean 4 (Theorem5.lean)                                   |
+| CAS-scheduling bound (Thm 6)       | PASS      | Machine-checked in Lean 4. Bounds unified makespan                          |
+|                                    |           | as $M(\sigma\_\cup) \leq \alpha(1+\rho                                      | R   | ) \max*i M(\sigma*{\text{indep},i})$. |
+| Re-coarsening convergence (Thm 7)  | PASS      | Machine-checked in Lean 4. Proves monotonicity and                          |
+|                                    |           | convergence of coarsened EPs under cache growth.                            |
 | Graph coarsening optimality        | COND PASS | Bounded by $\alpha(\bar{\epsilon})$; competitive gap                        |
 |                                    |           | closes dynamically as prediction quality improves                           |
 | Minimality                         | PASS      | Two-track decomposition is minimal — protocol and                           |
@@ -665,11 +704,13 @@ Both tracks of formal verification are complete:
   with multi-request DAG merging, cache-skip, cancellation,
   transient failure, and failure cascading. See `models/tla/`.
 - **Track B (Lean 4)**: Optimization quality machine-checked.
-  Zero `sorry`, zero custom `axiom`. Six theorems verified
+  Zero `sorry`, zero custom `axiom`. Nine theorems verified
   with Mathlib: Theorem 1 (Coverage Existence), Theorem 2
   (Consistency Bound), Theorem 2' (Adaptive Consistency),
   Theorem 3 (Robustness), Theorem 4 (Structural Deduplication),
-  Theorem 5 (Unified Coarsening Dominance). See `models/lean/`.
+  Theorem 4' (Weighted Structural Deduplication), Theorem 5
+  (Unified Coarsening Dominance), Theorem 6 (CAS-Scheduling Bound),
+  Theorem 7 (Re-coarsening Convergence). See `models/lean/`.
 
 ### For Implementation (Derived from Proofs)
 
@@ -705,12 +746,11 @@ Vec<EntryPointHash>>`. The `EosModel` properties (1-4)
    $\tau$. The implementation must not conflate transfer cost
    with cache benefit in the same variable.
 
-6. **Singleflight map keyed by derivation hash**: Theorem 4
+6. **Structural deduplication keyed by derivation hash**: Theorem 4
    operates on abstract set families. In implementation, the
-   `DashMap<DrvHash, SharedFuture<BuildResult>>` singleflight
-   map is the concrete instantiation. The theorem guarantees
-   deduplication savings exactly equal the overlap between
-   concurrent requests' uncached sub-DAGs.
+   content-addressed global DAG merging is the concrete instantiation.
+   The theorem guarantees deduplication savings exactly equal the overlap
+   between concurrent requests' uncached sub-DAGs.
 
 7. **EMA decay as self-healing mechanism**: The EMA lower
    bound proof guarantees that under sustained prediction
