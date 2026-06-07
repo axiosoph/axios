@@ -33,6 +33,7 @@ EosScheduling.lean            Root module — imports all theorem files
 EosScheduling/
   Defs.lean                   Shared definitions
   Schedule.lean               Scheduling model infrastructure
+  Coarsening.lean             Coarsening function model
   HEFT.lean                   HEFT List-Scheduling Bound
   Theorem1.lean               Coverage Existence
   Theorem2.lean               Consistency Bound
@@ -40,9 +41,10 @@ EosScheduling/
   Theorem3.lean               Robustness
   Theorem4.lean               Structural Deduplication
   Theorem4Prime.lean          Weighted Structural Deduplication
-  Theorem5.lean               Makespan Subadditivity
+  Theorem5.lean               Unified Coarsening Dominance
   Theorem6.lean               CAS-Scheduling Bound
   Theorem7.lean               Re-coarsening Convergence
+  MainTheorem.lean            End-to-End CAS-Scheduling Bound
 ```
 
 **`Defs.lean`** — DAG path reachability (`PathNoS`), the `EosModel`
@@ -86,6 +88,16 @@ Theorem 2 when predictions are accurate.
 
 **`Theorem7.lean`** — _Re-coarsening Convergence._ Proves monotonicity and
 convergence of the coarsened entry point set under incremental cache growth.
+
+**`Coarsening.lean`** — _Coarsening Function Model._ Formalizes the
+coarsening function as a Lean structure with monotonicity under cache growth
+and subadditivity under request union. Derives Theorem 7 convergence as
+corollaries of a `Coarsening` instance.
+
+**`MainTheorem.lean`** — _End-to-End CAS-Scheduling Bound._ Composes the
+full proof chain (Schedule → HEFT → Thm 4' → Thm 5 → Thm 6) into a single
+theorem statement with all hypotheses explicitly justified. This is the
+paper's "punchline" theorem.
 
 ## Relationship to the Project
 

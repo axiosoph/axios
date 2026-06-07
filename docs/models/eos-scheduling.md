@@ -631,7 +631,7 @@ _Let $C \subseteq V$ be the cache state of the system. Let $\text{coarse} : \mat
 |                                      |           | `S = V'`, `κ = id`. Zero `sorry`, zero `axiom`.                                        |
 | Ordering soundness (P1)              | PASS      | Model-checked in TLA+ across 4 topology models                                         |
 |                                      |           | (linear, diamond, convergence, independent)                                            |
-| Coverage completeness (P2)           | PASS      | Structural — guaranteed by `EosModel` total coverage                                   |
+| Coverage completeness (P2)           | PASS      | Track B (Lean) — guaranteed by `EosModel` total coverage                               |
 |                                      |           | property, verified satisfiable by Thm 1                                                |
 | Artifact completeness (P3)           | PASS      | Model-checked in TLA+ (`ArtifactSafety` invariant)                                     |
 | Capacity safety (P4)                 | PASS      | Model-checked in TLA+ under all interleavings                                          |
@@ -668,6 +668,8 @@ _Let $C \subseteq V$ be the cache state of the system. Let $\text{coarse} : \mat
 |                                      |           | as $M(\sigma_\cup) \leq \alpha(1+\rho \cdot \|R\|) \max_i M(\sigma_{\text{indep},i})$. |
 | Re-coarsening convergence (Thm 7)    | PASS      | Machine-checked in Lean 4. Proves monotonicity and                                     |
 |                                      |           | convergence of coarsened EPs under cache growth.                                       |
+| End-to-end composition (Main Thm)    | PASS      | Machine-checked in Lean 4. Composes Thm 4'→5→HEFT→6                                    |
+|                                      |           | into a single bound with all hypotheses justified.                                     |
 | Graph coarsening optimality          | COND PASS | Bounded by $\alpha(\bar{\epsilon})$; competitive gap                                   |
 |                                      |           | closes dynamically as prediction quality improves                                      |
 | Minimality                           | PASS      | Two-track decomposition is minimal — protocol and                                      |
