@@ -11,6 +11,7 @@ import EosScheduling.Theorem6
 import EosScheduling.Theorem7
 import EosScheduling.Coarsening
 import EosScheduling.HEFT
+import EosScheduling.MainTheorem
 
 
 
