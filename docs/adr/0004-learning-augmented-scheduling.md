@@ -481,18 +481,60 @@ linear in the DAG size plus the product of entry points
 and workers. No phase has exponential or super-polynomial
 cost.
 
-| Phase                  | Operation                                     | Complexity                                             |
-| :--------------------- | :-------------------------------------------- | :----------------------------------------------------- |
-| DAG construction       | Topological sort + cache filtering            | $O(\|V'\| + \|E'\|)$                                   |
-| Entry point selection  | Greedy top-down walk with fan-in/cost checks  | $O(\|V'\| + \|E'\|)$                                   |
-| EP DAG derivation      | Transitive closure on selected set            | $O(\|S\|^2)$ worst case                                |
-| Scoring (per EP)       | Evaluate $\text{score}(w, e)$ for all workers | $O(\|W\| \cdot d)$                                     |
-| Full dispatch loop     | Score + assign all $\|S\|$ entry points       | $O(\|S\| \cdot \|W\| \cdot d)$                         |
-| LRH lookup             | Per-assignment cache affinity                 | $O(\log\|R\| + C)$                                     |
-| Structural dedup check | Hash map lookup/insert                        | $O(1)$ amortized                                       |
-| EMA update             | Per-completion profile update                 | $O(1)$                                                 |
-| HEFT re-planning       | per-event full EP DAG scheduling              | $O(\|S\|^2 \cdot \|W\|)$ amortized by event coalescing |
-| **Total pipeline**     | **One scheduling pass**                       | $O(\|V'\| + \|E'\| + \|S\| \cdot \max(\|S\|, \|W\|))$  |
+#### Per-Event Cost (Coalesced Batch)
+
+Each coalesced event batch triggers the following phases.
+Not all phases run on every event type — `RequestArrival`
+triggers DAG merge + re-coarsening + HEFT; `EPComplete`
+triggers cache-skip scan + dependency cascade + HEFT;
+failure/health events trigger only HEFT re-planning.
+
+| Phase                   | Operation                               | Complexity                                     | Trigger Events |
+| :---------------------- | :-------------------------------------- | :--------------------------------------------- | :------------- |
+| DAG merge (incremental) | JIT merge new nodes/edges into $G_\cup$ | $O(\|V_{\text{new}}\| + \|E_{\text{new}}\|)$   | RequestArrival |
+| Cache filtering         | Check store for each new node           | $O(\|V_{\text{new}}\|)$                        | RequestArrival |
+| Re-coarsening           | Greedy walk over MUTABLE partition      | $O(\|V'_{\text{mut}}\| + \|E'_{\text{mut}}\|)$ | RequestArrival |
+| Cache-skip scan         | Check scope overlap for mutable EPs     | $O(\|S_{\text{mut}}\| \cdot \bar\kappa)$       | EPComplete     |
+| Dependency cascade      | Update ready status of pending EPs      | $O(\|S\|)$                                     | EPComplete     |
+| EP DAG derivation       | Transitive closure on selected set      | $O(\|S\|^2)$ worst case                        | RequestArrival |
+| HEFT re-planning        | Full EP DAG scheduling                  | $O(\|S\|^2 \cdot \|W\|)$                       | All events     |
+| EMA update              | Per-completion profile update           | $O(1)$                                         | EPComplete     |
+
+Where $\bar\kappa$ is the average entry-point scope size
+(number of derivations in a typical EP's transitive closure).
+
+The **dominant per-event cost** is HEFT re-planning at
+$O(\|S\|^2 \cdot \|W\|)$. Event coalescing amortizes this:
+$k$ closely-spaced events trigger one HEFT pass, not $k$.
+
+#### Initial Construction Cost
+
+The first `RequestArrival` for a given request incurs the
+full DAG construction cost:
+
+| Phase                 | Operation                                    | Complexity                                 |
+| :-------------------- | :------------------------------------------- | :----------------------------------------- |
+| DAG construction      | Topological sort + cache filtering           | $O(\|V'\| + \|E'\|)$                       |
+| Entry point selection | Greedy top-down walk with fan-in/cost checks | $O(\|V'\| + \|E'\|)$                       |
+| EP DAG derivation     | Transitive closure on selected set           | $O(\|S\|^2)$ worst case                    |
+| HEFT planning         | Initial full EP DAG scheduling               | $O(\|S\|^2 \cdot \|W\|)$                   |
+| LRH lookup (per EP)   | Cache affinity scoring                       | $O(\log\|R\| + C)$                         |
+| **Total (initial)**   | **First scheduling pass**                    | $O(\|V'\| + \|E'\| + \|S\|^2 \cdot \|W\|)$ |
+
+#### Lifecycle Cost
+
+Over the full lifetime of a request (from arrival through
+all EP completions), the scheduler runs approximately
+$\|S\|$ HEFT re-plans (one per EP completion, amortized by
+coalescing). The total lifecycle cost is:
+
+$$O(\|V'\| + \|E'\| + \|S\|^3 \cdot \|W\|)$$
+
+The $\|S\|^3$ term arises from $\|S\|$ re-plans each
+costing $O(\|S\|^2 \cdot \|W\|)$. In practice, coalescing
+reduces this significantly — concurrent completions
+trigger a single re-plan. The $\|S\|^3$ bound is
+conservative.
 
 Where:
 
@@ -520,13 +562,13 @@ find a better $\alpha$ but at exponential cost —
 unacceptable when the scheduling decision itself must
 complete in sub-second time.
 
-**Implementation note**: The dominant cost in practice is
-the scoring loop $O(\|S\| \cdot \|W\|)$. For a cluster
-of 100 workers and a DAG coarsened to 50 entry points,
-this is 5,000 score evaluations per scheduling pass —
-trivially fast. At federated scale ($\|W\| > 1000$), the
-min-cost flow formulation (§Future Work) replaces the
-per-pair scoring with a global flow optimization.
+**Implementation note**: The dominant cost per event is
+HEFT at $O(\|S\|^2 \cdot \|W\|)$. For a cluster of 100
+workers and a DAG coarsened to 50 entry points, this is
+250,000 operations per HEFT pass — trivially fast. At
+federated scale ($\|W\| > 1000$), the min-cost flow
+formulation (§Future Work) replaces HEFT with a global
+flow optimization.
 
 ---
 
