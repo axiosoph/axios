@@ -178,6 +178,7 @@ P[drv_name] → {
     build_memory:    ExponentialMovingAverage,
     build_cpu_cores: ExponentialMovingAverage,  // average or peak cpu cores
     output_size:     ExponentialMovingAverage,
+    confidence:      f64,                        // computed as 1 - EMA(|η_e|) from error history
 
     // enrichment (present when derivation is also an atom)
     atom_id:        Option<AtomId>,
@@ -229,151 +230,64 @@ the consistency/robustness/smoothness framework.
 
 ### 2. Entry Point DAG Construction and Dispatch
 
-When evaluation produces a derivation DAG, the scheduler
-constructs an **entry point DAG** — a coarsened dependency
-graph where each node is an entry point (a derivation that
-will be scheduled as a top-level build invocation) and edges
-represent inter-entry-point ordering constraints.
+#### 2a. Construction of the Unified Global DAG and Coarsening
 
-#### 2a. Construction
+To prevent redundant computation across concurrent requests and minimize myopic scheduling, all requests contribute to a **unified global derivation graph** $G_\cup = (V_\cup, E_\cup)$ keyed by derivation hash (N1). When a new build request arrives, its derivation sub-graph is merged JIT into the global DAG in $O(|V_{\text{new}}| + |E_{\text{new}}|)$ time. Derivations whose outputs are already cached in the artifact store are immediately filtered out.
 
-```
-Derivation DAG
-    → (filter cached) →
-Uncached Sub-DAG
-    → (select entry points) →
-Entry Point DAG
-    → (topological dispatch) →
-Worker Assignments
-```
+The scheduler partitions the mutable portion of the global DAG into coarsened **entry points** ($S$). Entry points are selected top-down to cover the uncached sub-DAG using a greedy walk governed by the following promotion criteria:
 
-1. **Receive** the uncached sub-DAG from the evaluator
-   (derivations whose outputs are not in the artifact store)
+A node $v$ is promoted to a standalone entry point ($v \in S$) if:
+$$\text{predicted\_cost}(v) > \frac{\theta_{\text{cost}}}{1 + \text{conf}(v) \cdot \theta_{\text{scale}}} \;\lor\; \text{fan\_in}(v) > \theta_{\text{fanin}} \;\lor\; \text{subgraph\_cost}(v) > \frac{\theta_{\text{subgraph}}}{1 + \text{conf}(v) \cdot \theta_{\text{scale}}}$$
 
-2. **Select entry points** — identify derivations that will
-   serve as top-level build invocations. Entry points are
-   selected **top-down** to cover the uncached sub-DAG:
+Where:
+- **Troublesomeness**: High predicted cost or resource footprint.
+- **Convergence (Fan-in)**: High fan-in node (many direct dependents).
+- **Subgraph Volume**: Large aggregate transitive cost below $v$.
+- **Confidence Gate**: $\text{conf}(v) = 1 - \text{EMA}(|\eta_v|)$ modulates the cost thresholds based on past prediction error. When confidence is low ($\text{conf} \to 0$), cost thresholds remain high (conservative coarsening: fewer EPs, fewer scheduling decisions). When confidence is high ($\text{conf} \to 1$), cost thresholds are lowered, allowing selective promotion for fine-grained HEFT optimization.
 
-   Nix derivation DAGs are highly detailed — many leaves
-   are trivial (patches, source fetches, fixed-output
-   derivations). Scheduling every leaf as an entry point
-   would create a flood of tiny jobs whose completion
-   blocks higher-level entry points, causing excessive
-   scheduling overhead with no locality benefit. Instead,
-   entry points are selected to **cover** the leaves
-   beneath them:
-   - **Start from the top-level derivation** and walk
-     downward through the uncached sub-DAG
-   - **Split at strategic points**: a node becomes a
-     separate entry point (rather than being absorbed into
-     its parent's transitive scope) if:
-     - It is a **troublesome node** — predicted duration
-       or resource usage above threshold (from `P[drv_name]`,
-       developer metadata, or `requiredSystemFeatures`)
-     - It is a **convergence point** — high fan-in node
-       where many dependency paths converge. Making it an
-       explicit entry point prevents multiple downstream
-       builders from redundantly building it.
-     - Its **subgraph cost** (aggregate predicted duration
-       of all uncached transitives below it) exceeds a
-       threshold, meaning it represents enough work to
-       justify independent scheduling
-   - **Everything else** is absorbed into the nearest
-     covering entry point's transitive scope — the builder
-     handles trivial leaves, patches, and fetches
-     internally as part of the entry point's build.
+**Frozen/Mutable Partition & Re-Coarsening**:
+The global scheduling state is partitioned into two regions:
+1. **FROZEN partition**: $\{ ep \mid ep.\text{status} \in \{\text{dispatched}, \text{complete}, \text{failed}\} \}$. This boundary is sacred. Dispatched EPs are immutable: their coverage scope $\kappa(v, s)$ and worker assignment can never change (Frozen Stability invariant).
+2. **MUTABLE partition**: $\{ ep \mid ep.\text{status} \in \{\text{pending}, \text{ready}\} \} \cup \{ \text{unassigned nodes} \}$. These EPs can be freely restructured (merged, split, promoted, demoted) by incremental re-coarsening when new requests arrive or cache updates occur (Mutable Freedom invariant).
 
-     **Merging constraint (Relaxed)**: Since the formal model relaxes
-     entry-point coverage to a relation, a non-entry-point derivation is
-     permitted to exist in multiple entry points' transitive scopes
-     simultaneously. At runtime, the builder's store-path locks deduplicate
-     the build of this shared node. To optimize scheduling efficiency and
-     avoid redundant worker load reservations, the selection heuristic
-     _may_ choose to promote high fan-in convergence points to standalone
-     entry points. However, there is no mathematical constraint forcing
-     this promotion, preventing the macroscopic scheduling DAG from
-     shattering under dense dependencies.
+#### 2b. Event-Driven HEFT Dispatch Protocol
 
-3. **Derive inter-entry-point dependencies** — if entry
-   point A's transitive subgraph depends on the output of
-   entry point B's subgraph, then A depends on B in the
-   entry point DAG. This includes the user's top-level
-   derivation: it depends on ALL sub-entry-points whose
-   outputs it transitively needs.
+Instead of sequential topological dispatch or epoch batching, the scheduler employs **event-driven HEFT re-planning** on the **full EP DAG** (pending + ready + frozen). HEFT computes a complete time-slotted assignment plan in $O(|S|^2 \cdot |W|)$ time. Ready EPs with feasible workers are dispatched immediately, while pending EPs are tentatively scheduled to future time slots. These tentative assignments do NOT lock workers; workers remain available for ready work.
 
-   ```
-   Entry Point DAG (derived from uncached sub-DAG):
+To avoid scheduler thrashing, the engine uses an **event coalescing** loop (draining the non-blocking event channel completely before running a single HEFT pass).
 
-   EP-top (user's top-level derivation)
-   ├── depends on: EP-a (troublesome: heavy link step)
-   │   └── depends on: EP-d (convergence point)
-   ├── depends on: EP-b
-   │   └── depends on: EP-d (shared)
-   └── (EP-f absorbed into EP-top — trivial fetch)
+The state transitions are governed by the following event handlers:
 
-   Dispatch order: {EP-d} → {EP-a, EP-b} → {EP-top}
-   ```
+1. **RequestArrival(dag, request_id)**:
+   - Cache filter: Remove cached derivations from incoming DAG.
+   - Merge: JIT merge uncached nodes/edges into $G_\cup$.
+   - Request tracking: Add `request_id` to `request_clients` set on each node.
+   - Incremental re-coarsening: Re-coarsen the MUTABLE partition.
+   - HEFT re-plan: Run HEFT on full EP DAG.
+   - Dispatch: Dispatch ready EPs to feasible workers.
+2. **EPComplete(ep)**:
+   - Freeze: Mark `ep` as completed (frozen).
+   - Cache update: Populate artifact store with `ep` outputs.
+   - EMA update: Refine prediction error and update profile.
+   - Cache-skip scan: For each MUTABLE EP whose scope overlaps `ep`: if all outputs are now in the store, mark it complete (cache-skipped); otherwise, update its predicted duration.
+   - Dependency cascade: Downstream pending EPs whose dependencies are satisfied transition to `ready`.
+   - HEFT re-plan & Dispatch: Run HEFT and dispatch ready EPs.
+3. **EPFail(ep, failure_kind)**:
+   - If `deterministic`: Mark failed, fail downstream dependents, and notify clients.
+   - If `transient` (infra failure): Revert `ep` to `ready`, run HEFT, and re-dispatch.
+4. **WorkerHealthChange(worker, unhealthy)**:
+   - Revert affected running EPs on `worker` to `ready`.
+   - Run HEFT excluding `worker` and dispatch.
+5. **RequestCancellation(request_id)**:
+   - For each EP, remove `request_id` from `request_clients`.
+   - If `request_clients` is empty and EP is MUTABLE, prune it.
 
-4. **Assign entry points to workers** using the scoring
-   function (§3). Entry points that share dependencies are
-   preferentially colocated on the same worker to avoid
-   redundant transitive builds.
+**Two-Level Deduplication & CAS Idempotency**:
+Deduplication is achieved at two distinct levels:
+1. **Entry Point Level (Unified DAG)**: Structural deduplication. Because requests merge into $G_\cup$, identical derivation hashes map to the same node. This is the primary defense against redundant computation.
+2. **Derivation Level (CAS Idempotency)**: Unlike Nix's legacy model which relies on store-level locks, Snix store operations (gRPC `BlobService`, `DirectoryService`, `PathInfoService`) are content-addressed and **purely idempotent**. Concurrent writes of the same outputs both succeed. If two builders race on the same derivation, they both execute the computation, incurring **redundant CPU/resource cost** rather than lock contention. The builder's internal `has()` check provides a partial defense by skipping a build if it finishes after another, but the scheduler's convergence-point promotion is the primary mechanism to prevent overlapping scopes from triggering wasted computation.
 
-#### 2b. Dispatch Protocol
-
-Entry points are dispatched in **topological order** of the
-entry point DAG:
-
-1. **Root entry points** (no dependency on other entry
-   points in the EP DAG) are dispatched immediately.
-
-2. **When an entry point completes**, the scheduler:
-   - Records its outputs as available in the artifact store
-   - Checks which downstream entry points now have ALL their
-     dependency entry points completed
-   - Dispatches newly-unblocked entry points to workers
-
-3. **The user's top-level derivation** is dispatched last —
-   only after all its sub-entry-points have completed and
-   their outputs are available. This ensures the top-level
-   builder does not start building things already being
-   worked on by other builders.
-
-4. **Shared dependency protection**: If entry points A and B
-   both depend on entry point D, D is built exactly once.
-   Neither A nor B is dispatched until D completes. This
-   prevents the scenario where A's and B's builders both
-   independently attempt to build D's subgraph.
-
-The scheduler tracks only the entry point DAG — not
-individual derivations within each entry point's transitive
-scope. The builder handles all transitive work below each
-entry point internally, on the assigned worker, with full
-locality.
-
-**Two-level deduplication**: Dedup operates at two independent levels:
-
-- **Entry point level (singleflight - Track B optimization)**: The scheduler's
-  in-flight map deduplicates across concurrent requests that select the same
-  entry point (same derivation hash). Since this is a pure software-level
-  optimization rather than a protocol correctness invariant, it is omitted
-  from the formal Track A correctness model. If implemented in software, the
-  coalescing logic must isolate failure domains: it must distinguish between
-  deterministic build failures (which can be safely broadcast to subscribers)
-  and transient infrastructure failures (e.g., worker crash, disk failure).
-  If the build owner fails due to infrastructure, subscribers must not inherit
-  the failure; they must be re-dispatched to a healthy worker.
-- **Derivation level (store locks - Track A correctness)**: Within a builder,
-  snix's `PathInfoService` acquires exclusive locks on output store paths.
-  If two builders (from different entry points or different requests) attempt
-  to build the same transitive derivation, the second blocks on the lock
-  and uses the first's result. This catches overlaps that the entry-point-level
-  singleflight cannot — e.g., different entry point selections with shared
-  transitives.
-
-**Prior art**: Graphene/DagPS (Grandl et al., OSDI 2016) —
-troublesome task identification and pre-allocation in
-multi-resource space-time.
+**Prior art**: Graphene/DagPS (Grandl et al., OSDI 2016) — troublesome task identification and pre-allocation in multi-resource space-time.
 
 ### 3. Multi-Criteria Placement Scoring
 
@@ -452,9 +366,33 @@ The entry-point selection heuristic determines which nodes in the uncached sub-D
 - **Weak Coarsening (Low Thresholds)**: Too many entry points are promoted. The scheduler shatters the DAG into a high volume of tiny tasks (e.g., short compile tasks, small script runs). This leads to:
   1. High scheduling queue overhead.
   2. Destruction of input cache locality, as sub-DAG nodes are scattered across different workers rather than executing on the same machine.
-  3. Contention and latency on store-level locks (`PathInfoService`), as multiple workers block waiting for shared transient outputs to sync.
+  3. Redundant computation, as multiple workers simultaneously execute the same shared transient dependencies due to overlapping entry point scopes.
 
 Production environments should calibrate coarsening thresholds to the _scheduling latency_ of the cluster. The minimum subgraph cost threshold must be significantly larger than the average round-trip scheduling latency (dispatch + worker pickup overhead) to ensure that the parallel execution benefit outweighs the coordination cost.
+
+### 3b. Strategy Trait and JIT Solver
+
+The scheduler decouples the mathematical properties of the assignment phase from the concrete solver implementation through a strategy trait boundary:
+
+```rust
+pub trait SchedulerStrategy {
+    fn plan(&self, ep_dag: &EpDag, workers: &[Worker], predictions: &Profiles)
+        -> Assignment;
+
+    // Invariants any strategy must satisfy:
+    // 1. Total coverage: every EP is assigned to some worker
+    // 2. Dependency ordering: if A -> B in EP DAG, B does not start before A completes
+    // 3. Worker capacity: peak memory/CPU does not exceed worker limits
+    
+    // Competitive Makespan Bound:
+    fn alpha_bound(&self) -> f64;
+}
+```
+
+The Eos scheduling daemon utilizes this trait boundary to support three swappable strategy backends:
+1. **HEFT (Primary)**: The default active strategy. HEFT constructs a time-slotted execution plan. It is highly efficient ($O(|S|^2 \cdot |W|)$) and provides a provable competitive bound ($\alpha_{\text{heft}}$) mechanized in Lean 4.
+2. **Greedy (Fallback)**: A low-overhead fallback strategy activated under high prediction error or missing profiles. It assigns tasks greedily to the highest scoring cache-affinity worker, satisfying basic capacity safety.
+3. **MILP/MCMF (Deferred)**: A global solver strategy reserved for federated scale ($|W| > 1000$). It solves the JIT assignment globally via mixed-integer programming or min-cost max-flow, operating over the coarsened Atom DAG. Because the graph size is naturally bounded ($|S| \leq 20$), the solver completes in sub-millisecond time, bypassing NP-hardness in practice.
 
 ### 4. Local Rendezvous Hashing (LRH)
 
@@ -559,6 +497,21 @@ $\varepsilon$ from `|d_actual - d_predicted| / d_predicted`
 and track it via EMA. This provides a live monitorable
 metric for how close the system is to the proven bound.
 
+### Adaptive Consistency (Machine-Checked — Theorem 2')
+
+As prediction error increases gradually, scheduling quality degrades proportionally through the parameterized approximation function $\alpha(\bar{\epsilon})$:
+
+$$
+M(\sigma_H) \leq \alpha(\bar{\epsilon}) \cdot \frac{1 + \bar{\epsilon}}{1 - \bar{\epsilon}} \cdot M(\sigma^*)
+$$
+
+Where:
+- $\bar{\epsilon}$ is the average prediction error magnitude.
+- $\alpha(\bar{\epsilon})$ is a monotonically non-increasing function representing the quality of the selected entry-point DAG coarsening:
+  $$\alpha(0) = \alpha_{\text{heft}} \quad \text{and} \quad \alpha(1) \leq \alpha_{\text{max}}$$
+
+This theorem bounds the combined performance of both graph coarsening and worker placement. Under accurate predictions ($\bar{\epsilon} \to 0$), cost thresholds are safely lowered, yielding fine-grained entry points that HEFT schedules optimally ($\alpha \to \alpha_{\text{heft}}$). When error is high ($\bar{\epsilon} \to 1$), thresholds rise, yielding a coarse DAG with fewer entry points, falling back to the prediction-free baseline bound $\alpha_{\text{max}}$.
+
 ### Robustness (Machine-Checked — Theorem 3)
 
 When predictions are arbitrarily wrong ($\eta \to \infty$),
@@ -629,15 +582,17 @@ omniscient MILP solver:
    scheduler (HEFT-style) computes the temporal chain and
    intentionally delays assignment.
 
-3. **Submodular lock contention**: The relaxed coverage
+3. **Submodular redundant computation**: The relaxed coverage
    mapping permits non-entry-point derivations to exist in
    multiple entry points' transitive scopes. When two
    workers concurrently build entry points with shared
-   transitives (e.g., `openssl`), the store-level lock
-   causes one to block. The blocked worker's reserved
-   CPU/memory sits idle. A global solver could calculate
-   submodular overlap costs and perfectly stagger or route
-   tasks to eliminate lock-wait time.
+   transitives (e.g., `openssl`), they will both redundantly
+   build that shared dependency if their executions overlap.
+   The builder's `has()` check will only skip the build if
+   the other builder completes and publishes the output before
+   the second builder starts the same derivation. A global
+   solver could calculate submodular overlap costs and perfectly
+   stagger or route tasks to eliminate redundant computation.
 
 4. **Federation topology blindness**: LRH measures logical
    hash-ring distance, not physical WAN bandwidth or
@@ -828,17 +783,17 @@ function when:
 
 ### Risks
 
-- **Store-level transitive dedup**: Two entry points on
-  different workers whose transitive scopes share
-  derivations will both attempt to build the shared
-  derivations. The store-level lock mechanism
-  (snix `PathInfoService`) prevents redundant work — the
-  second builder blocks until the first completes and uses
-  the cached result. This is correct but adds latency
-  (blocking wait). Mitigation: the convergence point
-  promotion rule in entry point selection minimizes shared
-  non-EP derivations, reducing how often store-level dedup
-  is needed.
+- **Redundant computation on overlapping scopes**: Two entry points on
+  different workers whose transitive scopes share derivations will both
+  attempt to build the shared derivations. Because Snix uses a
+  CAS-idempotent store model rather than store-level locks, both workers
+  will redundantly compute the shared dependency if their executions overlap.
+  The builder's `has()` check only prevents redundant work if the first
+  builder finishes before the second builder starts the shared derivation.
+  Mitigation: the convergence point promotion rule in entry point selection
+  promotes high fan-in nodes to standalone entry points, ensuring they are
+  scheduled and built exactly once before downstream dependents start,
+  minimizing redundant computation.
 - **EMA lag**: Exponential moving average adapts slowly to
   sudden changes in build characteristics. Mitigation:
   configurable decay factor; operators can flush profiles.
@@ -865,14 +820,15 @@ optimality assessment above:
    reverse topological pass with max-aggregation over EP
    edges).
 
-2. **Store lock contention monitoring**: When overlapping
-   coverage causes store-level lock blocking, the blocked
-   worker's reserved resources are idle. The implementation
-   should track lock-wait duration as a per-entry-point
-   metric and feed it back into the convergence-point
-   promotion threshold — high contention on a specific
-   transitive dependency is a signal to promote it to an
-   explicit entry point.
+2. **Redundant computation monitoring**: When overlapping
+   coverage causes workers to redundantly compute the same derivations,
+   resources are wasted. The implementation should track the frequency
+   of redundant builds (e.g., when a worker publishes outputs that
+   were already populated by another worker during its execution)
+   as a per-entry-point metric, and feed it back into the
+   convergence-point promotion threshold — high redundant computation
+   on a specific transitive dependency is a signal to promote it to
+   an explicit entry point.
 
 3. **Federation-aware transfer cost**: The $\tau(s', s)$
    transfer time in the formal model should be populated
@@ -1034,7 +990,7 @@ point selection is a potential novel contribution.
    `ready` and be re-dispatched independently to a healthy worker.
 
    **Prior art**: BuildBuddy's action merging (Bazel RBE),
-   Nix's store-level output path locks, Go's
+   Nix's store path deduplication, Go's
    `golang.org/x/sync/singleflight`, Varnish's request
    coalescing, Dask's automatic DAG deduplication. Also
    formalized in Mokhov, Mitchell & Peyton Jones,
