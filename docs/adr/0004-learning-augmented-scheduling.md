@@ -191,15 +191,32 @@ from `StorePath`, e.g., `openssl-3.0.12`). Derivation names
 are human-readable and structurally stable — the same
 package produces similarly-named derivations across versions.
 
+**Storage architecture**: The profile store is a persistent
+database (e.g., embedded KV store like `sled`, `redb`, or
+SQLite), not an in-memory structure. The set of unique
+derivation names grows unboundedly over time — a
+long-running daemon serving diverse workloads will
+accumulate profiles for hundreds of thousands of distinct
+derivation names. Keeping all of them in memory is not
+feasible.
+
+The scheduler maintains an **in-memory hot cache** of
+profiles for derivation names present in the current
+active DAG ($G_\cup$). Profiles are loaded from the
+persistent store on `RequestArrival` (when the cache
+filter walks the incoming DAG) and evicted when the
+corresponding derivation nodes are garbage-collected
+from $G_\cup$. After each completed build, the updated
+profile is written through to the persistent store
+immediately — the persistent store is always the source
+of truth.
+
 When a derivation that appears as a transitive dependency in
 one atom's DAG is also an independently-published atom, the
 scheduler recognizes this: the derivation name matches an
 existing profile, and the atom-id (if present) provides
 cross-version stability and access to developer-provided
 scheduling metadata.
-
-After each completed build, update `P[drv_name]` with
-observed metrics.
 
 **Prediction resolution** for a derivation:
 
@@ -1011,9 +1028,10 @@ function when:
 
 ### Negative
 
-- **Storage overhead**: Historical build profiles must be
-  persisted. EMA per atom-id is small (~100 bytes), but
-  scales with the number of distinct atoms.
+- **Storage overhead**: Historical build profiles are
+  persisted in an embedded database (§1). Each profile
+  is small (~100 bytes), but the store grows unboundedly
+  with the number of distinct derivation names ever seen.
 - **Entry point quality is heuristic**: The selection
   algorithm uses greedy heuristics, not a provably optimal
   algorithm. Quality depends on prediction accuracy and
@@ -1297,19 +1315,23 @@ optimality assessment above:
 16. **Scheduler disaster recovery**: The unified DAG
     $G_\cup$, EP assignments, and `request_clients`
     mappings are in-memory state. A scheduler process
-    crash loses all of this. The artifact store survives
-    (it's a separate durable service), and workers may
+    crash loses all of this. The artifact store and
+    profile store both survive (they are separate
+    durable services/databases), and workers may
     still be actively building dispatched EPs. Recovery
     must address three concerns:
 
     **State snapshotting**: The scheduler should
-    periodically snapshot its core state to durable
-    storage:
+    periodically snapshot its in-memory scheduling
+    state to durable storage:
     - The EP DAG (node states, coverage scopes, dependency edges)
     - EP-to-worker assignments for dispatched EPs
     - `request_clients` mappings
-    - EMA prediction profiles (also independently
-      persisted — see below)
+
+    Note: EMA prediction profiles do NOT need
+    snapshotting — they live in the persistent profile
+    store (§1) and are written through on every
+    `EPComplete`.
 
     Snapshot frequency is an operator-tunable parameter
     trading durability against I/O cost. A reasonable
@@ -1337,21 +1359,13 @@ optimality assessment above:
     gracefully — any work completed before the crash is
     in the store, so re-submitted requests only schedule
     the remaining uncached work. Cold restart loses EP
-    assignments (requiring full re-planning) and
-    prediction accuracy (requiring EMA re-learning).
-    This is functionally correct but operationally
-    expensive.
-
-    **EMA persistence**: Prediction profiles (EMA of
-    durations and resource usage per derivation name)
-    are the scheduler's long-term memory. These should
-    be persisted independently of the DAG snapshot at a
-    lower frequency (e.g., after every M completions or
-    on graceful shutdown). Losing EMA profiles degrades
-    scheduling quality until re-learned (Theorem 3
-    guarantees correctness — the system falls back to
-    the prediction-free baseline — but performance
-    suffers during re-convergence).
+    assignments (requiring full re-planning) but retains
+    prediction accuracy — the persistent profile store
+    (§1) survives the crash, so re-submitted requests
+    immediately benefit from historical profiles. This
+    is functionally correct and only operationally
+    expensive in the re-planning cost, not in prediction
+    re-learning.
 
     **Client reconnection**: Clients whose connections
     were severed by the crash must re-submit their
