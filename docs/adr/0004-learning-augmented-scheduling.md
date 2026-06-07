@@ -1294,6 +1294,83 @@ optimality assessment above:
     guarantee that tuning cannot violate safety or
     liveness properties.
 
+16. **Scheduler disaster recovery**: The unified DAG
+    $G_\cup$, EP assignments, and `request_clients`
+    mappings are in-memory state. A scheduler process
+    crash loses all of this. The artifact store survives
+    (it's a separate durable service), and workers may
+    still be actively building dispatched EPs. Recovery
+    must address three concerns:
+
+    **State snapshotting**: The scheduler should
+    periodically snapshot its core state to durable
+    storage:
+    - The EP DAG (node states, coverage scopes, dependency edges)
+    - EP-to-worker assignments for dispatched EPs
+    - `request_clients` mappings
+    - EMA prediction profiles (also independently
+      persisted — see below)
+
+    Snapshot frequency is an operator-tunable parameter
+    trading durability against I/O cost. A reasonable
+    default is after every N events or every T seconds,
+    whichever comes first.
+
+    **Warm restart (from snapshot)**: Load the last
+    snapshot, then reconcile against reality:
+    1. Query the artifact store: any EP whose outputs
+       are now cached can be marked complete (the build
+       finished between the snapshot and the crash).
+    2. Reconnect to workers and poll for in-flight
+       builds. Workers that are still building should
+       report what they're working on. Match these
+       against dispatched EPs in the snapshot.
+    3. Any dispatched EP whose worker is unreachable or
+       reports no matching build should be reverted to
+       `ready` and re-planned (same logic as the
+       `WorkerHealthChange` handler).
+    4. Mutable EPs are re-coarsened against current
+       cache state and HEFT is re-run.
+
+    **Cold restart (no snapshot)**: Clients must re-submit
+    their requests. The cache filter handles this
+    gracefully — any work completed before the crash is
+    in the store, so re-submitted requests only schedule
+    the remaining uncached work. Cold restart loses EP
+    assignments (requiring full re-planning) and
+    prediction accuracy (requiring EMA re-learning).
+    This is functionally correct but operationally
+    expensive.
+
+    **EMA persistence**: Prediction profiles (EMA of
+    durations and resource usage per derivation name)
+    are the scheduler's long-term memory. These should
+    be persisted independently of the DAG snapshot at a
+    lower frequency (e.g., after every M completions or
+    on graceful shutdown). Losing EMA profiles degrades
+    scheduling quality until re-learned (Theorem 3
+    guarantees correctness — the system falls back to
+    the prediction-free baseline — but performance
+    suffers during re-convergence).
+
+    **Client reconnection**: Clients whose connections
+    were severed by the crash must re-submit their
+    requests. The re-submitted request follows the
+    normal `RequestArrival` path — the cache filter
+    ensures already-completed work is skipped. Clients
+    should use idempotent request identifiers so the
+    recovered scheduler can deduplicate re-submissions
+    against any surviving state from the snapshot.
+
+    **Worker-side completion of orphaned builds**: After
+    a crash, workers may complete builds that the
+    recovered scheduler doesn't know about (the build
+    was dispatched before the last snapshot, or after it
+    but before the crash). The worker should still upload
+    outputs to the store (per note #6). The recovered
+    scheduler will discover these outputs via cache
+    filter or cache-skip scan.
+
 ---
 
 ## Prior Art
