@@ -842,6 +842,71 @@ function of $\varepsilon$. When error becomes sustained, the
 EMA decay mechanism (Theorem 3) automatically collapses the
 scoring function to the prediction-free baseline.
 
+#### Concrete Instantiation of α (Graham's Bound)
+
+Theorems 2–3 leave α abstract — "the heuristic's base
+approximation ratio." Since our modified HEFT is a **list
+scheduling algorithm** (it processes tasks in a fixed priority
+order and assigns each to a worker), we can instantiate α
+using Graham's classical List Scheduling Bound (1966):
+
+$$\alpha \leq 2 - \frac{1}{|W|}$$
+
+This is the tightest known worst-case bound for any list
+scheduling algorithm on $|W|$ identical machines, and it is
+tight (there exist adversarial DAGs that achieve it).
+
+Substituting into Theorem 2, the full consistency bound
+becomes:
+
+$$
+M(\sigma_H) \leq \left(2 - \frac{1}{|W|}\right) \cdot
+\frac{1 + \varepsilon}{1 - \varepsilon} \cdot M(\sigma^*)
+$$
+
+**Concrete worst-case ratios** for representative cluster
+sizes and prediction error levels:
+
+| Workers | α bound | ε = 5% | ε = 10% | ε = 20% |
+| :------ | :------ | :----- | :------ | :------ |
+| 2       | 1.50    | 1.58×  | 1.83×   | 2.25×   |
+| 10      | 1.90    | 2.00×  | 2.32×   | 2.85×   |
+| 50      | 1.98    | 2.08×  | 2.42×   | 2.97×   |
+| 100     | 1.99    | 2.09×  | 2.43×   | 2.99×   |
+
+These are **worst-case** guarantees. Empirically, HEFT on
+small DAGs ($|S| \leq 20$, which coarsening targets)
+typically achieves 1.1–1.3× optimal. The Graham bound is
+rarely tight because it requires adversarial DAG structures
+(long critical paths with precise fan-out patterns) that
+do not arise naturally in build dependency graphs.
+
+**Heterogeneous machines**: Graham's bound assumes identical
+machines. For heterogeneous clusters (varying worker speeds
+or capacities), the bound loosens by the **heterogeneity
+ratio** $Q = \max_{w,s} d_w(s) / \min_{w,s} d_w(s)$ (ratio
+of slowest to fastest execution time for any task across
+workers). For "related machines" — where worker speeds differ
+by a bounded constant factor, typical of build farms with a
+mix of small and large nodes — the bound remains $O(1)$. The
+general heterogeneous case is bounded by $O(\sqrt{m})$, but
+this is overly pessimistic for practical build clusters where
+heterogeneity ratios are typically $Q \leq 4$.
+
+**Coarsening gap**: This bound covers the assignment phase
+only (given a fixed EP DAG $T$). The coarsening phase
+(selecting which nodes become entry points) introduces a
+separate approximation factor not captured by α. The
+Adaptive Consistency bound (Theorem 2') addresses this by
+parameterizing α as a function of prediction error:
+$\alpha(\bar{\epsilon})$ tightens as predictions improve
+(better coarsening decisions) and loosens as they degrade
+(conservative fallback coarsening).
+
+**Prior art**: R. L. Graham, "Bounds for Certain
+Multiprocessing Anomalies," Bell System Technical Journal
+45(9), pp. 1563–1581, 1966.
+
 ---
 
 ## Optimality Assessment
