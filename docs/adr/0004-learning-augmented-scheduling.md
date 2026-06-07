@@ -1209,6 +1209,8 @@ See `docs/models/lean/` for proof sources.
    the quantitative makespan penalty is not mechanized.
    Low risk: the transient is geometrically short and
    capacity safety (Track A) holds throughout.
+4. **Starvation prevention (P12)**: While the work-conserving liveness property (P9) guarantees that ready EPs are eventually dispatched, it does not prevent low-priority tasks from being starved indefinitely under continuous high-priority arrival. Formalizing starvation-freedom requires modeling arrival processes and priority queuing disciplines (e.g. aging or FIFO bounds), which is deferred to future work.
+5. **DAG Boundedness and Memory Limits (P13)**: The TLA+ and Lean models assume a finite vertex set $V$. At runtime, the unified global DAG must be bounded to prevent memory exhaustion under continuous request streams. Proving memory safety and progress under sliding window request pruning is a future modeling objective.
 
 ## Future Work: Federated Scale via Min-Cost Max-Flow (MCMF)
 

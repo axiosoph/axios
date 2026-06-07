@@ -33,6 +33,7 @@ EosScheduling.lean            Root module — imports all theorem files
 EosScheduling/
   Defs.lean                   Shared definitions
   Schedule.lean               Scheduling model infrastructure
+  HEFT.lean                   HEFT List-Scheduling Bound
   Theorem1.lean               Coverage Existence
   Theorem2.lean               Consistency Bound
   Theorem2Prime.lean          Adaptive Consistency
@@ -50,6 +51,8 @@ self-coverage, transitive containment, downward closure), and the
 `WellFounded` DAG edge relation.
 
 **`Schedule.lean`** — Defines `WorkerPool` and `Schedule` structures encoding resource capacity and dependency constraints, defines `schedule_makespan`, and proves makespan lower bounds under worker contention.
+
+**`HEFT.lean`** — _HEFT List-Scheduling Bound._ Formalizes list-scheduling/work-conservation and proves Graham's list-scheduling makespan bound ($M \le \text{CP} + \text{Work}/|W|$) under the Schedule model. Also proves the equivalence/dominance lemma between structural makespan and schedule-aware makespan.
 
 **`Theorem1.lean`** — _Coverage Existence._ Constructs the identity
 witness (`S = univ, κ = id`) proving a valid `EosModel` exists for
@@ -79,9 +82,7 @@ Theorem 2 when predictions are accurate.
 
 **`Theorem5.lean`** — _Unified Coarsening Dominance._ Proves that the unified coarsening schedule (which has fewer scheduled nodes due to deduplication) achieves equal or better makespan than the per-request coarsening schedule under the Schedule model.
 
-**`Theorem6.lean`** — _CAS-Scheduling Bound._ Proves makespan bound
-under CAS deduplication with competitive ratio bounded by
-`α(1 + ρ |R|)` against the optimal independent makespan.
+**`Theorem6.lean`** — _CAS-Scheduling Bound._ Proves makespan bound under CAS deduplication with competitive ratio bounded by `α(1 + ρ |R|)` against the optimal independent makespan. It derives this bound end-to-end by importing and applying the HEFT bound from `HEFT.lean` to eliminate all bare scheduling assumptions.
 
 **`Theorem7.lean`** — _Re-coarsening Convergence._ Proves monotonicity and
 convergence of the coarsened entry point set under incremental cache growth.

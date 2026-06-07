@@ -604,7 +604,7 @@ _Let $R$ concurrent requests produce uncached sub-DAGs $V'_1, \ldots, V'_R$. Let
 
 $$M(\sigma_\cup) \leq \alpha (1 + \rho \cdot |R|) \cdot \max_i M(\sigma_{\text{indep}, i})$$
 
-**Proof intuition**: This connects CAS deduplication to scheduling quality, bounding makespan under worker contention. It uses Theorem 4' and shows that structural sharing in a CAS store directly tightens the scheduling quality bound compared to the sum of independent makespans.
+**Proof intuition**: This connects CAS deduplication to scheduling quality, bounding makespan under worker contention. It is derived using Schedule.lean (valid worker schedules, non-overlapping constraints, and critical path makespan lower bounds) and HEFT.lean (the work-conserving makespan bound $M \le \text{CP} + \text{Work}/|W|$ proved from first principles). By replacing the bare scheduling makespan hypothesis with the verified work-conserving bound, the theorem establishes the final competitive ratio using only structural DAG parameters and the deduplication factor $\rho$, with no unproven scheduling assumptions.
 
 **Status**: Machine-checked in Lean 4 (Theorem6.lean).
 
@@ -687,6 +687,8 @@ _Let $C \subseteq V$ be the cache state of the system. Let $\text{coarse} : \mat
    bound during prediction weight decay is not formally mechanized.
    Its correctness and boundedness are verified empirically and
    protected by local capacity constraints (Track A).
+3. **Starvation prevention (P12)**: While the work-conserving liveness property (P9) guarantees that ready EPs are eventually dispatched, it does not prevent low-priority tasks from being starved indefinitely under continuous high-priority arrival. Formalizing starvation-freedom requires modeling arrival processes and priority queuing disciplines (e.g. aging or FIFO bounds), which is deferred to future work.
+4. **DAG Boundedness and Memory Limits (P13)**: The TLA+ and Lean models assume a finite vertex set $V$. At runtime, the unified global DAG must be bounded to prevent memory exhaustion under continuous request streams. Proving memory safety and progress under sliding window request pruning is a future modeling objective.
 
 ---
 
