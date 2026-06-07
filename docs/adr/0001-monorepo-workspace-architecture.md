@@ -99,13 +99,13 @@ ingestion from any source uses the same codepath.
 
 ### eos/ — Runtime engine workspace (L2)
 
-| Crate        | Responsibility                                     | Dependencies                        |
-| :----------- | :------------------------------------------------- | :---------------------------------- |
-| `eos-core`   | `BuildEngine` trait with plan/apply + assoc. types | atom-core                           |
-| `eos-snix`   | Snix-specific store and evaluator implementations   | eos-core, `nix-compat`, `snix-*`    |
-| `eos-proto`  | Cap'n Proto interface schemas and serialization    | `capnp`, `capnp-rpc`                |
-| `eos-daemon` | Dynamic build scheduler and RPC server daemon      | eos-core, eos-proto, eos-snix, eos  |
-| `eos`        | Core orchestration engine and worker registry      | eos-core, eos-snix                  |
+| Crate        | Responsibility                                     | Dependencies                       |
+| :----------- | :------------------------------------------------- | :--------------------------------- |
+| `eos-core`   | `BuildEngine` trait with plan/apply + assoc. types | atom-core                          |
+| `eos-snix`   | Snix-specific store and evaluator implementations  | eos-core, `nix-compat`, `snix-*`   |
+| `eos-proto`  | Cap'n Proto interface schemas and serialization    | `capnp`, `capnp-rpc`               |
+| `eos-daemon` | Dynamic build scheduler and RPC server daemon      | eos-core, eos-proto, eos-snix, eos |
+| `eos`        | Core orchestration engine and worker registry      | eos-core, eos-snix                 |
 
 **BuildEngine** — plan/apply with cache-skipping:
 
@@ -145,13 +145,13 @@ contract; snix is the default backend. (Note: Refined in [ADR-0002](0002-decoupl
 
 ### ion/ — Frontend workspace (L3)
 
-| Crate          | Responsibility                                       | Dependencies                        |
-| :------------- | :--------------------------------------------------- | :---------------------------------- |
-| `ion-manifest` | Concrete `ion.toml` format, Compose system (With/As) | atom-core, atom-id                  |
-| `ion-resolve`  | SAT resolver, dependency variant formulation         | atom-core, ion-manifest             |
-| `ion-lock`     | Unified lockfile management and serialization        | atom-id, ion-manifest               |
-| `ion-eos`      | Bridge between frontend and build engine             | ion-manifest, eos-core              |
-| `ion-cli`      | CLI interface and command dispatch                   | ion-*, eos-core, atom-core          |
+| Crate          | Responsibility                                       | Dependencies                |
+| :------------- | :--------------------------------------------------- | :-------------------------- |
+| `ion-manifest` | Concrete `ion.toml` format, Compose system (With/As) | atom-core, atom-id          |
+| `ion-resolve`  | SAT resolver, dependency variant formulation         | atom-core, ion-manifest     |
+| `ion-lock`     | Unified lockfile management and serialization        | atom-id, ion-manifest       |
+| `ion-eos`      | Bridge between frontend and build engine             | ion-manifest, eos-core      |
+| `ion-cli`      | CLI interface and command dispatch                   | ion-\*, eos-core, atom-core |
 
 ### Monorepo layout
 

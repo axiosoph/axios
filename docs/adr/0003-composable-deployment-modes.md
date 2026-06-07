@@ -195,14 +195,14 @@ and uses in-process trait implementations directly.
 
 ### What Changes Between Modes
 
-| Concern          | Monolithic                          | Distributed                 |
-| :--------------- | :---------------------------------- | :-------------------------- |
-| Store backend    | In-process (redb)                   | gRPC client → remote daemon |
-| Worker transport | In-memory Cap'n Proto pipe          | TCP/UDS Cap'n Proto socket  |
-| Client transport | In-process (mode 1) or RPC (mode 2) | RPC                         |
-| Scaling          | Single machine                      | Horizontal                  |
+| Concern              | Monolithic                                | Distributed                                     |
+| :------------------- | :---------------------------------------- | :---------------------------------------------- |
+| Store backend        | In-process (redb)                         | gRPC client → remote daemon                     |
+| Worker transport     | In-memory Cap'n Proto pipe                | TCP/UDS Cap'n Proto socket                      |
+| Client transport     | In-process (mode 1) or RPC (mode 2)       | RPC                                             |
+| Scaling              | Single machine                            | Horizontal                                      |
 | Scheduling & Latency | Local-only (transfer cost \tau \approx 0) | Cluster-aware (with network transfer cost \tau) |
-| Business logic   | **Identical**                       | **Identical**               |
+| Business logic       | **Identical**                             | **Identical**                                   |
 
 The only conditional compilation is in transport
 initialization and DI wiring. No `#[cfg(monolithic)]` on
@@ -236,7 +236,7 @@ deployment mode is an observation-preserving morphism.
 
 The composable deployment architecture achieves simplicity and volatility isolation by separating concerns along physical and logical boundaries:
 
-1. **Spatial Simplicity (Hickey Audit):** 
+1. **Spatial Simplicity (Hickey Audit):**
    - **Decoupled Transport and Logic:** Cap'n Proto capability interfaces (e.g. `EvalWorker`, `BuildWorker`) are entirely transport-agnostic. The scheduling logic interacts with a client interface whether that client communicates over an in-memory duplex stream or a network socket. Concerns of thread concurrency and IPC are uncomplected.
    - **Storage Abstraction:** The storage layer is decoupled via abstract traits (`BlobService`, `DirectoryService`, `PathInfoService`). Workers only require `Arc<dyn BlobService>`; whether this points to an in-memory store, local redb instance, or remote gRPC client is a construction-time dependency injection choice.
 
