@@ -278,19 +278,21 @@ To avoid scheduler thrashing, the engine uses an **event coalescing** loop (drai
 The state transitions are governed by the following event handlers:
 
 1. **RequestArrival(dag, request_id)**:
-   - Cache filter (two-level): For each derivation in
-     the incoming DAG, first check if it matches a
-     completed node still present in $G_\cup$ (free
-     in-memory hash lookup — these are recently built
-     derivations not yet removed by terminal GC). Only
-     derivations not matched in $G_\cup$ are checked
-     against the artifact store (network/IPC call).
-     Both levels produce the same result — the
-     derivation is cached — but the in-memory check
-     avoids store roundtrips for recently completed
-     work. This also means terminal GC should not be
-     overly aggressive: retaining completed EPs briefly
-     serves as a "recently cached" index.
+   - Cache filter (two-level): First, check each
+     derivation in the incoming DAG against completed
+     nodes still present in $G_\cup$ (free in-memory
+     hash lookup — these are recently built derivations
+     not yet removed by terminal GC). Then, collect all
+     remaining unresolved derivations and issue a
+     **single batch query** to the artifact store
+     (`QueryValidPaths` / batch `has()`) to determine
+     which are cached. Per-node store roundtrips are
+     prohibitively expensive — the store's gRPC protocol
+     supports batch queries for exactly this reason.
+     The in-memory pre-filter reduces the batch size;
+     terminal GC should not be overly aggressive, as
+     retaining completed EPs briefly serves as a
+     "recently cached" index that shrinks the batch.
    - Merge: JIT merge uncached nodes/edges into $G_\cup$.
    - Request tracking: Add `request_id` to `request_clients` set on each node.
    - Incremental re-coarsening: Re-coarsen the MUTABLE partition.
