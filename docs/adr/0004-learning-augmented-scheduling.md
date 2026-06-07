@@ -574,13 +574,74 @@ flow optimization.
 
 ## Guarantees
 
-The learning-augmented framework provides three formal
-properties, now backed by machine-checked proofs
-(Lean 4, Track B) and model-checked protocol verification
-(TLA+, Track A). See `docs/models/lean/` and
-`docs/models/tla/`.
+The scheduling architecture provides two classes of formal
+guarantees, each backed by independent verification
+tracks. See `docs/models/lean/` and `docs/models/tla/`.
 
-### Consistency (Machine-Checked — Theorem 2)
+### Protocol Correctness (Model-Checked — Track A, TLA+)
+
+The dispatch protocol satisfies the following safety and
+liveness properties, verified via TLC model checking
+across four DAG topologies (linear chain, diamond
+fork-join, convergence, independent) with weak fairness.
+
+**Safety properties** (nothing bad ever happens):
+
+- **Ordering soundness (P1)**: An entry point is never
+  dispatched before all its EP-level dependencies have
+  completed. This is the fundamental dependency ordering
+  invariant — no worker ever receives an EP whose inputs
+  don't exist yet.
+- **Capacity safety (P4)**: The scheduler never
+  dispatches an EP to a worker whose current load plus
+  the EP's predicted resource requirements would exceed
+  the worker's reported capacity.
+- **Artifact completeness (P3)**: When an EP is marked
+  complete, all its outputs have been published to the
+  artifact store.
+- **Frozen stability (P8)**: Once an EP is dispatched or
+  completed, its coverage scope and worker assignment are
+  immutable. Re-coarsening only touches the mutable
+  partition.
+- **Failure isolation (P11)**: A deterministic build
+  failure in one EP cascades only to its transitive
+  dependents, not to unrelated requests or EPs.
+
+**Liveness properties** (good things eventually happen):
+
+- **Progress (P5)**: If a ready EP exists and a worker
+  has available capacity, the EP is eventually dispatched.
+  The scheduler never indefinitely holds a schedulable EP.
+- **Head-of-line immunity (P5')**: A large, slow EP on
+  one worker does not block dispatch of unrelated ready
+  EPs to other workers. The event-driven HEFT protocol
+  evaluates all ready EPs on each pass, not just the
+  first in queue.
+- **Completion propagation (P6)**: Every dispatched EP
+  eventually reaches a terminal state (completed or
+  failed). No EP hangs in `dispatched` indefinitely.
+- **Per-request completion (P6')**: Every request
+  eventually terminates — either all its EPs complete
+  successfully, or a deterministic failure cascades and
+  the client is notified.
+- **Work conservation (P9)**: The scheduler never leaves
+  a worker idle while ready EPs exist that the worker
+  could execute within its capacity.
+- **Transient recovery (P10)**: After a transient
+  infrastructure failure (worker crash, network partition),
+  the affected EPs are reverted to `ready` and
+  re-dispatched to a healthy worker. The system does not
+  require manual intervention to recover.
+
+**Key finding**: `CascadeFail` is **required** for
+liveness. Without active failure propagation, dependent
+tasks hang in `pending`/`ready` indefinitely after a
+dependency fails. This must be implemented as a mandatory
+transition, not an optional recovery mechanism.
+
+### Optimization Quality (Machine-Checked — Track B, Lean 4)
+
+#### Consistency (Theorem 2)
 
 When historical predictions are $\varepsilon$-accurate
 ($|d(s) - \hat{d}(s)| \leq \varepsilon \cdot \hat{d}(s)$),
@@ -607,7 +668,7 @@ $\varepsilon$ from `|d_actual - d_predicted| / d_predicted`
 and track it via EMA. This provides a live monitorable
 metric for how close the system is to the proven bound.
 
-### Adaptive Consistency (Machine-Checked — Theorem 2')
+#### Adaptive Consistency (Theorem 2')
 
 As prediction error increases gradually, scheduling quality degrades proportionally through the parameterized approximation function $\alpha(\bar{\epsilon})$:
 
@@ -623,7 +684,7 @@ Where:
 
 This theorem bounds the combined performance of both graph coarsening and worker placement. Under accurate predictions ($\bar{\epsilon} \to 0$), cost thresholds are safely lowered, yielding fine-grained entry points that HEFT schedules optimally ($\alpha \to \alpha_{\text{heft}}$). When error is high ($\bar{\epsilon} \to 1$), thresholds rise, yielding a coarse DAG with fewer entry points, falling back to the prediction-free baseline bound $\alpha_{\text{max}}$.
 
-### Robustness (Machine-Checked — Theorem 3)
+#### Robustness (Theorem 3)
 
 When predictions are arbitrarily wrong ($\eta \to \infty$),
 the system self-heals:
@@ -646,7 +707,7 @@ assignment equals baseline. The convergence is automatic
 and requires $O(\ln(\beta R_{\max}/\Delta_{\min}))$
 observations.
 
-### Smoothness (Corollary of Theorem 2)
+#### Smoothness (Corollary of Theorem 2)
 
 As prediction error increases gradually (incremental version
 changes, slowly shifting build profiles), scheduling quality
