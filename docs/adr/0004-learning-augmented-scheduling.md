@@ -290,6 +290,54 @@ Deduplication is achieved at two distinct levels:
 1. **Entry Point Level (Unified DAG)**: Structural deduplication. Because requests merge into $G_\cup$, identical derivation hashes map to the same node. This is the primary defense against redundant computation.
 2. **Derivation Level (CAS Idempotency)**: Unlike Nix's legacy model which relies on store-level locks, Snix store operations (gRPC `BlobService`, `DirectoryService`, `PathInfoService`) are content-addressed and **purely idempotent**. Concurrent writes of the same outputs both succeed. If two builders race on the same derivation, they both execute the computation, incurring **redundant CPU/resource cost** rather than lock contention. The builder's internal `has()` check provides a partial defense by skipping a build if it finishes after another, but the scheduler's convergence-point promotion is the primary mechanism to prevent overlapping scopes from triggering wasted computation.
 
+**DAG Lifecycle & Garbage Collection**:
+The unified DAG $G_\cup$ is a long-lived structure in a
+persistent daemon. Completed work exits the DAG through
+three mechanisms at different lifecycle stages:
+
+1. **Ingress cache filter** (`RequestArrival`): When a new
+   request's derivation sub-DAG is merged, each node is
+   checked against the artifact store. Derivations whose
+   outputs are already cached — including those built by
+   earlier requests — are filtered out before merge.
+   They never enter $G_\cup$. This is the primary
+   mechanism by which prior completed work becomes
+   invisible to new requests: once outputs are in the
+   store, the derivations are indistinguishable from
+   pre-existing cache hits.
+
+2. **Mid-lifecycle cache-skip** (`EPComplete`): When an
+   EP completes, the cache-skip scan checks all mutable
+   EPs whose scopes overlap the completed EP. If a
+   mutable EP's entire scope is now cached (because
+   another EP's completion populated the store with the
+   needed outputs), it is marked complete without
+   dispatch. This catches work that became redundant
+   mid-execution — the EP is effectively absorbed into
+   the cache.
+
+3. **Terminal GC** (post-completion): Once all requests
+   referencing an EP have terminated (all entries in
+   `request_clients` are resolved — completed or
+   failed), the EP and its underlying derivation nodes
+   are eligible for removal from $G_\cup$. The GC
+   should be triggered lazily (e.g., after client
+   notification) and must remove:
+   - The EP itself from the EP DAG
+   - Any derivation nodes in $G_\cup$ whose
+     `request_clients` set is now empty and that are
+     not referenced by any remaining EP's scope
+   - The EP's edges in the EP dependency graph
+
+   This prevents $G_\cup$ from growing monotonically in
+   a long-running daemon. Without GC, completed EPs
+   accumulate in the frozen partition, inflating $\|S\|$
+   in every HEFT pass and consuming memory indefinitely.
+   The `RequestCancellation` handler (which prunes
+   mutable EPs with empty `request_clients`) is the
+   partial version of this — terminal GC extends the
+   same logic to frozen EPs in terminal states.
+
 **Prior art**: Graphene/DagPS (Grandl et al., OSDI 2016) — troublesome task identification and pre-allocation in multi-resource space-time.
 
 ### 3. Multi-Criteria Placement Scoring
