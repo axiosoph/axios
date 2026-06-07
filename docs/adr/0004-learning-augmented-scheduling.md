@@ -952,6 +952,131 @@ optimality assessment above:
    monitorable quantity — operators can directly observe how
    close the system is to the proven worst-case ratio.
 
+6. **Artifact upload before completion**: Workers **must**
+   ensure all output artifacts are uploaded to the store and
+   globally visible **before** reporting `EPComplete` to the
+   scheduler. If the scheduler dispatches a dependent EP
+   before the parent's artifacts are available, the dependent
+   worker will encounter missing inputs. The completion
+   protocol is: build → upload all outputs → confirm store
+   acknowledgment → report `EPComplete`. This ordering is
+   critical for the correctness of the dependency cascade in
+   the event handler (§2b, step 2.5: "Downstream pending EPs
+   whose dependencies are satisfied transition to `ready`").
+
+7. **Opportunistic artifact salvage on failure**: When a
+   build fails, the worker should upload any intermediate
+   artifacts that were successfully produced before the
+   failure point. Many Nix builds consist of deep transitive
+   dependency chains where early phases (fetching sources,
+   building dependencies) succeed before the final
+   compilation step fails. By uploading the successful
+   intermediate outputs, subsequent re-dispatch attempts —
+   or entirely different requests that share those
+   dependencies — can skip the already-completed work. The
+   failure protocol is: detect failure → upload all
+   successfully produced store paths → report `EPFail` with
+   failure kind. This is best-effort: if the failure is a
+   worker crash or network partition, salvage may not be
+   possible. The scheduler must not block on salvage — if
+   `EPFail` arrives without salvage, it proceeds normally.
+
+8. **Prediction inflation on resource exhaustion**: When a
+   worker reports a sandbox failure caused by resource
+   exhaustion (e.g., OOM exit code 137, disk quota exceeded),
+   the scheduler **must** immediately inflate the historical
+   profile for the failing EP before returning it to the
+   `ready` pool. Without this inflation, the scheduler will
+   re-dispatch the EP with the same faulty resource estimate,
+   inducing a dispatch-fail-redispatch loop. The inflation
+   should set the resource estimate to at least the worker's
+   capacity limit for the exhausted resource dimension, and
+   the failure should be classified as `transient` (infra
+   failure) rather than `deterministic` (build error) to
+   allow re-dispatch to a higher-capacity worker. The formal
+   model's EMA decay (Theorem 3) handles gradual prediction
+   drift; this note addresses the acute case where a single
+   catastrophic misprediction needs immediate correction.
+
+9. **Convergence point cost floor**: The fan-in promotion
+   rule ($\text{fan\_in}(v) > \theta_{\text{fanin}}$) should
+   be gated with an absolute cost floor to prevent trivial
+   high-convergence nodes (e.g., a 20ms header copy with
+   many dependents) from being promoted to standalone entry
+   points. Promoting such nodes inserts a synchronization
+   barrier whose coordination overhead (RPC dispatch,
+   worker pickup, result reporting) exceeds the node's actual
+   computation time. The cost floor should be calibrated to
+   the cluster's average round-trip scheduling latency
+   $\Omega_{\text{latency}}$:
+   $\text{fan\_in}(v) > \theta_{\text{fanin}} \;\land\;
+   \text{predicted\_cost}(v) \ge \Omega_{\text{latency}}$.
+   This aligns with the general guidance in §3a that
+   coarsening thresholds must exceed scheduling latency.
+
+10. **Resource-fit normalization**: The multi-criteria
+    `resource_fit` dot product (§3) should be normalized to
+    a bounded interval $[0, 1]$ before applying the decayed
+    weight $\beta_e$. Without normalization, heterogeneous
+    clusters (small edge nodes vs. large builder nodes)
+    produce magnitude skew: the same task yields vastly
+    different raw dot products on different worker types.
+    This distorts the scoring function's ability to route
+    heavy tasks to capable workers. Normalize by dividing
+    by the norm of the resource vectors, or equivalently,
+    use cosine similarity instead of the raw dot product.
+
+11. **Non-blocking ingress draining**: The scheduler's
+    event channel **must not** block on HEFT planning or
+    graph coarsening. Because entry-point selection involves
+    graph searches over potentially large derivation trees,
+    inline processing would cause backpressure that stalls
+    request ingress. The implementation should use a
+    non-blocking `try_recv` drain loop that immediately
+    buffers all pending events into an in-memory queue,
+    then runs a single coalesced HEFT pass over the
+    accumulated events. This matches the event coalescing
+    model described in §2b and prevents the ingress channel
+    from filling under burst request load. Reference
+    pattern: `eka-ci`'s `poll_for_builds` loop uses
+    `try_recv` + `VecDeque` to completely insulate its
+    ingress from downstream processing latency.
+
+12. **Fixed-output derivation (FOD) locality**: FODs
+    (source fetches, git checkouts, tarball downloads) have
+    a fundamentally different resource profile from compute
+    tasks: they are network-bound, I/O-heavy, and produce
+    unpredictable latency. Some CI systems (e.g., `eka-ci`)
+    isolate FODs onto dedicated worker pools to prevent
+    network I/O storms from starving compute slots. However,
+    in the coarsened EP model this advice does **not**
+    translate directly. Because FODs are typically source
+    inputs absorbed into a parent EP's transitive scope, the
+    build worker fetches them locally with perfect data
+    locality. Routing FODs to a dedicated node would add a
+    pointless store round-trip: the dedicated node fetches
+    the source, uploads it to the store, and then the actual
+    build worker downloads it again as an input — strictly
+    more work than letting the builder fetch directly. The
+    coarsening heuristic already handles this correctly: a
+    trivial FOD is absorbed into its parent EP scope rather
+    than promoted to a standalone entry point (see note #9,
+    cost floor). FOD isolation may be worth considering only
+    in extreme deployment topologies where dedicated caching
+    proxies or mirrors serve as intermediaries for expensive
+    upstream fetches (e.g., large git monorepos), but this
+    is an infrastructure concern rather than a scheduling
+    decision. What **is** relevant for FOD-aware placement
+    is **worker internet egress bandwidth**: an EP whose
+    scope contains many FODs will have its predicted duration
+    dominated by fetch time, which varies dramatically with
+    worker bandwidth (100 Mbps vs. 10 Gbps). The resource
+    vector (§3) should include `egress_bandwidth` as a
+    dimension so that the scoring function can steer
+    FOD-heavy EPs toward high-bandwidth workers. Historical
+    profiles can track FOD fetch durations per derivation
+    hash to refine bandwidth-adjusted predictions.
+
 ---
 
 ## Prior Art
