@@ -7,9 +7,9 @@ import EosScheduling.Theorem2
 import Mathlib.Algebra.Order.BigOperators.Group.Finset
 
 /-!
-# Theorem 5: Unified Coarsening Dominance
+# Theorem 5: Makespan Subadditivity
 
-This module formalizes and proves the Unified Coarsening Dominance theorem:
+This module formalizes and proves the Makespan Subadditivity theorem:
 the makespan of the unified global DAG is bounded by the sum of makespans
 of individual requests.
 -/
@@ -39,8 +39,8 @@ lemma makespan_of_set_nonneg {d : V → Real} {τ : V → V → Real}
   rcases hx with ⟨v, _, rfl⟩
   exact completion_time_nonneg_global hd hτ v
 
--- Theorem 5: Unified Coarsening Dominance Inequality
-theorem theorem5_unified_dominance [DecidableEq V] {R : Type*} [Fintype R]
+-- Theorem 5: Makespan Subadditivity Inequality
+theorem theorem5_makespan_subadditivity [DecidableEq V] {R : Type*} [Fintype R]
     (V_prime : R → Finset V) (d : V → Real) (τ : V → V → Real)
     (hd : ∀ v, 0 ≤ d v) (hτ : ∀ u v, 0 ≤ τ u v) :
     makespan_of_set d τ (univ.biUnion V_prime)

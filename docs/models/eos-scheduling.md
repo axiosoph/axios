@@ -244,7 +244,7 @@ satisfy.
 
 **Scope note**: This track models entry-point-level scheduling and
 dependency constraints. To simplify the correctness state space,
-scheduler-level singleflight deduplication is treated as a
+scheduler-level structural deduplication is treated as a
 software-level performance optimization (Track B) and is omitted
 from the Track A correctness model. In the absence of locks, correct
 build execution under overlapping entry point scopes relies entirely
@@ -585,15 +585,15 @@ _with equality holding iff the uncached sub-DAGs are pairwise disjoint._
 
 **Status**: Machine-checked in Lean 4 (Theorem4Prime.lean).
 
-#### Theorem 5: Unified Coarsening Dominance
+#### Theorem 5: Makespan Subadditivity
 
-_Let $R$ concurrent requests produce uncached sub-DAGs $G'_1, \ldots, G'_R$. Let $\sigma_{\text{unified}}$ be the HEFT makespan of the unified global DAG $G_\cup$ under coarsening, and $\sigma_{\text{per\_request}}$ be the sum of makespans when each request is scheduled independently. Then:\_
+_Let $R$ concurrent requests produce uncached sub-DAGs $G'_1, \ldots, G'_R$. Let $M(\sigma_{\text{unified}})$ be the makespan of the unified global DAG $G_\cup$, and $M(\sigma_i)$ be the makespan when each request is scheduled independently. Then:\_
 
-$$M(\sigma_{\text{unified}}) \leq \sum_{i=1}^R M(\sigma_{\text{per\_request}, i})$$
+$$M(\sigma_{\text{unified}}) \leq \sum_{i=1}^R M(\sigma_i)$$
 
 _with equality holding iff all requests have completely disjoint dependency trees._
 
-**Proof intuition**: Because $G_\cup = \bigcup G'_i$ deduplicates shared transitives structurally, the number of uncached derivations to build is strictly smaller than or equal to the sum of independent builds. Since coarsening operates on $G_\cup$ as a single graph, shared dependencies are promoted to standalone entry points exactly once, preventing redundant worker allocation and minimizing total scheduling makespan.
+**Proof intuition**: Theorem 5 establishes a baseline subadditivity bound. The makespan of the union of task sets is bounded by the sum of their individual makespans due to the reduction of total work under structural deduplication. The scheduling-aware unified dominance result ($M(\sigma_{\text{unified}}) \leq M(\sigma_{\text{per\_request}})$) is planned as a Phase 6 extension.
 
 **Status**: Machine-checked in Lean 4 (Theorem5.lean).
 Zero `sorry`, zero custom `axiom`.
@@ -662,9 +662,9 @@ _Let $C \subseteq V$ be the cache state of the system. Let $\text{coarse} : \mat
 |                                    |           | with equality iff pairwise disjoint                                         |
 | Weighted deduplication (Thm 4')    | PASS      | Machine-checked in Lean 4. Generalizes Thm 4 to                             |
 |                                    |           | duration-weighted computation cost sums.                                    |
-| Unified coarsening (Thm 5)         | PASS      | Machine-checked in Lean 4 (Theorem5.lean)                                   |
+| Makespan Subadditivity (Thm 5)     | PASS      | Machine-checked in Lean 4 (Theorem5.lean)                                   |
 | CAS-scheduling bound (Thm 6)       | PASS      | Machine-checked in Lean 4. Bounds unified makespan                          |
-|                                    |           | as $M(\sigma\_\cup) \leq \alpha(1+\rho                                      | R   | ) \max*i M(\sigma*{\text{indep},i})$. |
+|                                    |           | as $M(\sigma\_\cup) \leq \alpha(1+\rho \cdot                                | R   | ) \max*i M(\sigma*{\text{indep},i})$. |
 | Re-coarsening convergence (Thm 7)  | PASS      | Machine-checked in Lean 4. Proves monotonicity and                          |
 |                                    |           | convergence of coarsened EPs under cache growth.                            |
 | Graph coarsening optimality        | COND PASS | Bounded by $\alpha(\bar{\epsilon})$; competitive gap                        |
@@ -709,7 +709,7 @@ Both tracks of formal verification are complete:
   (Consistency Bound), Theorem 2' (Adaptive Consistency),
   Theorem 3 (Robustness), Theorem 4 (Structural Deduplication),
   Theorem 4' (Weighted Structural Deduplication), Theorem 5
-  (Unified Coarsening Dominance), Theorem 6 (CAS-Scheduling Bound),
+  (Makespan Subadditivity), Theorem 6 (CAS-Scheduling Bound),
   Theorem 7 (Re-coarsening Convergence). See `models/lean/`.
 
 ### For Implementation (Derived from Proofs)

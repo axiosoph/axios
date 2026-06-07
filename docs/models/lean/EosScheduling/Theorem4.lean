@@ -6,16 +6,16 @@ Authors: nrd, Antigravity
 import EosScheduling.Defs
 
 /-!
-# Theorem 4: Singleflight Deduplication Savings
+# Theorem 4: Structural Deduplication Savings
 
-This module contains the proof of Theorem 4, showing that the singleflight map
+This module contains the proof of Theorem 4, showing that the structural map
 achieves makespan savings bounded by the union card, with equality iff the tasks
 are pairwise disjoint.
 -/
 
 open Finset
 
--- Theorem 4: Singleflight Deduplication Savings Inequality
+-- Theorem 4: Structural Deduplication Savings Inequality
 theorem theorem4_inequality {V : Type*} [DecidableEq V]
     {R : Type*} [Fintype R] (V_prime : R → Finset V) :
     (univ.biUnion V_prime).card ≤ univ.sum (fun i => (V_prime i).card) := by

@@ -209,8 +209,8 @@ CapacitySafety ==
     \A w \in Workers : workerLoad[w] <= WorkerCap[w]
 
 ArtifactSafety ==
-    (\A s \in EntryPoints : epStatus[s] = "complete")
-        => artifactStore = UNION {Outputs[s] : s \in EntryPoints}
+    \A s \in EntryPoints :
+        epStatus[s] = "complete" => Outputs[s] \subseteq artifactStore
 
 \* P11: Failure Isolation
 \* An EP can only be "failed" if:
@@ -286,5 +286,14 @@ WorkConservation ==
              /\ (\exists w \in Workers :
                     workerLoad[w] + PredictedLoad[s] <= WorkerCap[w]))
             ~> (epStatusSafe(s) \in {"dispatched", "complete", "failed", "none"})
+
+\* P10: Transient Recovery (explicit)
+\* A dispatched EP that experiences transient failure eventually
+\* reaches a terminal state (complete, failed, or pruned).
+TransientRecovery ==
+    NoInfiniteTransientFailures =>
+        \A s \in AllPossibleEntryPoints :
+            (epStatusSafe(s) = "dispatched")
+            ~> (epStatusSafe(s) \in {"complete", "failed", "none"})
 
 =============================================================================

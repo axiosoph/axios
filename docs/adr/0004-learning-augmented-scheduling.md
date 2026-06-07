@@ -481,18 +481,18 @@ linear in the DAG size plus the product of entry points
 and workers. No phase has exponential or super-polynomial
 cost.
 
-| Phase                 | Operation                                     | Complexity                                             |
-| :-------------------- | :-------------------------------------------- | :----------------------------------------------------- |
-| DAG construction      | Topological sort + cache filtering            | $O(\|V'\| + \|E'\|)$                                   |
-| Entry point selection | Greedy top-down walk with fan-in/cost checks  | $O(\|V'\| + \|E'\|)$                                   |
-| EP DAG derivation     | Transitive closure on selected set            | $O(\|S\|^2)$ worst case                                |
-| Scoring (per EP)      | Evaluate $\text{score}(w, e)$ for all workers | $O(\|W\| \cdot d)$                                     |
-| Full dispatch loop    | Score + assign all $\|S\|$ entry points       | $O(\|S\| \cdot \|W\| \cdot d)$                         |
-| LRH lookup            | Per-assignment cache affinity                 | $O(\log\|R\| + C)$                                     |
-| Singleflight check    | Hash map lookup/insert                        | $O(1)$ amortized                                       |
-| EMA update            | Per-completion profile update                 | $O(1)$                                                 |
-| HEFT re-planning      | per-event full EP DAG scheduling              | $O(\|S\|^2 \cdot \|W\|)$ amortized by event coalescing |
-| **Total pipeline**    | **One scheduling pass**                       | $O(\|V'\| + \|E'\| + \|S\| \cdot \max(\|S\|, \|W\|))$  |
+| Phase                  | Operation                                     | Complexity                                             |
+| :--------------------- | :-------------------------------------------- | :----------------------------------------------------- |
+| DAG construction       | Topological sort + cache filtering            | $O(\|V'\| + \|E'\|)$                                   |
+| Entry point selection  | Greedy top-down walk with fan-in/cost checks  | $O(\|V'\| + \|E'\|)$                                   |
+| EP DAG derivation      | Transitive closure on selected set            | $O(\|S\|^2)$ worst case                                |
+| Scoring (per EP)       | Evaluate $\text{score}(w, e)$ for all workers | $O(\|W\| \cdot d)$                                     |
+| Full dispatch loop     | Score + assign all $\|S\|$ entry points       | $O(\|S\| \cdot \|W\| \cdot d)$                         |
+| LRH lookup             | Per-assignment cache affinity                 | $O(\log\|R\| + C)$                                     |
+| Structural dedup check | Hash map lookup/insert                        | $O(1)$ amortized                                       |
+| EMA update             | Per-completion profile update                 | $O(1)$                                                 |
+| HEFT re-planning       | per-event full EP DAG scheduling              | $O(\|S\|^2 \cdot \|W\|)$ amortized by event coalescing |
+| **Total pipeline**     | **One scheduling pass**                       | $O(\|V'\| + \|E'\| + \|S\| \cdot \max(\|S\|, \|W\|))$  |
 
 Where:
 
@@ -956,17 +956,17 @@ optimality assessment above:
 
 ## Prior Art
 
-| Technique                       | Source                                  | Application                            |
-| :------------------------------ | :-------------------------------------- | :------------------------------------- |
-| Troublesome task pre-allocation | Graphene (OSDI 2016)                    | Entry point identification             |
-| Multi-resource dot-product      | Tetris (SIGCOMM 2014)                   | Placement scoring                      |
-| Learning-augmented framework    | Mitzenmacher & Vassilvitskii (2020)     | Consistency/robustness guarantees      |
-| Greedy stochastic scheduling    | Gupta et al. (Math OR 2020)             | Greedy with predictions is competitive |
-| Permutation predictions         | Lindermayr & Megow (SPAA 2022)          | Robustness bounds                      |
-| Local Rendezvous Hashing        | arXiv:2512.23434 (2025)                 | Cache-local HRW replacement            |
-| Multi-resource DAG bounds       | Kedad-Sidhoum et al. (arXiv:2106.07059) | Approximation ratio bounds             |
-| Request coalescing/singleflight | Fitzpatrick (groupcache), BuildBuddy    | Cross-request deduplication            |
-| Build systems formalization     | Mokhov et al. (ICFP 2018)               | Cloud build memoization model          |
+| Technique                         | Source                                  | Application                            |
+| :-------------------------------- | :-------------------------------------- | :------------------------------------- |
+| Troublesome task pre-allocation   | Graphene (OSDI 2016)                    | Entry point identification             |
+| Multi-resource dot-product        | Tetris (SIGCOMM 2014)                   | Placement scoring                      |
+| Learning-augmented framework      | Mitzenmacher & Vassilvitskii (2020)     | Consistency/robustness guarantees      |
+| Greedy stochastic scheduling      | Gupta et al. (Math OR 2020)             | Greedy with predictions is competitive |
+| Permutation predictions           | Lindermayr & Megow (SPAA 2022)          | Robustness bounds                      |
+| Local Rendezvous Hashing          | arXiv:2512.23434 (2025)                 | Cache-local HRW replacement            |
+| Multi-resource DAG bounds         | Kedad-Sidhoum et al. (arXiv:2106.07059) | Approximation ratio bounds             |
+| Request coalescing (singleflight) | Fitzpatrick (groupcache), BuildBuddy    | Cross-request dedup (prior art)        |
+| Build systems formalization       | Mokhov et al. (ICFP 2018)               | Cloud build memoization model          |
 
 ### Open Research Area
 
@@ -1058,9 +1058,9 @@ point selection is a potential novel contribution.
    the scheduler recognizes it automatically via name
    match and uses the atom metadata if available.
 
-5. **Cross-request deduplication** — RESOLVED (singleflight
-   pattern as a Track B optimization). This is a well-understood,
-   production-proven pattern called **request coalescing** (Go: "singleflight",
+5. **Cross-request deduplication** — RESOLVED (structural
+   deduplication as a Track B optimization). This is a well-understood,
+   production-proven pattern called **request coalescing** (inspired by Go's "singleflight",
    Bazel backends: "action merging", CDN: "request collapsing").
 
    Mechanism: maintain a concurrent map of in-flight entry
@@ -1138,13 +1138,19 @@ independent) using TLC with weak fairness.
 
 **Verified properties:**
 
-| Property                   | Type     | Status |
-| :------------------------- | :------- | :----- |
-| Ordering soundness (P1)    | Safety   | ✅     |
-| Capacity safety (P4)       | Safety   | ✅     |
-| Artifact completeness (P3) | Safety   | ✅     |
-| Progress (P5)              | Liveness | ✅     |
-| Completion prop. (P6)      | Liveness | ✅     |
+| Property                     | Type     | Status |
+| :--------------------------- | :------- | :----- |
+| Ordering soundness (P1)      | Safety   | ✅     |
+| Capacity safety (P4)         | Safety   | ✅     |
+| Artifact completeness (P3)   | Safety   | ✅     |
+| Progress (P5)                | Liveness | ✅     |
+| Completion prop. (P6)        | Liveness | ✅     |
+| HoL immunity (P5')           | Liveness | ✅     |
+| Per-request completion (P6') | Liveness | ✅     |
+| Frozen stability (P8)        | Safety   | ✅     |
+| Work conservation (P9)       | Liveness | ✅     |
+| Transient recovery (P10)     | Liveness | ✅     |
+| Failure isolation (P11)      | Safety   | ✅     |
 
 Key finding: `CascadeFail` is **required** for liveness.
 Without active failure propagation, dependent tasks hang
@@ -1160,17 +1166,17 @@ model instantiations.
 Nine theorems machine-checked with Mathlib. Zero `sorry`
 placeholders, zero custom `axiom` declarations.
 
-| Theorem | Statement                                                                                  | Status |
-| :------ | :----------------------------------------------------------------------------------------- | :----- | --- | --- |
-| Thm 1   | Valid entry point selection exists (identity witness)                                      | ✅     |
-| Thm 2   | $M(\sigma_H) \leq \alpha \cdot \frac{1+\varepsilon}{1-\varepsilon} \cdot M(\sigma^*)$      | ✅     |
-| Thm 2'  | Adaptive bound: $\alpha(\bar\varepsilon) \to 1$ as $\bar\varepsilon \to 0$                 | ✅     |
-| Thm 3   | Assignment stability under perturbation; EMA convergence                                   | ✅     |
-| Thm 4   | Structural: $\lvert\bigcup V'_i\rvert \leq \sum \lvert V'_i\rvert$, equality iff disjoint  | ✅     |
-| Thm 4'  | Weighted: $\sum_{v \in \bigcup V'_i} d(v) \leq \sum_i \sum_{v \in V'_i} d(v)$, disjoint Eq | ✅     |
-| Thm 5   | HEFT makespan within $(2 - 1/\|W\|)$ of optimal on the EP DAG                              | ✅     |
-| Thm 6   | CAS-scheduling makespan competitive ratio bounded by $\alpha(1 + \rho                      | R      | )$  | ✅  |
-| Thm 7   | Re-coarsening convergence: monotonicity and finite-step cache convergence                  | ✅     |
+| Theorem | Statement                                                                                           | Status |
+| :------ | :-------------------------------------------------------------------------------------------------- | :----- | --- | --- |
+| Thm 1   | Valid entry point selection exists (identity witness)                                               | ✅     |
+| Thm 2   | $M(\sigma_H) \leq \alpha \cdot \frac{1+\varepsilon}{1-\varepsilon} \cdot M(\sigma^*)$               | ✅     |
+| Thm 2'  | Adaptive bound: $\alpha(\bar\varepsilon) \to 1$ as $\bar\varepsilon \to 0$                          | ✅     |
+| Thm 3   | Assignment stability under perturbation; EMA convergence                                            | ✅     |
+| Thm 4   | Structural: $\lvert\bigcup V'_i\rvert \leq \sum \lvert V'_i\rvert$, equality iff disjoint           | ✅     |
+| Thm 4'  | Weighted: $\sum_{v \in \bigcup V'_i} d(v) \leq \sum_i \sum_{v \in V'_i} d(v)$, disjoint Eq          | ✅     |
+| Thm 5   | Makespan subadditivity: $M(\sigma_{\text{unified}}) \leq \sum M(\sigma_i)$ (Phase 6 dominance prep) | ✅     |
+| Thm 6   | CAS-scheduling makespan competitive ratio bounded by $\alpha(1 + \rho                               | R      | )$  | ✅  |
+| Thm 7   | Re-coarsening convergence: monotonicity and finite-step cache convergence                           | ✅     |
 
 All assumptions enter as explicit hypotheses on theorem
 signatures (non-negative durations, $\varepsilon < 1$,

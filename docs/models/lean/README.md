@@ -39,7 +39,7 @@ EosScheduling/
   Theorem3.lean               Robustness
   Theorem4.lean               Structural Deduplication
   Theorem4Prime.lean          Weighted Structural Deduplication
-  Theorem5.lean               HEFT Makespan Bound
+  Theorem5.lean               Makespan Subadditivity
   Theorem6.lean               CAS-Scheduling Bound
   Theorem7.lean               Re-coarsening Convergence
 ```
@@ -77,10 +77,10 @@ the coarsening factor `α(ε̄) → 1` as the mean prediction error
 `ε̄ → 0`, conditionally closing the coarsening gap from
 Theorem 2 when predictions are accurate.
 
-**`Theorem5.lean`** — _HEFT Makespan Bound._ Proves that HEFT
-on the EP DAG achieves makespan within `(2 − 1/|W|)` of the
-optimal schedule, replacing the earlier myopic greedy dispatch
-with a provably bounded global priority ordering.
+**`Theorem5.lean`** — _Makespan Subadditivity._ Proves makespan subadditivity:
+the makespan of the union of task sets is bounded by the sum of their individual makespans.
+Theorem 5 establishes a baseline subadditivity bound. The scheduling-aware unified dominance
+result (M(σ_unified) ≤ M(σ_per)) is planned as a Phase 6 extension.
 
 **`Theorem6.lean`** — _CAS-Scheduling Bound._ Proves makespan bound
 under CAS deduplication with competitive ratio bounded by
