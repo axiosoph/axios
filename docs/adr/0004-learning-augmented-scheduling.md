@@ -278,7 +278,19 @@ To avoid scheduler thrashing, the engine uses an **event coalescing** loop (drai
 The state transitions are governed by the following event handlers:
 
 1. **RequestArrival(dag, request_id)**:
-   - Cache filter: Remove cached derivations from incoming DAG.
+   - Cache filter (two-level): For each derivation in
+     the incoming DAG, first check if it matches a
+     completed node still present in $G_\cup$ (free
+     in-memory hash lookup — these are recently built
+     derivations not yet removed by terminal GC). Only
+     derivations not matched in $G_\cup$ are checked
+     against the artifact store (network/IPC call).
+     Both levels produce the same result — the
+     derivation is cached — but the in-memory check
+     avoids store roundtrips for recently completed
+     work. This also means terminal GC should not be
+     overly aggressive: retaining completed EPs briefly
+     serves as a "recently cached" index.
    - Merge: JIT merge uncached nodes/edges into $G_\cup$.
    - Request tracking: Add `request_id` to `request_clients` set on each node.
    - Incremental re-coarsening: Re-coarsen the MUTABLE partition.
@@ -354,6 +366,16 @@ three mechanisms at different lifecycle stages:
    mutable EPs with empty `request_clients`) is the
    partial version of this — terminal GC extends the
    same logic to frozen EPs in terminal states.
+
+   However, GC should be **lazy, not aggressive**.
+   Completed nodes still in $G_\cup$ serve as a free
+   in-memory "recently cached" index for the two-level
+   cache filter (§2b): new requests can check them
+   before making store roundtrips. A reasonable GC
+   policy is to defer collection until the completed EP
+   has no remaining `request_clients` AND a brief
+   retention period has elapsed (or memory pressure
+   demands it).
 
 **Prior art**: Graphene/DagPS (Grandl et al., OSDI 2016) — troublesome task identification and pre-allocation in multi-resource space-time.
 
@@ -554,16 +576,16 @@ triggers DAG merge + re-coarsening + HEFT; `EPComplete`
 triggers cache-skip scan + dependency cascade + HEFT;
 failure/health events trigger only HEFT re-planning.
 
-| Phase                   | Operation                               | Complexity                                     | Trigger Events |
-| :---------------------- | :-------------------------------------- | :--------------------------------------------- | :------------- |
-| DAG merge (incremental) | JIT merge new nodes/edges into $G_\cup$ | $O(\|V_{\text{new}}\| + \|E_{\text{new}}\|)$   | RequestArrival |
-| Cache filtering         | Check store for each new node           | $O(\|V_{\text{new}}\|)$                        | RequestArrival |
-| Re-coarsening           | Greedy walk over MUTABLE partition      | $O(\|V'_{\text{mut}}\| + \|E'_{\text{mut}}\|)$ | RequestArrival |
-| Cache-skip scan         | Check scope overlap for mutable EPs     | $O(\|S_{\text{mut}}\| \cdot \bar\kappa)$       | EPComplete     |
-| Dependency cascade      | Update ready status of pending EPs      | $O(\|S\|)$                                     | EPComplete     |
-| EP DAG derivation       | Transitive closure on selected set      | $O(\|S\|^2)$ worst case                        | RequestArrival |
-| HEFT re-planning        | Full EP DAG scheduling                  | $O(\|S\|^2 \cdot \|W\|)$                       | All events     |
-| EMA update              | Per-completion profile update           | $O(1)$                                         | EPComplete     |
+| Phase                   | Operation                                    | Complexity                                     | Trigger Events |
+| :---------------------- | :------------------------------------------- | :--------------------------------------------- | :------------- |
+| DAG merge (incremental) | JIT merge new nodes/edges into $G_\cup$      | $O(\|V_{\text{new}}\| + \|E_{\text{new}}\|)$   | RequestArrival |
+| Cache filtering         | Two-level: $G_\cup$ completed set then store | $O(\|V_{\text{new}}\|)$                        | RequestArrival |
+| Re-coarsening           | Greedy walk over MUTABLE partition           | $O(\|V'_{\text{mut}}\| + \|E'_{\text{mut}}\|)$ | RequestArrival |
+| Cache-skip scan         | Check scope overlap for mutable EPs          | $O(\|S_{\text{mut}}\| \cdot \bar\kappa)$       | EPComplete     |
+| Dependency cascade      | Update ready status of pending EPs           | $O(\|S\|)$                                     | EPComplete     |
+| EP DAG derivation       | Transitive closure on selected set           | $O(\|S\|^2)$ worst case                        | RequestArrival |
+| HEFT re-planning        | Full EP DAG scheduling                       | $O(\|S\|^2 \cdot \|W\|)$                       | All events     |
+| EMA update              | Per-completion profile update                | $O(1)$                                         | EPComplete     |
 
 Where $\bar\kappa$ is the average entry-point scope size
 (number of derivations in a typical EP's transitive closure).
