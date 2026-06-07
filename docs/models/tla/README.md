@@ -37,25 +37,39 @@ invariants and temporal properties hold. A successful run ends with
 ### Base Module
 
 `EosScheduling.tla` defines the parameterised state machine that all
-topology models instantiate.
+simple topology models instantiate.
+
+`MultiRequestModel.tla` extends this state machine with support for
+concurrent request arrivals (`MergeRequest`), dynamic topology merging,
+request cancellation (`CancelRequest`), cache-skip scan (`CacheSkip`),
+transient failure recovery (`FailTransient`), and client request tracking.
 
 **State variables:**
 
-| Variable        | Description                                   |
-| :-------------- | :-------------------------------------------- |
-| `epStatus`      | Map from entry point → execution status       |
-| `workerLoad`    | Map from worker → current load count          |
-| `artifactStore` | Set of artifacts produced by completed steps  |
-| `runningOn`     | Map from entry point → assigned worker (or ⊥) |
+| Variable          | Description                                   |
+| :---------------- | :-------------------------------------------- |
+| `epStatus`        | Map from entry point → execution status       |
+| `workerLoad`      | Map from worker → current load count          |
+| `artifactStore`   | Set of artifacts produced by completed steps  |
+| `runningOn`       | Map from entry point → assigned worker (or ⊥) |
+| `EntryPoints`     | Dynamic set of active entry points            |
+| `DependencyEdges` | Dynamic set of active dependency edges        |
+| `requestClients`  | Map from entry point → requesting request IDs |
+| `requestArrived`  | Set of request IDs that have arrived          |
+| `failureReason`   | Map from entry point → failure type (or none) |
 
 **Transitions:**
 
-| Action           | Effect                                     |
-| :--------------- | :----------------------------------------- |
-| `Dispatch(s, w)` | Assign ready step `s` to worker `w`        |
-| `Complete(s)`    | Mark `s` done; publish its artifact        |
-| `Fail(s)`        | Mark `s` failed                            |
-| `CascadeFail(s)` | Propagate failure to downstream dependants |
+| Action                 | Effect                                      |
+| :--------------------- | :------------------------------------------ |
+| `Dispatch(s, w)`       | Assign ready step `s` to worker `w`         |
+| `Complete(s)`          | Mark `s` done; publish its artifact         |
+| `FailDeterministic(s)` | Mark `s` failed due to build failure        |
+| `FailTransient(s)`     | Release `s` back to ready pool (recovery)   |
+| `CascadeFail(s)`       | Propagate failure to downstream dependants  |
+| `MergeRequest`         | Dynamically merge a new request and its DAG |
+| `CacheSkip(s)`         | Skip execution if outputs are in store      |
+| `CancelRequest(r)`     | Prune EPs after request cancellation        |
 
 **Static axioms** — `VerifyAxioms` asserts finite sets, DAG acyclicity,
 and feasibility as preconditions before state exploration begins.
@@ -65,25 +79,31 @@ over all transitions), ensuring the system cannot stall indefinitely.
 
 ### Topology Models
 
-Each model instantiates `EosScheduling` with a concrete step set, edge
-relation, worker pool, and capacity:
+Each model instantiates `EosScheduling` or defines a custom multi-request scenario:
 
-| Model              | Topology           | Primary Concern              |
-| :----------------- | :----------------- | :--------------------------- |
-| `LinearModel`      | A → B → C          | Sequential cascade failure   |
-| `DiamondModel`     | A → {B,C} → D      | Fork/join synchronisation    |
-| `ConvergenceModel` | {A,B} → C          | Multi-dependency convergence |
-| `IndependentModel` | A, B, C (no edges) | Capacity bin-packing         |
+| Model               | Topology           | Primary Concern                                  |
+| :------------------ | :----------------- | :----------------------------------------------- |
+| `LinearModel`       | A → B → C          | Sequential cascade failure                       |
+| `DiamondModel`      | A → {B,C} → D      | Fork/join synchronisation                        |
+| `ConvergenceModel`  | {A,B} → C          | Multi-dependency convergence                     |
+| `IndependentModel`  | A, B, C (no edges) | Capacity bin-packing                             |
+| `MultiRequestModel` | Dynamic merging    | Merging, cache-skip, cancellation, liveness, HoL |
 
 ## What the Models Verify
 
-| Property                    | Type                | Verified |
-| :-------------------------- | :------------------ | :------- |
-| Ordering soundness (P1)     | Safety invariant    | ✅       |
-| Artifact completeness (P3)  | Safety invariant    | ✅       |
-| Capacity safety (P4)        | Safety invariant    | ✅       |
-| Progress (P5)               | Liveness (temporal) | ✅       |
-| Completion propagation (P6) | Liveness (temporal) | ✅       |
+| Property                     | Type                | Verified |
+| :--------------------------- | :------------------ | :------- |
+| Ordering soundness (P1)      | Safety invariant    | ✅       |
+| Artifact completeness (P3)   | Safety invariant    | ✅       |
+| Capacity safety (P4)         | Safety invariant    | ✅       |
+| Progress (P5)                | Liveness (temporal) | ✅       |
+| Completion propagation (P6)  | Liveness (temporal) | ✅       |
+| HoL immunity (P5')           | Liveness (temporal) | ✅       |
+| Per-request completion (P6') | Liveness (temporal) | ✅       |
+| Frozen stability (P8)        | Action property     | ✅       |
+| Work conservation (P9)       | Liveness (temporal) | ✅       |
+| Transient recovery (P10)     | Liveness (temporal) | ✅       |
+| Failure isolation (P11)      | Safety invariant    | ✅       |
 
 `TypeOK` (type invariant) is checked in every model as a baseline
 structural health property.

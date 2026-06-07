@@ -361,12 +361,12 @@ $$
 > (e.g., macOS), capacity is a conservative virtual budget accounting
 > for the lack of kernel enforcement. See ADR-0004 §3.1.
 
-**P8. Frozen stability**: Once an entry point is dispatched, its coverage scope $\kappa$ remains immutable and its assignment is fixed.
+**P8. Frozen stability**: Once an entry point is dispatched to a worker, its assignment is fixed for that execution. It can only transition to complete (on the same worker), failed (released from worker), or back to ready (released from worker via transient failure). It can never be migrated directly to a different worker while dispatched.
 
 $$
-\Box\; \forall s \in S:\;
-  (Q(s) = \text{dispatched} \land \text{scope}(s) = K \land \text{worker}(s) = w)
-  \implies \Box\; (\text{scope}(s) = K \land \text{worker}(s) = w)
+\Box\; \forall s \in S:\; \forall w \in W:\;
+  (Q(s) = \text{dispatched} \land \text{worker}(s) = w)
+  \implies \big( Q'(s) \in \{\text{dispatched}, \text{complete}, \text{failed}, \text{ready}\} \land (Q'(s) = \text{dispatched} \implies \text{worker}'(s) = w) \big)
 $$
 
 #### Liveness Properties (◇ — must eventually hold)
@@ -410,6 +410,16 @@ $$
 $$
 
 where $A_w$ is the artifact store view at worker $w$.
+
+**P9. Work Conservation**: If a ready entry point exists and a worker has capacity, that entry point is eventually dispatched (or skipped, failed, or canceled).
+
+$$
+\Box\; \big( Q(s) = \text{ready} \land \exists w:\; L(w) + \text{load}(s) \leq \text{cap}(w) \big) \implies \Diamond\; Q(s) \in \{\text{dispatched}, \text{complete}, \text{failed}\}
+$$
+
+**P10. Transient Failure Recovery**: If an infrastructure or worker crash occurs while running entry point $s$, the entry point is unfrozen back to `ready` for re-dispatch, and worker capacity is reclaimed.
+
+**P11. Failure Isolation**: An entry point can only transition to `failed` if it fails deterministically (build failure) or if a dependency fails (cascade failure), preventing spurious failure propagation.
 
 ---
 
@@ -513,7 +523,7 @@ $$M(\sigma_H) \leq \alpha \cdot M(\sigma_\text{base})$$
 
 _where $\sigma_\text{base}$ is the prediction-free baseline
 (tag matching with LRH affinity and availability only) and $\alpha \geq 1$
-is a small constant._
+is a small constant.\_
 
 **Proof approach**: We normalize the `resource_fit` term using capacity-relative fractions:
 $$\text{resource\_fit}(w, e) = \sum_{i} \left( \frac{r_{e,i}}{c_{w,i}} \cdot \frac{a_{w,i}}{c_{w,i}} \right)$$
@@ -565,7 +575,7 @@ yielding large savings.
 
 #### Theorem 5: Unified Coarsening Dominance
 
-_Let $R$ concurrent requests produce uncached sub-DAGs $G'_1, \ldots, G'_R$. Let $\sigma_{\text{unified}}$ be the HEFT makespan of the unified global DAG $G_\cup$ under coarsening, and $\sigma_{\text{per\_request}}$ be the sum of makespans when each request is scheduled independently. Then:_
+_Let $R$ concurrent requests produce uncached sub-DAGs $G'_1, \ldots, G'_R$. Let $\sigma_{\text{unified}}$ be the HEFT makespan of the unified global DAG $G_\cup$ under coarsening, and $\sigma_{\text{per\_request}}$ be the sum of makespans when each request is scheduled independently. Then:\_
 
 $$M(\sigma_{\text{unified}}) \leq \sum_{i=1}^R M(\sigma_{\text{per\_request}, i})$$
 
@@ -580,46 +590,49 @@ Zero `sorry`, zero custom `axiom`.
 
 ## Validation
 
-| Check                              | Result | Detail                                                 |
-| :--------------------------------- | :----- | :----------------------------------------------------- |
-| Coverage properties (1-4) coherent | PASS   | Identity witness mechanized in Lean 4 (Thm 1);         |
-|                                    |        | properties 1-4 are satisfiable and non-contradictory   |
-| Coverage existence (Thm 1)         | PASS   | Machine-checked in Lean 4. Constructs `EosModel` with  |
-|                                    |        | `S = V'`, `κ = id`. Zero `sorry`, zero `axiom`.        |
-| Ordering soundness (P1)            | PASS   | Model-checked in TLA+ across 4 topology models         |
-|                                    |        | (linear, diamond, convergence, independent)            |
-| Coverage completeness (P2)         | PASS   | Structural — guaranteed by `EosModel` total coverage   |
-|                                    |        | property, verified satisfiable by Thm 1                |
-| Artifact completeness (P3)         | PASS   | Model-checked in TLA+ (`ArtifactSafety` invariant)     |
-| Capacity safety (P4)               | PASS   | Model-checked in TLA+ under all interleavings          |
-| Liveness (P5, P6)                  | PASS   | Model-checked in TLA+ with `WF_vars(Next)` weak        |
-|                                    |        | fairness. All 4 topology models verify both properties |
-| Federation liveness (P7)           | OPEN   | Requires real-time bounds ($\Diamond_{\leq\delta}$)    |
-|                                    |        | not expressible in standard TLA+ temporal logic.       |
-|                                    |        | Intentionally deferred — see note below                |
-| HoL immunity (P5')                 | PASS   | Model-checked in TLA+ under concurrent requests        |
-| Per-request completion (P6')       | PASS   | Model-checked in TLA+ under concurrent requests        |
-| Frozen stability (P8)              | PASS   | Model-checked in TLA+ under dynamic re-coarsening      |
-| Consistency bound (Thm 2)          | PASS   | Machine-checked in Lean 4. Proves                      |
-|                                    |        | $M(\sigma_H) \leq \alpha (1+\varepsilon)/(1-\varepsilon) \cdot M(\sigma^*)$ |
-|                                    |        | via well-founded induction on DAG completion times     |
-| Adaptive consistency (Thm 2')      | PASS   | Machine-checked in Lean 4 (Theorem2Prime.lean)         |
-| Robustness — assignment stability  | PASS   | Lean 4 Lemma 3.1: perturbation $2P < \Delta_{\min}$ implies |
-|                                    |        | $\sigma_H = \sigma_\text{base}$ (assignment identity)  |
-| Robustness — EMA convergence       | PASS   | Lean 4: under sustained error $\eta \geq \eta_0$,      |
-|                                    |        | EMA $\geq (1 - \gamma^n) \eta_0 + \gamma^n E_0$        |
-| Robustness — μ-makespan bound      | OPEN   | Quantitative bound during transient not mechanized.    |
-|                                    |        | Low risk — transient is short (geometric convergence)  |
-|                                    |        | and capacity safety holds throughout (Track A)         |
-| Singleflight deduplication (Thm 4) | PASS   | Machine-checked in Lean 4. Proves                      |
-|                                    |        | $\lvert\bigcup V'_i\rvert \leq \sum \lvert V'_i\rvert$ |
-|                                    |        | with equality iff pairwise disjoint                    |
-| Unified coarsening (Thm 5)         | PASS   | Machine-checked in Lean 4 (Theorem5.lean)              |
-| Graph coarsening optimality        | COND PASS| Bounded by $\alpha(\bar{\epsilon})$; competitive gap     |
-|                                    |        | closes dynamically as prediction quality improves      |
-| Minimality                         | PASS   | Two-track decomposition is minimal — protocol and      |
-|                                    |        | optimization are formally independent concerns         |
-| External adequacy                  | PASS   | Model captures all mechanisms described in ADR-0004    |
+| Check                              | Result    | Detail                                                                      |
+| :--------------------------------- | :-------- | :-------------------------------------------------------------------------- |
+| Coverage properties (1-4) coherent | PASS      | Identity witness mechanized in Lean 4 (Thm 1);                              |
+|                                    |           | properties 1-4 are satisfiable and non-contradictory                        |
+| Coverage existence (Thm 1)         | PASS      | Machine-checked in Lean 4. Constructs `EosModel` with                       |
+|                                    |           | `S = V'`, `κ = id`. Zero `sorry`, zero `axiom`.                             |
+| Ordering soundness (P1)            | PASS      | Model-checked in TLA+ across 4 topology models                              |
+|                                    |           | (linear, diamond, convergence, independent)                                 |
+| Coverage completeness (P2)         | PASS      | Structural — guaranteed by `EosModel` total coverage                        |
+|                                    |           | property, verified satisfiable by Thm 1                                     |
+| Artifact completeness (P3)         | PASS      | Model-checked in TLA+ (`ArtifactSafety` invariant)                          |
+| Capacity safety (P4)               | PASS      | Model-checked in TLA+ under all interleavings                               |
+| Liveness (P5, P6)                  | PASS      | Model-checked in TLA+ with `WF_vars(Next)` weak                             |
+|                                    |           | fairness. All 4 topology models verify both properties                      |
+| Federation liveness (P7)           | OPEN      | Requires real-time bounds ($\Diamond_{\leq\delta}$)                         |
+|                                    |           | not expressible in standard TLA+ temporal logic.                            |
+|                                    |           | Intentionally deferred — see note below                                     |
+| HoL immunity (P5')                 | PASS      | Model-checked in TLA+ under concurrent requests                             |
+| Per-request completion (P6')       | PASS      | Model-checked in TLA+ under concurrent requests                             |
+| Frozen stability (P8)              | PASS      | Model-checked in TLA+ under dynamic re-coarsening                           |
+| Work conservation (P9)             | PASS      | Model-checked in TLA+ under concurrent requests                             |
+| Transient failure recovery (P10)   | PASS      | Model-checked in TLA+ under transient failures                              |
+| Failure isolation (P11)            | PASS      | Model-checked in TLA+ under deterministic and cascade failures              |
+| Consistency bound (Thm 2)          | PASS      | Machine-checked in Lean 4. Proves                                           |
+|                                    |           | $M(\sigma_H) \leq \alpha (1+\varepsilon)/(1-\varepsilon) \cdot M(\sigma^*)$ |
+|                                    |           | via well-founded induction on DAG completion times                          |
+| Adaptive consistency (Thm 2')      | PASS      | Machine-checked in Lean 4 (Theorem2Prime.lean)                              |
+| Robustness — assignment stability  | PASS      | Lean 4 Lemma 3.1: perturbation $2P < \Delta_{\min}$ implies                 |
+|                                    |           | $\sigma_H = \sigma_\text{base}$ (assignment identity)                       |
+| Robustness — EMA convergence       | PASS      | Lean 4: under sustained error $\eta \geq \eta_0$,                           |
+|                                    |           | EMA $\geq (1 - \gamma^n) \eta_0 + \gamma^n E_0$                             |
+| Robustness — μ-makespan bound      | OPEN      | Quantitative bound during transient not mechanized.                         |
+|                                    |           | Low risk — transient is short (geometric convergence)                       |
+|                                    |           | and capacity safety holds throughout (Track A)                              |
+| Singleflight deduplication (Thm 4) | PASS      | Machine-checked in Lean 4. Proves                                           |
+|                                    |           | $\lvert\bigcup V'_i\rvert \leq \sum \lvert V'_i\rvert$                      |
+|                                    |           | with equality iff pairwise disjoint                                         |
+| Unified coarsening (Thm 5)         | PASS      | Machine-checked in Lean 4 (Theorem5.lean)                                   |
+| Graph coarsening optimality        | COND PASS | Bounded by $\alpha(\bar{\epsilon})$; competitive gap                        |
+|                                    |           | closes dynamically as prediction quality improves                           |
+| Minimality                         | PASS      | Two-track decomposition is minimal — protocol and                           |
+|                                    |           | optimization are formally independent concerns                              |
+| External adequacy                  | PASS      | Model captures all mechanisms described in ADR-0004                         |
 
 **Remaining open items:**
 
@@ -645,11 +658,12 @@ Both tracks of formal verification are complete:
 
 - **Track A (TLA+)**: Protocol correctness model-checked.
   `MultiRequestModel` verifies safety invariants (P1 Ordering,
-  P3 Artifact, P4 Capacity) and liveness properties (P5 Progress,
-  P5' HoL Immunity, P6 Completion, P6' Per-request Completion,
-  P8 Frozen Stability) under `WF_vars(Next)` weak fairness
+  P3 Artifact, P4 Capacity, P11 Failure Isolation) and liveness
+  properties (P5 Progress, P5' HoL Immunity, P6 Completion,
+  P6' Per-request Completion, P8 Frozen Stability, P9 Work Conservation,
+  P10 Transient Failure Recovery) under `WF_vars(Next)` weak fairness
   with multi-request DAG merging, cache-skip, cancellation,
-  and failure cascading. See `models/tla/`.
+  transient failure, and failure cascading. See `models/tla/`.
 - **Track B (Lean 4)**: Optimization quality machine-checked.
   Zero `sorry`, zero custom `axiom`. Six theorems verified
   with Mathlib: Theorem 1 (Coverage Existence), Theorem 2

@@ -17,9 +17,10 @@ VARIABLES
     EntryPoints,       \* Set of active entry points (dynamic)
     DependencyEdges,   \* Set of active edges (dynamic)
     requestClients,    \* Map of entry point to set of request IDs
-    requestArrived     \* Set of request IDs that have arrived
+    requestArrived,    \* Set of request IDs that have arrived
+    failureReason      \* Map: EP -> {"none", "deterministic", "cascade"}
 
-vars == <<epStatus, workerLoad, artifactStore, runningOn, EntryPoints, DependencyEdges, requestClients, requestArrived>>
+vars == <<epStatus, workerLoad, artifactStore, runningOn, EntryPoints, DependencyEdges, requestClients, requestArrived, failureReason>>
 
 -----------------------------------------------------------------------------
 
@@ -57,6 +58,7 @@ Init ==
     /\ artifactStore = {}
     /\ runningOn = [s \in {"A", "B"} |-> "none"]
     /\ requestArrived = {"r1"}
+    /\ failureReason = [s \in {"A", "B"} |-> "none"]
 
 -----------------------------------------------------------------------------
 
@@ -70,7 +72,7 @@ Dispatch(s, w) ==
     /\ epStatus' = [epStatus EXCEPT ![s] = "dispatched"]
     /\ workerLoad' = [workerLoad EXCEPT ![w] = @ + PredictedLoad[s]]
     /\ runningOn' = [runningOn EXCEPT ![s] = w]
-    /\ UNCHANGED <<EntryPoints, DependencyEdges, requestClients, artifactStore, requestArrived>>
+    /\ UNCHANGED <<EntryPoints, DependencyEdges, requestClients, artifactStore, requestArrived, failureReason>>
 
 \* Complete the execution of entry point s
 Complete(s) ==
@@ -87,7 +89,7 @@ Complete(s) ==
          /\ workerLoad' = [workerLoad EXCEPT ![w] = @ - PredictedLoad[s]]
          /\ artifactStore' = artifactStore \cup Outputs[s]
          /\ runningOn' = [runningOn EXCEPT ![s] = "none"]
-         /\ UNCHANGED <<EntryPoints, DependencyEdges, requestClients, requestArrived>>
+         /\ UNCHANGED <<EntryPoints, DependencyEdges, requestClients, requestArrived, failureReason>>
 
 \* Fail deterministically (deterministic failure propagates)
 FailDeterministic(s) ==
@@ -97,7 +99,20 @@ FailDeterministic(s) ==
          /\ epStatus' = [epStatus EXCEPT ![s] = "failed"]
          /\ workerLoad' = [workerLoad EXCEPT ![w] = @ - PredictedLoad[s]]
          /\ runningOn' = [runningOn EXCEPT ![s] = "none"]
+         /\ failureReason' = [failureReason EXCEPT ![s] = "deterministic"]
          /\ UNCHANGED <<EntryPoints, DependencyEdges, requestClients, artifactStore, requestArrived>>
+
+\* Transient failure: infrastructure/worker crash, not build failure.
+\* The EP is unfrozen back to "ready" for re-dispatch to a healthy worker.
+\* This does NOT trigger CascadeFail (transient failures are isolated).
+FailTransient(s) ==
+    /\ s \in EntryPoints
+    /\ epStatus[s] = "dispatched"
+    /\ LET w == runningOn[s] IN
+         /\ epStatus' = [epStatus EXCEPT ![s] = "ready"]
+         /\ workerLoad' = [workerLoad EXCEPT ![w] = @ - PredictedLoad[s]]
+         /\ runningOn' = [runningOn EXCEPT ![s] = "none"]
+         /\ UNCHANGED <<EntryPoints, DependencyEdges, requestClients, artifactStore, requestArrived, failureReason>>
 
 \* Propagate failures downstream
 CascadeFail(s) ==
@@ -105,6 +120,7 @@ CascadeFail(s) ==
     /\ epStatus[s] \in {"pending", "ready"}
     /\ \exists e \in DependencyEdges : e[2] = s /\ epStatus[e[1]] = "failed"
     /\ epStatus' = [epStatus EXCEPT ![s] = "failed"]
+    /\ failureReason' = [failureReason EXCEPT ![s] = "cascade"]
     /\ UNCHANGED <<EntryPoints, DependencyEdges, requestClients, workerLoad, artifactStore, runningOn, requestArrived>>
 
 \* Merge a new request r2 containing topology B -> C (shared B dependency)
@@ -128,6 +144,9 @@ MergeRequest ==
                 IF s \in EntryPoints THEN runningOn[s]
                 ELSE "none"]
          /\ requestArrived' = requestArrived \cup {"r2"}
+         /\ failureReason' = [s \in EntryPoints' |->
+                IF s \in EntryPoints THEN failureReason[s]
+                ELSE "none"]
          /\ UNCHANGED <<workerLoad, artifactStore>>
 
 \* Cache-skip scan for pending/ready EPs whose outputs are already present in store
@@ -136,7 +155,7 @@ CacheSkip(s) ==
     /\ epStatus[s] \in {"pending", "ready"}
     /\ Outputs[s] \subseteq artifactStore
     /\ epStatus' = [epStatus EXCEPT ![s] = "complete"]
-    /\ UNCHANGED <<EntryPoints, DependencyEdges, requestClients, workerLoad, artifactStore, runningOn, requestArrived>>
+    /\ UNCHANGED <<EntryPoints, DependencyEdges, requestClients, workerLoad, artifactStore, runningOn, requestArrived, failureReason>>
 
 \* Cancel a request and prune its mutable EPs
 CancelRequest(req_id) ==
@@ -150,6 +169,7 @@ CancelRequest(req_id) ==
          /\ requestClients' = [s \in EntryPoints' |-> new_requestClients[s]]
          /\ epStatus' = [s \in EntryPoints' |-> epStatus[s]]
          /\ runningOn' = [s \in EntryPoints' |-> runningOn[s]]
+         /\ failureReason' = [s \in EntryPoints' |-> failureReason[s]]
          /\ UNCHANGED <<workerLoad, artifactStore, requestArrived>>
 
 -----------------------------------------------------------------------------
@@ -159,6 +179,7 @@ Next ==
     \/ \exists s \in EntryPoints, w \in Workers : Dispatch(s, w)
     \/ \exists s \in EntryPoints : Complete(s)
     \/ \exists s \in EntryPoints : FailDeterministic(s)
+    \/ \exists s \in EntryPoints : FailTransient(s)
     \/ \exists s \in EntryPoints : CascadeFail(s)
     \/ \exists s \in EntryPoints : CacheSkip(s)
     \/ MergeRequest
@@ -178,6 +199,7 @@ TypeOK ==
     /\ artifactStore \subseteq UNION {Outputs[s] : s \in AllPossibleEntryPoints}
     /\ runningOn \in [EntryPoints -> Workers \cup {"none"}]
     /\ requestClients \in [EntryPoints -> SUBSET AllPossibleRequestIds]
+    /\ failureReason \in [EntryPoints -> {"none", "deterministic", "cascade"}]
 
 OrderingSoundness ==
     \A e \in DependencyEdges :
@@ -190,29 +212,79 @@ ArtifactSafety ==
     (\A s \in EntryPoints : epStatus[s] = "complete")
         => artifactStore = UNION {Outputs[s] : s \in EntryPoints}
 
+\* P11: Failure Isolation
+\* An EP can only be "failed" if:
+\*   (a) it failed deterministically (was dispatched, build failed), or
+\*   (b) it failed via cascade (a dependency is failed).
+\* This prevents spurious failure propagation to unrelated EPs.
+FailureIsolation ==
+    \A s \in EntryPoints :
+        epStatus[s] = "failed" =>
+            \/ failureReason[s] = "deterministic"
+            \/ (failureReason[s] = "cascade"
+                /\ \exists e \in DependencyEdges :
+                      e[2] = s /\ epStatus[e[1]] = "failed")
+
 \* Safe helper operators to prevent out-of-domain function application errors
 epStatusSafe(s) == IF s \in EntryPoints THEN epStatus[s] ELSE "none"
 runningOnSafe(s) == IF s \in EntryPoints THEN runningOn[s] ELSE "none"
 requestClientsSafe(s) == IF s \in EntryPoints THEN requestClients[s] ELSE {}
 
-\* P8: Frozen Stability
-FrozenStability ==
-    \A s \in AllPossibleEntryPoints :
+\* P8: Frozen Stability (refined as action property)
+FrozenStability == [][
+    \A s \in EntryPoints :
         \A w \in Workers :
-            (epStatusSafe(s) = "dispatched" /\ runningOnSafe(s) = w)
-                => [] (epStatusSafe(s) \in {"dispatched", "complete", "failed"} => runningOnSafe(s) = w)
+            (epStatus[s] = "dispatched" /\ runningOn[s] = w)
+            => /\ epStatus'[s] \in {"dispatched", "complete", "failed", "ready"}
+               /\ (epStatus'[s] = "dispatched" => runningOn'[s] = w)
+]_vars
 
 -----------------------------------------------------------------------------
 
-\* Liveness Properties
+NoInfiniteTransientFailures ==
+    \A s \in AllPossibleEntryPoints :
+        ~ []<> <<
+            /\ s \in EntryPoints
+            /\ epStatus[s] = "dispatched"
+            /\ epStatus'[s] = "ready"
+        >>_vars
 
 CompletionPropagation ==
-    \A req_id \in AllPossibleRequestIds :
-        <> (\A s \in AllPossibleEntryPoints : (req_id \in requestClientsSafe(s)) => epStatusSafe(s) \in {"complete", "failed"})
+    NoInfiniteTransientFailures =>
+        \A req_id \in AllPossibleRequestIds :
+            <> (\A s \in AllPossibleEntryPoints : (req_id \in requestClientsSafe(s)) => epStatusSafe(s) \in {"complete", "failed"})
 
 Progress ==
-    \A s \in AllPossibleEntryPoints :
-        (epStatusSafe(s) = "ready" /\ (\exists w \in Workers : workerLoad[w] + PredictedLoad[s] <= WorkerCap[w]))
-            => <> (epStatusSafe(s) /= "ready")
+    NoInfiniteTransientFailures =>
+        \A s \in AllPossibleEntryPoints :
+            (epStatusSafe(s) = "ready" /\ (\exists w \in Workers : workerLoad[w] + PredictedLoad[s] <= WorkerCap[w]))
+                => <> (epStatusSafe(s) /= "ready")
+
+\* P5': Head-of-Line Immunity
+\* Structural guarantee: Dispatch(s, w) depends only on epStatus[s]
+\* and workerLoad[w], never on epStatus[s'] for s' /= s. Therefore
+\* one request's EPs cannot block another request's dispatch.
+\* This uses ~> (leads-to) for stronger guarantees than <> (eventually).
+\* Intentionally redundant with Progress (P5) for publication traceability.
+HoLImmunity ==
+    NoInfiniteTransientFailures =>
+        \A s \in AllPossibleEntryPoints :
+            \A req_id \in AllPossibleRequestIds :
+                (req_id \in requestClientsSafe(s)
+                 /\ epStatusSafe(s) = "ready"
+                 /\ (\exists w \in Workers :
+                        workerLoad[w] + PredictedLoad[s] <= WorkerCap[w]))
+                ~> (epStatusSafe(s) \in {"dispatched", "complete", "failed", "none"})
+
+\* P9: Work Conservation
+\* If a ready EP exists and a worker has capacity, that EP is
+\* eventually dispatched, completed, failed, or canceled (none).
+WorkConservation ==
+    NoInfiniteTransientFailures =>
+        \A s \in AllPossibleEntryPoints :
+            (epStatusSafe(s) = "ready"
+             /\ (\exists w \in Workers :
+                    workerLoad[w] + PredictedLoad[s] <= WorkerCap[w]))
+            ~> (epStatusSafe(s) \in {"dispatched", "complete", "failed", "none"})
 
 =============================================================================
