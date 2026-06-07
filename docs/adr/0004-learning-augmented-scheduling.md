@@ -258,6 +258,13 @@ $$\operatorname{predicted_cost}(v) > \frac{\theta_{\text{cost}}}{1 + \operatorna
 
 Where:
 
+- **predicted_cost(v)**: predicted build duration of
+  derivation $v$ in isolation, from `P[drv_name].build_duration`.
+- **subgraph_cost(v)**: sum of predicted_cost(u)
+  for all uncached nodes $u$ in the transitive dependency closure of
+  $v$ (aggregate computation below $v$).
+- **fan_in(v)**: in-degree of $v$ in $G_\cup$ (number
+  of direct dependents).
 - **Troublesomeness**: High predicted cost or resource footprint.
 - **Convergence (Fan-in)**: High fan-in node (many direct dependents).
 - **Subgraph Volume**: Large aggregate transitive cost below $v$.
@@ -271,28 +278,37 @@ The global scheduling state is partitioned into two regions:
 
 #### 2b. Event-Driven HEFT Dispatch Protocol
 
-Instead of sequential topological dispatch or epoch batching, the scheduler employs **event-driven HEFT re-planning** on the **full EP DAG** (pending + ready + frozen). HEFT computes a complete time-slotted assignment plan in $O(|S|^2 \cdot |W|)$ time. Ready EPs with feasible workers are dispatched immediately, while pending EPs are tentatively scheduled to future time slots. These tentative assignments do NOT lock workers; workers remain available for ready work.
+Instead of sequential topological dispatch or epoch batching, the scheduler employs **event-driven HEFT re-planning** on the **full EP DAG** (pending + ready + frozen). HEFT determines task priority via upward rank (critical path contribution from predicted durations) and constructs a time-slotted assignment plan in $O(|S|^2 \cdot |W|)$ time. Within HEFT's worker selection phase — where standard HEFT picks the worker minimizing Earliest Finish Time (EFT) — we replace the worker selection criterion with the multi-criteria scoring function `score(w, e)` (§3). The scoring function's predicted durations feed into HEFT's time-slot computation, and the combined affinity/resource_fit/availability score replaces EFT as the worker selection criterion. Ready EPs with feasible workers are dispatched immediately, while pending EPs are tentatively scheduled to future time slots. These tentative assignments do NOT lock workers; workers remain available for ready work.
 
-To avoid scheduler thrashing, the engine uses an **event coalescing** loop (draining the non-blocking event channel completely before running a single HEFT pass).
+Frozen EPs (dispatched/complete) are included in the HEFT computation as **fixed constraints** — their time slots and worker assignments are immutable inputs. Only mutable EPs (pending/ready) have their assignments computed by HEFT.
+
+For single-cluster deployments (all workers in the same artifact store namespace), the transfer cost $\tau = 0$ for all EP pairs. HEFT degenerates to a compute-only DAG scheduler, which is the intended behavior. Communication costs become relevant only in federated deployments with distinct store namespaces (see note #3).
+
+To avoid scheduler thrashing, the engine uses an **event coalescing** loop (draining the non-blocking event channel completely before running a single HEFT pass). The event loop is **single-threaded for state mutations**: event _producers_ (request ingress, completion callbacks, health monitors) run concurrently and push events to an async channel (`tokio::sync::mpsc`), but the event loop is the sole consumer. This serialization is required by the Frozen Stability invariant — concurrent HEFT passes could dispatch the same ready EP to different workers.
 
 The state transitions are governed by the following event handlers:
 
 1. **RequestArrival(dag, request_id)**:
-   - Cache filter (two-level): First, check each
-     derivation in the incoming DAG against completed
-     nodes still present in $G_\cup$ (free in-memory
-     hash lookup — these are recently built derivations
-     not yet removed by terminal GC). Then, collect all
-     remaining unresolved derivations and issue a
-     **single batch query** to the artifact store
-     (`QueryValidPaths` / batch `has()`) to determine
-     which are cached. Per-node store roundtrips are
-     prohibitively expensive — the store's gRPC protocol
-     supports batch queries for exactly this reason.
-     The in-memory pre-filter reduces the batch size;
+   - Cache filter (two-level): For each node in the
+     incoming DAG, first check if $G_\cup$ already
+     contains a node with the same derivation hash in a
+     **completed** state (free in-memory hash lookup —
+     recently built derivations not yet removed by
+     terminal GC). Then, collect all remaining
+     unresolved derivations and issue a **single batch
+     query** to the artifact store (`QueryValidPaths` /
+     batch `has()`) to determine which are cached.
+     Per-node store roundtrips are prohibitively
+     expensive — the store's gRPC protocol supports
+     batch queries for exactly this reason. The
+     in-memory pre-filter reduces the batch size;
      terminal GC should not be overly aggressive, as
      retaining completed EPs briefly serves as a
      "recently cached" index that shrinks the batch.
+     If the uncached sub-DAG is empty after filtering,
+     the request is immediately marked complete and the
+     client notified — no merge, coarsening, or HEFT
+     pass is needed.
    - Merge: JIT merge uncached nodes/edges into $G_\cup$.
    - Request tracking: Add `request_id` to `request_clients` set on each node.
    - Incremental re-coarsening: Re-coarsen the MUTABLE partition.
@@ -305,17 +321,33 @@ The state transitions are governed by the following event handlers:
    - Cache-skip scan: For each MUTABLE EP whose scope overlaps `ep`: if all outputs are now in the store, mark it complete (cache-skipped); otherwise, update its predicted duration.
    - Dependency cascade: Downstream pending EPs whose dependencies are satisfied transition to `ready`.
    - HEFT re-plan & Dispatch: Run HEFT and dispatch ready EPs.
+   - Note: Re-coarsening is intentionally omitted from
+     `EPComplete`. Mutable EPs retain their existing
+     coverage scope; the cache-skip scan handles the
+     common case (entire scope cached), and partial
+     cache updates within a scope are handled lazily on
+     the next `RequestArrival`.
 3. **EPFail(ep, failure_kind)**:
    - If `deterministic`: Mark failed, fail downstream dependents, and notify clients.
    - If `transient` (infra failure): Revert `ep` to `ready`, run HEFT, and re-dispatch.
-4. **WorkerHealthChange(worker, unhealthy)**:
-   - Revert affected running EPs on `worker` to `ready`.
-   - Run HEFT excluding `worker` and dispatch.
+4. **WorkerHealthChange(worker, status)**:
+   - If `unhealthy`: Revert affected running EPs on
+     `worker` to `ready`. Run HEFT excluding `worker`
+     and dispatch.
+   - If `healthy` (restored): Mark worker available.
+     Run HEFT re-plan and dispatch accumulated ready
+     EPs.
 5. **RequestCancellation(request_id)**:
-   - For each EP, remove `request_id` from `request_clients`.
-   - If `request_clients` is empty and EP is MUTABLE, prune it.
+   - For each derivation node in $G_\cup$, remove
+     `request_id` from `request_clients(v)`. For each
+     EP whose constituent nodes now all have empty
+     `request_clients` and which is MUTABLE, prune it.
+     (Per the formal model, `request_clients` is tracked
+     on derivation nodes, not EPs. An EP's effective
+     client set is the union of its constituent nodes'
+     `request_clients`.)
 
-**Two-Level Deduplication & CAS Idempotency**:
+**Structural Deduplication & CAS Idempotency**:
 Deduplication is achieved at two distinct levels:
 
 1. **Entry Point Level (Unified DAG)**: Structural deduplication. Because requests merge into $G_\cup$, identical derivation hashes map to the same node. This is the primary defense against redundant computation.
@@ -402,7 +434,10 @@ Where:
   between the entry point's predicted resource vector $\mathbf{r}_e$ and
   the worker's available capacity vector $\mathbf{a}_w$, normalized by the
   worker's total capacity vector $\mathbf{c}_w$ (as established in Tetris):
-  $$\operatorname{resource_fit}(w, e) = \sum_{i \in \{\text{cpu}, \text{mem}, \text{disk}\}} \left( \frac{r_{e,i}}{c_{w,i}} \cdot \frac{a_{w,i}}{c_{w,i}} \right)$$
+  $$\operatorname{resource_fit}(w, e) = \sum_{i \in \mathcal{D}} \left( \frac{r_{e,i}}{c_{w,i}} \cdot \frac{a_{w,i}}{c_{w,i}} \right)$$
+  where $\mathcal{D}$ is the set of resource dimensions (typically
+  $\{\text{cpu}, \text{mem}, \text{disk}\}$, extensible with
+  `egress_bandwidth` per note #12).
   Normalizing each dimension by total worker capacity $c_{w,i}$ converts
   raw resource values (e.g., CPU cores vs. memory bytes) into unitless, comparable
   fractions in $[0,1]$ before combination. This prevents large byte ranges from
@@ -485,7 +520,7 @@ The Eos scheduling daemon utilizes this trait boundary to support three swappabl
 
 1. **HEFT (Primary)**: The default active strategy. HEFT constructs a time-slotted execution plan. It is highly efficient ($O(|S|^2 \cdot |W|)$) and provides a provable competitive bound ($\alpha_{\text{heft}}$) mechanized in Lean 4.
 2. **Greedy (Fallback)**: A low-overhead fallback strategy activated under high prediction error or missing profiles. It assigns tasks greedily to the highest scoring cache-affinity worker, satisfying basic capacity safety.
-3. **MILP/MCMF (Deferred)**: A global solver strategy reserved for federated scale ($|W| > 1000$). It solves the JIT assignment globally via mixed-integer programming or min-cost max-flow, operating over the coarsened Atom DAG. Because the graph size is naturally bounded ($|S| \leq 20$), the solver completes in sub-millisecond time, bypassing NP-hardness in practice.
+3. **MILP/MCMF (Deferred)**: A global solver strategy reserved for federated scale ($|W| > 1000$). It solves the JIT assignment globally via mixed-integer programming or min-cost max-flow, operating over the coarsened EP DAG. Because the graph size is naturally bounded ($|S| \leq 20$), the solver completes in sub-millisecond time, bypassing NP-hardness in practice.
 
 ### 3.1 Virtual Capacity and Enforcement
 
@@ -1100,9 +1135,13 @@ function when:
 Derived from formal verification (§Appendix) and the
 optimality assessment above:
 
-1. **Critical path priority**: When multiple entry points
-   become `ready` simultaneously, the dispatcher should
-   sort them by estimated critical-path contribution
+1. **Critical path priority (Greedy fallback)**: This note
+   applies to the Greedy fallback strategy (§3b, strategy 2),
+   which does not compute time slots. The HEFT strategy
+   inherently prioritizes by upward rank (critical path
+   contribution). Under the Greedy strategy, when multiple
+   entry points become `ready` simultaneously, the dispatcher
+   should sort them by estimated critical-path contribution
    (longest weighted path to the DAG root) before assigning.
    Greedy FIFO readiness ordering risks assigning trivial
    entry points to capable workers, blocking imminent
@@ -1155,8 +1194,9 @@ optimality assessment above:
    protocol is: build → upload all outputs → confirm store
    acknowledgment → report `EPComplete`. This ordering is
    critical for the correctness of the dependency cascade in
-   the event handler (§2b, step 2.5: "Downstream pending EPs
-   whose dependencies are satisfied transition to `ready`").
+   the event handler (§2b, `EPComplete`, dependency cascade
+   step: "Downstream pending EPs whose dependencies are
+   satisfied transition to `ready`").
 
 7. **Opportunistic artifact salvage on failure**: When a
    build fails, the worker should upload any intermediate
@@ -1208,17 +1248,17 @@ optimality assessment above:
    This aligns with the general guidance in §3a that
    coarsening thresholds must exceed scheduling latency.
 
-10. **Resource-fit normalization**: The multi-criteria
-    `resource_fit` dot product (§3) should be normalized to
-    a bounded interval $[0, 1]$ before applying the decayed
-    weight $\beta_e$. Without normalization, heterogeneous
-    clusters (small edge nodes vs. large builder nodes)
-    produce magnitude skew: the same task yields vastly
-    different raw dot products on different worker types.
-    This distorts the scoring function's ability to route
-    heavy tasks to capable workers. Normalize by dividing
-    by the norm of the resource vectors, or equivalently,
-    use cosine similarity instead of the raw dot product.
+10. **Resource-fit normalization**: The Tetris-style
+    `resource_fit` formula (§3) is self-normalizing — each
+    dimension is capacity-relative ($r_{e,i}/c_{w,i} \in [0,1]$
+    and $a_{w,i}/c_{w,i} \in [0,1]$), so each term is bounded
+    by $[0,1]$ and the sum is bounded by $|\mathcal{D}|$ (the
+    number of resource dimensions). To normalize to $[0,1]$
+    for comparable weighting with affinity and availability,
+    divide by $|\mathcal{D}|$. Do NOT use cosine similarity —
+    the Tetris formula intentionally preserves task magnitude
+    to steer heavy builds to capable workers, and this property
+    is relied upon by the Theorem 3 robustness proof.
 
 11. **Non-blocking ingress draining**: The scheduler's
     event channel **must not** block on HEFT planning or
