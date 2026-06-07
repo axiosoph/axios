@@ -237,7 +237,7 @@ To prevent redundant computation across concurrent requests and minimize myopic 
 The scheduler partitions the mutable portion of the global DAG into coarsened **entry points** ($S$). Entry points are selected top-down to cover the uncached sub-DAG using a greedy walk governed by the following promotion criteria:
 
 A node $v$ is promoted to a standalone entry point ($v \in S$) if:
-$$\operatorname{predicted{\_}cost}(v) > \frac{\theta_{\text{cost}}}{1 + \operatorname{conf}(v) \cdot \theta_{\text{scale}}} \;\lor\; \operatorname{fan{\_}in}(v) > \theta_{\text{fanin}} \;\lor\; \operatorname{subgraph{\_}cost}(v) > \frac{\theta_{\text{subgraph}}}{1 + \operatorname{conf}(v) \cdot \theta_{\text{scale}}}$$
+$$\operatorname{predicted_cost}(v) > \frac{\theta_{\text{cost}}}{1 + \operatorname{conf}(v) \cdot \theta_{\text{scale}}} \;\lor\; \operatorname{fan_in}(v) > \theta_{\text{fanin}} \;\lor\; \operatorname{subgraph_cost}(v) > \frac{\theta_{\text{subgraph}}}{1 + \operatorname{conf}(v) \cdot \theta_{\text{scale}}}$$
 
 Where:
 
@@ -313,7 +313,7 @@ Where:
   between the entry point's predicted resource vector $\mathbf{r}_e$ and
   the worker's available capacity vector $\mathbf{a}_w$, normalized by the
   worker's total capacity vector $\mathbf{c}_w$ (as established in Tetris):
-  $$\operatorname{resource{\_}fit}(w, e) = \sum_{i \in \{\text{cpu}, \text{mem}, \text{disk}\}} \left( \frac{r_{e,i}}{c_{w,i}} \cdot \frac{a_{w,i}}{c_{w,i}} \right)$$
+  $$\operatorname{resource_fit}(w, e) = \sum_{i \in \{\text{cpu}, \text{mem}, \text{disk}\}} \left( \frac{r_{e,i}}{c_{w,i}} \cdot \frac{a_{w,i}}{c_{w,i}} \right)$$
   Normalizing each dimension by total worker capacity $c_{w,i}$ converts
   raw resource values (e.g., CPU cores vs. memory bytes) into unitless, comparable
   fractions in $[0,1]$ before combination. This prevents large byte ranges from
@@ -1000,7 +1000,7 @@ optimality assessment above:
    catastrophic misprediction needs immediate correction.
 
 9. **Convergence point cost floor**: The fan-in promotion
-   rule ($\operatorname{fan{\_}in}(v) > \theta_{\text{fanin}}$) should
+   rule ($\operatorname{fan_in}(v) > \theta_{\text{fanin}}$) should
    be gated with an absolute cost floor to prevent trivial
    high-convergence nodes (e.g., a 20ms header copy with
    many dependents) from being promoted to standalone entry
@@ -1010,8 +1010,8 @@ optimality assessment above:
    computation time. The cost floor should be calibrated to
    the cluster's average round-trip scheduling latency
    $\Omega_{\text{latency}}$:
-   $\operatorname{fan{\_}in}(v) > \theta_{\text{fanin}} \;\land\;
-   \operatorname{predicted{\_}cost}(v) \ge \Omega_{\text{latency}}$.
+   $\operatorname{fan_in}(v) > \theta_{\text{fanin}} \;\land\;
+   \operatorname{predicted_cost}(v) \ge \Omega_{\text{latency}}$.
    This aligns with the general guidance in §3a that
    coarsening thresholds must exceed scheduling latency.
 
