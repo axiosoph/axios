@@ -237,7 +237,7 @@ To prevent redundant computation across concurrent requests and minimize myopic 
 The scheduler partitions the mutable portion of the global DAG into coarsened **entry points** ($S$). Entry points are selected top-down to cover the uncached sub-DAG using a greedy walk governed by the following promotion criteria:
 
 A node $v$ is promoted to a standalone entry point ($v \in S$) if:
-$$\text{predicted\_cost}(v) > \frac{\theta_{\text{cost}}}{1 + \text{conf}(v) \cdot \theta_{\text{scale}}} \;\lor\; \text{fan\_in}(v) > \theta_{\text{fanin}} \;\lor\; \text{subgraph\_cost}(v) > \frac{\theta_{\text{subgraph}}}{1 + \text{conf}(v) \cdot \theta_{\text{scale}}}$$
+$$\operatorname{predicted{\_}cost}(v) > \frac{\theta_{\text{cost}}}{1 + \operatorname{conf}(v) \cdot \theta_{\text{scale}}} \;\lor\; \operatorname{fan{\_}in}(v) > \theta_{\text{fanin}} \;\lor\; \operatorname{subgraph{\_}cost}(v) > \frac{\theta_{\text{subgraph}}}{1 + \operatorname{conf}(v) \cdot \theta_{\text{scale}}}$$
 
 Where:
 
@@ -313,7 +313,7 @@ Where:
   between the entry point's predicted resource vector $\mathbf{r}_e$ and
   the worker's available capacity vector $\mathbf{a}_w$, normalized by the
   worker's total capacity vector $\mathbf{c}_w$ (as established in Tetris):
-  $$\text{resource\_fit}(w, e) = \sum_{i \in \{\text{cpu}, \text{mem}, \text{disk}\}} \left( \frac{r_{e,i}}{c_{w,i}} \cdot \frac{a_{w,i}}{c_{w,i}} \right)$$
+  $$\operatorname{resource{\_}fit}(w, e) = \sum_{i \in \{\text{cpu}, \text{mem}, \text{disk}\}} \left( \frac{r_{e,i}}{c_{w,i}} \cdot \frac{a_{w,i}}{c_{w,i}} \right)$$
   Normalizing each dimension by total worker capacity $c_{w,i}$ converts
   raw resource values (e.g., CPU cores vs. memory bytes) into unitless, comparable
   fractions in $[0,1]$ before combination. This prevents large byte ranges from
@@ -500,8 +500,8 @@ Where:
 - $\|S\|$ = selected entry points ($\|S\| \leq \|V'\|$,
   typically $\|S\| \ll \|V'\|$ due to coarsening)
 - $\|W\|$ = number of candidate workers
-- $d$ = resource dimensions (constant, typically 3:
-  CPU, memory, disk)
+- $d$ = resource dimensions (constant, typically 3–4:
+  CPU, memory, disk, optionally egress bandwidth — see note #12)
 - $\|R\|$ = LRH ring size, $C$ = cache-local window
 - EP DAG derivation is $O(\|S\|^2)$ in the worst case
   (all-pairs reachability on the coarsened set) but
@@ -627,10 +627,10 @@ documents the specific tradeoffs.
 
 ### Where the Algorithm Departs from Optimality
 
-To achieve $O(\|V'\| + \|E'\| + \|S\| \cdot \|W\|)$
-greedy dispatch (§5), the design makes four intentional
-mathematical compromises relative to a theoretical
-omniscient MILP solver:
+To achieve $O(\|V'\| + \|E'\| + \|S\|^2 \cdot \|W\|)$
+polynomial-time scheduling (§5), the design makes four
+intentional mathematical compromises relative to a
+theoretical omniscient MILP solver:
 
 1. **Graph coarsening blindspot**: Finding the optimal
    antichain cover of a weighted DAG to minimize
@@ -738,7 +738,8 @@ Bridging this gap requires trace-driven simulation:
 3. Implement the entry point selection + scoring in a
    single-threaded Rust simulator
 4. Sweep heuristic thresholds and measure simulated
-   makespan against an HRW-only baseline
+   makespan against an LRH-only baseline (cache-affinity
+   dispatch without coarsening or prediction)
 
 If the simulator demonstrates order-of-magnitude DAG
 reduction without serializing the critical path, the
@@ -999,7 +1000,7 @@ optimality assessment above:
    catastrophic misprediction needs immediate correction.
 
 9. **Convergence point cost floor**: The fan-in promotion
-   rule ($\text{fan\_in}(v) > \theta_{\text{fanin}}$) should
+   rule ($\operatorname{fan{\_}in}(v) > \theta_{\text{fanin}}$) should
    be gated with an absolute cost floor to prevent trivial
    high-convergence nodes (e.g., a 20ms header copy with
    many dependents) from being promoted to standalone entry
@@ -1009,8 +1010,8 @@ optimality assessment above:
    computation time. The cost floor should be calibrated to
    the cluster's average round-trip scheduling latency
    $\Omega_{\text{latency}}$:
-   $\text{fan\_in}(v) > \theta_{\text{fanin}} \;\land\;
-   \text{predicted\_cost}(v) \ge \Omega_{\text{latency}}$.
+   $\operatorname{fan{\_}in}(v) > \theta_{\text{fanin}} \;\land\;
+   \operatorname{predicted{\_}cost}(v) \ge \Omega_{\text{latency}}$.
    This aligns with the general guidance in §3a that
    coarsening thresholds must exceed scheduling latency.
 
@@ -1076,6 +1077,71 @@ optimality assessment above:
     FOD-heavy EPs toward high-bandwidth workers. Historical
     profiles can track FOD fetch durations per derivation
     hash to refine bandwidth-adjusted predictions.
+
+13. **Worker reconnection protocol**: When a worker is
+    marked unhealthy (heartbeat timeout), the scheduler
+    reverts its running EPs to `ready` and re-dispatches
+    them. However, the worker may still be alive and
+    actively building — the health check failure may be a
+    transient network blip. If the worker reconnects while
+    a duplicate build is in flight, the cluster wastes
+    resources. The implementation should use a **grace
+    period** before rescheduling: when a worker misses a
+    heartbeat, enter a `suspect` state for a configurable
+    cooldown (e.g., 30–60 seconds) before transitioning to
+    `unhealthy`. During the cooldown, no rescheduling
+    occurs. If the worker reconnects during the cooldown,
+    its EPs remain assigned and the incident is logged as
+    a transient network event. If the cooldown expires, the
+    worker transitions to `unhealthy` and rescheduling
+    proceeds normally. Additionally, if a worker reconnects
+    _after_ rescheduling has already occurred and reports
+    that it is still actively building the same EP, the
+    scheduler should allow the original build to continue
+    (with its own short monitoring window in case the
+    network issue recurs) and cancel the duplicate. CAS
+    idempotency guarantees correctness regardless of which
+    build "wins," but minimizing redundant work is a
+    resource efficiency concern.
+
+14. **Causal prediction error attribution**: The EMA-based
+    prediction system tracks _that_ predictions are wrong
+    (magnitude of |η|) but not _why_. For faster
+    convergence, the implementation should track
+    per-worker-class performance deltas: if derivation X
+    takes 120s on a 64GB worker but 45s on a 256GB worker,
+    the prediction error is attributable to memory pressure
+    (swapping or cache thrashing), not to an inherent
+    change in the derivation. The profile store can
+    maintain resource-conditioned predictions — e.g.,
+    separate EMA tracks for "duration on workers with
+    ≥128GB RAM" vs. "duration on workers with <128GB RAM."
+    When a prediction error exceeds a significance
+    threshold (e.g., >50% deviation), the scheduler should
+    compare the worker's resource profile to the historical
+    median worker profile for this derivation and attribute
+    the error to the most divergent resource dimension.
+    This attribution can then drive targeted prediction
+    inflation (note #8) and inform the resource-fit
+    scoring (§3) without waiting for the EMA to accumulate
+    enough samples to self-correct.
+
+15. **Heuristic refinement stability**: The formal model
+    is explicitly designed so that heuristic tuning does
+    not invalidate the proofs. The `SchedulerStrategy`
+    trait (§3b) abstracts over the specific solver; the
+    `Coarsening` structure (Lean 4) abstracts over the
+    specific entry-point selection criteria; and the
+    competitive ratio α absorbs heuristic quality — worse
+    heuristics produce a larger α, but the bound structure
+    remains valid. Implementors should treat the
+    coarsening thresholds, scoring weights, EMA decay
+    constants, and cooldown timers as continuously
+    tunable parameters. Steady refinement of these
+    heuristics through production telemetry is expected
+    and encouraged — the architecture's formal seams
+    guarantee that tuning cannot violate safety or
+    liveness properties.
 
 ---
 
