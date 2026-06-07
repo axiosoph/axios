@@ -1,0 +1,218 @@
+--------------------------- MODULE MultiRequestModel ---------------------------
+EXTENDS Naturals, Sequences, FiniteSets
+
+\* Local Definitions representing constants
+AllPossibleEntryPoints == {"A", "B", "C", "D"}
+AllPossibleRequestIds == {"r1", "r2"}
+Workers == {"w1", "w2"}
+WorkerCap == [w \in Workers |-> 4]
+PredictedLoad == [s \in AllPossibleEntryPoints |-> 2]
+Outputs == [s \in AllPossibleEntryPoints |-> {s}]
+
+VARIABLES
+    epStatus,          \* Map of entry point to status
+    workerLoad,        \* Map of worker to current load
+    artifactStore,     \* Set of completed outputs
+    runningOn,         \* Map of entry point to worker
+    EntryPoints,       \* Set of active entry points (dynamic)
+    DependencyEdges,   \* Set of active edges (dynamic)
+    requestClients,    \* Map of entry point to set of request IDs
+    requestArrived     \* Set of request IDs that have arrived
+
+vars == <<epStatus, workerLoad, artifactStore, runningOn, EntryPoints, DependencyEdges, requestClients, requestArrived>>
+
+-----------------------------------------------------------------------------
+
+\* Helper to check acyclicity of DependencyEdges
+BoundedSeq == UNION { [1..n -> AllPossibleEntryPoints] : n \in 2..(Cardinality(AllPossibleEntryPoints) + 1) }
+
+IsAcyclic(edges) ==
+    ~ \exists seq \in BoundedSeq :
+        /\ Len(seq) >= 2
+        /\ seq[1] = seq[Len(seq)]
+        /\ \A i \in 1..(Len(seq)-1) : <<seq[i], seq[i+1]>> \in edges
+
+VerifyAxioms ==
+    /\ IsFiniteSet(AllPossibleEntryPoints)
+    /\ AllPossibleEntryPoints /= {}
+    /\ IsFiniteSet(AllPossibleRequestIds)
+    /\ AllPossibleRequestIds /= {}
+    /\ IsFiniteSet(Workers)
+    /\ Workers /= {}
+    /\ WorkerCap \in [Workers -> Nat]
+    /\ PredictedLoad \in [AllPossibleEntryPoints -> Nat]
+    /\ \A s \in AllPossibleEntryPoints : IsFiniteSet(Outputs[s])
+
+ASSUME VerifyAxioms
+
+-----------------------------------------------------------------------------
+
+\* Initial State (Starts with a single request r1 containing a linear topology A -> B)
+Init ==
+    /\ EntryPoints = {"A", "B"}
+    /\ DependencyEdges = {<<"A", "B">>}
+    /\ requestClients = [s \in {"A", "B"} |-> {"r1"}]
+    /\ epStatus = [s \in {"A", "B"} |-> IF s = "A" THEN "ready" ELSE "pending"]
+    /\ workerLoad = [w \in Workers |-> 0]
+    /\ artifactStore = {}
+    /\ runningOn = [s \in {"A", "B"} |-> "none"]
+    /\ requestArrived = {"r1"}
+
+-----------------------------------------------------------------------------
+
+\* State transitions (Actions)
+
+\* Dispatch an entry point s to worker w
+Dispatch(s, w) ==
+    /\ s \in EntryPoints
+    /\ epStatus[s] = "ready"
+    /\ workerLoad[w] + PredictedLoad[s] <= WorkerCap[w]
+    /\ epStatus' = [epStatus EXCEPT ![s] = "dispatched"]
+    /\ workerLoad' = [workerLoad EXCEPT ![w] = @ + PredictedLoad[s]]
+    /\ runningOn' = [runningOn EXCEPT ![s] = w]
+    /\ UNCHANGED <<EntryPoints, DependencyEdges, requestClients, artifactStore, requestArrived>>
+
+\* Complete the execution of entry point s
+Complete(s) ==
+    /\ s \in EntryPoints
+    /\ epStatus[s] = "dispatched"
+    /\ LET w == runningOn[s] IN
+         /\ epStatus' = [s_new \in EntryPoints |->
+              IF s_new = s THEN "complete"
+              ELSE IF epStatus[s_new] = "pending" /\
+                      (\A e \in DependencyEdges : e[2] = s_new => 
+                         (e[1] = s \/ epStatus[e[1]] = "complete"))
+                   THEN "ready"
+                   ELSE epStatus[s_new]]
+         /\ workerLoad' = [workerLoad EXCEPT ![w] = @ - PredictedLoad[s]]
+         /\ artifactStore' = artifactStore \cup Outputs[s]
+         /\ runningOn' = [runningOn EXCEPT ![s] = "none"]
+         /\ UNCHANGED <<EntryPoints, DependencyEdges, requestClients, requestArrived>>
+
+\* Fail deterministically (deterministic failure propagates)
+FailDeterministic(s) ==
+    /\ s \in EntryPoints
+    /\ epStatus[s] = "dispatched"
+    /\ LET w == runningOn[s] IN
+         /\ epStatus' = [epStatus EXCEPT ![s] = "failed"]
+         /\ workerLoad' = [workerLoad EXCEPT ![w] = @ - PredictedLoad[s]]
+         /\ runningOn' = [runningOn EXCEPT ![s] = "none"]
+         /\ UNCHANGED <<EntryPoints, DependencyEdges, requestClients, artifactStore, requestArrived>>
+
+\* Propagate failures downstream
+CascadeFail(s) ==
+    /\ s \in EntryPoints
+    /\ epStatus[s] \in {"pending", "ready"}
+    /\ \exists e \in DependencyEdges : e[2] = s /\ epStatus[e[1]] = "failed"
+    /\ epStatus' = [epStatus EXCEPT ![s] = "failed"]
+    /\ UNCHANGED <<EntryPoints, DependencyEdges, requestClients, workerLoad, artifactStore, runningOn, requestArrived>>
+
+\* Merge a new request r2 containing topology B -> C (shared B dependency)
+MergeRequest ==
+    /\ ~ ("r2" \in requestArrived) \* Request r2 hasn't arrived yet
+    /\ LET new_eps == {"B", "C"}
+           new_edges == {<<"B", "C">>}
+       IN
+         /\ EntryPoints' = EntryPoints \cup new_eps
+         /\ DependencyEdges' = DependencyEdges \cup new_edges
+         /\ requestClients' = [s \in EntryPoints' |->
+                IF s \in EntryPoints THEN requestClients[s] \cup {"r2"}
+                ELSE {"r2"}]
+         /\ epStatus' = [s \in EntryPoints' |->
+                IF s \in EntryPoints THEN epStatus[s]
+                ELSE IF Outputs[s] \subseteq artifactStore THEN "complete"
+                ELSE IF \A e \in new_edges : e[2] = s => (e[1] \in EntryPoints /\ epStatus[e[1]] = "complete")
+                THEN "ready"
+                ELSE "pending"]
+         /\ runningOn' = [s \in EntryPoints' |->
+                IF s \in EntryPoints THEN runningOn[s]
+                ELSE "none"]
+         /\ requestArrived' = requestArrived \cup {"r2"}
+         /\ UNCHANGED <<workerLoad, artifactStore>>
+
+\* Cache-skip scan for pending/ready EPs whose outputs are already present in store
+CacheSkip(s) ==
+    /\ s \in EntryPoints
+    /\ epStatus[s] \in {"pending", "ready"}
+    /\ Outputs[s] \subseteq artifactStore
+    /\ epStatus' = [epStatus EXCEPT ![s] = "complete"]
+    /\ UNCHANGED <<EntryPoints, DependencyEdges, requestClients, workerLoad, artifactStore, runningOn, requestArrived>>
+
+\* Cancel a request and prune its mutable EPs
+CancelRequest(req_id) ==
+    /\ \exists s \in EntryPoints : req_id \in requestClients[s]
+    /\ LET new_requestClients == [s \in EntryPoints |-> requestClients[s] \ {req_id}]
+           to_prune == {s \in EntryPoints : new_requestClients[s] = {} /\ epStatus[s] \in {"pending", "ready"}}
+       IN
+         /\ to_prune /= {}
+         /\ EntryPoints' = EntryPoints \ to_prune
+         /\ DependencyEdges' = {e \in DependencyEdges : e[1] \notin to_prune /\ e[2] \notin to_prune}
+         /\ requestClients' = [s \in EntryPoints' |-> new_requestClients[s]]
+         /\ epStatus' = [s \in EntryPoints' |-> epStatus[s]]
+         /\ runningOn' = [s \in EntryPoints' |-> runningOn[s]]
+         /\ UNCHANGED <<workerLoad, artifactStore, requestArrived>>
+
+-----------------------------------------------------------------------------
+
+\* Next State
+Next ==
+    \/ \exists s \in EntryPoints, w \in Workers : Dispatch(s, w)
+    \/ \exists s \in EntryPoints : Complete(s)
+    \/ \exists s \in EntryPoints : FailDeterministic(s)
+    \/ \exists s \in EntryPoints : CascadeFail(s)
+    \/ \exists s \in EntryPoints : CacheSkip(s)
+    \/ MergeRequest
+    \/ \exists req_id \in AllPossibleRequestIds : CancelRequest(req_id)
+
+Spec == Init /\ [][Next]_vars /\ WF_vars(Next)
+
+-----------------------------------------------------------------------------
+
+\* Invariants (Safety)
+
+TypeOK ==
+    /\ EntryPoints \subseteq AllPossibleEntryPoints
+    /\ DependencyEdges \subseteq (EntryPoints \times EntryPoints)
+    /\ epStatus \in [EntryPoints -> {"pending", "ready", "dispatched", "complete", "failed"}]
+    /\ workerLoad \in [Workers -> Nat]
+    /\ artifactStore \subseteq UNION {Outputs[s] : s \in AllPossibleEntryPoints}
+    /\ runningOn \in [EntryPoints -> Workers \cup {"none"}]
+    /\ requestClients \in [EntryPoints -> SUBSET AllPossibleRequestIds]
+
+OrderingSoundness ==
+    \A e \in DependencyEdges :
+        epStatus[e[2]] \in {"dispatched", "complete"} => epStatus[e[1]] = "complete"
+
+CapacitySafety ==
+    \A w \in Workers : workerLoad[w] <= WorkerCap[w]
+
+ArtifactSafety ==
+    (\A s \in EntryPoints : epStatus[s] = "complete")
+        => artifactStore = UNION {Outputs[s] : s \in EntryPoints}
+
+\* Safe helper operators to prevent out-of-domain function application errors
+epStatusSafe(s) == IF s \in EntryPoints THEN epStatus[s] ELSE "none"
+runningOnSafe(s) == IF s \in EntryPoints THEN runningOn[s] ELSE "none"
+requestClientsSafe(s) == IF s \in EntryPoints THEN requestClients[s] ELSE {}
+
+\* P8: Frozen Stability
+FrozenStability ==
+    \A s \in AllPossibleEntryPoints :
+        \A w \in Workers :
+            (epStatusSafe(s) = "dispatched" /\ runningOnSafe(s) = w)
+                => [] (epStatusSafe(s) \in {"dispatched", "complete", "failed"} => runningOnSafe(s) = w)
+
+-----------------------------------------------------------------------------
+
+\* Liveness Properties
+
+CompletionPropagation ==
+    \A req_id \in AllPossibleRequestIds :
+        <> (\A s \in AllPossibleEntryPoints : (req_id \in requestClientsSafe(s)) => epStatusSafe(s) \in {"complete", "failed"})
+
+Progress ==
+    \A s \in AllPossibleEntryPoints :
+        (epStatusSafe(s) = "ready" /\ (\exists w \in Workers : workerLoad[w] + PredictedLoad[s] <= WorkerCap[w]))
+            => <> (epStatusSafe(s) /= "ready")
+
+=============================================================================
