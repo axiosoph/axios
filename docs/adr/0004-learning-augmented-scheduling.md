@@ -394,6 +394,65 @@ The Eos scheduling daemon utilizes this trait boundary to support three swappabl
 2. **Greedy (Fallback)**: A low-overhead fallback strategy activated under high prediction error or missing profiles. It assigns tasks greedily to the highest scoring cache-affinity worker, satisfying basic capacity safety.
 3. **MILP/MCMF (Deferred)**: A global solver strategy reserved for federated scale ($|W| > 1000$). It solves the JIT assignment globally via mixed-integer programming or min-cost max-flow, operating over the coarsened Atom DAG. Because the graph size is naturally bounded ($|S| \leq 20$), the solver completes in sub-millisecond time, bypassing NP-hardness in practice.
 
+### 3.1 Virtual Capacity and Enforcement
+
+The scheduler's capacity model is **enforcement-agnostic**.
+`WorkerCap` is an abstract capacity vector reported by the
+worker at registration. The scheduler treats it as a budget
+and applies a single dispatch guard uniformly:
+
+$$
+L(w) + \text{PredictedLoad}(s) \leq \text{WorkerCap}(w)
+$$
+
+How that capacity is determined is a worker-side concern:
+
+- **With OCI cgroups**: The worker reports its full physical
+  capacity (e.g., 128 cores, 256 GiB RAM) because enforcement
+  is kernel-guaranteed. Each dispatched build receives a cgroup
+  with limits matching `PredictedLoad` — the OCI runtime spec
+  sets `linux.resources.cpu.max` and `linux.resources.memory.max`.
+  Builds physically cannot exceed their allocation. If a
+  prediction underestimates, the build is throttled by the
+  kernel, not the machine exhausted. P4 is **kernel-enforced**.
+
+- **Without OCI (macOS, disabled)**: The worker reports a
+  **conservative virtual capacity** — smaller than hardware
+  reality, accounting for the lack of enforcement and
+  shared-resource interference. A 128-core Mac might report
+  effective capacity equivalent to 2–3 concurrent max-jobs.
+  P4 is **scheduler-enforced** with conservative margins.
+
+The scheduler algorithm is identical in both cases. No
+conditional branches, no tier detection, no capability
+queries. The abstraction boundary is clean:
+
+```
+┌────────────────────────────────┐
+│   Scheduler                    │
+│   Sees only: WorkerCap[w]      │
+│   Guard: L[w] + P[s] <= C[w]  │
+└──────────────┬─────────────────┘
+               │ abstract capacity vector
+┌──────────────▼─────────────────┐
+│   Worker Registration          │
+│   ┌─────────┐  ┌─────────────┐ │
+│   │ OCI:    │  │ Non-OCI:    │ │
+│   │ report  │  │ report      │ │
+│   │ physical│  │ conservative│ │
+│   │ capacity│  │ virtual cap │ │
+│   └─────────┘  └─────────────┘ │
+└────────────────────────────────┘
+```
+
+**Snix seam**: `BuildConstraints::MinMemory(u64)` already
+exists in the build request protocol
+(`snix/build/src/buildservice/build_request.rs`). Extending
+with CPU resource constraints is a clean addition.
+`snix/build/src/oci/spec.rs` generates OCI runtime specs
+with PID/IPC/UTS/Mount namespaces; cgroup namespace support
+is architecturally prepared.
+
 ### 4. Local Rendezvous Hashing (LRH)
 
 Replace standard Highest Random Weight (HRW) hashing with
@@ -428,6 +487,7 @@ cost.
 | LRH lookup            | Per-assignment cache affinity                 | $O(\log\|R\| + C)$                                    |
 | Singleflight check    | Hash map lookup/insert                        | $O(1)$ amortized                                      |
 | EMA update            | Per-completion profile update                 | $O(1)$                                                |
+| HEFT re-planning      | per-event full EP DAG scheduling              | $O(\|S\|^2 \cdot \|W\|)$ amortized by event coalescing |
 | **Total pipeline**    | **One scheduling pass**                       | $O(\|V'\| + \|E'\| + \|S\| \cdot \max(\|S\|, \|W\|))$ |
 
 Where:
@@ -442,6 +502,10 @@ Where:
 - EP DAG derivation is $O(\|S\|^2)$ in the worst case
   (all-pairs reachability on the coarsened set) but
   typically much smaller since $\|S\| \ll \|V'\|$
+- **Single-machine degenerate case**: When $\|W\| = 1$,
+  HEFT degenerates to a topological sort and coarsening
+  is irrelevant — all EPs are assigned to the single
+  worker regardless of the partition chosen
 
 **Key property**: The NP-hard optimal entry point
 selection is sidestepped by the greedy heuristic, which
@@ -570,17 +634,30 @@ omniscient MILP solver:
    if bundling a subgraph will accidentally serialize
    tasks that could have been parallelized, or fragment
    what should be colocated. This gap is captured by
-   $\alpha$ in Theorem 2.
+   $\alpha(\bar\varepsilon)$ in Theorem 2': the coarsening
+   gap closes adaptively as the mean prediction error
+   $\bar\varepsilon \to 0$, because higher-confidence
+   predictions enable finer-grained partitions.
 
-2. **Myopic dispatch**: The moment an entry point becomes
-   `ready`, it is assigned to the highest-scoring worker.
-   Greedy dispatch cannot hold a worker idle in
-   anticipation of an imminent high-priority entry point.
-   Example: a 2-core leaf assigned to a 128-core worker
-   via cache affinity, blocking a critical 120-core entry
-   point that unblocks 5 seconds later. An optimal offline
-   scheduler (HEFT-style) computes the temporal chain and
-   intentionally delays assignment.
+2. **Cross-event residual myopia**: HEFT on the full EP
+   DAG replaces the earlier myopic greedy dispatch,
+   computing a global priority ordering across all ready
+   entry points within a single scheduling event.
+   Residual sub-optimality is bounded to cross-event
+   myopia — decisions made between successive HEFT
+   re-plans, where a completion event reveals new ready
+   EPs that could not be anticipated. Event coalescing
+   (batching closely-spaced events into a single HEFT
+   invocation) further reduces this gap.
+   Example: a 4-worker cluster with 4 available cores
+   each receives 5 concurrent 4-core entry points.
+   Capacity is exhausted (4 × 4 = 16 cores, 5 × 4 = 20
+   required). The 5th EP must wait for a completion
+   event, and HEFT cannot anticipate which of the 4
+   running EPs will finish first. An omniscient scheduler
+   with perfect completion-time knowledge would pre-assign
+   the 5th EP to the worker whose current task finishes
+   soonest.
 
 3. **Submodular redundant computation**: The relaxed coverage
    mapping permits non-entry-point derivations to exist in
@@ -767,6 +844,13 @@ function when:
 - **Deterministic and debuggable**: No ML inference in the
   scheduling loop. Historical profiles are inspectable.
   Scheduling decisions are reproducible given the same state.
+- **Cross-request optimization**: The unified global DAG
+  shares cached dependencies across concurrent requests.
+  HoL immunity (P5') ensures no request can block another's
+  progress.
+- **Adaptive coarsening**: Coarsening quality adjusts
+  automatically to prediction accuracy via the confidence
+  gate.
 
 ### Negative
 
@@ -780,6 +864,10 @@ function when:
 - **Tuning surface**: Three operator-tunable weights (α, β,
   γ) plus entry point selection thresholds. Sensible defaults
   should cover most cases.
+- **Global DAG memory**: The unified global DAG's memory
+  footprint is proportional to the sum of concurrent request
+  DAG sizes. Under many concurrent requests with large DAGs,
+  this may require memory budgeting.
 
 ### Risks
 
@@ -803,6 +891,10 @@ function when:
   the dependency structure — there IS no parallelism to
   extract from a linear chain. The scheduler correctly
   identifies this.
+- **Deduplication-amplified failure cascade**: A shared EP's
+  deterministic failure cascades to all requests that depend
+  on it. Independent scheduling would isolate this failure.
+  Mitigation: transient failure detection + re-dispatch (P10).
 
 ### Implementation Notes
 
@@ -1060,15 +1152,17 @@ model instantiations.
 
 ### Track B: Optimization Quality (Lean 4)
 
-Four theorems machine-checked with Mathlib. Zero `sorry`
+Six theorems machine-checked with Mathlib. Zero `sorry`
 placeholders, zero custom `axiom` declarations.
 
 | Theorem | Statement                                                                                   | Status |
 | :------ | :------------------------------------------------------------------------------------------ | :----- |
 | Thm 1   | Valid entry point selection exists (identity witness)                                       | ✅     |
 | Thm 2   | $M(\sigma_H) \leq \alpha \cdot \frac{1+\varepsilon}{1-\varepsilon} \cdot M(\sigma^*)$       | ✅     |
+| Thm 2'  | Adaptive bound: $\alpha(\bar\varepsilon) \to 1$ as $\bar\varepsilon \to 0$                  | ✅     |
 | Thm 3   | Assignment stability under perturbation; EMA convergence                                    | ✅     |
 | Thm 4   | Singleflight: $\lvert\bigcup V'_i\rvert \leq \sum \lvert V'_i\rvert$, equality iff disjoint | ✅     |
+| Thm 5   | HEFT makespan within $(2 - 1/\|W\|)$ of optimal on the EP DAG                               | ✅     |
 
 All assumptions enter as explicit hypotheses on theorem
 signatures (non-negative durations, $\varepsilon < 1$,
@@ -1092,7 +1186,11 @@ See `docs/models/lean/` for proof sources.
 2. **Graph coarsening optimality**: The entry point
    selection problem is NP-hard. Theorem 2 bounds
    assignment quality on any fixed DAG, cleanly separating
-   it from DAG decomposition quality ($\alpha$).
+   it from DAG decomposition quality
+   ($\alpha(\bar\varepsilon)$). Theorem 2' conditionally
+   closes this gap: as mean prediction error
+   $\bar\varepsilon \to 0$, $\alpha \to 1$ and the
+   coarsening penalty vanishes.
 3. **μ-makespan transient bound**: During EMA convergence,
    the quantitative makespan penalty is not mechanized.
    Low risk: the transient is geometrically short and

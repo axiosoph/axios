@@ -9,7 +9,7 @@
 
 **Problem Statement:** The Eos build scheduler constructs entry
 point DAGs from derivation graphs, dispatches them topologically
-across federated workers, relies on builder-level locks to
+across federated workers, relies on CAS-idempotent store semantics to
 deduplicate concurrent transitive builds, and uses historical
 predictions keyed by derivation name to improve placement. These
 mechanisms interact concurrently under nondeterministic request
@@ -30,8 +30,8 @@ bounded performance relative to an optimal offline algorithm.
   subgraphs. Dispatch order must respect the induced entry point
   dependency DAG.
 - **Content-addressed deduplication** — derivation hashes provide
-  globally unique identity. Builder-level locks guarantee at-most-one
-  execution per output path across all concurrent builds.
+  globally unique identity. CAS-idempotent store semantics guarantee
+  at-most-one materialization per output path across all concurrent builds.
 - **Prediction-augmented optimization** — historical build
   profiles (keyed by derivation name) augment a baseline
   scheduling algorithm. Quality guarantees must hold when
@@ -47,7 +47,7 @@ bounded performance relative to an optimal offline algorithm.
 | :----------------------------------------- | :---------------------------------------- |
 | Entry point DAG construction correctness   | Snix evaluation internals                 |
 | Dispatch protocol ordering and liveness    | Builder-internal dependency resolution    |
-| Builder-level store locking correctness    | Artifact store implementation details     |
+| CAS-idempotent store deduplication         | Artifact store implementation details     |
 | Coverage property (partition completeness) | Wire protocol (Cap'n Proto serialization) |
 | Consistency/robustness competitive bounds  | Authentication/authorization middleware   |
 | Federated liveness under partition         | Specific hash algorithm (BLAKE3, etc.)    |
@@ -352,6 +352,15 @@ $$
   L(w) \leq \text{cap}(w) \quad \text{(component-wise)}
 $$
 
+> **Enforcement note**: $\text{cap}(w)$ is a virtual capacity vector
+> reported by the worker at registration. The scheduler is
+> enforcement-agnostic — the dispatch guard is identical regardless
+> of the worker's enforcement capability. Under OCI-based workers,
+> capacity equals physical resources and P4 is **kernel-enforced**
+> via cgroup limits (`cpu.max`, `memory.max`). Under non-OCI workers
+> (e.g., macOS), capacity is a conservative virtual budget accounting
+> for the lack of kernel enforcement. See ADR-0004 §3.1.
+
 **P8. Frozen stability**: Once an entry point is dispatched, its coverage scope $\kappa$ remains immutable and its assignment is fixed.
 
 $$
@@ -634,13 +643,19 @@ Zero `sorry`, zero custom `axiom`.
 
 Both tracks of formal verification are complete:
 
-- **Track A (TLA+)**: Protocol correctness model-checked
-  across 4 DAG topologies. All safety invariants (P1, P3,
-  P4) and liveness properties (P5, P6) verified
-  under `WF_vars(Next)` weak fairness. See `models/tla/`.
+- **Track A (TLA+)**: Protocol correctness model-checked.
+  `MultiRequestModel` verifies safety invariants (P1 Ordering,
+  P3 Artifact, P4 Capacity) and liveness properties (P5 Progress,
+  P5' HoL Immunity, P6 Completion, P6' Per-request Completion,
+  P8 Frozen Stability) under `WF_vars(Next)` weak fairness
+  with multi-request DAG merging, cache-skip, cancellation,
+  and failure cascading. See `models/tla/`.
 - **Track B (Lean 4)**: Optimization quality machine-checked.
-  Zero `sorry`, zero custom `axiom`. Theorems 1-4 verified
-  with Mathlib. See `models/lean/`.
+  Zero `sorry`, zero custom `axiom`. Six theorems verified
+  with Mathlib: Theorem 1 (Coverage Existence), Theorem 2
+  (Consistency Bound), Theorem 2' (Adaptive Consistency),
+  Theorem 3 (Robustness), Theorem 4 (Structural Deduplication),
+  Theorem 5 (Unified Coarsening Dominance). See `models/lean/`.
 
 ### For Implementation (Derived from Proofs)
 

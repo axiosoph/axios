@@ -34,8 +34,10 @@ EosScheduling/
   Defs.lean                   Shared definitions
   Theorem1.lean               Coverage Existence
   Theorem2.lean               Consistency Bound
+  Theorem2Prime.lean          Adaptive Consistency
   Theorem3.lean               Robustness
   Theorem4.lean               Singleflight Deduplication
+  Theorem5.lean               HEFT Makespan Bound
 ```
 
 **`Defs.lean`** — DAG path reachability (`PathNoS`), the `EosModel`
@@ -59,6 +61,16 @@ sustained prediction error).
 **`Theorem4.lean`** — _Singleflight Deduplication._ Proves
 `|⋃ V'_i| ≤ Σ|V'_i|` with equality iff pairwise disjoint (both
 directions).
+
+**`Theorem2Prime.lean`** — _Adaptive Consistency._ Proves that
+the coarsening factor `α(ε̄) → 1` as the mean prediction error
+`ε̄ → 0`, conditionally closing the coarsening gap from
+Theorem 2 when predictions are accurate.
+
+**`Theorem5.lean`** — _HEFT Makespan Bound._ Proves that HEFT
+on the EP DAG achieves makespan within `(2 − 1/|W|)` of the
+optimal schedule, replacing the earlier myopic greedy dispatch
+with a provably bounded global priority ordering.
 
 ## Relationship to the Project
 
