@@ -270,11 +270,57 @@ Where:
 - **Subgraph Volume**: Large aggregate transitive cost below $v$.
 - **Confidence Gate**: $\text{conf}(v) = 1 - \text{EMA}(|\eta_v|)$ modulates the cost thresholds based on past prediction error. When confidence is low ($\text{conf} \to 0$), cost thresholds remain high (conservative coarsening: fewer EPs, fewer scheduling decisions). When confidence is high ($\text{conf} \to 1$), cost thresholds are lowered, allowing selective promotion for fine-grained PEFT optimization.
 
+**The Scheduling Table T (one graph, not two)**:
+There is exactly **one** graph — $G_\cup$. The coarsened
+entry-point set $S$ is not a second graph but a **persistent
+lightweight scheduling table** $T = (S, E_S)$ layered over
+$G_\cup$: a small map (typically tens of entries) of EP
+records. Each record holds the EP's coverage scope (which
+$G_\cup$ nodes it covers), its aggregate cost and peak-memory
+estimates, its status, its per-worker OCT values, and
+dependency pointers to other EPs. Those dependency pointers
+**are** $E_S$ — adjacency lists, not a separately materialized
+edge set; PEFT walks them for OCT and the dispatcher walks them
+for readiness cascades.
+
+```rust
+struct SchedulingState {              // this is T
+    eps: HashMap<EpId, EpRecord>,     // |S| entries (tens)
+}
+
+struct EpRecord {
+    scope: HashSet<PlanHash>,         // G∪ nodes covered
+    time_cost: Duration,              // Σ d(v) for v ∈ scope
+    mem_peak: Bytes,                  // max peak_mem(v)
+    status: EpStatus,                 // pending|ready|dispatched|complete|failed
+    deps: Vec<EpId>,                  // dependency pointers (E_S)
+    oct: HashMap<WorkerId, f64>,      // per-worker OCT values
+}
+```
+
+$T$ **persists between events** so PEFT can update OCT
+incrementally on status-only events without re-walking
+$G_\cup$. The formal proofs' $T = (S, E_S)$ denotes exactly
+this table — a coarsened projection of $G_\cup$, never a
+duplicate of it.
+
 **Frozen/Mutable Partition & Re-Coarsening**:
-The global scheduling state is partitioned into two regions:
+The records in $T$ are **logically** partitioned by status.
+This is a classification within the one table, not a split
+into two structures:
 
 1. **FROZEN partition**: $\{ ep \mid ep.\text{status} \in \{\text{dispatched}, \text{complete}, \text{failed}\} \}$. This boundary is sacred. Dispatched EPs are immutable: their coverage scope $\kappa(v, s)$ and worker assignment can never change (Frozen Stability invariant).
-2. **MUTABLE partition**: $\{ ep \mid ep.\text{status} \in \{\text{pending}, \text{ready}\} \} \cup \{ \text{unassigned nodes} \}$. These EPs can be freely restructured (merged, split, promoted, demoted) by incremental re-coarsening when new requests arrive or cache updates occur (Mutable Freedom invariant).
+2. **MUTABLE partition**: $\{ ep \mid ep.\text{status} \in \{\text{pending}, \text{ready}\} \} \cup \{ \text{unassigned nodes} \}$. These EPs can be freely restructured (merged, split, promoted, demoted) by re-coarsening when new requests arrive or cache updates occur (Mutable Freedom invariant).
+
+"Re-coarsening" is a **scoped re-walk of the mutable
+partition**, not an in-place incremental patch. On a
+structure-changing event the scheduler re-walks the mutable
+portion of $G_\cup$ from scratch (skipping frozen nodes) and
+rebuilds the mutable EP records — their scopes, aggregate
+costs, and $E_S$ pointers. Frozen records are untouched inputs
+to the walk. $E_S$ on the mutable side is recomputed on demand
+via reachability over the selected set ($O(|S|^2)$, $|S|$
+small), not maintained incrementally.
 
 #### 2b. Event-Driven PEFT Dispatch Protocol
 
@@ -320,7 +366,7 @@ The state transitions are governed by the following event handlers:
      pass is needed.
    - Merge: JIT merge uncached nodes/edges into $G_\cup$.
    - Request tracking: Add `request_id` to `request_clients` set on each node.
-   - Incremental re-coarsening: Re-coarsen the MUTABLE partition.
+   - Re-coarsening: scoped re-walk of the MUTABLE partition (rebuilds mutable EP records; frozen records untouched).
    - PEFT re-plan: Run PEFT on full EP DAG.
    - Dispatch: Dispatch ready EPs to feasible workers.
 2. **EPComplete(ep)**:
