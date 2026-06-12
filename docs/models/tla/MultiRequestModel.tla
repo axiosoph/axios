@@ -278,6 +278,7 @@ FailureIsolation ==
 epStatusSafe(s) == IF s \in EntryPoints THEN epStatus[s] ELSE "none"
 runningOnSafe(s) == IF s \in EntryPoints THEN runningOn[s] ELSE "none"
 requestClientsSafe(s) == IF s \in EntryPoints THEN requestClients[s] ELSE {}
+readySinceSafe(s) == IF s \in EntryPoints THEN readySince[s] ELSE 0
 
 \* P8: Frozen Stability (refined as action property)
 FrozenStability == [][
@@ -325,16 +326,22 @@ HoLImmunity ==
                         workerLoad[w] + PredictedLoad[s] <= WorkerCap[w]))
                 ~> (epStatusSafe(s) \in {"dispatched", "complete", "failed", "none"})
 
-\* P9: Work Conservation
-\* If a ready EP exists and a worker has capacity, that EP is
-\* eventually dispatched, completed, failed, or canceled (none).
+\* P9': Bounded-window work conservation (replaces the unbounded P9).
+\* When an EP is ready and a worker is feasible, it MAY be held but is
+\* dispatched (or reaches a terminal state) within Delta ticks of becoming
+\* ready. Two conjuncts encode the bounded-eventually operator (<>_<=Delta):
+\*   - the [] conjunct bounds the waiting time to Delta ticks (the clock-
+\*     guarded Tick makes this a hard deadline), and
+\*   - the ~> conjunct makes the exit from "ready" inevitable under the
+\*     spec's weak fairness.
+\* With Delta = 0 no tick is enabled while work is ready+feasible, so the
+\* window collapses to strict immediacy, recovering the original P9.
 WorkConservation ==
     NoInfiniteTransientFailures =>
         \A s \in AllPossibleEntryPoints :
-            (epStatusSafe(s) = "ready"
-             /\ (\exists w \in Workers :
-                    workerLoad[w] + PredictedLoad[s] <= WorkerCap[w]))
-            ~> (epStatusSafe(s) \in {"dispatched", "complete", "failed", "none"})
+            /\ [](ReadyFeasible(s) => clock <= readySinceSafe(s) + Delta)
+            /\ ReadyFeasible(s)
+                 ~> (epStatusSafe(s) \in {"dispatched", "complete", "failed", "none"})
 
 \* P10: Transient Recovery (explicit)
 \* A dispatched EP that experiences transient failure eventually
