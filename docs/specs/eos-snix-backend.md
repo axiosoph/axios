@@ -125,8 +125,7 @@ TYPE BuildRequestAdapter          -- Derivation → BuildRequest converter
 **[snix-global-artifact-store]**: All eval workers, build workers, and snix builder instances in a cluster MUST be configured to use the same network artifact store (snix store daemon). Artifacts accumulated anywhere in the cluster — whether produced by a top-level build, an IFD build, or an ingestion — MUST be instantly available to all other workers via the shared store. This is a critical efficiency invariant: it eliminates redundant builds and enables the cluster to function as a unified build cache. Latency of store access is an operational concern managed by network topology (e.g., co-locating workers and store daemons in the same availability zone).
 `VERIFIED: unverified`
 
-**[snix-ifd-store-population]**: Import-from-derivation (IFD) is an internal concern of the snix evaluator and builder, not an Eos scheduling concern. Eval workers handle IFD internally via `SnixStoreIO`'s `BuildService` gRPC handle. Operators MAY configure IFD in multiple ways: using existing cluster build instances, or sanctioning dedicated IFD-only builders. Regardless of the IFD builder topology, the invariant is: **IFD build outputs MUST be populated into the global cluster artifact store** (as specified by `[snix-global-artifact-store]`). This ensures IFD results are available to all eval workers and build workers cluster-wide, preventing redundant IFD rebuilds.
-`VERIFIED: unverified`
+**[snix-ifd-store-population]**: Import-from-[derivation] (IFD) is an internal concern of the snix evaluator and builder, not an Eos scheduling concern. Eval workers handle IFD internally via `SnixStoreIO`'s `BuildService` gRPC handle. IFD builds MUST execute exclusively on dedicated IFD builders reached via this handle; these builders do NOT participate in the Eos scheduler's build worker pool. This prevents circular-wait deadlock where untracked IFD builds could consume scheduled-pool capacity that scheduled builds are waiting on. The invariant is: **IFD build outputs MUST be populated into the global cluster artifact store** (as specified by `[snix-global-artifact-store]`). This ensures IFD results are visible cluster-wide as cache hits to all eval workers and build workers, preventing redundant IFD rebuilds.
 `VERIFIED: unverified`
 
 **[snix-store-digest-fidelity]**: The `From<B3Digest>` and `Into<B3Digest>` conversions between `Blake3Digest` (the `eos_core::Digest` impl) and `snix_castore::B3Digest` MUST be lossless. Both types are `#[repr(transparent)]` `[u8; 32]` newtypes representing a BLAKE3 hash. No truncation, re-encoding, or algorithm substitution is permitted.
@@ -434,16 +433,11 @@ The `inputs` parameter requires pre-resolved content-addressed nodes for every i
 
 ### G7: IFD is an Internal Snix Concern
 
-Import-from-derivation (IFD) occurs when the evaluator encounters a `builtins.derivation` whose output is needed to continue evaluation. Snix handles IFD asynchronously — unlike the Nix C++ implementation which blocks entirely during IFD, snix can schedule IFD builds asynchronously and continue evaluating other derivations in parallel, making the overall cost of IFD less severe.
+Import-from-[derivation] (IFD) occurs when the evaluator encounters a `builtins.derivation` whose output is needed to continue evaluation. Snix dispatches IFD builds via its `BuildService` gRPC handle — unlike the Nix C++ implementation, which blocks the evaluator thread entirely during IFD dispatch (upstream limitation: `snix_store_io.rs:110-113`), snix can continue evaluating other [derivations] in parallel once the IFD build is submitted, making the overall cost of IFD less severe.
 
-IFD is managed entirely within the eval worker's `SnixStoreIO` wiring. The eval worker is configured with a `BuildService` gRPC handle that dispatches IFD builds. Operators configure this handle to point at the appropriate builder endpoint:
+IFD is managed entirely within the eval worker's `SnixStoreIO` wiring. IFD builds MUST execute exclusively on **dedicated IFD builders** — out-of-process snix builder instances reached via the eval worker's `BuildService` gRPC handle. These dedicated builders do NOT participate in the Eos scheduler's build worker pool. The previously offered shared-cluster-builders option (dispatching IFD to the same builders used for top-level builds) is withdrawn: it enables a circular-wait deadlock where untracked IFD builds consume scheduled-pool capacity that scheduled builds are waiting on.
 
-- **Shared cluster builders**: IFD builds are dispatched to the same snix builders used for top-level builds. Simple but may cause contention.
-- **Dedicated IFD builders**: Reserved builder instances handle only IFD builds, isolating IFD load from top-level build scheduling.
-
-Regardless of topology, the invariant `[snix-ifd-store-population]` requires that IFD build outputs are populated into the global cluster artifact store. This makes IFD results available cluster-wide.
-
-The Eos scheduler is NOT aware of IFD builds — they occur outside its scheduling context. This is the intentional trade-off: Eos sacrifices visibility into IFD builds in exchange for a dramatically simpler scheduler that does not need to handle re-entrant eval→build→eval call patterns.
+The invariant `[snix-ifd-store-population]` requires that IFD build outputs are populated into the global cluster artifact store. The Eos scheduler is IFD-unaware: it observes IFD outputs exclusively as cache hits through the artifact store and carries no IFD build state. The scheduler MAY receive `ifdSystems` metadata from eval workers at registration time, but this metadata is used solely to route eval requests to capable eval workers; it is never used for IFD build placement. Store-mediated visibility is the intentional trade-off: Eos avoids re-entrant eval→build→eval scheduling complexity while remaining deadlock-free.
 
 ---
 
