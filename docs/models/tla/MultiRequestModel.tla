@@ -9,6 +9,10 @@ WorkerCap == [w \in Workers |-> 4]
 PredictedLoad == [s \in AllPossibleEntryPoints |-> 2]
 Outputs == [s \in AllPossibleEntryPoints |-> {s}]
 
+CONSTANTS
+    Delta,     \* Bounded dispatch window in ticks (confidence-gated; Delta=0 is strict immediacy)
+    MaxTick    \* Model-checking bound on the clock (keeps the state space finite)
+
 VARIABLES
     epStatus,          \* Map of entry point to status
     workerLoad,        \* Map of worker to current load
@@ -18,9 +22,11 @@ VARIABLES
     DependencyEdges,   \* Set of active edges (dynamic)
     requestClients,    \* Map of entry point to set of request IDs
     requestArrived,    \* Set of request IDs that have arrived
-    failureReason      \* Map: EP -> {"none", "deterministic", "cascade"}
+    failureReason,     \* Map: EP -> {"none", "deterministic", "cascade"}
+    clock,             \* Logical tick counter (advanced by Tick)
+    readySince         \* Map: EP -> tick at which it last entered "ready"
 
-vars == <<epStatus, workerLoad, artifactStore, runningOn, EntryPoints, DependencyEdges, requestClients, requestArrived, failureReason>>
+vars == <<epStatus, workerLoad, artifactStore, runningOn, EntryPoints, DependencyEdges, requestClients, requestArrived, failureReason, clock, readySince>>
 
 -----------------------------------------------------------------------------
 
@@ -45,6 +51,8 @@ VerifyAxioms ==
     /\ \A s \in AllPossibleEntryPoints : IsFiniteSet(Outputs[s])
 
 ASSUME VerifyAxioms
+ASSUME Delta \in Nat
+ASSUME MaxTick \in Nat
 
 -----------------------------------------------------------------------------
 
@@ -59,6 +67,8 @@ Init ==
     /\ runningOn = [s \in {"A", "B"} |-> "none"]
     /\ requestArrived = {"r1"}
     /\ failureReason = [s \in {"A", "B"} |-> "none"]
+    /\ clock = 0
+    /\ readySince = [s \in {"A", "B"} |-> 0]
 
 -----------------------------------------------------------------------------
 
@@ -72,7 +82,7 @@ Dispatch(s, w) ==
     /\ epStatus' = [epStatus EXCEPT ![s] = "dispatched"]
     /\ workerLoad' = [workerLoad EXCEPT ![w] = @ + PredictedLoad[s]]
     /\ runningOn' = [runningOn EXCEPT ![s] = w]
-    /\ UNCHANGED <<EntryPoints, DependencyEdges, requestClients, artifactStore, requestArrived, failureReason>>
+    /\ UNCHANGED <<EntryPoints, DependencyEdges, requestClients, artifactStore, requestArrived, failureReason, clock, readySince>>
 
 \* Complete the execution of entry point s
 Complete(s) ==
@@ -89,7 +99,13 @@ Complete(s) ==
          /\ workerLoad' = [workerLoad EXCEPT ![w] = @ - PredictedLoad[s]]
          /\ artifactStore' = artifactStore \cup Outputs[s]
          /\ runningOn' = [runningOn EXCEPT ![s] = "none"]
-         /\ UNCHANGED <<EntryPoints, DependencyEdges, requestClients, requestArrived, failureReason>>
+         /\ readySince' = [s_new \in EntryPoints |->
+              IF epStatus[s_new] = "pending" /\
+                 (\A e \in DependencyEdges : e[2] = s_new =>
+                    (e[1] = s \/ epStatus[e[1]] = "complete"))
+              THEN clock
+              ELSE readySince[s_new]]
+         /\ UNCHANGED <<EntryPoints, DependencyEdges, requestClients, requestArrived, failureReason, clock>>
 
 \* Fail deterministically (deterministic failure propagates)
 FailDeterministic(s) ==
@@ -100,7 +116,7 @@ FailDeterministic(s) ==
          /\ workerLoad' = [workerLoad EXCEPT ![w] = @ - PredictedLoad[s]]
          /\ runningOn' = [runningOn EXCEPT ![s] = "none"]
          /\ failureReason' = [failureReason EXCEPT ![s] = "deterministic"]
-         /\ UNCHANGED <<EntryPoints, DependencyEdges, requestClients, artifactStore, requestArrived>>
+         /\ UNCHANGED <<EntryPoints, DependencyEdges, requestClients, artifactStore, requestArrived, clock, readySince>>
 
 \* Transient failure: infrastructure/worker crash, not build failure.
 \* The EP is unfrozen back to "ready" for re-dispatch to a healthy worker.
@@ -112,7 +128,8 @@ FailTransient(s) ==
          /\ epStatus' = [epStatus EXCEPT ![s] = "ready"]
          /\ workerLoad' = [workerLoad EXCEPT ![w] = @ - PredictedLoad[s]]
          /\ runningOn' = [runningOn EXCEPT ![s] = "none"]
-         /\ UNCHANGED <<EntryPoints, DependencyEdges, requestClients, artifactStore, requestArrived, failureReason>>
+         /\ readySince' = [readySince EXCEPT ![s] = clock]
+         /\ UNCHANGED <<EntryPoints, DependencyEdges, requestClients, artifactStore, requestArrived, failureReason, clock>>
 
 \* Propagate failures downstream
 CascadeFail(s) ==
@@ -121,7 +138,7 @@ CascadeFail(s) ==
     /\ \exists e \in DependencyEdges : e[2] = s /\ epStatus[e[1]] = "failed"
     /\ epStatus' = [epStatus EXCEPT ![s] = "failed"]
     /\ failureReason' = [failureReason EXCEPT ![s] = "cascade"]
-    /\ UNCHANGED <<EntryPoints, DependencyEdges, requestClients, workerLoad, artifactStore, runningOn, requestArrived>>
+    /\ UNCHANGED <<EntryPoints, DependencyEdges, requestClients, workerLoad, artifactStore, runningOn, requestArrived, clock, readySince>>
 
 \* Merge a new request r2 containing topology B -> C (shared B dependency)
 MergeRequest ==
@@ -147,7 +164,10 @@ MergeRequest ==
          /\ failureReason' = [s \in EntryPoints' |->
                 IF s \in EntryPoints THEN failureReason[s]
                 ELSE "none"]
-         /\ UNCHANGED <<workerLoad, artifactStore>>
+         /\ readySince' = [s \in EntryPoints' |->
+                IF s \in EntryPoints THEN readySince[s]
+                ELSE clock]
+         /\ UNCHANGED <<workerLoad, artifactStore, clock>>
 
 \* Cache-skip scan for pending/ready EPs whose outputs are already present in store
 CacheSkip(s) ==
@@ -155,7 +175,7 @@ CacheSkip(s) ==
     /\ epStatus[s] \in {"pending", "ready"}
     /\ Outputs[s] \subseteq artifactStore
     /\ epStatus' = [epStatus EXCEPT ![s] = "complete"]
-    /\ UNCHANGED <<EntryPoints, DependencyEdges, requestClients, workerLoad, artifactStore, runningOn, requestArrived, failureReason>>
+    /\ UNCHANGED <<EntryPoints, DependencyEdges, requestClients, workerLoad, artifactStore, runningOn, requestArrived, failureReason, clock, readySince>>
 
 \* Cancel a request and prune its mutable EPs
 CancelRequest(req_id) ==
@@ -170,7 +190,29 @@ CancelRequest(req_id) ==
          /\ epStatus' = [s \in EntryPoints' |-> epStatus[s]]
          /\ runningOn' = [s \in EntryPoints' |-> runningOn[s]]
          /\ failureReason' = [s \in EntryPoints' |-> failureReason[s]]
-         /\ UNCHANGED <<workerLoad, artifactStore, requestArrived>>
+         /\ readySince' = [s \in EntryPoints' |-> readySince[s]]
+         /\ UNCHANGED <<workerLoad, artifactStore, requestArrived, clock>>
+
+\* An EP that is ready and has at least one worker with spare capacity:
+\* a candidate the scheduler could dispatch immediately.
+ReadyFeasible(s) ==
+    /\ s \in EntryPoints
+    /\ epStatus[s] = "ready"
+    /\ \exists w \in Workers : workerLoad[w] + PredictedLoad[s] <= WorkerCap[w]
+
+\* Advance the logical clock by one tick. Time may pass only while some
+\* ready+feasible EP is still inside its dispatch window, and a tick may
+\* never push such an EP past its deadline (clock < readySince + Delta).
+\* This makes Delta a hard upper bound on dispatch latency: at the deadline
+\* Tick is disabled, so the only way to make progress is to dispatch (or
+\* otherwise resolve) the waiting EP. With Delta = 0 no tick is ever enabled
+\* while work is ready+feasible, collapsing the window to strict immediacy.
+Tick ==
+    /\ \exists s \in EntryPoints : ReadyFeasible(s)
+    /\ \A s \in EntryPoints : ReadyFeasible(s) => clock < readySince[s] + Delta
+    /\ clock' = clock + 1
+    /\ UNCHANGED <<epStatus, workerLoad, artifactStore, runningOn, EntryPoints,
+                   DependencyEdges, requestClients, requestArrived, failureReason, readySince>>
 
 -----------------------------------------------------------------------------
 
@@ -184,8 +226,15 @@ Next ==
     \/ \exists s \in EntryPoints : CacheSkip(s)
     \/ MergeRequest
     \/ \exists req_id \in AllPossibleRequestIds : CancelRequest(req_id)
+    \/ Tick
 
 Spec == Init /\ [][Next]_vars /\ WF_vars(Next)
+
+\* State constraint bounding the clock for finite model checking. Dispatch
+\* never consumes a tick, so a ready+feasible EP can always still be dispatched
+\* at clock = MaxTick; bounding the clock therefore prunes only the unbounded
+\* transient-failure tail and never masks or fabricates a P9' violation.
+ClockBound == clock <= MaxTick
 
 -----------------------------------------------------------------------------
 
