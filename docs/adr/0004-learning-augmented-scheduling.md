@@ -413,17 +413,20 @@ three mechanisms at different lifecycle stages:
 
 **Prior art**: Graphene/DagPS (Grandl et al., OSDI 2016) — troublesome task identification and pre-allocation in multi-resource space-time.
 
-### 3. Multi-Criteria Placement Scoring
+### 3. Placement Signals and the Folded Duration Model
 
-For each feasible worker `w` and entry point `e`, compute:
+Two placement signals steer where an entry point runs: **cache affinity**
+(which worker already holds the inputs) and **multi-resource fit** (which
+worker's free capacity best matches the work). Rather than evaluate these as a
+standalone placement score that competes with the dispatch layer's timing
+estimates, the scheduler folds both directly into the **predicted duration**
+`d(e, w)` that PEFT consumes (§2b). This is the "Option C" integration: a
+worker that caches `e`'s inputs builds it faster (smaller `d`), and a worker
+whose free capacity poorly fits `e`'s resource vector is penalized (larger
+`d`), so `EFT(e, w)` and `OCT(e, w)` account for affinity and fit through their
+effect on predicted finish time, not through a separate weighted sum.
 
-```
-score(w, e) = α · affinity(w, e)
-            + β · resource_fit(w, e)
-            + γ · availability(w)
-```
-
-Where:
+**Placement signals.** For each feasible worker `w` and entry point `e`:
 
 - **affinity(w, e)**: Local Rendezvous Hash score for atom
   content locality. Measures likelihood that worker `w`
@@ -444,11 +447,37 @@ Where:
   dominating CPU count while preserving the absolute magnitude of tasks to steer
   heavy builds to capable workers (preventing the magnitude erasure of cosine similarity).
 
-- **availability(w)**: Headroom ratio:
-  `1 - (w.current_load / w.max_capacity)`
-  Prefers workers with more spare capacity (dimensionless $\in [0,1]$).
+**Reduced placement weighting.** With the availability term removed (see below),
+the two signals combine as
 
-Weights `α`, `β`, `γ` are operator-tunable. To protect against adversarial or
+$$\operatorname{score}(w, e) = \alpha \cdot \operatorname{affinity}(w, e) + \beta_e \cdot \operatorname{resource_fit}(w, e)$$
+
+An earlier formulation added a third term, $\gamma \cdot \operatorname{availability}(w)$,
+a scalar headroom ratio $1 - (w.\text{current\_load} / w.\text{max\_capacity})$.
+That term is **removed**: `resource_fit` already contains the per-dimension
+headroom factor $a_{w,i}/c_{w,i}$, so the scalar availability double-counted the
+same signal. Worse, when an entry point's resource vector is near-zero (trivial
+tasks) `resource_fit` vanishes and the availability term dominated, scattering
+micro-tasks onto empty workers instead of cache-affinity workers — actively
+undermining LRH locality.
+
+**Folding into the duration model (Option C).** The reduced weighting above is
+not evaluated as a separate score. Its two signals are absorbed into the
+per-worker predicted duration
+
+$$d(e, w) = \operatorname{base_predicted_cost}(e) \times \big(1 - \operatorname{affinity}(w, e) \cdot \operatorname{cache_speedup_factor}\big) \times \operatorname{resource_fit_penalty}(w, e)$$
+
+where $\operatorname{base_predicted_cost}(e) = \sum_{v \in \operatorname{scope}(e)} d(v)$ is
+the aggregate isolated-build cost of the entry point's uncached scope (from
+historical profiles), the affinity factor shrinks `d` toward a warm-cache
+build, and `resource_fit_penalty` inflates `d` when free capacity fits poorly.
+The dispatch layer then selects the worker minimizing $\operatorname{EFT}(e, w) + \operatorname{OCT}(e, w)$
+(§2b), with both quantities computed from this cache- and fit-adjusted `d(e, w)`.
+Folding the signals into `d` rather than a hybrid score eliminates the
+unit-mixing problem of combining unitless affinity/fit scores with time-valued
+finish-time estimates.
+
+To protect against adversarial or
 highly inaccurate predictions, the effective weight of the resource fit term
 is dynamically decayed based on the exponential moving average (EMA) of the absolute
 relative prediction error:
@@ -457,14 +486,17 @@ where $\text{EMA}(|\eta_e|)$ is the running average of the absolute relative pre
 error magnitude for that atom/derivation group, and $\lambda > 0$ is a decay
 constant. If predictions are systematically incorrect (even if stable and having zero variance),
 $\text{EMA}(|\eta_e|)$ grows, causing $\beta_e \to 0$ and safely falling back to the
-prediction-free baseline. Operators running homogeneous clusters may set $\beta = 0$.
+prediction-free baseline — the resource-fit signal drops out of `d(e, w)`,
+leaving placement governed by $\alpha \cdot \operatorname{affinity}$ alone (pure
+LRH cache locality). Operators running homogeneous clusters may set $\beta = 0$.
 
-**Symbol note**: The scoring weights $\alpha, \beta, \gamma$
+**Symbol note**: The placement weights $\alpha, \beta$
 are operator-tunable parameters distinct from the identically
 named symbols in the formal guarantees: $\alpha$ in Theorem 2
 is the heuristic's base approximation ratio (a bound, not a
 knob), and $\gamma$ in Theorem 3 is the EMA smoothing factor
-(a convergence parameter). Context disambiguates.
+(a convergence parameter), unrelated to any placement weight.
+Context disambiguates.
 
 **Prior art**: Tetris (Grandl et al., SIGCOMM 2014) —
 multi-resource dot-product alignment heuristic.
@@ -815,9 +847,12 @@ the system self-heals:
 
 1. **Assignment stability** (Lemma 3.1): If the prediction
    perturbation satisfies $2P < \Delta_{\min}$ (twice the
-   perturbation is less than the baseline scoring gap), then
+   perturbation is less than the baseline affinity gap), then
    $\sigma_H = \sigma_{\text{base}}$ — the heuristic makes
-   the same assignment as the prediction-free baseline.
+   the same assignment as the prediction-free baseline, which
+   after the availability-term removal (§3) is **pure LRH
+   cache affinity** ($\alpha \cdot \operatorname{affinity}$
+   alone).
 
 2. **EMA convergence**: Under sustained prediction error
    $\eta \geq \eta_0 > 0$, the EMA of error magnitudes
@@ -827,8 +862,12 @@ the system self-heals:
 
 Together: bad predictions → EMA grows → $\beta_e$ decays →
 perturbation shrinks → eventually $2P < \Delta_{\min}$ →
-assignment equals baseline. The convergence is automatic
-and requires $O(\ln(\beta R_{\max}/\Delta_{\min}))$
+assignment equals baseline. Dropping the availability term
+strengthens this result: with only one prediction-dependent
+signal remaining (resource fit, gated by $\beta_e$), the
+perturbation bound $P$ is smaller, so the stability condition
+$2P < \Delta_{\min}$ is reached sooner. The convergence is
+automatic and requires $O(\ln(\beta R_{\max}/\Delta_{\min}))$
 observations.
 
 #### Smoothness (Corollary of Theorem 2)
@@ -1160,8 +1199,8 @@ function when:
   algorithm uses greedy heuristics, not a provably optimal
   algorithm. Quality depends on prediction accuracy and
   DAG structure.
-- **Tuning surface**: Three operator-tunable weights (α, β,
-  γ) plus entry point selection thresholds. Sensible defaults
+- **Tuning surface**: Two operator-tunable placement weights
+  (α, β) plus entry point selection thresholds. Sensible defaults
   should cover most cases.
 - **Global DAG memory**: The unified global DAG's memory
   footprint is proportional to the sum of concurrent request
@@ -1319,7 +1358,7 @@ optimality assessment above:
     and $a_{w,i}/c_{w,i} \in [0,1]$), so each term is bounded
     by $[0,1]$ and the sum is bounded by $|\mathcal{D}|$ (the
     number of resource dimensions). To normalize to $[0,1]$
-    for comparable weighting with affinity and availability,
+    for comparable weighting with affinity,
     divide by $|\mathcal{D}|$. Do NOT use cosine similarity —
     the Tetris formula intentionally preserves task magnitude
     to steer heavy builds to capable workers, and this property
