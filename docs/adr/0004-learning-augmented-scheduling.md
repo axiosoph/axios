@@ -1764,28 +1764,20 @@ point selection is a potential novel contribution.
    The entry point DAG is constructed once and dispatched
    topologically without re-computation.
 
-3. **Entry point granularity** — RESOLVED (algorithmic, not
-   a static parameter). Granularity is determined per
-   plan by analyzing the subgraph below each candidate
-   entry point:
-   - **Aggregate predicted cost**: sum historical build
-     durations for all uncached transitive dependencies
-     below the candidate (using both atom-level and
-     plan-level profiles — see Q5 resolution)
-   - **Subgraph shape**: depth (critical path length) and
-     width (max parallelism within the subgraph)
-   - A candidate becomes an explicit entry point if:
-     - Its aggregated cost exceeds a threshold (it's
-       "worth" scheduling independently)
-     - It has high fan-in (convergence point — many
-       downstream nodes depend on it)
-     - It is a troublesome node (heavy resource profile)
-     - Its subgraph is deep enough that internal parallelism
-       would be wasted on a single builder
-
-   Small, tightly-coupled subgraphs are absorbed into their
-   parent entry point. Large, loosely-coupled subgraphs are
-   split at convergence points.
+3. **Entry point granularity** — RESOLVED *in form, not in
+   calibration*. Granularity is algorithmic (determined per
+   plan by analyzing the subgraph below each candidate), not
+   a static parameter — that much is settled. *Which* signals
+   and thresholds drive promotion is **not** settled: the
+   leading hypothesis H1 (§2a) promotes on critical-path cut,
+   cost-gated convergence, and troublesome cost, all
+   confidence-gated; the alternatives H2–H4 and the threshold
+   calibration are decided by trace-driven simulation
+   (§Optimality, *The Simulation Gap*), not by this ADR.
+   In all variants, small tightly-coupled subgraphs are
+   absorbed into their parent entry point while large,
+   loosely-coupled subgraphs are split at convergence points;
+   the variants differ in exactly where that cut falls.
 
 4. **Historical profile schema** — RESOLVED (unified
    plan model). Everything is a plan at the
@@ -1965,7 +1957,7 @@ See `docs/models/lean/` for proof sources.
    the quantitative makespan penalty is not mechanized.
    Low risk: the transient is geometrically short and
    capacity safety (Track A) holds throughout.
-4. **Starvation prevention (P12)**: While the bounded-window work-conserving liveness property (P9') guarantees that ready EPs are eventually dispatched (within Δ), it does not prevent low-priority tasks from being starved indefinitely under continuous high-priority arrival. Formalizing starvation-freedom requires modeling arrival processes and priority queuing disciplines (e.g. aging or FIFO bounds), which is deferred to future work.
+4. **Starvation prevention (P12)**: Even once the bounded-window work-conserving liveness property (P9', pending re-verification) is established, P9' would ensure only that a ready EP is *eventually* dispatched (within Δ); it would not prevent low-priority tasks from being starved indefinitely under continuous high-priority arrival. Formalizing starvation-freedom requires modeling arrival processes and priority queuing disciplines (e.g. aging or FIFO bounds), which is deferred to future work.
 5. **DAG Boundedness and Memory Limits (P13)**: The TLA+ and Lean models assume a finite vertex set $V$. At runtime, the unified global DAG must be bounded to prevent memory exhaustion under continuous request streams. Proving memory safety and progress under sliding window request pruning is a future modeling objective.
 
 ## Future Work: Federated Scale via Min-Cost Max-Flow (MCMF)
