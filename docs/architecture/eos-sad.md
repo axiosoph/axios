@@ -68,7 +68,7 @@ graph TB
 | **Atom Fetching**         | Fetching top-level atoms into local store (registries → local → ion peer) | Atom identity, signing, verification (L1 concern)          |
 | **Dependency Resolution** | Not an Eos concern                                                        | Lock file resolution, SAT solving (L3/Ion concern)         |
 | **Artifact Storage**      | All workers use the global shared store                                   | Store implementation, GC, replication (snix store concern) |
-| **IFD**                   | Scheduler knows which eval workers have IFD-capable builders              | IFD execution is internal to snix evaluator                |
+| **IFD**                   | Scheduler receives `ifdSystems` metadata from eval workers to route eval requests to IFD-capable workers; schedules and tracks zero IFD work | IFD execution and dedicated builder placement are internal to snix evaluator |
 
 ### 1.4 Layer Discipline
 
