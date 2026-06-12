@@ -394,7 +394,6 @@ types define the behavioral contract. Both MUST remain synchronized.
 | `DepDescriptor`      | `FetchDescriptor`                 | Pre-fetch dependency descriptor (union of atom/nix variants)    |
 | `ComposerSpec`       | `ComposerSpec`                    | Composer configuration (atom / nix-trivial / static)            |
 | `BuildRequest`       | `BuildRequest<D: Digest>`         | Structured build request (plan digest + sets + deps + composer) |
-| `AtomId`             | `AtomId`                          | Content-addressed atom identifier                               |
 | `VersionInfo`        | `(version, rev, set)` fields      | Per-version atom metadata                                       |
 | `EosDaemon`          | Daemon entry point                | Top-level client-facing RPC surface                             |
 | `BuildJob`           | Job handle                        | Per-build capability (client-facing)                            |
@@ -402,6 +401,10 @@ types define the behavioral contract. Both MUST remain synchronized.
 | `AtomMeta`           | Atom metadata                     | Per-atom identity and version info                              |
 | `AtomQuery`          | Search parameters                 | Discovery query constraints                                     |
 | `KeyValue`           | `(String, String)`                | Evaluation arguments                                            |
+
+The atom identifier struct (`atom-id` crate) appears throughout the schema
+as the canonical atom reference type. It is an L1 contract type — not an
+`eos-core` type — and is omitted from this table.
 
 **PROPOSED** (ADR-0002 — not yet in implemented schema):
 
