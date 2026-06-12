@@ -287,7 +287,7 @@ PEFT uses OCT for both decisions HEFT made from upward rank, in $O(|S|^2 \cdot |
 1. **Priority ordering**: rank EPs by **average OCT across workers**. An EP with high average OCT has the largest downstream impact and is scheduled first. This replaces static upward rank.
 2. **Worker selection**: for each ready EP, select the worker **minimizing `EFT(e, w) + OCT(e, w)`**, where `EFT(e, w) = worker_available_time(w) + d(e, w)`. This places the EP where it both finishes earliest *and* best sets up downstream work. Because `d(e, w)` is the cache- and fit-adjusted duration from §3, cache affinity and resource fit enter the selection through the duration model — there is no separate placement score.
 
-Ready EPs with feasible workers are dispatched immediately, while pending EPs have their priorities and tentative placements computed but do NOT lock workers; workers remain available for ready work.
+Ready EPs with feasible workers are dispatched within the bounded window Δ (immediately when prediction confidence is low — see P9' under §Guarantees), while pending EPs have their priorities and tentative placements computed but do NOT lock workers; workers remain available for ready work.
 
 Frozen EPs (dispatched/complete) are included in the PEFT computation as **fixed constraints** — their worker assignments and occupancy are immutable inputs that shape OCT for the mutable EPs above them. Only mutable EPs (pending/ready) have their priorities and assignments computed by PEFT.
 
@@ -750,6 +750,16 @@ liveness properties, verified via TLC model checking
 across four DAG topologies (linear chain, diamond
 fork-join, convergence, independent) with weak fairness.
 
+> **Pending re-verification (P9')**: The relaxation of work
+> conservation to the bounded-window form **P9'** (below) is
+> **not yet model-checked**. It needs an explicit clock
+> variable and `readySince` timestamps the current models do
+> not have; the re-check is tracked as campaign node P2. Every
+> other property in this section reflects the *current* model
+> state. The time-free safety properties (P1, P3, P4, P8, P11)
+> are unaffected by the relaxation; the liveness properties
+> retain their structure under a clock-guarded `Next`.
+
 **Safety properties** (nothing bad ever happens):
 
 - **Ordering soundness (P1)**: An entry point is never
@@ -789,9 +799,23 @@ fork-join, convergence, independent) with weak fairness.
   eventually terminates — either all its EPs complete
   successfully, or a deterministic failure cascades and
   the client is notified.
-- **Work conservation (P9)**: The scheduler never leaves
-  a worker idle while ready EPs exist that the worker
-  could execute within its capacity.
+- **Bounded-window work conservation (P9')** *(pending TLC
+  re-verification — node P2)*: When a ready EP has a feasible
+  worker, it is dispatched within a bounded window Δ rather
+  than necessarily immediately:
+
+  ```
+  P9': □( Q(s) = ready ∧ ∃w: feasible(s, w) ) ⟹ ◇≤Δ Q(s) ∈ {dispatched, complete, failed}
+  ```
+
+  The window is **confidence-gated**: under low prediction
+  confidence Δ = 0, degenerating to strict immediate dispatch
+  (the original P9); under high confidence the scheduler may
+  hold a ready EP for up to Δ to wait for a higher-affinity
+  worker about to free up, since a warm cache can save orders
+  of magnitude over a cold fetch. This relaxation is what makes
+  PEFT's look-ahead valuable — strict work conservation forced
+  immediate dispatch and rendered the look-ahead inert.
 - **Transient recovery (P10)**: After a transient
   infrastructure failure (worker crash, network partition),
   the affected EPs are reverted to `ready` and
@@ -1758,8 +1782,10 @@ point selection is a potential novel contribution.
 ## Appendix: Formal Verification Results
 
 The scheduling model has been formally verified through a
-two-track approach. The formal model is defined in
-`docs/models/eos-scheduling.md`.
+two-track approach, with one liveness property — bounded-window
+work conservation (**P9'**) — pending re-verification under the
+dispatch-window relaxation (campaign node P2). The formal model
+is defined in `docs/models/eos-scheduling.md`.
 
 ### Track A: Protocol Correctness (TLA+)
 
@@ -1779,9 +1805,19 @@ independent) using TLC with weak fairness.
 | HoL immunity (P5')           | Liveness | ✅     |
 | Per-request completion (P6') | Liveness | ✅     |
 | Frozen stability (P8)        | Safety   | ✅     |
-| Work conservation (P9)       | Liveness | ✅     |
+| Work conservation (P9, strict) | Liveness | ✅ (superseded) |
+| Bounded-window work cons. (P9') | Liveness | ⏳ pending (node P2) |
 | Transient recovery (P10)     | Liveness | ✅     |
 | Failure isolation (P11)      | Safety   | ✅     |
+
+The ✅ rows reflect the *current* models, which verify the
+strict P9. The ADR now specifies the bounded-window **P9'**
+(§Guarantees); re-verification requires a clock variable,
+`readySince` timestamps, and re-scoped weak fairness so an
+*intentional* dispatch delay within Δ does not count as a
+fairness violation. That re-check is campaign node P2. The
+time-free safety properties (P1, P3, P4, P8, P11) carry over
+unchanged because they never reference time.
 
 Key finding: `CascadeFail` is **required** for liveness.
 Without active failure propagation, dependent tasks hang
@@ -1840,7 +1876,7 @@ See `docs/models/lean/` for proof sources.
    the quantitative makespan penalty is not mechanized.
    Low risk: the transient is geometrically short and
    capacity safety (Track A) holds throughout.
-4. **Starvation prevention (P12)**: While the work-conserving liveness property (P9) guarantees that ready EPs are eventually dispatched, it does not prevent low-priority tasks from being starved indefinitely under continuous high-priority arrival. Formalizing starvation-freedom requires modeling arrival processes and priority queuing disciplines (e.g. aging or FIFO bounds), which is deferred to future work.
+4. **Starvation prevention (P12)**: While the bounded-window work-conserving liveness property (P9') guarantees that ready EPs are eventually dispatched (within Δ), it does not prevent low-priority tasks from being starved indefinitely under continuous high-priority arrival. Formalizing starvation-freedom requires modeling arrival processes and priority queuing disciplines (e.g. aging or FIFO bounds), which is deferred to future work.
 5. **DAG Boundedness and Memory Limits (P13)**: The TLA+ and Lean models assume a finite vertex set $V$. At runtime, the unified global DAG must be bounded to prevent memory exhaustion under continuous request streams. Proving memory safety and progress under sliding window request pruning is a future modeling objective.
 
 ## Future Work: Federated Scale via Min-Cost Max-Flow (MCMF)
