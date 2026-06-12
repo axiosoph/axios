@@ -1733,18 +1733,24 @@ point selection is a potential novel contribution.
 1. **DAG visibility** — RESOLVED. The snix evaluator
    accumulates the full plan DAG as a side-effect in
    `KnownPaths` (owned by `SnixStoreIO`). After evaluation,
-   `KnownPaths` exposes:
+   the eval worker can report from `KnownPaths`:
    - an enumeration of all plans it has seen
    - each plan's input-plan edges (a
      `BTreeMap<StorePath, BTreeSet<String>>`)
-   - per-plan cache checks via `PathInfoService.get(digest)`
+   - existence of each plan's outputs (on the snix side, via
+     `PathInfoService.get(digest)` returning NOT_FOUND)
    - a topological ordering invariant (all input plans
      registered before their dependents)
 
    The Eos scheduler can therefore introspect the full DAG
-   after evaluation completes: walk the input-plan edges,
-   query `PathInfoService` for each node, and construct the
-   uncached sub-DAG and entry-point DAG proactively.
+   without itself touching the store: it consumes the
+   plan-DAG fragment and walks the input-plan edges, and
+   routes existence checks through its two-level cache filter
+   (§2b) — the in-memory completed-node index plus the
+   `SubstitutionService` store shim — never a direct per-node
+   `PathInfoService` call. This keeps the scheduler free of
+   snix imports and gRPC client code while still constructing
+   the uncached sub-DAG and entry-point DAG proactively.
 
 2. **Dynamic re-evaluation** — RESOLVED (unnecessary).
    Because evaluation is deterministic (invariant
