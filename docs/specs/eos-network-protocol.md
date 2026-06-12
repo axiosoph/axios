@@ -246,15 +246,46 @@ struct ResolvedInput {
   storePath @2 :Text;              # Store path of the resolved atom
 }
 
+# PROPOSED: plan sub-DAG node. Carries an opaque plan digest plus optional
+# advisory weight annotations. Annotations are predictions only — the
+# scheduler gates them through confidence weighting and they never alter
+# correctness guarantees (Theorem 3 decay applies).
+struct PlanNode {
+  digest @0 :Data;                 # Opaque plan digest (Blake3)
+  predictedDurationMs @1 :UInt64;  # Predicted build duration (0 = unknown)
+  predictedMemPeakKb @2 :UInt64;   # Predicted peak memory in KiB (0 = unknown)
+  predictedOutputKb @3 :UInt64;    # Predicted output size in KiB (0 = unknown)
+  atomProvenance @4 :AtomId;       # Atom-id provenance for cross-version profiling (optional)
+}
+
+# PROPOSED: directed edge in the plan sub-DAG (predecessor → successor).
+struct PlanEdge {
+  from @0 :Data;                   # Plan digest of the predecessor node
+  to @1 :Data;                     # Plan digest of the successor node
+}
+
+# PROPOSED: uncached plan sub-DAG fragment reported by the eval worker
+# to the scheduler for G∪ merge on evaluation completion.
+# v1 normative shape: the full sub-DAG is reported atomically when
+# evaluation completes (matches the formal model's atomic-merge semantics).
+# Future extension only (open verification questions — NOT specified here):
+# incremental fragment streaming during evaluation. Partial-graph semantics
+# and mid-stream cancellation handling require separate design work.
+struct PlanDag {
+  nodes @0 :List(PlanNode);
+  edges @1 :List(PlanEdge);
+}
+
 struct EvalResult {
   union {
     success :group {
       planBytes @0 :Data;          # Serialized plan (engine-format)
       planDigest @1 :Data;         # Content-addressed plan digest
+      subDag @2 :PlanDag;          # PROPOSED: uncached plan sub-DAG for scheduler G∪ merge
     }
     failure :group {
-      error @2 :Text;              # Evaluation error message
-      errorCode @3 :Int32;         # Structured error code
+      error @3 :Text;              # Evaluation error message
+      errorCode @4 :Int32;         # Structured error code
     }
   }
 }
@@ -306,6 +337,46 @@ interface BuildWorker {
   attachProgress @2 (jobId :Data, callback :ProgressStream) -> ();
 }
 ```
+
+#### Plan-DAG Reporting Surface — PROPOSED
+
+**Status: PROPOSED** — this surface is L2-internal (eval-worker → scheduler);
+it is NOT client-facing and is NOT in the implemented schema.
+
+When an eval worker completes evaluation successfully, it returns an
+`EvalResult` carrying — in addition to the serialized plan — the uncached
+plan sub-DAG (`subDag`) for the scheduler's G∪ merge. Plans are
+self-describing: the build graph derives entirely from evaluation output; no
+L3 (ion/lock) information is needed or accepted on this surface.
+
+**v1 normative shape.** The full uncached sub-DAG is reported atomically when
+evaluation completes. This matches the formal model's atomic-merge semantics:
+the scheduler receives a complete, consistent fragment before merging it into
+G∪. Incremental fragment streaming during evaluation is a future extension
+only (see `PlanDag` struct comment above for open verification questions).
+
+**Advisory weight annotations.** `PlanNode` MAY carry weight annotations
+(`predictedDurationMs`, `predictedMemPeakKb`, `predictedOutputKb`,
+`atomProvenance`). These are treated strictly as predictions under confidence
+gating — identical to historical profiles from the build profile store. A
+hostile or incorrect annotation degrades to the prediction-free baseline;
+correctness guarantees are unaffected (Theorem 3 decay bound applies,
+ADR-0004 §2).
+
+**Normative notes (nrd, 2026-06-12):**
+
+1. **Build-submission surface scope.** The `BuildRequest` submission surface
+   is NOT a dependency-intelligence channel. Lock-level dependency overlap is
+   an *evaluation-coalescing* concern, reserved for the forthcoming
+   evaluation-scheduler ADR. Any batching or grouping surface at the
+   submission level awaits that design and is not specified here.
+
+2. **Atom store as source of truth.** Eval workers pull atoms into the global
+   atom store before evaluation and read atom metadata — including
+   lock-derived dependency information — from the store as the presumptive
+   source of truth, rather than via explicit ion frontend handoff. This is the
+   working assumption and will be confirmed or revised by the
+   evaluation-scheduler ADR.
 
 ### Schema–Type Correspondence
 
@@ -398,10 +469,24 @@ struct OutputMapping {
 interface SubstitutionService {
   query @0 (request :SubstitutionQuery) -> (result :SubstitutionResult);
   fetchArtifact @1 (contentDigest :Data) -> (stream :ArtifactStream);
+  # PROPOSED: presence-only batch query for the scheduler's two-level
+  # cache filter (one logical round trip; REVIEW.md §4).
+  queryPresenceBatch @2 (request :BatchPresenceQuery) -> (result :BatchPresenceResult);
 }
 
 interface ArtifactStream {
   read @0 (maxBytes :UInt32) -> (data :Data, done :Bool);
+}
+
+# PROPOSED: types for the batched presence query.
+# List of plan digests in, per-digest presence partition out.
+struct BatchPresenceQuery {
+  planDigests @0 :List(Data);   # Plan digests to check (Blake3)
+}
+
+struct BatchPresenceResult {
+  present @0 :List(Data);       # Plan digests with available artifacts
+  missing @1 :List(Data);       # Plan digests without cached artifacts
 }
 ```
 
@@ -894,6 +979,31 @@ Each `OriginAttestation` binds:
 
 This structure follows the [in-toto](https://in-toto.io/) attestation model,
 adapted for sovereign (Cyphr/Coz) signing rather than Sigstore/OIDC.
+
+### Batched Presence Query — PROPOSED
+
+**Status: PROPOSED** — `queryPresenceBatch` is not in the implemented schema;
+`BatchPresenceQuery` and `BatchPresenceResult` are specified under Constraints
+§ Type Declarations above.
+
+The scheduler's two-level cache filter requires a single logical round trip
+to determine which plans in a ready execution-point's scope are already
+available as substitutable artifacts. The per-plan `query` method cannot
+satisfy this in one round trip; the PROPOSED `queryPresenceBatch` method
+provides a presence-only batch interface.
+
+The scheduler sends a `BatchPresenceQuery` carrying the list of plan digests
+to check. The `SubstitutionService` returns `present` and `missing`
+partitions. The scheduler uses `missing` to identify plans requiring local
+build execution; `present` plans can be fetched via the per-plan `query` +
+`fetchArtifact` path (which provides the full `SubstitutionResult` with
+`OriginAttestation` for trust verification).
+
+This directly addresses finding F3 (REVIEW.md §4): the single-round-trip
+intent of ADR-0004's batch cache filter is preserved without requiring a
+batch RPC on the snix `PathInfoService` wire. A `SubstitutionService` shim
+translates to bounded-concurrency per-digest `PathInfoService.Get` calls
+internally; the scheduler's contract is "one logical batch round trip."
 
 ---
 
