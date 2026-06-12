@@ -348,25 +348,27 @@ The state transitions are governed by the following event handlers:
 
 1. **RequestArrival(dag, request_id)**:
    - Cache filter (two-level): For each node in the
-     incoming DAG, first check if $G_\cup$ already
-     contains a node with the same derivation hash in a
-     **completed** state (free in-memory hash lookup —
-     recently built derivations not yet removed by
-     terminal GC). Then, collect all remaining
-     unresolved derivations and issue a **single batch
-     query** to the artifact store (`QueryValidPaths` /
-     batch `has()`) to determine which are cached.
-     Per-node store roundtrips are prohibitively
-     expensive — the store's gRPC protocol supports
-     batch queries for exactly this reason. The
-     in-memory pre-filter reduces the batch size;
-     terminal GC should not be overly aggressive, as
-     retaining completed EPs briefly serves as a
-     "recently cached" index that shrinks the batch.
-     If the uncached sub-DAG is empty after filtering,
-     the request is immediately marked complete and the
-     client notified — no merge, coarsening, or PEFT
-     pass is needed.
+     incoming DAG, first check whether $G_\cup$ already
+     holds a node with the same plan hash in a
+     **completed** state (a free in-memory hash lookup —
+     recently built plans not yet removed by terminal
+     GC). Then collect the remaining unresolved plans and
+     issue **one logical batched existence query** over
+     the Cap'n Proto `SubstitutionService`
+     (`SubstitutionService.query`, keyed by
+     `SubstitutionQuery.planHash` —
+     eos-network-protocol.md:282-300) to a **store shim**.
+     The scheduler makes no per-node store round trips and
+     holds no snix imports or gRPC client code; the shim
+     owns amortization (see *Cache filter and the store
+     boundary* below). The in-memory pre-filter shrinks the
+     batch handed to the shim; terminal GC should not be
+     overly aggressive, as retaining completed EPs briefly
+     serves as a "recently cached" index that shrinks it
+     further. If the uncached sub-DAG is empty after
+     filtering, the request is immediately marked complete
+     and the client notified — no merge, coarsening, or
+     PEFT pass is needed.
    - Merge: JIT merge uncached nodes/edges into $G_\cup$.
    - Request tracking: Add `request_id` to `request_clients` set on each node.
    - Re-coarsening: scoped re-walk of the MUTABLE partition (rebuilds mutable EP records; frozen records untouched).
@@ -376,7 +378,7 @@ The state transitions are governed by the following event handlers:
    - Freeze: Mark `ep` as completed (frozen).
    - Cache update: Populate artifact store with `ep` outputs.
    - EMA update: Refine prediction error and update profile.
-   - Cache-skip scan: For each MUTABLE EP whose scope overlaps `ep`: if all outputs are now in the store, mark it complete (cache-skipped); otherwise, update its predicted duration.
+   - Cache-skip scan: For each MUTABLE EP whose scope overlaps `ep`: if all outputs are now in the store, mark it complete (cache-skipped); otherwise, update its predicted duration. Scope overlap is computed in memory against $G_\cup$ using `ep`'s own (locally known) output set; only a partially-overlapped scope ever consults the store shim, so the common case needs no store round trip.
    - Dependency cascade: Downstream pending EPs whose dependencies are satisfied transition to `ready`.
    - PEFT re-plan & Dispatch: Run PEFT and dispatch ready EPs.
    - Note: Re-coarsening is intentionally omitted from
@@ -404,6 +406,28 @@ The state transitions are governed by the following event handlers:
      on derivation nodes, not EPs. An EP's effective
      client set is the union of its constituent nodes'
      `request_clients`.)
+
+**Cache filter and the store boundary**:
+The "single logical query" above is a property of the
+**scheduler↔shim** Cap'n Proto surface, not of the snix store.
+The snix store wire protocol has **no batch existence RPC and no
+standalone existence RPC** — only per-digest
+`PathInfoService.Get`, with existence read as `Get` returning
+`NOT_FOUND` (`rpc_pathinfo.proto:13-61`). The store shim
+(deployable inside a worker or standalone) implements
+`SubstitutionService` by fanning the batch out to per-digest
+`Get` calls with **bounded concurrency**, so the scheduler sees
+one round trip while the shim absorbs the per-digest fan-out.
+This keeps the scheduler free of snix dependencies and gRPC code
+(`[eos-scheduler-state-isolation]`) even in federated
+topologies. A batch-native existence RPC (e.g. a `Stat`/bulk
+API) is **PROPOSED upstream on the snix canon** (campaign node
+P12); the shim will consume it once it lands to drop the
+fan-out, but it is **not** an existing snix capability and the
+design does not assume one. An earlier draft claimed the store's
+gRPC protocol natively answered a batch existence query; that
+was factually wrong against the snix proto and is corrected
+here.
 
 **Structural Deduplication & CAS Idempotency**:
 Deduplication is achieved at two distinct levels:
@@ -463,7 +487,7 @@ three mechanisms at different lifecycle stages:
    Completed nodes still in $G_\cup$ serve as a free
    in-memory "recently cached" index for the two-level
    cache filter (§2b): new requests can check them
-   before making store roundtrips. A reasonable GC
+   before consulting the store shim. A reasonable GC
    policy is to defer collection until the completed EP
    has no remaining `request_clients` AND a brief
    retention period has elapsed (or memory pressure
