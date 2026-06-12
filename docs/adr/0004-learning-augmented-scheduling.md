@@ -16,12 +16,15 @@
 
 ## Context
 
-> **Terminology note**: This ADR and its companion formal model
-> use "derivation" to refer to the Nix-native build unit. In
-> Axios's layered terminology, the Eos engine abstraction is
-> "Plan" (`BuildEngine::Plan`). The scheduling documents
-> operate at the Nix/snix integration layer where "derivation"
-> is the precise domain term.
+> **Terminology note**: This ADR uses **plan** (the Eos
+> `BuildEngine::Plan` abstraction) for the build unit the
+> scheduler operates on, per the monorepo's canonical
+> glossary. A plan corresponds to the Nix-native
+> `[derivation]`; where that Nix-native unit or a verbatim
+> snix/Nix identifier must be named exactly, it appears in
+> brackets (e.g. `[derivation]`). Plan digests, plan DAGs,
+> and the profile store's `plan_name` keys are all stated in
+> this canonical vocabulary.
 
 The Eos scheduler currently uses tag-based set-containment
 matching with Rendezvous hashing for cache affinity (SAD §7).
@@ -34,10 +37,10 @@ on the table:
    a 2-second leaf compilation from a 30-minute monolithic
    link step until it's already running.
 
-2. **No derivation DAG awareness**: When evaluation produces a
-   derivation DAG, the scheduler sees a flat set of uncached
-   derivations. It does not consider the graph structure when
-   selecting which derivations to schedule as top-level build
+2. **No plan DAG awareness**: When evaluation produces a
+   plan DAG, the scheduler sees a flat set of uncached
+   plans. It does not consider the graph structure when
+   selecting which plans to schedule as top-level build
    entries — missing opportunities to colocate tightly coupled
    subgraphs on the same machine.
 
@@ -46,29 +49,29 @@ on the table:
    job's resource profile aligns with the worker's currently
    available resources. This causes fragmentation.
 
-### The Derivation DAG Problem
+### The Plan DAG Problem
 
 This is the core scheduling challenge. A Nix evaluation
-produces not a single derivation but a **directed acyclic
-graph** of derivations — the top-level derivation and all
+produces not a single plan but a **directed acyclic
+graph** of plans — the top-level plan and all
 its transitive build dependencies:
 
 ```
-top-level.drv
-├── dep-a.drv
-│   ├── dep-c.drv  (cached ✓)
-│   └── dep-d.drv
-├── dep-b.drv
-│   ├── dep-d.drv  (shared with dep-a)
-│   └── dep-e.drv  (cached ✓)
-└── dep-f.drv
+top-level
+├── dep-a
+│   ├── dep-c  (cached ✓)
+│   └── dep-d
+├── dep-b
+│   ├── dep-d  (shared with dep-a)
+│   └── dep-e  (cached ✓)
+└── dep-f
 ```
 
-After filtering cached derivations, the remaining uncached
+After filtering cached plans, the remaining uncached
 nodes form the **uncached sub-DAG**. The key insight from
 Nix/snix's execution model is:
 
-> **Scheduling a derivation for build automatically builds
+> **Scheduling a plan for build automatically builds
 > all its transitive dependencies.** The builder resolves
 > the full dependency chain internally — there is no need
 > to explicitly schedule each transitive node.
@@ -82,16 +85,16 @@ entry points** (peaks) into the uncached DAG:
   same machine — with full locality (no cross-machine
   artifact transfers for transitive outputs).
 - The scheduler tracks only the entry points, not every
-  individual derivation in the graph.
+  individual plan in the graph.
 - Parallelism comes from scheduling multiple entry points
   to different workers simultaneously.
 
-The scheduling question becomes: **which derivations should
+The scheduling question becomes: **which plans should
 be the entry points, and which workers should execute them?**
 
 #### Entry Point Selection
 
-Naive approach (schedule only the top-level derivation):
+Naive approach (schedule only the top-level plan):
 
 - One worker builds the entire DAG sequentially
 - Zero parallelism — all transitive dependencies serialize
@@ -127,7 +130,7 @@ prediction oracle:
   ~120s to build
 - **Resources**: atom X consistently uses ~2GB RAM during
   build
-- **DAG shape**: atom X's derivation DAG is structurally
+- **DAG shape**: atom X's plan DAG is structurally
   similar across versions (same dependencies, same depth)
 - **Cache behavior**: atom X's dependencies are 90% cached
   after the first build
@@ -166,78 +169,79 @@ developer metadata (domain knowledge) > system defaults
 Augment the tag-based scheduler with four capabilities, each
 grounded in academic prior art:
 
-### 1. Historical Build Profiles (Unified Derivation Model)
+### 1. Historical Build Profiles (Unified Plan Model)
 
-Everything is a derivation. An atom is a derivation with
-extra metadata (atom-id, developer scheduling hints), not a
-separate classification. The profile store reflects this:
+Everything is a plan. An atom is a plan with extra metadata
+(atom-id, developer scheduling hints), not a separate
+classification. The profile store reflects this:
 
 ```
-P[drv_name] → {
+P[plan_name] → {
     build_duration:  ExponentialMovingAverage,
     build_memory:    ExponentialMovingAverage,
     build_cpu_cores: ExponentialMovingAverage,  // average or peak cpu cores
     output_size:     ExponentialMovingAverage,
     confidence:      f64,                        // computed as 1 - EMA(|η_e|) from error history
 
-    // enrichment (present when derivation is also an atom)
-    atom_id:        Option<AtomId>,
+    // enrichment (present when the plan is also an atom)
+    atom-id:        Option<atom-id>,
     atom_metadata:  Option<SchedulingMetadata>,
 }
 ```
 
-Profiles are keyed by **derivation name** (the `name` field
-from `StorePath`, e.g., `openssl-3.0.12`). Derivation names
-are human-readable and structurally stable — the same
-package produces similarly-named derivations across versions.
+Profiles are keyed by the plan's `plan_name` — the
+human-readable, version-stable identifier from its
+`StorePath` (e.g., `openssl-3.0.12`). These keys are
+structurally stable: the same package produces
+similarly-keyed plans across versions.
 
 **Storage architecture**: The profile store is a persistent
 database (e.g., embedded KV store like `sled`, `redb`, or
 SQLite), not an in-memory structure. The set of unique
-derivation names grows unboundedly over time — a
+plan keys grows unboundedly over time — a
 long-running daemon serving diverse workloads will
 accumulate profiles for hundreds of thousands of distinct
-derivation names. Keeping all of them in memory is not
+plan keys. Keeping all of them in memory is not
 feasible.
 
 The scheduler maintains an **in-memory hot cache** of
-profiles for derivation names present in the current
+profiles for the plans present in the current
 active DAG ($G_\cup$). Profiles are loaded from the
 persistent store on `RequestArrival` (when the cache
 filter walks the incoming DAG) and evicted when the
-corresponding derivation nodes are garbage-collected
+corresponding plan nodes are garbage-collected
 from $G_\cup$. After each completed build, the updated
 profile is written through to the persistent store
 immediately — the persistent store is always the source
 of truth.
 
-When a derivation that appears as a transitive dependency in
+When a plan that appears as a transitive dependency in
 one atom's DAG is also an independently-published atom, the
-scheduler recognizes this: the derivation name matches an
+scheduler recognizes this: the plan's key matches an
 existing profile, and the atom-id (if present) provides
 cross-version stability and access to developer-provided
 scheduling metadata.
 
-**Prediction resolution** for a derivation:
+**Prediction resolution** for a plan:
 
-1. **Exact match**: `P[drv_name]` — exact derivation name match (historical).
-2. **Cross-version aggregate**: Aggregate EMA of the `atom_id` group — if the derivation is an atom, query the secondary index to aggregate historical profiles from other versions of the same atom (calibrating prediction for version bumps like `openssl-3.0.12` → `openssl-3.0.13`).
-3. **Developer metadata**: `P[drv_name].atom_metadata` — developer-provided hints (if derivation is an atom).
+1. **Exact match**: `P[plan_name]` — exact plan-key match (historical).
+2. **Cross-version aggregate**: Aggregate EMA of the `atom-id` group — if the plan is an atom, query the secondary index to aggregate historical profiles from other versions of the same atom (calibrating prediction for version bumps like `openssl-3.0.12` → `openssl-3.0.13`).
+3. **Developer metadata**: `P[plan_name].atom_metadata` — developer-provided hints (if the plan is an atom).
 4. **Defaults**: System defaults — conservative fallback.
 
-**Cross-version querying**: The `atom_id` field is a
+**Cross-version querying**: The `atom-id` field is a
 secondary index, not just a passive annotation. Grouping
-profiles by `atom_id` gives the full historical trajectory
+profiles by `atom-id` gives the full historical trajectory
 of an atom across versions — how build duration, memory, CPU,
 and DAG shape have evolved over time. This is essential for
 trend detection (is this atom's build getting heavier?),
-EMA calibration, and operator visibility. Derivation names
+EMA calibration, and operator visibility. Plan keys
 change with versions (e.g., `openssl-3.0.12` →
 `openssl-3.0.13`), but the atom-id groups them coherently.
 
 This unified model avoids the complexity of maintaining
-separate atom-level and derivation-level stores. A
-derivation that is also an atom simply has richer metadata
+separate atom-level and plan-level stores. A
+plan that is also an atom simply has richer metadata
 in the same profile entry.
 
 **Prior art**: Learning-augmented algorithms framework
@@ -249,7 +253,7 @@ the consistency/robustness/smoothness framework.
 
 #### 2a. Construction of the Unified Global DAG and Coarsening
 
-To prevent redundant computation across concurrent requests and minimize myopic scheduling, all requests contribute to a **unified global derivation graph** $G_\cup = (V_\cup, E_\cup)$ keyed by derivation hash (N1). When a new build request arrives, its derivation sub-graph is merged JIT into the global DAG in $O(|V_{\text{new}}| + |E_{\text{new}}|)$ time. Derivations whose outputs are already cached in the artifact store are immediately filtered out.
+To prevent redundant computation across concurrent requests and minimize myopic scheduling, all requests contribute to a **unified global plan graph** $G_\cup = (V_\cup, E_\cup)$ keyed by plan hash (N1). When a new build request arrives, its plan sub-graph is merged JIT into the global DAG in $O(|V_{\text{new}}| + |E_{\text{new}}|)$ time. Plans whose outputs are already cached in the artifact store are immediately filtered out.
 
 The scheduler partitions the mutable portion of $G_\cup$ into coarsened **entry points** ($S$) with a greedy top-down walk that covers the uncached sub-DAG. *Which* nodes become entry points is governed by promotion criteria. The criteria below are the **leading hypothesis (H1)** — they are **not settled**. The campaign's trace-driven simulator (node P10) compares H1 against the alternatives H2–H4 on real nixpkgs DAGs (constraint C2), and that simulation, not this ADR, selects the production heuristic.
 
@@ -398,12 +402,12 @@ The state transitions are governed by the following event handlers:
      Run PEFT re-plan and dispatch accumulated ready
      EPs.
 5. **RequestCancellation(request_id)**:
-   - For each derivation node in $G_\cup$, remove
+   - For each plan node in $G_\cup$, remove
      `request_id` from `request_clients(v)`. For each
      EP whose constituent nodes now all have empty
      `request_clients` and which is MUTABLE, prune it.
      (Per the formal model, `request_clients` is tracked
-     on derivation nodes, not EPs. An EP's effective
+     on plan nodes, not EPs. An EP's effective
      client set is the union of its constituent nodes'
      `request_clients`.)
 
@@ -432,8 +436,8 @@ here.
 **Structural Deduplication & CAS Idempotency**:
 Deduplication is achieved at two distinct levels:
 
-1. **Entry Point Level (Unified DAG)**: Structural deduplication. Because requests merge into $G_\cup$, identical derivation hashes map to the same node. This is the primary defense against redundant computation.
-2. **Derivation Level (CAS Idempotency)**: Unlike Nix's legacy model which relies on store-level locks, Snix store operations (gRPC `BlobService`, `DirectoryService`, `PathInfoService`) are content-addressed and **purely idempotent**. Concurrent writes of the same outputs both succeed. If two builders race on the same derivation, they both execute the computation, incurring **redundant CPU/resource cost** rather than lock contention. The builder's internal `has()` check provides a partial defense by skipping a build if it finishes after another, but the scheduler's convergence-point promotion is the primary mechanism to prevent overlapping scopes from triggering wasted computation.
+1. **Entry Point Level (Unified DAG)**: Structural deduplication. Because requests merge into $G_\cup$, identical plan hashes map to the same node. This is the primary defense against redundant computation.
+2. **Plan Level (CAS Idempotency)**: Unlike Nix's legacy model which relies on store-level locks, Snix store operations (gRPC `BlobService`, `DirectoryService`, `PathInfoService`) are content-addressed and **purely idempotent**. Concurrent writes of the same outputs both succeed. If two builders race on the same plan, they both execute the computation, incurring **redundant CPU/resource cost** rather than lock contention. The builder's internal `has()` check provides a partial defense by skipping a build if it finishes after another, but the scheduler's convergence-point promotion is the primary mechanism to prevent overlapping scopes from triggering wasted computation.
 
 **DAG Lifecycle & Garbage Collection**:
 The unified DAG $G_\cup$ is a long-lived structure in a
@@ -441,14 +445,14 @@ persistent daemon. Completed work exits the DAG through
 three mechanisms at different lifecycle stages:
 
 1. **Ingress cache filter** (`RequestArrival`): When a new
-   request's derivation sub-DAG is merged, each node is
-   checked against the artifact store. Derivations whose
+   request's plan sub-DAG is merged, each node is
+   checked against the artifact store. Plans whose
    outputs are already cached — including those built by
    earlier requests — are filtered out before merge.
    They never enter $G_\cup$. This is the primary
    mechanism by which prior completed work becomes
    invisible to new requests: once outputs are in the
-   store, the derivations are indistinguishable from
+   store, the plans are indistinguishable from
    pre-existing cache hits.
 
 2. **Mid-lifecycle cache-skip** (`EPComplete`): When an
@@ -464,12 +468,12 @@ three mechanisms at different lifecycle stages:
 3. **Terminal GC** (post-completion): Once all requests
    referencing an EP have terminated (all entries in
    `request_clients` are resolved — completed or
-   failed), the EP and its underlying derivation nodes
+   failed), the EP and its underlying plan nodes
    are eligible for removal from $G_\cup$. The GC
    should be triggered lazily (e.g., after client
    notification) and must remove:
    - The EP itself from the EP DAG
-   - Any derivation nodes in $G_\cup$ whose
+   - Any plan nodes in $G_\cup$ whose
      `request_clients` set is now empty and that are
      not referenced by any remaining EP's scope
    - The EP's edges in the EP dependency graph
@@ -565,7 +569,7 @@ is dynamically decayed based on the exponential moving average (EMA) of the abso
 relative prediction error:
 $$\beta_e = \beta \cdot e^{-\lambda \cdot \text{EMA}(|\eta_e|)}$$
 where $\text{EMA}(|\eta_e|)$ is the running average of the absolute relative prediction
-error magnitude for that atom/derivation group, and $\lambda > 0$ is a decay
+error magnitude for that atom/plan group, and $\lambda > 0$ is a decay
 constant. If predictions are systematically incorrect (even if stable and having zero variance),
 $\text{EMA}(|\eta_e|)$ grows, causing $\beta_e \to 0$ and safely falling back to the
 prediction-free baseline — the resource-fit signal drops out of `d(e, w)`,
@@ -603,7 +607,7 @@ To tune $\lambda$, operators should align it with the expected coefficient of va
 
 The entry-point selection heuristic determines which nodes in the uncached sub-DAG are promoted to standalone entry points ($S$) and which are merged into transitive parent scopes. The thresholds for promote-vs-merge (subgraph cost threshold, convergence/fan-in threshold, and resource limits) dictate the scheduling granularity:
 
-- **Aggressive Coarsening (High Thresholds)**: Too few entry points are promoted. Trivial dependencies, convergence points, and even heavy derivations are absorbed into a small number of top-level tasks. This serializes execution, forcing individual workers to build large subgraphs sequentially and starving the rest of the cluster of parallel execution opportunities.
+- **Aggressive Coarsening (High Thresholds)**: Too few entry points are promoted. Trivial dependencies, convergence points, and even heavy plans are absorbed into a small number of top-level tasks. This serializes execution, forcing individual workers to build large subgraphs sequentially and starving the rest of the cluster of parallel execution opportunities.
 - **Weak Coarsening (Low Thresholds)**: Too many entry points are promoted. The scheduler shatters the DAG into a high volume of tiny tasks (e.g., short compile tasks, small script runs). This leads to:
   1. High scheduling queue overhead.
   2. Destruction of input cache locality, as sub-DAG nodes are scattered across different workers rather than executing on the same machine.
@@ -734,12 +738,12 @@ failure/health events trigger only PEFT re-planning.
 | Re-coarsening           | Greedy walk over MUTABLE partition           | $O(\|V'_{\text{mut}}\| + \|E'_{\text{mut}}\|)$ | RequestArrival |
 | Cache-skip scan         | Check scope overlap for mutable EPs          | $O(\|S_{\text{mut}}\| \cdot \bar\kappa)$       | EPComplete     |
 | Dependency cascade      | Update ready status of pending EPs           | $O(\|S\|)$                                     | EPComplete     |
-| EP DAG derivation       | Transitive closure on selected set           | $O(\|S\|^2)$ worst case                        | RequestArrival |
+| EP DAG construction       | Transitive closure on selected set           | $O(\|S\|^2)$ worst case                        | RequestArrival |
 | PEFT re-planning        | Full EP DAG scheduling                       | $O(\|S\|^2 \cdot \|W\|)$                       | All events     |
 | EMA update              | Per-completion profile update                | $O(1)$                                         | EPComplete     |
 
 Where $\bar\kappa$ is the average entry-point scope size
-(number of derivations in a typical EP's transitive closure).
+(number of plans in a typical EP's transitive closure).
 
 The **dominant per-event cost** is PEFT re-planning at
 $O(\|S\|^2 \cdot \|W\|)$. Event coalescing amortizes this:
@@ -754,7 +758,7 @@ full DAG construction cost:
 | :-------------------- | :------------------------------------------- | :----------------------------------------- |
 | DAG construction      | Topological sort + cache filtering           | $O(\|V'\| + \|E'\|)$                       |
 | Entry point selection | Greedy top-down walk with fan-in/cost checks | $O(\|V'\| + \|E'\|)$                       |
-| EP DAG derivation     | Transitive closure on selected set           | $O(\|S\|^2)$ worst case                    |
+| EP DAG construction     | Transitive closure on selected set           | $O(\|S\|^2)$ worst case                    |
 | PEFT planning         | Initial full EP DAG scheduling               | $O(\|S\|^2 \cdot \|W\|)$                   |
 | LRH lookup (per EP)   | Cache affinity scoring                       | $O(\log\|R\| + C)$                         |
 | **Total (initial)**   | **First scheduling pass**                    | $O(\|V'\| + \|E'\| + \|S\|^2 \cdot \|W\|)$ |
@@ -783,7 +787,7 @@ Where:
 - $d$ = resource dimensions (constant, typically 3–4:
   CPU, memory, disk, optionally egress bandwidth — see note #12)
 - $\|R\|$ = LRH ring size, $C$ = cache-local window
-- EP DAG derivation is $O(\|S\|^2)$ in the worst case
+- EP DAG construction is $O(\|S\|^2)$ in the worst case
   (all-pairs reachability on the coarsened set) but
   typically much smaller since $\|S\| \ll \|V'\|$
 - **Single-machine degenerate case**: When $\|W\| = 1$,
@@ -1103,14 +1107,14 @@ theoretical omniscient MILP solver:
    soonest.
 
 3. **Submodular redundant computation**: The relaxed coverage
-   mapping permits non-entry-point derivations to exist in
+   mapping permits non-entry-point plans to exist in
    multiple entry points' transitive scopes. When two
    workers concurrently build entry points with shared
    transitives (e.g., `openssl`), they will both redundantly
    build that shared dependency if their executions overlap.
    The builder's `has()` check will only skip the build if
    the other builder completes and publishes the output before
-   the second builder starts the same derivation. A global
+   the second builder starts the same plan. A global
    solver could calculate submodular overlap costs and perfectly
    stagger or route tasks to eliminate redundant computation.
 
@@ -1128,7 +1132,7 @@ theoretical omniscient MILP solver:
 The algorithm exploits three domain-specific realities
 that close most of the gap to theoretical optimality:
 
-1. **Nix granularity solution**: Nix derivation DAGs are
+1. **Nix granularity solution**: Nix plan DAGs are
    wildly bimodal — a few colossal linchpin tasks plus
    thousands of trivial micro-tasks (patches, fetches,
    hooks). Academic schedulers choke on this; scheduling
@@ -1162,14 +1166,14 @@ Formal proofs validate bounds on **fixed, abstract DAGs**
 but cannot validate that the heuristic thresholds
 (troublesome node cost, convergence fan-in limit, subgraph
 cost threshold) are well-calibrated for **real Nix
-derivation shapes**. The $\alpha$ factor in Theorem 2
+plan shapes**. The $\alpha$ factor in Theorem 2
 absorbs heuristic quality — the proofs guarantee bounded
 quality for any $\alpha$ but do not tell us what $\alpha$
 is in practice.
 
 Bridging this gap requires trace-driven simulation:
 
-1. Extract real derivation DAGs from `nixpkgs` (e.g.,
+1. Extract real plan DAGs from `nixpkgs` (e.g.,
    `chromium`, `kde-plasma`, `linux`) as trace corpus
 2. Extract actual build durations and resource profiles
    from Hydra/Cachix as ground truth
@@ -1301,7 +1305,7 @@ model when:
   related subgraphs on the same worker. The builder handles
   all transitive work internally with full locality.
 - **Reduced scheduler tracking**: The scheduler tracks entry
-  points, not individual derivations. The builder's internal
+  points, not individual plans. The builder's internal
   dependency resolution handles the rest.
 - **Resource efficiency**: Multi-resource scoring reduces
   fragmentation, improving effective cluster utilization.
@@ -1325,7 +1329,7 @@ model when:
 - **Storage overhead**: Historical build profiles are
   persisted in an embedded database (§1). Each profile
   is small (~100 bytes), but the store grows unboundedly
-  with the number of distinct derivation names ever seen.
+  with the number of distinct plan names ever seen.
 - **Entry point quality is heuristic**: The selection
   algorithm uses greedy heuristics, not a provably optimal
   algorithm. Quality depends on prediction accuracy and
@@ -1341,12 +1345,12 @@ model when:
 ### Risks
 
 - **Redundant computation on overlapping scopes**: Two entry points on
-  different workers whose transitive scopes share derivations will both
-  attempt to build the shared derivations. Because Snix uses a
+  different workers whose transitive scopes share plans will both
+  attempt to build the shared plans. Because Snix uses a
   CAS-idempotent store model rather than store-level locks, both workers
   will redundantly compute the shared dependency if their executions overlap.
   The builder's `has()` check only prevents redundant work if the first
-  builder finishes before the second builder starts the shared derivation.
+  builder finishes before the second builder starts the shared plan.
   Mitigation: the convergence point promotion rule in entry point selection
   promotes high fan-in nodes to standalone entry points, ensuring they are
   scheduled and built exactly once before downstream dependents start,
@@ -1377,7 +1381,7 @@ optimality assessment above:
    refinement of critical-path rank). Under the Greedy strategy, when multiple
    entry points become `ready` simultaneously, the dispatcher
    should sort them by estimated critical-path contribution
-   (longest weighted path to the DAG root) before assigning.
+   (longest weighted path to a top-level target) before assigning.
    Greedy FIFO readiness ordering risks assigning trivial
    entry points to capable workers, blocking imminent
    critical tasks. The critical path computation is
@@ -1386,7 +1390,7 @@ optimality assessment above:
    edges).
 
 2. **Redundant computation monitoring**: When overlapping
-   coverage causes workers to redundantly compute the same derivations,
+   coverage causes workers to redundantly compute the same plans,
    resources are wasted. The implementation should track the frequency
    of redundant builds (e.g., when a worker publishes outputs that
    were already populated by another worker during its execution)
@@ -1498,7 +1502,7 @@ optimality assessment above:
 11. **Non-blocking ingress draining**: The scheduler's
     event channel **must not** block on PEFT planning or
     graph coarsening. Because entry-point selection involves
-    graph searches over potentially large derivation trees,
+    graph searches over potentially large plan trees,
     inline processing would cause backpressure that stalls
     request ingress. The implementation should use a
     non-blocking `try_recv` drain loop that immediately
@@ -1511,7 +1515,7 @@ optimality assessment above:
     `try_recv` + `VecDeque` to completely insulate its
     ingress from downstream processing latency.
 
-12. **Fixed-output derivation (FOD) locality**: FODs
+12. **Fixed-output plan (FOD) locality**: FODs
     (source fetches, git checkouts, tarball downloads) have
     a fundamentally different resource profile from compute
     tasks: they are network-bound, I/O-heavy, and produce
@@ -1543,7 +1547,7 @@ optimality assessment above:
     vector (§3) should include `egress_bandwidth` as a
     dimension so that the duration model can steer
     FOD-heavy EPs toward high-bandwidth workers. Historical
-    profiles can track FOD fetch durations per derivation
+    profiles can track FOD fetch durations per plan
     hash to refine bandwidth-adjusted predictions.
 
 13. **Worker reconnection protocol**: When a worker is
@@ -1576,18 +1580,18 @@ optimality assessment above:
     prediction system tracks _that_ predictions are wrong
     (magnitude of |η|) but not _why_. For faster
     convergence, the implementation should track
-    per-worker-class performance deltas: if derivation X
+    per-worker-class performance deltas: if plan X
     takes 120s on a 64GB worker but 45s on a 256GB worker,
     the prediction error is attributable to memory pressure
     (swapping or cache thrashing), not to an inherent
-    change in the derivation. The profile store can
+    change in the plan. The profile store can
     maintain resource-conditioned predictions — e.g.,
     separate EMA tracks for "duration on workers with
     ≥128GB RAM" vs. "duration on workers with <128GB RAM."
     When a prediction error exceeds a significance
     threshold (e.g., >50% deviation), the scheduler should
     compare the worker's resource profile to the historical
-    median worker profile for this derivation and attribute
+    median worker profile for this plan and attribute
     the error to the most divergent resource dimension.
     This attribution can then drive targeted prediction
     inflation (note #8) and inform the resource-fit
@@ -1727,24 +1731,24 @@ point selection is a potential novel contribution.
 ### Resolved
 
 1. **DAG visibility** — RESOLVED. The snix evaluator
-   accumulates the full derivation DAG as a side-effect in
-   `KnownPaths` (owned by `SnixStoreIO`). After evaluation:
-   - `known_paths.get_derivations()` iterates all derivations
-   - `Derivation.input_derivations` provides dependency edges
-     (`BTreeMap<StorePath, BTreeSet<String>>`)
-   - `PathInfoService.get(digest)` provides per-derivation
-     cache checks
-   - `KnownPaths` enforces a topological ordering invariant
-     (all input derivations registered before dependents)
+   accumulates the full plan DAG as a side-effect in
+   `KnownPaths` (owned by `SnixStoreIO`). After evaluation,
+   `KnownPaths` exposes:
+   - an enumeration of all plans it has seen
+   - each plan's input-plan edges (a
+     `BTreeMap<StorePath, BTreeSet<String>>`)
+   - per-plan cache checks via `PathInfoService.get(digest)`
+   - a topological ordering invariant (all input plans
+     registered before their dependents)
 
    The Eos scheduler can therefore introspect the full DAG
-   after evaluation completes: walk `input_derivations` edges,
+   after evaluation completes: walk the input-plan edges,
    query `PathInfoService` for each node, and construct the
-   uncached sub-DAG and entry point DAG proactively.
+   uncached sub-DAG and entry-point DAG proactively.
 
 2. **Dynamic re-evaluation** — RESOLVED (unnecessary).
    Because evaluation is deterministic (invariant
-   `[eos-eval-pure-eval]`) and derivation hashes are
+   `[eos-eval-pure-eval]`) and plan hashes are
    content-addressed, the uncached sub-DAG is fully
    determined at construction time. When entry point D
    completes, the downstream cache state is exactly what
@@ -1756,12 +1760,12 @@ point selection is a potential novel contribution.
 
 3. **Entry point granularity** — RESOLVED (algorithmic, not
    a static parameter). Granularity is determined per
-   derivation by analyzing the subgraph below each candidate
+   plan by analyzing the subgraph below each candidate
    entry point:
    - **Aggregate predicted cost**: sum historical build
      durations for all uncached transitive dependencies
      below the candidate (using both atom-level and
-     derivation-level profiles — see Q5 resolution)
+     plan-level profiles — see Q5 resolution)
    - **Subgraph shape**: depth (critical path length) and
      width (max parallelism within the subgraph)
    - A candidate becomes an explicit entry point if:
@@ -1778,18 +1782,18 @@ point selection is a potential novel contribution.
    split at convergence points.
 
 4. **Historical profile schema** — RESOLVED (unified
-   derivation model). Everything is a derivation at the
-   base layer. An atom is a derivation with extra metadata
+   plan model). Everything is a plan at the
+   base layer. An atom is a plan with extra metadata
    (atom-id, developer scheduling hints), not a separate
-   classification. One profile store keyed by derivation
-   name (`P[drv_name]`), with optional atom enrichment.
+   classification. One profile store keyed by the plan's
+   `plan_name`, with optional atom enrichment.
 
    This eliminates the two-table split (atom-level vs
-   derivation-level) that added classification complexity
-   without clear benefit. A derivation appearing as a
+   plan-level) that added classification complexity
+   without clear benefit. A plan appearing as a
    transitive dep in one DAG and as an independent atom
    in another context shares the same profile entry —
-   the scheduler recognizes it automatically via name
+   the scheduler recognizes it automatically via key
    match and uses the atom metadata if available.
 
 5. **Cross-request deduplication** — RESOLVED (structural
@@ -1798,10 +1802,10 @@ point selection is a potential novel contribution.
    Bazel backends: "action merging", CDN: "request collapsing").
 
    Mechanism: maintain a concurrent map of in-flight entry
-   point builds keyed by derivation hash:
+   point builds keyed by plan hash:
 
    ```
-   in_flight: Map<DrvHash, SharedFuture<BuildResult>>
+   in_flight: Map<PlanHash, SharedFuture<BuildResult>>
    ```
 
    When dispatching an entry point:
