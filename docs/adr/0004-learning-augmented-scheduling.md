@@ -268,7 +268,7 @@ Where:
 - **Troublesomeness**: High predicted cost or resource footprint.
 - **Convergence (Fan-in)**: High fan-in node (many direct dependents).
 - **Subgraph Volume**: Large aggregate transitive cost below $v$.
-- **Confidence Gate**: $\text{conf}(v) = 1 - \text{EMA}(|\eta_v|)$ modulates the cost thresholds based on past prediction error. When confidence is low ($\text{conf} \to 0$), cost thresholds remain high (conservative coarsening: fewer EPs, fewer scheduling decisions). When confidence is high ($\text{conf} \to 1$), cost thresholds are lowered, allowing selective promotion for fine-grained HEFT optimization.
+- **Confidence Gate**: $\text{conf}(v) = 1 - \text{EMA}(|\eta_v|)$ modulates the cost thresholds based on past prediction error. When confidence is low ($\text{conf} \to 0$), cost thresholds remain high (conservative coarsening: fewer EPs, fewer scheduling decisions). When confidence is high ($\text{conf} \to 1$), cost thresholds are lowered, allowing selective promotion for fine-grained PEFT optimization.
 
 **Frozen/Mutable Partition & Re-Coarsening**:
 The global scheduling state is partitioned into two regions:
@@ -276,15 +276,24 @@ The global scheduling state is partitioned into two regions:
 1. **FROZEN partition**: $\{ ep \mid ep.\text{status} \in \{\text{dispatched}, \text{complete}, \text{failed}\} \}$. This boundary is sacred. Dispatched EPs are immutable: their coverage scope $\kappa(v, s)$ and worker assignment can never change (Frozen Stability invariant).
 2. **MUTABLE partition**: $\{ ep \mid ep.\text{status} \in \{\text{pending}, \text{ready}\} \} \cup \{ \text{unassigned nodes} \}$. These EPs can be freely restructured (merged, split, promoted, demoted) by incremental re-coarsening when new requests arrive or cache updates occur (Mutable Freedom invariant).
 
-#### 2b. Event-Driven HEFT Dispatch Protocol
+#### 2b. Event-Driven PEFT Dispatch Protocol
 
-Instead of sequential topological dispatch or epoch batching, the scheduler employs **event-driven HEFT re-planning** on the **full EP DAG** (pending + ready + frozen). HEFT determines task priority via upward rank (critical path contribution from predicted durations) and constructs a time-slotted assignment plan in $O(|S|^2 \cdot |W|)$ time. Within HEFT's worker selection phase — where standard HEFT picks the worker minimizing Earliest Finish Time (EFT) — we replace the worker selection criterion with the multi-criteria scoring function `score(w, e)` (§3). The scoring function's predicted durations feed into HEFT's time-slot computation, and the combined affinity/resource_fit/availability score replaces EFT as the worker selection criterion. Ready EPs with feasible workers are dispatched immediately, while pending EPs are tentatively scheduled to future time slots. These tentative assignments do NOT lock workers; workers remain available for ready work.
+Instead of sequential topological dispatch or epoch batching, the scheduler employs **event-driven PEFT (Predict Earliest Finish Time) re-planning** on the **full EP DAG** (pending + ready + frozen). PEFT (Arabnejad & Barbosa, 2014) replaces static HEFT's upward rank with an **Optimistic Cost Table** (OCT). For each entry point `e` and worker `w`, `OCT(e, w)` is the optimistic cost to complete *all* remaining work downstream of `e`, assuming `e` runs on `w` and every future assignment is optimal. It is computed **backward** over the scheduling table T from exit EPs (EPs with no EP-level dependents):
 
-Frozen EPs (dispatched/complete) are included in the HEFT computation as **fixed constraints** — their time slots and worker assignments are immutable inputs. Only mutable EPs (pending/ready) have their assignments computed by HEFT.
+$$OCT(e_i, w_k) = \max_{e_j \in \operatorname{succ}(e_i)} \; \min_{w_m \in W} \big[\, OCT(e_j, w_m) + d(e_j, w_m) \,\big], \qquad OCT(e_{\text{exit}}, w_k) = 0$$
 
-For single-cluster deployments (all workers in the same artifact store namespace), the transfer cost $\tau = 0$ for all EP pairs. HEFT degenerates to a compute-only DAG scheduler, which is the intended behavior. Communication costs become relevant only in federated deployments with distinct store namespaces (see note #3).
+PEFT uses OCT for both decisions HEFT made from upward rank, in $O(|S|^2 \cdot |W|)$ time — the same bound as the HEFT pass it replaces:
 
-To avoid scheduler thrashing, the engine uses an **event coalescing** loop (draining the non-blocking event channel completely before running a single HEFT pass). The event loop is **single-threaded for state mutations**: event _producers_ (request ingress, completion callbacks, health monitors) run concurrently and push events to an async channel (`tokio::sync::mpsc`), but the event loop is the sole consumer. This serialization is required by the Frozen Stability invariant — concurrent HEFT passes could dispatch the same ready EP to different workers.
+1. **Priority ordering**: rank EPs by **average OCT across workers**. An EP with high average OCT has the largest downstream impact and is scheduled first. This replaces static upward rank.
+2. **Worker selection**: for each ready EP, select the worker **minimizing `EFT(e, w) + OCT(e, w)`**, where `EFT(e, w) = worker_available_time(w) + d(e, w)`. This places the EP where it both finishes earliest *and* best sets up downstream work. Because `d(e, w)` is the cache- and fit-adjusted duration from §3, cache affinity and resource fit enter the selection through the duration model — there is no separate placement score.
+
+Ready EPs with feasible workers are dispatched immediately, while pending EPs have their priorities and tentative placements computed but do NOT lock workers; workers remain available for ready work.
+
+Frozen EPs (dispatched/complete) are included in the PEFT computation as **fixed constraints** — their worker assignments and occupancy are immutable inputs that shape OCT for the mutable EPs above them. Only mutable EPs (pending/ready) have their priorities and assignments computed by PEFT.
+
+For single-cluster deployments (all workers in the same artifact store namespace), the transfer cost $\tau = 0$ for all EP pairs. PEFT degenerates to a compute-only DAG scheduler, which is the intended behavior. Communication costs become relevant only in federated deployments with distinct store namespaces (see note #3).
+
+To avoid scheduler thrashing, the engine uses an **event coalescing** loop (draining the non-blocking event channel completely before running a single PEFT pass). The event loop is **single-threaded for state mutations**: event _producers_ (request ingress, completion callbacks, health monitors) run concurrently and push events to an async channel (`tokio::sync::mpsc`), but the event loop is the sole consumer. This serialization is required by the Frozen Stability invariant — concurrent PEFT passes could dispatch the same ready EP to different workers.
 
 The state transitions are governed by the following event handlers:
 
@@ -307,12 +316,12 @@ The state transitions are governed by the following event handlers:
      "recently cached" index that shrinks the batch.
      If the uncached sub-DAG is empty after filtering,
      the request is immediately marked complete and the
-     client notified — no merge, coarsening, or HEFT
+     client notified — no merge, coarsening, or PEFT
      pass is needed.
    - Merge: JIT merge uncached nodes/edges into $G_\cup$.
    - Request tracking: Add `request_id` to `request_clients` set on each node.
    - Incremental re-coarsening: Re-coarsen the MUTABLE partition.
-   - HEFT re-plan: Run HEFT on full EP DAG.
+   - PEFT re-plan: Run PEFT on full EP DAG.
    - Dispatch: Dispatch ready EPs to feasible workers.
 2. **EPComplete(ep)**:
    - Freeze: Mark `ep` as completed (frozen).
@@ -320,7 +329,7 @@ The state transitions are governed by the following event handlers:
    - EMA update: Refine prediction error and update profile.
    - Cache-skip scan: For each MUTABLE EP whose scope overlaps `ep`: if all outputs are now in the store, mark it complete (cache-skipped); otherwise, update its predicted duration.
    - Dependency cascade: Downstream pending EPs whose dependencies are satisfied transition to `ready`.
-   - HEFT re-plan & Dispatch: Run HEFT and dispatch ready EPs.
+   - PEFT re-plan & Dispatch: Run PEFT and dispatch ready EPs.
    - Note: Re-coarsening is intentionally omitted from
      `EPComplete`. Mutable EPs retain their existing
      coverage scope; the cache-skip scan handles the
@@ -329,13 +338,13 @@ The state transitions are governed by the following event handlers:
      the next `RequestArrival`.
 3. **EPFail(ep, failure_kind)**:
    - If `deterministic`: Mark failed, fail downstream dependents, and notify clients.
-   - If `transient` (infra failure): Revert `ep` to `ready`, run HEFT, and re-dispatch.
+   - If `transient` (infra failure): Revert `ep` to `ready`, run PEFT, and re-dispatch.
 4. **WorkerHealthChange(worker, status)**:
    - If `unhealthy`: Revert affected running EPs on
-     `worker` to `ready`. Run HEFT excluding `worker`
+     `worker` to `ready`. Run PEFT excluding `worker`
      and dispatch.
    - If `healthy` (restored): Mark worker available.
-     Run HEFT re-plan and dispatch accumulated ready
+     Run PEFT re-plan and dispatch accumulated ready
      EPs.
 5. **RequestCancellation(request_id)**:
    - For each derivation node in $G_\cup$, remove
@@ -395,7 +404,7 @@ three mechanisms at different lifecycle stages:
    This prevents $G_\cup$ from growing monotonically in
    a long-running daemon. Without GC, completed EPs
    accumulate in the frozen partition, inflating $\|S\|$
-   in every HEFT pass and consuming memory indefinitely.
+   in every PEFT pass and consuming memory indefinitely.
    The `RequestCancellation` handler (which prunes
    mutable EPs with empty `request_clients`) is the
    partial version of this — terminal GC extends the
@@ -550,7 +559,7 @@ pub trait SchedulerStrategy {
 
 The Eos scheduling daemon utilizes this trait boundary to support three swappable strategy backends:
 
-1. **HEFT (Primary)**: The default active strategy. HEFT constructs a time-slotted execution plan. It is highly efficient ($O(|S|^2 \cdot |W|)$) and provides a provable competitive bound ($\alpha_{\text{heft}}$) mechanized in Lean 4.
+1. **PEFT (Primary)**: The default active strategy. PEFT ranks EPs by average OCT and assigns each to the worker minimizing `EFT + OCT` (§2b). It is highly efficient ($O(|S|^2 \cdot |W|)$) and, as a list-scheduling algorithm, provides a provable competitive bound ($\alpha_{\text{peft}}$) mechanized in Lean 4.
 2. **Greedy (Fallback)**: A low-overhead fallback strategy activated under high prediction error or missing profiles. It assigns tasks greedily to the highest scoring cache-affinity worker, satisfying basic capacity safety.
 3. **MILP/MCMF (Deferred)**: A global solver strategy reserved for federated scale ($|W| > 1000$). It solves the JIT assignment globally via mixed-integer programming or min-cost max-flow, operating over the coarsened EP DAG. Because the graph size is naturally bounded ($|S| \leq 20$), the solver completes in sub-millisecond time, bypassing NP-hardness in practice.
 
@@ -641,9 +650,9 @@ cost.
 
 Each coalesced event batch triggers the following phases.
 Not all phases run on every event type — `RequestArrival`
-triggers DAG merge + re-coarsening + HEFT; `EPComplete`
-triggers cache-skip scan + dependency cascade + HEFT;
-failure/health events trigger only HEFT re-planning.
+triggers DAG merge + re-coarsening + PEFT; `EPComplete`
+triggers cache-skip scan + dependency cascade + PEFT;
+failure/health events trigger only PEFT re-planning.
 
 | Phase                   | Operation                                    | Complexity                                     | Trigger Events |
 | :---------------------- | :------------------------------------------- | :--------------------------------------------- | :------------- |
@@ -653,15 +662,15 @@ failure/health events trigger only HEFT re-planning.
 | Cache-skip scan         | Check scope overlap for mutable EPs          | $O(\|S_{\text{mut}}\| \cdot \bar\kappa)$       | EPComplete     |
 | Dependency cascade      | Update ready status of pending EPs           | $O(\|S\|)$                                     | EPComplete     |
 | EP DAG derivation       | Transitive closure on selected set           | $O(\|S\|^2)$ worst case                        | RequestArrival |
-| HEFT re-planning        | Full EP DAG scheduling                       | $O(\|S\|^2 \cdot \|W\|)$                       | All events     |
+| PEFT re-planning        | Full EP DAG scheduling                       | $O(\|S\|^2 \cdot \|W\|)$                       | All events     |
 | EMA update              | Per-completion profile update                | $O(1)$                                         | EPComplete     |
 
 Where $\bar\kappa$ is the average entry-point scope size
 (number of derivations in a typical EP's transitive closure).
 
-The **dominant per-event cost** is HEFT re-planning at
+The **dominant per-event cost** is PEFT re-planning at
 $O(\|S\|^2 \cdot \|W\|)$. Event coalescing amortizes this:
-$k$ closely-spaced events trigger one HEFT pass, not $k$.
+$k$ closely-spaced events trigger one PEFT pass, not $k$.
 
 #### Initial Construction Cost
 
@@ -673,7 +682,7 @@ full DAG construction cost:
 | DAG construction      | Topological sort + cache filtering           | $O(\|V'\| + \|E'\|)$                       |
 | Entry point selection | Greedy top-down walk with fan-in/cost checks | $O(\|V'\| + \|E'\|)$                       |
 | EP DAG derivation     | Transitive closure on selected set           | $O(\|S\|^2)$ worst case                    |
-| HEFT planning         | Initial full EP DAG scheduling               | $O(\|S\|^2 \cdot \|W\|)$                   |
+| PEFT planning         | Initial full EP DAG scheduling               | $O(\|S\|^2 \cdot \|W\|)$                   |
 | LRH lookup (per EP)   | Cache affinity scoring                       | $O(\log\|R\| + C)$                         |
 | **Total (initial)**   | **First scheduling pass**                    | $O(\|V'\| + \|E'\| + \|S\|^2 \cdot \|W\|)$ |
 
@@ -681,7 +690,7 @@ full DAG construction cost:
 
 Over the full lifetime of a request (from arrival through
 all EP completions), the scheduler runs approximately
-$\|S\|$ HEFT re-plans (one per EP completion, amortized by
+$\|S\|$ PEFT re-plans (one per EP completion, amortized by
 coalescing). The total lifecycle cost is:
 
 $$O(\|V'\| + \|E'\| + \|S\|^3 \cdot \|W\|)$$
@@ -705,7 +714,7 @@ Where:
   (all-pairs reachability on the coarsened set) but
   typically much smaller since $\|S\| \ll \|V'\|$
 - **Single-machine degenerate case**: When $\|W\| = 1$,
-  HEFT degenerates to a topological sort and coarsening
+  PEFT degenerates to a topological sort and coarsening
   is irrelevant — all EPs are assigned to the single
   worker regardless of the partition chosen
 
@@ -719,11 +728,11 @@ unacceptable when the scheduling decision itself must
 complete in sub-second time.
 
 **Implementation note**: The dominant cost per event is
-HEFT at $O(\|S\|^2 \cdot \|W\|)$. For a cluster of 100
+PEFT at $O(\|S\|^2 \cdot \|W\|)$. For a cluster of 100
 workers and a DAG coarsened to 50 entry points, this is
-250,000 operations per HEFT pass — trivially fast. At
+250,000 operations per PEFT pass — trivially fast. At
 federated scale ($\|W\| > 1000$), the min-cost flow
-formulation (§Future Work) replaces HEFT with a global
+formulation (§Future Work) replaces PEFT with a global
 flow optimization.
 
 ---
@@ -770,7 +779,7 @@ fork-join, convergence, independent) with weak fairness.
   The scheduler never indefinitely holds a schedulable EP.
 - **Head-of-line immunity (P5')**: A large, slow EP on
   one worker does not block dispatch of unrelated ready
-  EPs to other workers. The event-driven HEFT protocol
+  EPs to other workers. The event-driven PEFT protocol
   evaluates all ready EPs on each pass, not just the
   first in queue.
 - **Completion propagation (P6)**: Every dispatched EP
@@ -814,7 +823,8 @@ offline assignment. For small $\varepsilon$, this simplifies
 to $\alpha \cdot (1 + 2\varepsilon + O(\varepsilon^2))$.
 
 This bound cleanly separates two concerns: heuristic quality
-($\alpha$, a function of DAG structure and scoring function)
+($\alpha$, a function of DAG structure and the placement
+signals folded into `d(e, w)`)
 and prediction degradation ($(1+\varepsilon)/(1-\varepsilon)$,
 a function of profile accuracy). The implementation can
 independently tune each axis.
@@ -836,9 +846,9 @@ Where:
 
 - $\bar{\epsilon}$ is the average prediction error magnitude.
 - $\alpha(\bar{\epsilon})$ is a monotonically non-increasing function representing the quality of the selected entry-point DAG coarsening:
-  $$\alpha(0) = \alpha_{\text{heft}} \quad \text{and} \quad \alpha(1) \leq \alpha_{\text{max}}$$
+  $$\alpha(0) = \alpha_{\text{peft}} \quad \text{and} \quad \alpha(1) \leq \alpha_{\text{max}}$$
 
-This theorem bounds the combined performance of both graph coarsening and worker placement. Under accurate predictions ($\bar{\epsilon} \to 0$), cost thresholds are safely lowered, yielding fine-grained entry points that HEFT schedules optimally ($\alpha \to \alpha_{\text{heft}}$). When error is high ($\bar{\epsilon} \to 1$), thresholds rise, yielding a coarse DAG with fewer entry points, falling back to the prediction-free baseline bound $\alpha_{\text{max}}$.
+This theorem bounds the combined performance of both graph coarsening and worker placement. Under accurate predictions ($\bar{\epsilon} \to 0$), cost thresholds are safely lowered, yielding fine-grained entry points that PEFT schedules optimally ($\alpha \to \alpha_{\text{peft}}$). When error is high ($\bar{\epsilon} \to 1$), thresholds rise, yielding a coarse DAG with fewer entry points, falling back to the prediction-free baseline bound $\alpha_{\text{max}}$.
 
 #### Robustness (Theorem 3)
 
@@ -878,14 +888,14 @@ degrades proportionally via the $(1+\varepsilon)/(1-\varepsilon)$
 factor — not catastrophically. This follows directly from
 Theorem 2's bound: the consistency ratio is a smooth, monotone
 function of $\varepsilon$. When error becomes sustained, the
-EMA decay mechanism (Theorem 3) automatically collapses the
-scoring function to the prediction-free baseline.
+EMA decay mechanism (Theorem 3) automatically collapses
+placement to the prediction-free baseline (pure LRH affinity).
 
 #### Concrete Instantiation of α (Graham's Bound)
 
 Theorems 2–3 leave α abstract — "the heuristic's base
-approximation ratio." Since our modified HEFT is a **list
-scheduling algorithm** (it processes tasks in a fixed priority
+approximation ratio." Since our modified PEFT is a **list
+scheduling algorithm** (it processes EPs in OCT-priority
 order and assigns each to a worker), we can instantiate α
 using Graham's classical List Scheduling Bound (1966):
 
@@ -913,7 +923,7 @@ sizes and prediction error levels:
 | 50      | 1.98    | 2.08×  | 2.42×   | 2.97×   |
 | 100     | 1.99    | 2.09×  | 2.43×   | 2.99×   |
 
-These are **worst-case** guarantees. Empirically, HEFT on
+These are **worst-case** guarantees. Empirically, PEFT on
 small DAGs ($|S| \leq 20$, which coarsening targets)
 typically achieves 1.1–1.3× optimal. The Graham bound is
 rarely tight because it requires adversarial DAG structures
@@ -975,21 +985,21 @@ theoretical omniscient MILP solver:
    $\bar\varepsilon \to 0$, because higher-confidence
    predictions enable finer-grained partitions.
 
-2. **Cross-event residual myopia**: HEFT on the full EP
+2. **Cross-event residual myopia**: PEFT on the full EP
    DAG replaces the earlier myopic greedy dispatch,
-   computing a global priority ordering across all ready
+   computing a global OCT-priority ordering across all ready
    entry points within a single scheduling event.
    Residual sub-optimality is bounded to cross-event
-   myopia — decisions made between successive HEFT
+   myopia — decisions made between successive PEFT
    re-plans, where a completion event reveals new ready
    EPs that could not be anticipated. Event coalescing
-   (batching closely-spaced events into a single HEFT
+   (batching closely-spaced events into a single PEFT
    invocation) further reduces this gap.
    Example: a 4-worker cluster with 4 available cores
    each receives 5 concurrent 4-core entry points.
    Capacity is exhausted (4 × 4 = 16 cores, 5 × 4 = 20
    required). The 5th EP must wait for a completion
-   event, and HEFT cannot anticipate which of the 4
+   event, and PEFT cannot anticipate which of the 4
    running EPs will finish first. An omniscient scheduler
    with perfect completion-time knowledge would pre-assign
    the 5th EP to the worker whose current task finishes
@@ -1011,7 +1021,7 @@ theoretical omniscient MILP solver:
    hash-ring distance, not physical WAN bandwidth or
    inter-cluster latency. Transferring a 50GB artifact
    from Tokyo to Virginia incurs massive wall-clock
-   penalties invisible to the scoring function. The
+   penalties invisible to the placement signals (§3). The
    deferred min-cost flow formulation (§Future Work)
    addresses this by encoding federation topology as edge
    costs.
@@ -1081,6 +1091,24 @@ formal proofs alone can establish.
 
 ## Rejected Alternatives
 
+### Static HEFT (Superseded Baseline)
+
+The initial design dispatched with **static HEFT** (Topcuoglu
+et al., IEEE TPDS 2002), prioritizing EPs by upward rank and
+building a time-slotted assignment plan. It is superseded by
+PEFT (§2b) for two reasons. First, HEFT's time-slot matrix for
+*pending* EPs is causally disconnected from dispatch under strict
+work conservation — the predictions never drive a decision, so
+the matrix was effectively phantom. Second, PEFT's Optimistic
+Cost Table is strictly more informative than upward rank
+(it is worker-aware and downstream-path-aware) at the *same*
+$O(|S|^2 \cdot |W|)$ complexity. The lookahead-HEFT variant
+(Bittencourt et al., Euromicro PDP 2010) achieves comparable
+downstream awareness but at $O(|S|^3)$ — too expensive for the
+per-event re-plan. HEFT is retained only as the conceptual
+baseline that PEFT improves upon, and as the list-scheduling
+family whose Graham bound (§Guarantees) PEFT inherits.
+
 ### GNN + Reinforcement Learning (Decima)
 
 Decima (Mao et al., SIGCOMM 2019, arXiv:1810.01963) uses
@@ -1148,9 +1176,9 @@ policies) as edge costs in a single optimization is
 compelling.
 
 **Status**: Deferred to a follow-up ADR. The initial
-implementation uses the heuristic scoring function (§3).
-Min-cost flow is a candidate replacement for the scoring
-function when:
+implementation uses the heuristic placement model (§3).
+Min-cost flow is a candidate replacement for that placement
+model when:
 
 - Cluster sizes exceed ~1000 workers
 - Federation introduces cross-cluster placement decisions
@@ -1241,9 +1269,9 @@ optimality assessment above:
 
 1. **Critical path priority (Greedy fallback)**: This note
    applies to the Greedy fallback strategy (§3b, strategy 2),
-   which does not compute time slots. The HEFT strategy
-   inherently prioritizes by upward rank (critical path
-   contribution). Under the Greedy strategy, when multiple
+   which does not compute an OCT. The PEFT strategy
+   inherently prioritizes by average OCT (a downstream-aware
+   refinement of critical-path rank). Under the Greedy strategy, when multiple
    entry points become `ready` simultaneously, the dispatcher
    should sort them by estimated critical-path contribution
    (longest weighted path to the DAG root) before assigning.
@@ -1270,8 +1298,8 @@ optimality assessment above:
    periodic pings or artifact store latency probes), not
    from a constant default. For intra-cluster assignments,
    $\tau \approx 0$. For cross-region assignments, $\tau$
-   may dominate makespan — the scoring function's
-   `affinity` term partially captures this via LRH but
+   may dominate makespan — the placement model's
+   `affinity` signal partially captures this via LRH but
    does not model WAN bandwidth constraints.
 
 4. **Coverage properties as debug assertions**: The four
@@ -1365,14 +1393,14 @@ optimality assessment above:
     is relied upon by the Theorem 3 robustness proof.
 
 11. **Non-blocking ingress draining**: The scheduler's
-    event channel **must not** block on HEFT planning or
+    event channel **must not** block on PEFT planning or
     graph coarsening. Because entry-point selection involves
     graph searches over potentially large derivation trees,
     inline processing would cause backpressure that stalls
     request ingress. The implementation should use a
     non-blocking `try_recv` drain loop that immediately
     buffers all pending events into an in-memory queue,
-    then runs a single coalesced HEFT pass over the
+    then runs a single coalesced PEFT pass over the
     accumulated events. This matches the event coalescing
     model described in §2b and prevents the ingress channel
     from filling under burst request load. Reference
@@ -1410,7 +1438,7 @@ optimality assessment above:
     dominated by fetch time, which varies dramatically with
     worker bandwidth (100 Mbps vs. 10 Gbps). The resource
     vector (§3) should include `egress_bandwidth` as a
-    dimension so that the scoring function can steer
+    dimension so that the duration model can steer
     FOD-heavy EPs toward high-bandwidth workers. Historical
     profiles can track FOD fetch durations per derivation
     hash to refine bandwidth-adjusted predictions.
@@ -1520,7 +1548,7 @@ optimality assessment above:
        `ready` and re-planned (same logic as the
        `WorkerHealthChange` handler).
     4. Mutable EPs are re-coarsened against current
-       cache state and HEFT is re-run.
+       cache state and PEFT is re-run.
 
     **Cold restart (no snapshot)**: Clients must re-submit
     their requests. The cache filter handles this
@@ -1559,8 +1587,10 @@ optimality assessment above:
 
 | Technique                         | Source                                  | Application                            |
 | :-------------------------------- | :-------------------------------------- | :------------------------------------- |
+| OCT-based list scheduling (PEFT)  | Arabnejad & Barbosa (IEEE TPDS 2014)    | Active dispatch priority + selection   |
+| List scheduling (HEFT)            | Topcuoglu et al. (IEEE TPDS 2002)       | Superseded baseline PEFT improves upon |
 | Troublesome task pre-allocation   | Graphene (OSDI 2016)                    | Entry point identification             |
-| Multi-resource dot-product        | Tetris (SIGCOMM 2014)                   | Placement scoring                      |
+| Multi-resource dot-product        | Tetris (SIGCOMM 2014)                   | Placement signals (folded into d(e,w)) |
 | Learning-augmented framework      | Mitzenmacher & Vassilvitskii (2020)     | Consistency/robustness guarantees      |
 | Greedy stochastic scheduling      | Gupta et al. (Math OR 2020)             | Greedy with predictions is competitive |
 | Permutation predictions           | Lindermayr & Megow (SPAA 2022)          | Robustness bounds                      |
