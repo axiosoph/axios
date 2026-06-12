@@ -1186,8 +1186,8 @@ Bridging this gap requires trace-driven simulation:
 
 This is campaign node `P10-heuristic-eval`: it is the binding evaluator
 (constraint C2) for the promotion heuristic. The ADR adopts H1
-as the leading hypothesis, but P10's results — not this
-document — select the production variant.
+as the leading hypothesis, but that node's simulation
+results — not this document — select the production variant.
 
 If the simulator demonstrates order-of-magnitude DAG
 reduction without serializing the critical path, the
