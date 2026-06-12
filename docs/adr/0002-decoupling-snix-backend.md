@@ -204,7 +204,7 @@ Eos does NOT manage the lifecycle of snix store daemons, builders, or eval worke
 The scheduler manages two worker pools with separate registries:
 
 - **Eval worker pool**: Dynamic registration via Cap'n Proto handshake. Rendezvous hashing for routing. Deduplication via `compute_eval_cache_key()` (BLAKE3 hash of normalized request). No work-stealing (eval durations have low variance).
-  - **Metadata**: `ifdSystems: List<Text>` (systems the worker's IFD builders handle; empty if no IFD), `speedFactor: UInt32` (relative priority).
+  - **Metadata**: `ifdSystems: List<Text>` (systems the worker's dedicated IFD builders handle; used solely to route eval requests to capable eval workers — never for IFD build placement; empty if the worker has no IFD builders), `speedFactor: UInt32` (relative priority).
 
 - **Build worker pool**: Dynamic registration via Cap'n Proto handshake. Rendezvous hashing with cache affinity. Deduplication via `plan_digest()`. Work-stealing enabled for load balancing across heterogeneous machines.
   - **Metadata**: `systems: List<Text>` (hard predicate — derivation system ∈ worker systems), `supportedFeatures: List<Text>` (hard predicate — derivation required features ⊆ worker features), `speedFactor: UInt32`.
