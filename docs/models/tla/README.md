@@ -28,6 +28,10 @@ java -jar tla2tools.jar -config ConvergenceModel.cfg ConvergenceModel.tla
 java -jar tla2tools.jar -config IndependentModel.cfg IndependentModel.tla
 ```
 
+To check every configuration — including the `MultiRequestModel` bounded
+dispatch window (Δ=2) and its strict-immediacy degenerate (Δ=0) — and tee a
+combined log, run [`run_model_check.sh`](run_model_check.sh).
+
 TLC will report the number of distinct states explored and whether all
 invariants and temporal properties hold. A successful run ends with
 `Model checking completed. No error has been found.`
