@@ -75,10 +75,13 @@ AsyncWrite` stream, enabling clean layering of Cyphr authentication
 
 ### Protocol Schema
 
-The canonical Cap'n Proto schema for the Eos daemon protocol:
+#### Implemented Schema
+
+The following schema is quoted verbatim from
+`eos/eos-proto/schema/eos.capnp` (ground truth):
 
 ```capnp
-@0xabc123def456789a;
+@0xb8d8f0d996dfe9b0;
 
 struct PlanDigest {
   bytes @0 :Data;  # 32-byte Blake3 digest
@@ -100,9 +103,76 @@ interface ProgressStream {
   done @1 () -> ();
 }
 
+struct AtomSetEntry {
+  anchor @0 :Text;
+  tag @1 :Text;
+  mirrors @2 :List(Text);
+}
+
+struct DepDescriptor {
+  union {
+    atom :group {
+      id @0 :AtomId;
+      label @1 :Text;
+      version @2 :Text;
+      set @3 :Text;
+      rev @4 :Text;
+      requires @5 :List(AtomId);
+      direct @6 :Bool;
+    }
+    nix :group {
+      name @7 :Text;
+      url @8 :Text;
+      hash @9 :Text;
+      owner @10 :AtomId;
+    }
+    nixGit :group {
+      name @11 :Text;
+      url @12 :Text;
+      rev @13 :Text;
+      version @14 :Text;
+      owner @15 :AtomId;
+    }
+    nixTar :group {
+      name @16 :Text;
+      url @17 :Text;
+      hash @18 :Text;
+      owner @19 :AtomId;
+    }
+    nixSrc :group {
+      name @20 :Text;
+      url @21 :Text;
+      hash @22 :Text;
+      owner @23 :AtomId;
+    }
+  }
+}
+
+struct ComposerSpec {
+  union {
+    atom :group {
+      id @0 :AtomId;
+      entry @1 :Text;
+      args @2 :List(KeyValue);
+    }
+    nixTrivial :group {
+      expression @3 :Text;
+      args @4 :List(KeyValue);
+    }
+    static @5 :Void;
+  }
+}
+
+struct BuildRequest {
+  planDigest @0 :Data;
+  sets @1 :List(AtomSetEntry);
+  deps @2 :List(DepDescriptor);
+  composer @3 :ComposerSpec;
+  evalArgs @4 :List(KeyValue);
+}
+
 interface EosDaemon {
-  submitBuild @0 (planDigest :PlanDigest, evalArgs :List(KeyValue))
-    -> (job :BuildJob);
+  submitBuild @0 (request :BuildRequest) -> (job :BuildJob);
   queryStatus @1 (jobId :Data) -> (status :BuildStatus);
   getCapabilities @2 () -> (
     supportedBackends :List(Text),
@@ -115,6 +185,7 @@ interface BuildJob {
   attachProgress @0 (callback :ProgressStream) -> ();
   cancel @1 () -> ();
   getJobId @2 () -> (jobId :Data);
+  getMissing @3 () -> (missingAtoms :List(AtomId));
 }
 
 interface AtomDiscovery {
@@ -123,11 +194,21 @@ interface AtomDiscovery {
   search @2 (query :AtomQuery) -> (results :List(AtomMeta));
 }
 
+struct AtomId {
+  digest @0 :Data;
+}
+
 struct AtomMeta {
   id @0 :AtomId;
   label @1 :Text;
   versions @2 :List(VersionInfo);
   sets @3 :List(Text);  # anchor hashes of sets containing this atom
+}
+
+struct VersionInfo {
+  version @0 :Text;
+  rev @1 :Text;
+  set @2 :Text;
 }
 
 struct AtomQuery {
@@ -140,14 +221,21 @@ struct KeyValue {
   key @0 :Text;
   value @1 :Text;
 }
+```
 
-# --- Internal Worker Interfaces (ADR-0002) ---
-# These interfaces are used by the scheduler to communicate with
-# eval workers and build workers. They are NOT client-facing.
+#### Worker Protocol — PROPOSED (ADR-0002)
+
+The following interfaces are L2-internal (scheduler-to-worker and
+worker-to-scheduler). They are **NOT** present in the implemented schema.
+**Status: PROPOSED** — pending the ADR-0002 implementation campaign.
+
+```capnp
+# Worker-facing types and interfaces — PROPOSED (ADR-0002)
+# These types are NOT in the implemented schema.
 
 struct EvalRequest {
   atomDigest @0 :Data;             # Content-addressed atom snapshot digest
-  expression @1 :Text;             # Nix expression or file path to evaluate
+  expression @1 :Text;             # Plan expression path
   evalArgs @2 :List(KeyValue);     # Evaluation arguments (compose.args)
   inputs @3 :List(ResolvedInput);  # Pre-resolved atom inputs
 }
@@ -161,8 +249,8 @@ struct ResolvedInput {
 struct EvalResult {
   union {
     success :group {
-      derivationBytes @0 :Data;    # ATerm-serialized Derivation
-      planDigest @1 :Data;         # Digest of the computed plan
+      planBytes @0 :Data;          # Serialized plan (engine-format)
+      planDigest @1 :Data;         # Content-addressed plan digest
     }
     failure :group {
       error @2 :Text;              # Evaluation error message
@@ -172,7 +260,7 @@ struct EvalResult {
 }
 
 struct WorkerBuildRequest {
-  derivationBytes @0 :Data;        # ATerm-serialized Derivation
+  planBytes @0 :Data;              # Serialized plan (engine-format)
   jobId @1 :Data;                  # Scheduler-assigned job ID
   leaseId @2 :Data;                # Lease token for health monitoring
 }
@@ -222,24 +310,37 @@ interface BuildWorker {
 ### Schema–Type Correspondence
 
 The Cap'n Proto schema defines the wire representation. The `eos-core` Rust
-types define the behavioral contract. Both MUST remain synchronized:
+types define the behavioral contract. Both MUST remain synchronized.
+
+**Implemented** (`eos/eos-proto/schema/eos.capnp` ↔ `eos/eos-core/src/request.rs`):
+
+| Cap'n Proto Type     | `eos-core` Rust Type              | Role                                                            |
+| :------------------- | :-------------------------------- | :-------------------------------------------------------------- |
+| `PlanDigest`         | `Digest`                          | Content-addressed plan identifier                               |
+| `BuildStatus`        | `JobStatus`                       | Job lifecycle state                                             |
+| `ProgressStream`     | `ProgressEvent`                   | Streaming status callback                                       |
+| `AtomSetEntry`       | `AtomSetInfo`                     | Atom-set declaration (anchor → tag + mirrors)                   |
+| `DepDescriptor`      | `FetchDescriptor`                 | Pre-fetch dependency descriptor (union of atom/nix variants)    |
+| `ComposerSpec`       | `ComposerSpec`                    | Composer configuration (atom / nix-trivial / static)            |
+| `BuildRequest`       | `BuildRequest<D: Digest>`         | Structured build request (plan digest + sets + deps + composer) |
+| `AtomId`             | `AtomId`                          | Content-addressed atom identifier                               |
+| `VersionInfo`        | `(version, rev, set)` fields      | Per-version atom metadata                                       |
+| `EosDaemon`          | Daemon entry point                | Top-level client-facing RPC surface                             |
+| `BuildJob`           | Job handle                        | Per-build capability (client-facing)                            |
+| `AtomDiscovery`      | `AtomSource` (read-only)          | Atom resolution and search                                      |
+| `AtomMeta`           | Atom metadata                     | Per-atom identity and version info                              |
+| `AtomQuery`          | Search parameters                 | Discovery query constraints                                     |
+| `KeyValue`           | `(String, String)`                | Evaluation arguments                                            |
+
+**PROPOSED** (ADR-0002 — not yet in implemented schema):
 
 | Cap'n Proto Type     | `eos-core` Rust Type     | Role                                               |
 | :------------------- | :----------------------- | :------------------------------------------------- |
-| `PlanDigest`         | `Digest`                 | Content-addressed plan identifier                  |
-| `BuildStatus`        | `JobStatus`              | Job lifecycle state                                |
-| `ProgressStream`     | `ProgressEvent`          | Streaming status callback                          |
-| `EosDaemon`          | Daemon entry point       | Top-level client-facing RPC surface                |
-| `BuildJob`           | Job handle               | Per-build capability (client-facing)               |
-| `AtomDiscovery`      | `AtomSource` (read-only) | Atom resolution and search                         |
-| `AtomMeta`           | Atom metadata            | Per-atom identity and version info                 |
-| `AtomQuery`          | Search parameters        | Discovery query constraints                        |
-| `KeyValue`           | `(String, String)`       | Evaluation arguments                               |
 | `EvalWorker`         | Eval worker interface    | Scheduler-to-eval-worker RPC (internal, ADR-0002)  |
 | `BuildWorker`        | Build worker interface   | Scheduler-to-build-worker RPC (internal, ADR-0002) |
 | `EvalRequest`        | `EvalRequest`            | Evaluation job specification                       |
-| `EvalResult`         | Evaluation result        | Derivation or error from eval worker               |
-| `WorkerBuildRequest` | Build job specification  | Derivation + lease for build worker                |
+| `EvalResult`         | Evaluation result        | Plan or error from eval worker                     |
+| `WorkerBuildRequest` | Build job specification  | Plan bytes + lease for build worker                |
 | `WorkerBuildResult`  | Build result             | Output paths or error from build worker            |
 
 ---
@@ -253,7 +354,7 @@ supplementary types constrain authentication and substitution:
 
 ```capnp
 struct NodeIdentity {
-  principalRoot @0 :Data;          # Cyphr Principal Root (sovereign identity)
+  principalRoot @0 :Data;          # Cyphr sovereign principal (signing key anchor)
   timestamp @1 :UInt64;            # Unix epoch seconds
   signature @2 :Data;              # Signature over (principalRoot, timestamp, nonce)
   nonce @3 :Data;                  # Anti-replay nonce
@@ -272,7 +373,7 @@ struct HandshakeResponse {
 }
 
 struct OriginAttestation {
-  builderId @0 :Data;              # NodeId (Principal Root) of the builder
+  builderId @0 :Data;              # NodeId (sovereign principal) of the builder
   planHash @1 :Data;               # Blake3 digest of the EnginePlan
   outputDigest @2 :Data;           # Blake3 digest of the build output
   signature @3 :Data;              # Builder's signature over (planHash, outputDigest)
@@ -310,11 +411,11 @@ interface ArtifactStream {
 
 **[eos-network-sovereign-auth]**: All daemon connections and inter-node wire
 sessions MUST authenticate using sovereign identities at Layer 1 (Cyphr
-Principal Roots). Authentication proceeds via signed challenge-response over
-`NodeIdentity` payloads. Eos MUST NOT accept connections authenticated solely
-by web-PKI TLS certificates. The signing algorithm is determined by the Cyphr
-cryptographic suite — implementations MUST NOT hardcode a specific curve or
-scheme.
+sovereign principals). Authentication proceeds via signed challenge-response
+over `NodeIdentity` payloads. Eos MUST NOT accept connections authenticated
+solely by web-PKI TLS certificates. The signing algorithm is determined by the
+Cyphr cryptographic suite — implementations MUST NOT hardcode a specific curve
+or scheme.
 `VERIFIED: unverified`
 
 **[eos-trustless-substitution]**: When fetching a pre-built artifact from a
@@ -412,9 +513,12 @@ the daemon.
 **[submit-build]**: Submit a build request and receive a job capability.
 
 - **PRE**: An authenticated client holds an `EosDaemon` capability.
-- **POST**: The client invokes `submitBuild(planDigest, evalArgs)`. The
-  daemon computes `JobId = hash(plan)` for deduplication. If a job with the
-  same `JobId` already exists, the existing `BuildJob` capability is returned
+- **POST**: The client invokes `submitBuild(request: BuildRequest)`. The
+  `BuildRequest` carries the plan digest (a session-scoped deduplication key,
+  not a semantic plan identifier), atom-set declarations, dependency
+  descriptors, composer spec, and eval args. The daemon computes
+  `JobId = hash(planDigest)` for deduplication. If a job with the same
+  `JobId` already exists, the existing `BuildJob` capability is returned
   (deduplication). Otherwise, a new job is enqueued and a fresh `BuildJob`
   capability is returned. The build proceeds asynchronously.
   `VERIFIED: unverified`
@@ -495,7 +599,7 @@ establishment.
 
 **[no-unauthorized-handshake]**: A connection MUST NOT be promoted to an
 authenticated RPC session if the `HandshakeRequest` signature does not
-validate against the declared `NodeIdentity` (Principal Root).
+validate against the declared `NodeIdentity` (sovereign principal).
 `VERIFIED: unverified`
 
 **[no-cancel-on-drop]**: Dropping a `BuildJob` or `ProgressStream` capability
@@ -552,10 +656,11 @@ sufficient for invoking the operations it exposes.
 ```
 EosDaemon (bootstrap)
   │
-  ├── submitBuild() ──→ BuildJob (per-job capability)
+  ├── submitBuild(request: BuildRequest) ──→ BuildJob (per-job capability)
   │                        ├── attachProgress(callback) ──→ server holds ProgressStream ref
   │                        ├── cancel()
-  │                        └── getJobId()
+  │                        ├── getJobId()
+  │                        └── getMissing() ──→ List(AtomId)
   │
   ├── discover() ──→ AtomDiscovery (read-only capability)
   │                     ├── resolve(id) ──→ AtomMeta
@@ -569,9 +674,9 @@ EosDaemon (bootstrap)
 
 ### Lifecycle Semantics
 
-1. **Submit.** Client invokes `EosDaemon.submitBuild()`. The daemon returns a
-   `BuildJob` capability — an opaque, unforgeable reference to the running
-   job.
+1. **Submit.** Client invokes `EosDaemon.submitBuild(request: BuildRequest)`.
+   The daemon returns a `BuildJob` capability — an opaque, unforgeable
+   reference to the running job.
 
 2. **Attach.** Client invokes `BuildJob.attachProgress(callback)`, passing a
    client-side `ProgressStream` implementation. The daemon holds a reference
@@ -645,7 +750,7 @@ Client                              Daemon
   │── HandshakeRequest ────────────▸ │  (Cap'n Proto RPC: capability negotiation)
   │◂── HandshakeResponse ────────── │
   │                                   │
-  │── [EosDaemon bootstrap cap] ───▸ │  (client receives root capability)
+  │── [EosDaemon bootstrap cap] ───▸ │  (client receives bootstrap capability)
   │                                   │
 ```
 
@@ -781,7 +886,7 @@ The substitution trust model is deployment-configurable:
 
 Each `OriginAttestation` binds:
 
-- The builder's sovereign identity (`builderId`: Principal Root)
+- The builder's sovereign identity (`builderId`: Cyphr sovereign principal)
 - The plan that was executed (`planHash`: Blake3 digest of the `Plan`)
 - The output that was produced (`outputDigest`: Blake3 digest of the artifact)
 - A timestamp for freshness verification
