@@ -251,24 +251,27 @@ the consistency/robustness/smoothness framework.
 
 To prevent redundant computation across concurrent requests and minimize myopic scheduling, all requests contribute to a **unified global derivation graph** $G_\cup = (V_\cup, E_\cup)$ keyed by derivation hash (N1). When a new build request arrives, its derivation sub-graph is merged JIT into the global DAG in $O(|V_{\text{new}}| + |E_{\text{new}}|)$ time. Derivations whose outputs are already cached in the artifact store are immediately filtered out.
 
-The scheduler partitions the mutable portion of the global DAG into coarsened **entry points** ($S$). Entry points are selected top-down to cover the uncached sub-DAG using a greedy walk governed by the following promotion criteria:
+The scheduler partitions the mutable portion of $G_\cup$ into coarsened **entry points** ($S$) with a greedy top-down walk that covers the uncached sub-DAG. *Which* nodes become entry points is governed by promotion criteria. The criteria below are the **leading hypothesis (H1)** — they are **not settled**. The campaign's trace-driven simulator (node P10) compares H1 against the alternatives H2–H4 on real nixpkgs DAGs (constraint C2), and that simulation, not this ADR, selects the production heuristic.
 
-A node $v$ is promoted to a standalone entry point ($v \in S$) if:
-$$\operatorname{predicted_cost}(v) > \frac{\theta_{\text{cost}}}{1 + \operatorname{conf}(v) \cdot \theta_{\text{scale}}} \;\lor\; \operatorname{fan_in}(v) > \theta_{\text{fanin}} \;\lor\; \operatorname{subgraph_cost}(v) > \frac{\theta_{\text{subgraph}}}{1 + \operatorname{conf}(v) \cdot \theta_{\text{scale}}}$$
+**Hypothesis H1 (leading) — priority-ordered promotion.** Derived from the formal objective (minimize $\text{makespan} + \lambda \cdot \text{concurrent\_redundant\_work}$, makespan primary, redundancy avoidance secondary). A node $v$ is promoted to a standalone entry point if any criterion fires, evaluated in priority order:
 
-Where:
+1. **Critical-path cut (PRIMARY — parallelism)**: $\operatorname{critical_path}(v) > \theta_{\text{critical}}$. A long serial chain below $v$ blocks everything above it; promoting $v$ lets that chain start on a dedicated worker immediately while other EPs handle parallel work. This **replaces** $\operatorname{subgraph_cost}(v)$, which summed *all* transitive cost (much of it parallelizable inside the builder); critical path measures only the serial portion that actually constrains makespan.
+2. **Cost-gated convergence (SECONDARY — avoid expensive redundancy)**: $(\operatorname{fan_in}(v) - 1) \cdot d(v) > \theta_{\text{redundancy}}$. High-fan-in nodes appear in multiple concurrent EP scopes; promotion converts concurrent overlap into a sequential dependency built once. The cost gate refuses to promote trivial shared nodes, where the synchronization barrier costs more than simply rebuilding. This **replaces** the bare $\operatorname{fan_in}(v) > \theta_{\text{fanin}}$ criterion, which ignored whether the redundancy was worth preventing.
+3. **Troublesome node (TERTIARY — resource isolation)**: $d(v) > \theta_{\text{cost}}$. A single heavyweight plan (e.g. a 30-minute compile) becomes its own EP so it can be routed to the most capable worker.
 
-- **predicted_cost(v)**: predicted build duration of
-  derivation $v$ in isolation, from `P[drv_name].build_duration`.
-- **subgraph_cost(v)**: sum of predicted_cost(u)
-  for all uncached nodes $u$ in the transitive dependency closure of
-  $v$ (aggregate computation below $v$).
-- **fan_in(v)**: in-degree of $v$ in $G_\cup$ (number
-  of direct dependents).
-- **Troublesomeness**: High predicted cost or resource footprint.
-- **Convergence (Fan-in)**: High fan-in node (many direct dependents).
-- **Subgraph Volume**: Large aggregate transitive cost below $v$.
-- **Confidence Gate**: $\text{conf}(v) = 1 - \text{EMA}(|\eta_v|)$ modulates the cost thresholds based on past prediction error. When confidence is low ($\text{conf} \to 0$), cost thresholds remain high (conservative coarsening: fewer EPs, fewer scheduling decisions). When confidence is high ($\text{conf} \to 1$), cost thresholds are lowered, allowing selective promotion for fine-grained PEFT optimization.
+Where $d(v)$ is the predicted isolated build duration of plan $v$ (from `P[plan_name].build_duration`), $\operatorname{critical_path}(v)$ is the longest weighted dependency chain below $v$, and $\operatorname{fan_in}(v)$ is its in-degree in $G_\cup$.
+
+**Confidence gating.** Every threshold is gated on prediction confidence so unreliable estimates do not over-partition:
+$$\theta_{\text{eff}} = \frac{\theta}{1 + \operatorname{conf}(v) \cdot \theta_{\text{scale}}}, \qquad \operatorname{conf}(v) = 1 - \operatorname{EMA}(|\eta_v|)$$
+Low confidence raises the effective threshold (conservative coarsening — fewer EPs, fewer scheduling decisions); high confidence lowers it (finer-grained promotion for PEFT to optimize). For the critical-path criterion, $\operatorname{conf}$ is the *minimum* confidence of any node on the path (weakest-link model — the chain is only as reliable as its least-predicted node).
+
+**Alternative hypotheses (simulation candidates).** The simulator (node P10) evaluates H1 against:
+
+- **H2 — combined score**: a weighted sum $w_1 \cdot \operatorname{critical_path}(v) + w_2 \cdot (\operatorname{fan_in}(v) - 1) \cdot d(v) + w_3 \cdot d(v) > \theta_{\text{combined}}$, letting partial signals jointly trigger promotion even when no single criterion is met (more expressive, but more weights to tune and harder to interpret).
+- **H3 — redundancy-aware critical path**: the critical-path and troublesome-node criteria only, with **no** explicit fan-in term — relying on the cache-skip scan (§2b) to absorb convergence points organically (simplest; risks missing off-critical-path convergence that causes expensive redundancy).
+- **H4 — ADR-0004 original (baseline)**: the prior formulation $$\operatorname{predicted_cost}(v) > \theta_{\text{eff,cost}} \;\lor\; \operatorname{fan_in}(v) > \theta_{\text{fanin}} \;\lor\; \operatorname{subgraph_cost}(v) > \theta_{\text{eff,subgraph}}$$ retained as the comparison baseline against which H1–H3 are judged.
+
+The simulator sweeps thresholds per variant against the nixpkgs trace corpus and reports makespan (primary), redundant work, EP count, and worker utilization (§Optimality, *The Simulation Gap*). Until those results land, H1 is the default but provisional choice.
 
 **The Scheduling Table T (one graph, not two)**:
 There is exactly **one** graph — $G_\cup$. The coarsened
@@ -1148,9 +1151,15 @@ Bridging this gap requires trace-driven simulation:
    from Hydra/Cachix as ground truth
 3. Implement the entry point selection + scoring in a
    single-threaded Rust simulator
-4. Sweep heuristic thresholds and measure simulated
-   makespan against an LRH-only baseline (cache-affinity
-   dispatch without coarsening or prediction)
+4. Sweep heuristic thresholds **and the promotion variants
+   H1–H4 (§2a)** against an LRH-only baseline (cache-affinity
+   dispatch without coarsening or prediction), measuring
+   makespan, redundant work, EP count, and worker utilization
+
+This is campaign node **P10**: it is the binding evaluator
+(constraint C2) for the promotion heuristic. The ADR adopts H1
+as the leading hypothesis, but P10's results — not this
+document — select the production variant.
 
 If the simulator demonstrates order-of-magnitude DAG
 reduction without serializing the critical path, the
