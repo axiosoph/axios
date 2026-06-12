@@ -255,7 +255,7 @@ the consistency/robustness/smoothness framework.
 
 To prevent redundant computation across concurrent requests and minimize myopic scheduling, all requests contribute to a **unified global plan graph** $G_\cup = (V_\cup, E_\cup)$ keyed by plan hash (N1). When a new build request arrives, its plan sub-graph is merged JIT into the global DAG in $O(|V_{\text{new}}| + |E_{\text{new}}|)$ time. Plans whose outputs are already cached in the artifact store are immediately filtered out.
 
-The scheduler partitions the mutable portion of $G_\cup$ into coarsened **entry points** ($S$) with a greedy top-down walk that covers the uncached sub-DAG. *Which* nodes become entry points is governed by promotion criteria. The criteria below are the **leading hypothesis (H1)** — they are **not settled**. The campaign's trace-driven simulator (node P10) compares H1 against the alternatives H2–H4 on real nixpkgs DAGs (constraint C2), and that simulation, not this ADR, selects the production heuristic.
+The scheduler partitions the mutable portion of $G_\cup$ into coarsened **entry points** ($S$) with a greedy top-down walk that covers the uncached sub-DAG. *Which* nodes become entry points is governed by promotion criteria. The criteria below are the **leading hypothesis (H1)** — they are **not settled**. The campaign's trace-driven simulator (campaign node `P10-heuristic-eval`) compares H1 against the alternatives H2–H4 on real nixpkgs DAGs (constraint C2), and that simulation, not this ADR, selects the production heuristic.
 
 **Hypothesis H1 (leading) — priority-ordered promotion.** Derived from the formal objective (minimize $\text{makespan} + \lambda \cdot \text{concurrent\_redundant\_work}$, makespan primary, redundancy avoidance secondary). A node $v$ is promoted to a standalone entry point if any criterion fires, evaluated in priority order:
 
@@ -269,7 +269,7 @@ Where $d(v)$ is the predicted isolated build duration of plan $v$ (from `P[plan_
 $$\theta_{\text{eff}} = \frac{\theta}{1 + \operatorname{conf}(v) \cdot \theta_{\text{scale}}}, \qquad \operatorname{conf}(v) = 1 - \operatorname{EMA}(|\eta_v|)$$
 Low confidence raises the effective threshold (conservative coarsening — fewer EPs, fewer scheduling decisions); high confidence lowers it (finer-grained promotion for PEFT to optimize). For the critical-path criterion, $\operatorname{conf}$ is the *minimum* confidence of any node on the path (weakest-link model — the chain is only as reliable as its least-predicted node).
 
-**Alternative hypotheses (simulation candidates).** The simulator (node P10) evaluates H1 against:
+**Alternative hypotheses (simulation candidates).** The simulator (campaign node `P10-heuristic-eval`) evaluates H1 against:
 
 - **H2 — combined score**: a weighted sum $w_1 \cdot \operatorname{critical_path}(v) + w_2 \cdot (\operatorname{fan_in}(v) - 1) \cdot d(v) + w_3 \cdot d(v) > \theta_{\text{combined}}$, letting partial signals jointly trigger promotion even when no single criterion is met (more expressive, but more weights to tune and harder to interpret).
 - **H3 — redundancy-aware critical path**: the critical-path and troublesome-node criteria only, with **no** explicit fan-in term — relying on the cache-skip scan (§2b) to absorb convergence points organically (simplest; risks missing off-critical-path convergence that causes expensive redundancy).
@@ -426,7 +426,7 @@ This keeps the scheduler free of snix dependencies and gRPC code
 (`[eos-scheduler-state-isolation]`) even in federated
 topologies. A batch-native existence RPC (e.g. a `Stat`/bulk
 API) is **PROPOSED upstream on the snix canon** (campaign node
-P12); the shim will consume it once it lands to drop the
+`P12-snix-pathinfo-stat`); the shim will consume it once it lands to drop the
 fan-out, but it is **not** an existing snix capability and the
 design does not assume one. An earlier draft claimed the store's
 gRPC protocol natively answered a batch existence query; that
@@ -831,7 +831,7 @@ fork-join, convergence, independent) with weak fairness.
 > conservation to the bounded-window form **P9'** (below) is
 > **not yet model-checked**. It needs an explicit clock
 > variable and `readySince` timestamps the current models do
-> not have; the re-check is tracked as campaign node P2. Every
+> not have; the re-check is tracked as campaign node `P2-tla-p9prime`. Every
 > other property in this section reflects the *current* model
 > state. The time-free safety properties (P1, P3, P4, P8, P11)
 > are unaffected by the relaxation; the liveness properties
@@ -877,7 +877,7 @@ fork-join, convergence, independent) with weak fairness.
   successfully, or a deterministic failure cascades and
   the client is notified.
 - **Bounded-window work conservation (P9')** *(pending TLC
-  re-verification — node P2)*: When a ready EP has a feasible
+  re-verification — campaign node `P2-tla-p9prime`)*: When a ready EP has a feasible
   worker, it is dispatched within a bounded window Δ rather
   than necessarily immediately:
 
@@ -1184,7 +1184,7 @@ Bridging this gap requires trace-driven simulation:
    dispatch without coarsening or prediction), measuring
    makespan, redundant work, EP count, and worker utilization
 
-This is campaign node **P10**: it is the binding evaluator
+This is campaign node `P10-heuristic-eval`: it is the binding evaluator
 (constraint C2) for the promotion heuristic. The ADR adopts H1
 as the leading hypothesis, but P10's results — not this
 document — select the production variant.
@@ -1865,7 +1865,7 @@ point selection is a potential novel contribution.
 The scheduling model has been formally verified through a
 two-track approach, with one liveness property — bounded-window
 work conservation (**P9'**) — pending re-verification under the
-dispatch-window relaxation (campaign node P2). The formal model
+dispatch-window relaxation (campaign node `P2-tla-p9prime`). The formal model
 is defined in `docs/models/eos-scheduling.md`.
 
 ### Track A: Protocol Correctness (TLA+)
@@ -1887,7 +1887,7 @@ independent) using TLC with weak fairness.
 | Per-request completion (P6') | Liveness | ✅     |
 | Frozen stability (P8)        | Safety   | ✅     |
 | Work conservation (P9, strict) | Liveness | ✅ (superseded) |
-| Bounded-window work cons. (P9') | Liveness | ⏳ pending (node P2) |
+| Bounded-window work cons. (P9') | Liveness | ⏳ pending (`P2-tla-p9prime`) |
 | Transient recovery (P10)     | Liveness | ✅     |
 | Failure isolation (P11)      | Safety   | ✅     |
 
@@ -1896,7 +1896,7 @@ strict P9. The ADR now specifies the bounded-window **P9'**
 (§Guarantees); re-verification requires a clock variable,
 `readySince` timestamps, and re-scoped weak fairness so an
 *intentional* dispatch delay within Δ does not count as a
-fairness violation. That re-check is campaign node P2. The
+fairness violation. That re-check is campaign node `P2-tla-p9prime`. The
 time-free safety properties (P1, P3, P4, P8, P11) carry over
 unchanged because they never reference time.
 
