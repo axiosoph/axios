@@ -432,6 +432,14 @@ logic (see `[boundary-L2-concerns]`). Verification of atom
 integrity is the atom protocol's responsibility at ingestion
 time — eos trusts atoms resolved from its `AtomSource`.
 
+**Scheduler seam:** The scheduler MUST route all artifact-existence
+queries through the `eos-core` `ArtifactStore` abstraction or the
+Cap'n Proto `BuildJob` substitution surface — never through direct
+snix gRPC calls in scheduler code. This preserves
+`[boundary-contract-only]` at the scheduler boundary and is the
+required interface pattern for cache-skip scans (see
+[`eos-scheduler.md`](eos-scheduler.md)).
+
 VERIFIED: _pending_
 
 ---
@@ -497,105 +505,105 @@ VERIFIED: _pending_
 
 ## §6 — Known Violations
 
-The following violations exist as of the date of this
-specification. Each requires remediation.
+The following violations were identified as of the date of this
+specification. Entries marked CLOSED have been remediated with
+evidence; open entries require remediation.
 
 ### §6.1 — Lock types in `eos` instead of `ion`
 
 **Violates:** `[boundary-lock-ownership]`, `[boundary-L2-concerns]`
 
-`LockFile`, `Dependency`, `AtomDep`, `NixDep`, `NixGitDep`,
-`NixTarDep`, `NixSrcDep`, `SetDetails`, `ComposeConfig`, and
-`ComposeArgs` are defined in `eos/eos/src/lock.rs` — an L2
-implementation crate. The lock file is ion's serialization format
-and these types MUST migrate to L3.
-
-**Migration path:**
-
-1. Create `ion/ion-lock/` crate with the lock file types,
-   `parse()`, and `validate()`
-2. Add `ion-lock` dependency to `ion-eos`
-3. **Design a pre-fetch `BuildRequest` type in `eos-core`.**
-   Currently `eos-core` has `ResolvedInput<D>` (post-fetch:
-   `store_path` + `digest`) but no pre-fetch dependency
-   descriptor. The migration requires a new type — e.g.
-   `FetchDescriptor` or an expanded `BuildRequest` — that
-   carries the fetch metadata currently embedded in lock
-   file types (URLs, expected digests, labels, type tags).
-   This type is eos's pre-fetch input contract.
-4. In `ion-eos`, parse the lock file _before_ RPC submission
-   and translate lock entries into the new `eos-core`
-   pre-fetch types
-5. Update the Cap'n Proto schema / RPC to accept structured
-   build requests rather than raw TOML lock content
-6. Remove `eos/eos/src/lock.rs`, `eos/eos/src/fetch.rs` lock
-   imports, and the lock parsing from `eos-daemon/scheduler.rs`
-7. The orchestrator receives pre-parsed `eos-core` types
-   directly — it fetches, verifies, and resolves inputs using
-   the structured descriptors, then constructs `EvalRequest`
-   from the resolved results
-
-**Impact:** This migration touches the RPC boundary (Cap'n Proto
-schema change), requires new `eos-core` contract types, and
-changes the orchestrator's input signature. It is a structural
-refactor, not a cosmetic one. It SHOULD be planned as a dedicated
-workstream.
+**CLOSED** — `! test -f eos/eos/src/lock.rs` → exit 0.
+`eos/eos/src/lock.rs` has been removed. All lock types (`LockFile`,
+`Dependency`, `AtomDep`, `NixDep`, `NixGitDep`, `NixTarDep`,
+`NixSrcDep`, `SetDetails`, `ComposeConfig`) now reside in
+`ion/ion-lock/src/lib.rs`. `eos-core` carries `BuildRequest<D>` and
+`FetchDescriptor` as the pre-fetch contract types
+(`eos/eos-core/src/request.rs`). Cap'n Proto `submitBuild` accepts a
+structured `BuildRequest` (`eos/eos-proto/schema/eos.capnp:83,92`).
+The orchestrator takes pre-parsed `BuildRequest<Blake3Digest>`
+(`eos/eos/src/orchestrator.rs:48`). `ion-eos` depends on `ion-lock`
+(`ion/ion-eos/Cargo.toml:13`) and performs parse-and-translate before
+any RPC call (`ion/ion-eos/src/lib.rs:274-382`).
 
 ### §6.2 — `ion-eos` ad-hoc TOML parsing
 
 **Violates:** `[boundary-lock-ownership]` (indirectly)
 
-`ion-eos/src/lib.rs` performs ad-hoc TOML parsing of
-`compose.args` (lines 78–92) instead of using lock file types.
-Once `ion-lock` exists, `ion-eos` MUST use
-`ion_lock::LockFile::parse()` to extract compose args from a
-validated lock file, eliminating the ad-hoc parsing.
+**CLOSED** — `grep -q "ion_lock::LockFile::parse" ion/ion-eos/src/lib.rs` → exit 0.
+`parse_and_translate` (`ion/ion-eos/src/lib.rs:274-282`) routes all
+lock parsing through `ion_lock::LockFile::parse()` and `validate()`.
+No ad-hoc TOML parsing of compose args remains; all fields including
+`compose.args` are accessed via the structured `ion_lock::LockFile`
+type returned by the parser.
 
 ### §6.3 — Eos receives raw lock content
 
 **Violates:** `[boundary-L2-concerns]`
 
-`run_orchestrated_build()` in `eos/eos/src/orchestrator.rs`
-accepts `lock_content: &str` and parses it into `LockFile`.
-After migration, the orchestrator MUST accept pre-parsed
-`eos-core` types — an `EvalRequest` (or a structured
-`BuildRequest` type in `eos-core`) rather than raw TOML.
-Per [ADR-0002](../adr/0002-decoupling-snix-backend.md), the
-orchestrator crate must also eliminate all snix-specific types
-including `CastoreBridge`, which will be refactored behind
-`eos-core` traits.
+**CLOSED** — `grep -q "BuildRequest" eos/eos/src/orchestrator.rs` → exit 0.
+`run_orchestrated_build()` (`eos/eos/src/orchestrator.rs:42-55`) now
+accepts `request: &eos_core::request::BuildRequest<Blake3Digest>` —
+structured `eos-core` types replace raw TOML. `ion-eos` calls
+`parse_and_translate` to convert lock content into a `BuildRequest`
+before any RPC call (`ion/ion-eos/src/lib.rs:274-382`). The
+orchestrator's generic type parameters (`E: BuildEngine`, `S:
+AtomSource`, `B: AtomContentBridge`, `I: ContentIngestService`)
+eliminate snix-specific concrete types from the function signature.
 
 ### §6.4 — Eos daemon persists lock files to disk
 
 **Violates:** `[boundary-L2-concerns]`
 
-`eos-daemon/src/scheduler.rs` reads lock file content from a
-`locks_dir` on the host filesystem (`/tmp/eos-locks/{digest}.lock`).
-`eos-daemon/src/config.rs` defines the `locks_dir` CLI argument
-and `resolve_locks_dir()` helper. This is a remnant of the
-pre-structured-request architecture where ion or an operator
-copied raw lock files into place for the daemon to consume.
-
-After the lock migration (§6.1), eos receives structured
-`BuildRequest` types via RPC — no lock file touches the eos side
-at all. The `locks_dir` configuration, `resolve_locks_dir()`
-method, and all lock file I/O in the scheduler MUST be removed.
+**CLOSED** — No lock directory configuration or filesystem lock-read
+logic exists in `eos-daemon`. `eos-daemon/src/config.rs` defines no
+lock-path CLI argument and no lock-directory resolver.
+`eos-daemon/src/scheduler.rs` performs no lock file I/O. The daemon
+receives `BuildRequest` via Cap'n Proto RPC exclusively. Check: `! rg
+-ql 'lock.dir' eos/eos-daemon/src/` → empty output.
 
 ### §6.5 — Eos reimplements atom fetching
 
 **Violates:** `[boundary-L2-concerns]`, `[boundary-L1-concerns]`
 
-`eos/eos/src/fetch.rs` implements atom fetching from mirrors
-(via `curl`, `git clone`, tarball extraction) — duplicating
-functionality that belongs to the atom protocol (L1). Eos MUST
-read atom content through the `AtomSource` interface, not
-implement its own fetch-and-verify pipeline for atoms.
+**Check:** `grep -n "curl\|fetch_git\|download_file\|extract_tarball" eos/eos/src/fetch.rs`
 
-After migration, atom dependency resolution in eos uses
-`AtomSource::resolve()` on a composite source (local store →
-registry → ion peer). Non-atom dependency fetching (Nix
-expressions, tarballs, git sources) remains in eos as those
-are not atoms and do not flow through the atom protocol.
+`eos/eos/src/fetch.rs` retains direct external-tool fetching for
+non-atom external dependencies (`fetch_external`, lines 159–222):
+`curl` for Nix/tarball/source deps and `git clone` for Nix-git deps.
+`fetch_atom` (lines 224–259) correctly delegates atom resolution to
+`AtomSource::resolve()` and bridge ingestion, eliminating the
+atom-specific external fetch path. The remaining open scope is the
+full composite `AtomSource` implementation (local store → registry →
+ion peer) that routes all dependency resolution through
+protocol-native abstractions.
+
+Per §6.1 migration notes, non-atom dependency fetching (Nix
+expressions, tarballs, git sources) remains in eos intentionally as
+those types do not flow through the atom protocol. The violation is
+that the composite `AtomSource` pattern is incomplete.
+
+### §6.6 — `eos-daemon` depends on `atom-git` (L1 implementation crate)
+
+**Violates:** `[boundary-impl-isolation]`, `[boundary-contract-only]`
+
+**Check:** `grep -q "atom-git" eos/eos-daemon/Cargo.toml` → exit 0
+
+`eos-daemon/Cargo.toml:11` declares a direct dependency on `atom-git`,
+an L1 implementation crate. `eos-daemon/src/scheduler.rs:188-211`
+uses `atom_git::GitSource::new()` to open the local workspace git
+repository inside scheduled build tasks. `eos-daemon` is an L2
+implementation crate; it MUST NOT depend on any L1 implementation
+crate — this violates both `[boundary-impl-isolation]` (no L1 impl
+in L2 impl) and `[boundary-contract-only]` (cross-workspace dep MUST
+target a contract crate).
+
+**Remediation path:** Campaign node P11. Introduce a `WorkspaceSource`
+trait (or reuse `atom_core::AtomSource`) in `eos-core` and inject the
+concrete `atom_git::GitSource` at the composition layer
+(`eos-daemon/src/main.rs`). The scheduler receives the trait object;
+the `atom-git` dependency moves to the composition entry point, not
+the scheduler module.
 
 ---
 
