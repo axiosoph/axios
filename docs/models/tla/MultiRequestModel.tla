@@ -274,6 +274,17 @@ FailureIsolation ==
                 /\ \exists e \in DependencyEdges :
                       e[2] = s /\ epStatus[e[1]] = "failed")
 
+\* P5': Head-of-line freedom (structural safety invariant; see EosScheduling.tla
+\* for full rationale). Dispatch(s, w) is gated ONLY by epStatus[s] and worker
+\* capacity, never by any other entry point, so any ready EP with a feasible
+\* worker is immediately dispatchable -- no "head" EP can block ready work behind
+\* it. A head-of-line-blocking scheduler would violate this.
+HoLFreedom ==
+    \A s \in EntryPoints :
+        (epStatus[s] = "ready"
+         /\ \exists w \in Workers : workerLoad[w] + PredictedLoad[s] <= WorkerCap[w])
+        => ENABLED (\exists w \in Workers : Dispatch(s, w))
+
 \* Safe helper operators to prevent out-of-domain function application errors
 epStatusSafe(s) == IF s \in EntryPoints THEN epStatus[s] ELSE "none"
 runningOnSafe(s) == IF s \in EntryPoints THEN runningOn[s] ELSE "none"
@@ -310,12 +321,14 @@ Progress ==
             (epStatusSafe(s) = "ready" /\ (\exists w \in Workers : workerLoad[w] + PredictedLoad[s] <= WorkerCap[w]))
                 => <> (epStatusSafe(s) /= "ready")
 
-\* P5': Head-of-Line Immunity
-\* Structural guarantee: Dispatch(s, w) depends only on epStatus[s]
-\* and workerLoad[w], never on epStatus[s'] for s' /= s. Therefore
-\* one request's EPs cannot block another request's dispatch.
-\* This uses ~> (leads-to) for stronger guarantees than <> (eventually).
-\* Intentionally redundant with Progress (P5) for publication traceability.
+\* P5': Head-of-Line Immunity (this model: the per-EP, dependency-aware shadow).
+\* Dispatch(s, w) is gated ONLY by epStatus[s] and workerLoad[w], never by any
+\* other EP -- there is no dispatch queue or global ordering. The genuinely
+\* adversarial form (an independent ready EP dispatched WITHIN Delta while an
+\* unrelated EP is slow on another worker) is proved in the focused HoLModel,
+\* whose bounded P9' over independent EPs is what actually rules out head-of-line
+\* blocking; unbounded eventual dispatch alone does not (a serializing scheduler
+\* still eventually serves everyone).
 HoLImmunity ==
     NoInfiniteTransientFailures =>
         \A s \in AllPossibleEntryPoints :

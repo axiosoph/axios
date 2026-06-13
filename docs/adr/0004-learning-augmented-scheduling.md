@@ -863,11 +863,19 @@ fork-join, convergence, independent) with weak fairness.
 - **Progress (P5)**: If a ready EP exists and a worker
   has available capacity, the EP is eventually dispatched.
   The scheduler never indefinitely holds a schedulable EP.
-- **Head-of-line immunity (P5')**: A large, slow EP on
-  one worker does not block dispatch of unrelated ready
-  EPs to other workers. The event-driven PEFT protocol
-  evaluates all ready EPs on each pass, not just the
-  first in queue.
+- **Head-of-line freedom (P5')**: A large, slow EP on one
+  worker never blocks dispatch of unrelated ready EPs to other
+  workers — there is no dispatch queue or global ordering, so
+  no "head" can hold ready work behind it. This is verified as
+  the `HoLFreedom` structural invariant (checked in every
+  topology, including the independent one where several EPs are
+  ready while others occupy workers): in every reachable state,
+  any ready EP with a feasible worker is immediately
+  dispatchable, because `Dispatch(s, w)` is gated only by that
+  EP's readiness and the worker's capacity, never by any other
+  EP. The invariant is non-vacuous — a head-of-line-blocking
+  (serializing) dispatch rule violates it within two steps,
+  confirmed by mutation testing.
 - **Completion propagation (P6)**: Every dispatched EP
   eventually reaches a terminal state (completed or
   failed). No EP hangs in `dispatched` indefinitely.
@@ -1881,7 +1889,7 @@ independent) using TLC with weak fairness.
 | Artifact completeness (P3)   | Safety   | ✅     |
 | Progress (P5)                | Liveness | ✅     |
 | Completion prop. (P6)        | Liveness | ✅     |
-| HoL immunity (P5')           | Liveness | ✅     |
+| HoL freedom (P5')            | Safety   | ✅     |
 | Per-request completion (P6') | Liveness | ✅     |
 | Frozen stability (P8)        | Safety   | ✅     |
 | Work conservation (P9, strict) | Liveness | ✅ (Δ = 0 case of P9') |

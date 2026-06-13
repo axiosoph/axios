@@ -137,6 +137,22 @@ ArtifactSafety ==
     (\A s \in EntryPoints : epStatus[s] = "complete")
         => artifactStore = UNION {Outputs[s] : s \in EntryPoints}
 
+\* P5': Head-of-line freedom (structural safety invariant).
+\* In every reachable state, any ready entry point that has a feasible worker is
+\* immediately dispatchable -- Dispatch(s, w) is ENABLED for some worker w. The
+\* dispatch rule is gated ONLY by epStatus[s] and worker capacity, never by any
+\* other entry point's status: there is no dispatch queue or global ordering, so
+\* a slow or dispatched EP can never block a ready, schedulable EP "behind" it.
+\* A head-of-line-blocking scheduler (e.g. one that only dispatches a queue head)
+\* would violate this invariant the instant a non-head EP is ready and feasible.
+\* Exercised most sharply in the independent topology, where several EPs are
+\* ready while others occupy workers.
+HoLFreedom ==
+    \A s \in EntryPoints :
+        (epStatus[s] = "ready"
+         /\ \exists w \in Workers : workerLoad[w] + PredictedLoad[s] <= WorkerCap[w])
+        => ENABLED (\exists w \in Workers : Dispatch(s, w))
+
 -----------------------------------------------------------------------------
 
 \* Liveness Properties

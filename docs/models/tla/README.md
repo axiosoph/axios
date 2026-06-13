@@ -102,7 +102,7 @@ Each model instantiates `EosScheduling` or defines a custom multi-request scenar
 | Capacity safety (P4)         | Safety invariant    | ✅       |
 | Progress (P5)                | Liveness (temporal) | ✅       |
 | Completion propagation (P6)  | Liveness (temporal) | ✅       |
-| HoL immunity (P5')           | Liveness (temporal) | ✅       |
+| HoL freedom (P5')            | Safety invariant    | ✅       |
 | Per-request completion (P6') | Liveness (temporal) | ✅       |
 | Frozen stability (P8)        | Action property     | ✅       |
 | Work conservation (P9')      | Liveness (temporal) | ✅       |
