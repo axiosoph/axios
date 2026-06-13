@@ -7,11 +7,13 @@ import EosScheduling.Schedule
 import Mathlib.Data.Fintype.Card
 
 /-!
-# HEFT List-Scheduling Makespan Bound
+# List-Scheduling Makespan Bound (Graham 1966)
 
 This module formalizes list-scheduling/work-conservation and proves
 Graham's list-scheduling bound from first principles under the Schedule model.
-Also establishes structural makespan dominance.
+The bound holds for the entire list-scheduling family; PEFT — the active
+scheduler (ADR-0004 §Strategy) — inherits it. (HEFT, ADR-0004's superseded
+baseline, is another instance.) Also establishes structural makespan dominance.
 -/
 
 set_option linter.unusedSectionVars false

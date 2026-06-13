@@ -34,7 +34,8 @@ EosScheduling/
   Defs.lean                   Shared definitions
   Schedule.lean               Scheduling model infrastructure
   Coarsening.lean             Coarsening function model
-  HEFT.lean                   HEFT List-Scheduling Bound
+  ListScheduling.lean         List-Scheduling Bound (Graham)
+  Graham.lean                 Graham α = 2−1/|W| corollary + consistency
   Theorem1.lean               Coverage Existence
   Theorem2.lean               Consistency Bound
   Theorem2Prime.lean          Adaptive Consistency
@@ -54,7 +55,9 @@ self-coverage, transitive containment, downward closure), and the
 
 **`Schedule.lean`** — Defines `WorkerPool` and `Schedule` structures encoding resource capacity and dependency constraints, defines `schedule_makespan`, and proves makespan lower bounds under worker contention.
 
-**`HEFT.lean`** — _HEFT List-Scheduling Bound._ Formalizes list-scheduling/work-conservation and proves Graham's list-scheduling makespan bound ($M \le \text{CP} + \text{Work}/|W|$) under the Schedule model. Also proves the equivalence/dominance lemma between structural makespan and schedule-aware makespan.
+**`ListScheduling.lean`** — _List-Scheduling Bound (Graham 1966)._ Formalizes list-scheduling/work-conservation and proves Graham's list-scheduling makespan bound ($M \le \text{CP} + \text{Work}/|W|$) under the Schedule model. The bound holds for the list-scheduling family; PEFT (the active scheduler) inherits it, while HEFT is the superseded baseline. Also proves the equivalence/dominance lemma between structural makespan and schedule-aware makespan.
+
+**`Graham.lean`** — _Graham Approximation Corollary._ Instantiates the abstract ratio with Graham's identical-machines bound: `graham_list_scheduling_bound` (a work-conserving schedule's makespan is $\le (2 - 1/|W|)\,M(\sigma^*)$, at the resource-constrained schedule layer) and `graham_consistency_bound` (Theorem 2 with $\alpha := 2 - 1/|W|$). Closes the prose-only α gap in ADR-0004 §"Concrete Instantiation of α".
 
 **`Theorem1.lean`** — _Coverage Existence._ Constructs the identity
 witness (`S = univ, κ = id`) proving a valid `EosModel` exists for
@@ -84,7 +87,7 @@ Theorem 2 when predictions are accurate.
 
 **`Theorem5.lean`** — _Unified Coarsening Dominance._ Proves that the unified coarsening schedule (which has fewer scheduled nodes due to deduplication) achieves equal or better makespan than the per-request coarsening schedule under the Schedule model.
 
-**`Theorem6.lean`** — _CAS-Scheduling Bound._ Proves makespan bound under CAS deduplication with competitive ratio bounded by `α(1 + ρ |R|)` against the optimal independent makespan. It derives this bound end-to-end by importing and applying the HEFT bound from `HEFT.lean` to eliminate all bare scheduling assumptions.
+**`Theorem6.lean`** — _CAS-Scheduling Bound._ Proves makespan bound under CAS deduplication with competitive ratio bounded by `α(1 + ρ |R|)` against the optimal independent makespan. It derives this bound end-to-end by importing and applying the list-scheduling bound from `ListScheduling.lean` to eliminate all bare scheduling assumptions.
 
 **`Theorem7.lean`** — _Re-coarsening Convergence._ Proves monotonicity and
 convergence of the coarsened entry point set under incremental cache growth.
@@ -95,7 +98,7 @@ and subadditivity under request union. Derives Theorem 7 convergence as
 corollaries of a `Coarsening` instance.
 
 **`MainTheorem.lean`** — _End-to-End CAS-Scheduling Bound._ Composes the
-full proof chain (Schedule → HEFT → Thm 4' → Thm 5 → Thm 6) into a single
+full proof chain (Schedule → ListScheduling → Thm 4' → Thm 5 → Thm 6) into a single
 theorem statement with all hypotheses explicitly justified. This is the
 paper's "punchline" theorem.
 

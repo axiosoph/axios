@@ -7,7 +7,7 @@ import EosScheduling.Theorem5
 import EosScheduling.Theorem6
 import EosScheduling.Theorem4Prime
 import EosScheduling.Coarsening
-import EosScheduling.HEFT
+import EosScheduling.ListScheduling
 
 /-!
 # Main Theorem: End-to-End CAS-Scheduling Bound
@@ -15,7 +15,7 @@ import EosScheduling.HEFT
 This module composes the full proof chain into a single end-to-end result:
 
   Schedule.lean (worker model)
-    → HEFT.lean (Graham's list-scheduling bound)
+    → ListScheduling.lean (Graham's list-scheduling bound)
     → Theorem 4' (weighted deduplication bound)
     → Theorem 5 (unified coarsening dominance)
     → Theorem 6 (CAS-scheduling competitive ratio)
@@ -41,11 +41,12 @@ The theorem takes three categories of hypotheses:
 
 3. **Scheduling** (`h_wc`): The unified schedule is work-conserving, i.e.
    no worker idles when a ready task exists. This is the defining property
-   of list-scheduling algorithms (Graham 1966), of which HEFT is an instance.
+   of list-scheduling algorithms (Graham 1966), of which PEFT (the active
+   scheduler) is an instance.
 -/
 
 -- The main theorem unifies types across five imports
--- (Thm4', Thm5, Thm6, HEFT, Schedule, Coarsening).
+-- (Thm4', Thm5, Thm6, ListScheduling, Schedule, Coarsening).
 set_option linter.style.setOption false in
 set_option linter.style.maxHeartbeats false in
 set_option maxHeartbeats 400000 in
@@ -88,7 +89,7 @@ theorem main_theorem_cas_scheduling {V W : Type*} [DecidableEq V] [Fintype V]
       (fun v => if v ∈ univ.biUnion V_prime then d v else 0) τ pool)
     (h_W_pos : 0 < (Fintype.card W : Real))
     -- Work conservation: the defining property of list scheduling
-    -- (Graham 1966). HEFT is a list scheduling algorithm by construction.
+    -- (Graham 1966). PEFT is a list scheduling algorithm by construction.
     (h_wc : (Fintype.card W : Real) * schedule_makespan σ_unified
       - (univ.sum (fun v =>
           if v ∈ univ.biUnion V_prime then d v else 0))
@@ -97,7 +98,7 @@ theorem main_theorem_cas_scheduling {V W : Type*} [DecidableEq V] [Fintype V]
     schedule_makespan σ_unified ≤
       α * (1 + ρ * (Fintype.card R : Real)) *
       ((univ : Finset R).image makespan_indep).max' h_nonempty_set :=
-  -- Chain: Coarsening → Thm 4' (dedup) → Thm 5 (dominance) → HEFT → Thm 6
+  -- Chain: Coarsening → Thm 4' (dedup) → Thm 5 (dominance) → ListScheduling → Thm 6
   theorem6_cas_scheduling_bound hR V_prime d hd makespan_indep ρ α
     h_ρ_nonneg h_α_ge h_nonempty_set h_cp_preserved h_rho
     h_indep_work_bound σ_unified h_W_pos h_wc

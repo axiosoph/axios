@@ -6,7 +6,7 @@ Authors: nrd, Antigravity
 import EosScheduling.Defs
 import EosScheduling.Theorem4Prime
 import EosScheduling.Schedule
-import EosScheduling.HEFT
+import EosScheduling.ListScheduling
 import Mathlib.Data.Finset.Max
 import Mathlib.Tactic.Linarith
 import Mathlib.Tactic.Ring
@@ -67,8 +67,8 @@ theorem theorem6_cas_scheduling_bound {V W : Type*} [DecidableEq V] [Fintype V]
   let total_work_u := (univ.biUnion V_prime).sum d
   let critical_path_u := critical_path_makespan (fun v =>
     if v ∈ univ.biUnion V_prime then d v else 0) E
-  -- Deriving the unified HEFT bound from HEFT.lean
-  have h_HEFT_bound : schedule_makespan σ_unified ≤ critical_path_u +
+  -- Deriving the unified list-scheduling bound from ListScheduling.lean
+  have h_list_sched_bound : schedule_makespan σ_unified ≤ critical_path_u +
       (univ.sum (fun v => if v ∈ univ.biUnion V_prime then d v else 0)) / W_card := by
     apply work_conserving_makespan_bound σ_unified _ h_W_pos h_wc
     intro v
@@ -92,7 +92,7 @@ theorem theorem6_cas_scheduling_bound {V W : Type*} [DecidableEq V] [Fintype V]
       linarith
     have h_rw : (univ.sum (fun v => if v ∈ univ.biUnion V_prime then d v else 0))
         = total_work_u := h_sum_eq
-    rw [h_rw] at h_HEFT_bound
+    rw [h_rw] at h_list_sched_bound
     have h_le_mul : critical_path_u + total_work_u / W_card ≤
         α * (critical_path_u + total_work_u / W_card) := by
       nth_rw 1 [← one_mul (critical_path_u + total_work_u / W_card)]
