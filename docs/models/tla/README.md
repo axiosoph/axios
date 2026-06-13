@@ -105,7 +105,7 @@ Each model instantiates `EosScheduling` or defines a custom multi-request scenar
 | HoL immunity (P5')           | Liveness (temporal) | ✅       |
 | Per-request completion (P6') | Liveness (temporal) | ✅       |
 | Frozen stability (P8)        | Action property     | ✅       |
-| Work conservation (P9)       | Liveness (temporal) | ✅       |
+| Work conservation (P9')      | Liveness (temporal) | ✅       |
 | Transient recovery (P10)     | Liveness (temporal) | ✅       |
 | Failure isolation (P11)      | Safety invariant    | ✅       |
 

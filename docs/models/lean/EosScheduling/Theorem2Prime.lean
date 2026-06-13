@@ -16,18 +16,18 @@ open Finset
 
 /-- Adaptive coarsening quality function properties.
   As prediction error ε increases, the approximation factor α(ε) is non-decreasing.
-  Hence, it is non-increasing as quality improves, tightening toward α_heft at ε = 0. -/
-structure AdaptiveCoarsening (α : Real → Real) (α_heft α_max : Real) : Prop where
+  Hence, it is non-increasing as quality improves, tightening toward α_peft at ε = 0. -/
+structure AdaptiveCoarsening (α : Real → Real) (α_peft α_max : Real) : Prop where
   mono : ∀ x y, 0 ≤ x → x ≤ y → α x ≤ α y
   nonneg : ∀ x, 0 ≤ x → 0 ≤ α x
-  at_zero : α 0 = α_heft
+  at_zero : α 0 = α_peft
   at_one : α 1 ≤ α_max
 
 variable {S : Type*} [Fintype S] [wf : WellFoundedRelation S]
 
 theorem theorem2_prime_adaptive_consistency {d d_hat d_star d_hat_star : S → Real}
-    {τ : S → S → Real} {ε : Real} (α : Real → Real) (α_heft α_max : Real)
-    (h_ac : AdaptiveCoarsening α α_heft α_max)
+    {τ : S → S → Real} {ε : Real} (α : Real → Real) (α_peft α_max : Real)
+    (h_ac : AdaptiveCoarsening α α_peft α_max)
     (h_eps_pos : 0 ≤ ε) (h_eps_lt : ε < 1)
     (h_tau_nonneg : ∀ s' s, 0 ≤ τ s' s)
     (h_d_hat_nonneg : ∀ s, 0 ≤ d_hat s)

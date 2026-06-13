@@ -827,15 +827,14 @@ liveness properties, verified via TLC model checking
 across four DAG topologies (linear chain, diamond
 fork-join, convergence, independent) with weak fairness.
 
-> **Pending re-verification (P9')**: The relaxation of work
-> conservation to the bounded-window form **P9'** (below) is
-> **not yet model-checked**. It needs an explicit clock
-> variable and `readySince` timestamps the current models do
-> not have; the re-check is tracked as campaign node `P2-tla-p9prime`. Every
-> other property in this section reflects the *current* model
-> state. The time-free safety properties (P1, P3, P4, P8, P11)
-> are unaffected by the relaxation; the liveness properties
-> retain their structure under a clock-guarded `Next`.
+> **Bounded-window work conservation (P9') is verified.** The
+> `MultiRequestModel` carries an explicit `clock` variable and
+> `readySince` timestamps and checks **P9'** (`WorkConservation`)
+> as a clock-guarded liveness property — in both the Δ = 2 window
+> configuration and the Δ = 0 degenerate case (which recovers the
+> strict P9), under TLC (campaign node `P2-tla-p9prime`). The
+> time-free safety properties (P1, P3, P4, P8, P11) are
+> independent of the dispatch window.
 
 **Safety properties** (nothing bad ever happens):
 
@@ -876,10 +875,9 @@ fork-join, convergence, independent) with weak fairness.
   eventually terminates — either all its EPs complete
   successfully, or a deterministic failure cascades and
   the client is notified.
-- **Bounded-window work conservation (P9')** *(pending TLC
-  re-verification — campaign node `P2-tla-p9prime`)*: When a ready EP has a feasible
-  worker, it is dispatched within a bounded window Δ rather
-  than necessarily immediately:
+- **Bounded-window work conservation (P9')**: When a ready EP
+  has a feasible worker, it is dispatched within a bounded
+  window Δ rather than necessarily immediately:
 
   ```
   P9': □( Q(s) = ready ∧ ∃w: feasible(s, w) ) ⟹ ◇≤Δ Q(s) ∈ {dispatched, complete, failed}
@@ -1863,10 +1861,10 @@ point selection is a potential novel contribution.
 ## Appendix: Formal Verification Results
 
 The scheduling model has been formally verified through a
-two-track approach, with one liveness property — bounded-window
-work conservation (**P9'**) — pending re-verification under the
-dispatch-window relaxation (campaign node `P2-tla-p9prime`). The formal model
-is defined in `docs/models/eos-scheduling.md`.
+two-track approach. Bounded-window work conservation (**P9'**)
+is model-checked under the dispatch-window relaxation
+(campaign node `P2-tla-p9prime`). The formal model is defined in
+`docs/models/eos-scheduling.md`.
 
 ### Track A: Protocol Correctness (TLA+)
 
@@ -1886,19 +1884,20 @@ independent) using TLC with weak fairness.
 | HoL immunity (P5')           | Liveness | ✅     |
 | Per-request completion (P6') | Liveness | ✅     |
 | Frozen stability (P8)        | Safety   | ✅     |
-| Work conservation (P9, strict) | Liveness | ✅ (superseded) |
-| Bounded-window work cons. (P9') | Liveness | ⏳ pending (`P2-tla-p9prime`) |
+| Work conservation (P9, strict) | Liveness | ✅ (Δ = 0 case of P9') |
+| Bounded-window work cons. (P9') | Liveness | ✅ (Δ ∈ {0, 2}) |
 | Transient recovery (P10)     | Liveness | ✅     |
 | Failure isolation (P11)      | Safety   | ✅     |
 
-The ✅ rows reflect the *current* models, which verify the
-strict P9. The ADR now specifies the bounded-window **P9'**
-(§Guarantees); re-verification requires a clock variable,
-`readySince` timestamps, and re-scoped weak fairness so an
-*intentional* dispatch delay within Δ does not count as a
-fairness violation. That re-check is campaign node `P2-tla-p9prime`. The
-time-free safety properties (P1, P3, P4, P8, P11) carry over
-unchanged because they never reference time.
+The bounded-window **P9'** (§Guarantees) is checked in the
+`MultiRequestModel` with a `clock` variable, `readySince`
+timestamps, and a clock-guarded `Tick` so an *intentional*
+dispatch delay within Δ does not count as a fairness violation;
+the Δ = 0 configuration recovers the strict P9. The time-free
+safety properties (P1, P3, P4, P8, P11) are independent of the
+dispatch window. All liveness properties are stated under the
+`NoInfiniteTransientFailures` assumption — they hold provided
+the infrastructure does not crash-loop a single EP forever.
 
 Key finding: `CascadeFail` is **required** for liveness.
 Without active failure propagation, dependent tasks hang
@@ -1911,20 +1910,34 @@ model instantiations.
 
 ### Track B: Optimization Quality (Lean 4)
 
-Nine theorems machine-checked with Mathlib. Zero `sorry`
-placeholders, zero custom `axiom` declarations.
+Nine headline theorems machine-checked with Mathlib (plus
+supporting `Schedule`, list-scheduling, Graham, and end-to-end
+composition lemmas). Zero `sorry` placeholders, zero custom
+`axiom` declarations; every theorem reduces to the standard
+classical axioms only (`propext`, `Classical.choice`,
+`Quot.sound`).
 
 | Theorem | Statement                                                                                     | Status |
 | :------ | :-------------------------------------------------------------------------------------------- | :----- |
 | Thm 1   | Valid entry point selection exists (identity witness)                                         | ✅     |
 | Thm 2   | $M(\sigma_H) \leq \alpha \cdot \frac{1+\varepsilon}{1-\varepsilon} \cdot M(\sigma^*)$         | ✅     |
-| Thm 2'  | Adaptive bound: $\alpha(\bar\varepsilon) \to 1$ as $\bar\varepsilon \to 0$                    | ✅     |
+| Thm 2'  | Adaptive bound: $\alpha(\bar\varepsilon) \to \alpha_{\text{peft}}$ as $\bar\varepsilon \to 0$ | ✅     |
 | Thm 3   | Assignment stability under perturbation; EMA convergence                                      | ✅     |
 | Thm 4   | Structural: $\lvert\bigcup V'_i\rvert \leq \sum \lvert V'_i\rvert$, equality iff disjoint     | ✅     |
 | Thm 4'  | Weighted: $\sum_{v \in \bigcup V'_i} d(v) \leq \sum_i \sum_{v \in V'_i} d(v)$, disjoint Eq    | ✅     |
 | Thm 5   | Unified Coarsening Dominance: $M(\sigma_{\text{unified}}) \leq M(\sigma_{\text{per}})$        | ✅     |
 | Thm 6   | CAS-scheduling makespan competitive ratio bounded by $\alpha(1 + \rho \cdot \lvert R \rvert)$ | ✅     |
 | Thm 7   | Re-coarsening convergence: monotonicity and finite-step cache convergence                     | ✅     |
+
+> **Makespan layering**: Theorems 2/2'/6 are stated over the
+> *structural* (critical-path) makespan — a function of durations,
+> which is the layer where the $(1+\varepsilon)/(1-\varepsilon)$
+> degradation argument lives. The resource-contention factor
+> (ideal critical path vs. resource-constrained schedule) is the
+> separate list-scheduling/Graham bound `graham_list_scheduling_bound`
+> ($\alpha = 2 - 1/|W|$, proved at the schedule layer). The two
+> compose as the ADR's two independent axes (§Consistency), not as
+> one fused inequality.
 
 All assumptions enter as explicit hypotheses on theorem
 signatures (non-negative durations, $\varepsilon < 1$,
@@ -1951,8 +1964,8 @@ See `docs/models/lean/` for proof sources.
    it from DAG decomposition quality
    ($\alpha(\bar\varepsilon)$). Theorem 2' conditionally
    closes this gap: as mean prediction error
-   $\bar\varepsilon \to 0$, $\alpha \to 1$ and the
-   coarsening penalty vanishes.
+   $\bar\varepsilon \to 0$, $\alpha \to \alpha_{\text{peft}}$ and
+   the coarsening penalty falls to the base PEFT bound.
 3. **μ-makespan transient bound**: During EMA convergence,
    the quantitative makespan penalty is not mechanized.
    Low risk: the transient is geometrically short and
