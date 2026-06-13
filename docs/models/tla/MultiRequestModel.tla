@@ -285,6 +285,23 @@ HoLFreedom ==
          /\ \exists w \in Workers : workerLoad[w] + PredictedLoad[s] <= WorkerCap[w])
         => ENABLED (\exists w \in Workers : Dispatch(s, w))
 
+\* Acyclicity preservation under JIT request merge. The dynamic MergeRequest
+\* mutates DependencyEdges at runtime; this invariant verifies the active edge
+\* set stays acyclic across every merge/cancel. Soundness in the implementation
+\* rests on dependency edges being a global function of derivation identity
+\* (input-addressed), so two requests can never disagree on edge direction
+\* between the same pair of derivations -- hence the union of acyclic request
+\* DAGs sharing nodes by identity is acyclic. (Without this the static topology
+\* would hide a whole class of merge-induced-cycle bugs.)
+AcyclicInv == IsAcyclic(DependencyEdges)
+
+\* No non-terminal wedge (deadlock-freedom with terminal states allowed); see
+\* EosScheduling.tla. Tick never the sole enabled action (Tick enabled => some
+\* ready+feasible EP exists => Dispatch enabled), so ENABLED Next genuinely
+\* witnesses progress.
+Terminal == \A s \in EntryPoints : epStatus[s] \in {"complete", "failed"}
+NoWedge == Terminal \/ ENABLED Next
+
 \* Safe helper operators to prevent out-of-domain function application errors
 epStatusSafe(s) == IF s \in EntryPoints THEN epStatus[s] ELSE "none"
 runningOnSafe(s) == IF s \in EntryPoints THEN runningOn[s] ELSE "none"

@@ -40,5 +40,6 @@ ArtifactSafety == M!ArtifactSafety
 CompletionPropagation == M!CompletionPropagation
 Progress == M!Progress
 HoLFreedom == M!HoLFreedom
+NoWedge == M!NoWedge
 
 =============================================================================

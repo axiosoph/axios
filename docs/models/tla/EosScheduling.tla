@@ -153,6 +153,17 @@ HoLFreedom ==
          /\ \exists w \in Workers : workerLoad[w] + PredictedLoad[s] <= WorkerCap[w])
         => ENABLED (\exists w \in Workers : Dispatch(s, w))
 
+\* No non-terminal wedge (deadlock-freedom with terminal states allowed).
+\* In every reachable state, either every entry point is terminal
+\* (complete/failed), or some state-advancing action is enabled -- the scheduler
+\* can always make progress toward completion and never gets stuck with work
+\* outstanding. This complements CHECK_DEADLOCK FALSE (which is set so that
+\* legitimate terminal states are not reported as deadlocks, but which therefore
+\* does NOT check for a genuine non-terminal wedge). It would fail on a
+\* dependency CYCLE (every node pending, nothing enabled) or an infeasible EP.
+Terminal == \A s \in EntryPoints : epStatus[s] \in {"complete", "failed"}
+NoWedge == Terminal \/ ENABLED Next
+
 -----------------------------------------------------------------------------
 
 \* Liveness Properties
