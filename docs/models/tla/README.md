@@ -108,6 +108,8 @@ Each model instantiates `EosScheduling` or defines a custom multi-request scenar
 | Work conservation (P9')      | Liveness (temporal) | ✅       |
 | Transient recovery (P10)     | Liveness (temporal) | ✅       |
 | Failure isolation (P11)      | Safety invariant    | ✅       |
+| Acyclic merge (P14)          | Safety invariant    | ✅       |
+| No non-terminal wedge (P15)  | Safety invariant    | ✅       |
 
 `TypeOK` (type invariant) is checked in every model as a baseline
 structural health property.

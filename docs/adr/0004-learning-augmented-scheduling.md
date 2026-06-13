@@ -857,6 +857,16 @@ fork-join, convergence, independent) with weak fairness.
 - **Failure isolation (P11)**: A deterministic build
   failure in one EP cascades only to its transitive
   dependents, not to unrelated requests or EPs.
+- **Acyclic merge (P14)**: JIT merge of request sub-DAGs by
+  derivation identity never introduces a cycle — the active
+  dependency graph is acyclic in every reachable state.
+  (Sound because dependency edges are a global function of
+  input-addressed derivation identity, so two requests cannot
+  disagree on edge direction between the same pair.)
+- **No non-terminal wedge (P15)**: every reachable state is
+  either terminal (all EPs complete/failed) or has an enabled
+  progress action — the scheduler never gets stuck with work
+  outstanding.
 
 **Liveness properties** (good things eventually happen):
 
@@ -1896,6 +1906,8 @@ independent) using TLC with weak fairness.
 | Bounded-window work cons. (P9') | Liveness | ✅ (Δ ∈ {0, 2}) |
 | Transient recovery (P10)     | Liveness | ✅     |
 | Failure isolation (P11)      | Safety   | ✅     |
+| Acyclic merge (P14)          | Safety   | ✅     |
+| No non-terminal wedge (P15)  | Safety   | ✅     |
 
 The bounded-window **P9'** (§Guarantees) is checked in the
 `MultiRequestModel` with a `clock` variable, `readySince`
