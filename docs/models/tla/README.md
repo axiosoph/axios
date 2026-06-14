@@ -48,6 +48,13 @@ concurrent request arrivals (`MergeRequest`), dynamic topology merging,
 request cancellation (`CancelRequest`), cache-skip scan (`CacheSkip`),
 transient failure recovery (`FailTransient`), and client request tracking.
 
+`StarvationModel.tla` is a focused model for starvation-freedom (P12): one
+worker under maximal contention, a recurring high-priority stream, and one
+low-priority job. It checks that the delay-cost fairness term (`γ · age`, the
+greedy-tier reading of the shared cost model) guarantees the low-priority job
+is eventually dispatched. Non-vacuous: at `γ = 0` TLC produces a starvation
+counterexample.
+
 **State variables:**
 
 | Variable          | Description                                   |
@@ -92,6 +99,7 @@ Each model instantiates `EosScheduling` or defines a custom multi-request scenar
 | `ConvergenceModel`  | {A,B} → C          | Multi-dependency convergence                     |
 | `IndependentModel`  | A, B, C (no edges) | Capacity bin-packing                             |
 | `MultiRequestModel` | Dynamic merging    | Merging, cache-skip, cancellation, liveness, HoL |
+| `StarvationModel`   | 1 worker, recurring high-pri stream + low-pri job | Starvation-freedom (P12) of the delay-cost fairness discipline |
 
 ## What the Models Verify
 
@@ -103,6 +111,7 @@ Each model instantiates `EosScheduling` or defines a custom multi-request scenar
 | Progress (P5)                | Liveness (temporal) | ✅       |
 | Completion propagation (P6)  | Liveness (temporal) | ✅       |
 | HoL freedom (P5')            | Safety invariant    | ✅       |
+| Starvation-freedom (P12)     | Liveness (temporal) | ✅       |
 | Per-request completion (P6') | Liveness (temporal) | ✅       |
 | Frozen stability (P8)        | Action property     | ✅       |
 | Work conservation (P9')      | Liveness (temporal) | ✅       |

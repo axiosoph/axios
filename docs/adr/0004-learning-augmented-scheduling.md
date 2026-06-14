@@ -337,10 +337,10 @@ $$OCT(e_i, w_k) = \max_{e_j \in \operatorname{succ}(e_i)} \; \min_{w_m \in W} \b
 
 PEFT uses OCT for both decisions HEFT made from upward rank, in $O(|S|^2 \cdot |W|)$ time — the same bound as the HEFT pass it replaces:
 
-1. **Priority ordering**: rank EPs by **average OCT across workers**. An EP with high average OCT has the largest downstream impact and is scheduled first. This replaces static upward rank.
+1. **Priority ordering**: rank EPs by **average OCT across workers, improved by a delay credit** $\gamma \cdot \operatorname{age}(e)$ (where $\operatorname{age}(e)$ is the time since $e$ became ready). The OCT term schedules high-downstream-impact work first; the delay credit makes a waiting EP's effective priority rise monotonically, so a low-priority EP can never be starved behind a stream of higher-priority arrivals — this is what guarantees **bounded-fair-dispatch / starvation-freedom (P12)** under sustained load. The delay credit is the greedy tier's reading of the *same* **delay cost** the MCMF tier places on a task's unscheduled edge (§Future Work): one shared cost model, two solvers, one property. With $\gamma = 0$ the discipline degenerates to pure static priority (and admits starvation). This replaces static upward rank.
 2. **Worker selection**: for each ready EP, select the worker **minimizing `EFT(e, w) + OCT(e, w)`**, where `EFT(e, w) = worker_available_time(w) + d(e, w)`. This places the EP where it both finishes earliest *and* best sets up downstream work. Because `d(e, w)` is the cache- and fit-adjusted duration from §3, cache affinity and resource fit enter the selection through the duration model — there is no separate placement score.
 
-Ready EPs with feasible workers are dispatched within the bounded window Δ (immediately when prediction confidence is low — see P9' under §Guarantees), while pending EPs have their priorities and tentative placements computed but do NOT lock workers; workers remain available for ready work.
+Ready EPs with feasible workers are dispatched within the bounded window Δ (immediately when prediction confidence is low — see P9' under §Guarantees), while pending EPs have their priorities and tentative placements computed but do NOT lock workers; workers remain available for ready work. The Δ hold is overridden by the delay credit: an EP held for cache warmth is released and dispatched as soon as its accrued delay credit would otherwise risk starvation, so fairness always dominates the warm-cache wait.
 
 Frozen EPs (dispatched/complete) are included in the PEFT computation as **fixed constraints** — their worker assignments and occupancy are immutable inputs that shape OCT for the mutable EPs above them. Only mutable EPs (pending/ready) have their priorities and assignments computed by PEFT.
 
@@ -636,7 +636,7 @@ pub trait SchedulerStrategy {
 
 The Eos scheduling daemon utilizes this trait boundary to support three swappable strategy backends:
 
-1. **PEFT (Primary)**: The default active strategy. PEFT ranks EPs by average OCT and assigns each to the worker minimizing `EFT + OCT` (§2b). It is highly efficient ($O(|S|^2 \cdot |W|)$) and, as a list-scheduling algorithm, provides a provable competitive bound ($\alpha_{\text{peft}}$) mechanized in Lean 4.
+1. **PEFT (Primary)**: The default active strategy. PEFT ranks EPs by average OCT (improved by a delay credit for fairness; §2b) and assigns each to the worker minimizing `EFT + OCT` (§2b). It is highly efficient ($O(|S|^2 \cdot |W|)$) and, as a list-scheduling algorithm, provides a provable competitive bound ($\alpha_{\text{peft}}$) mechanized in Lean 4.
 2. **Greedy (Fallback)**: A low-overhead fallback strategy activated under high prediction error or missing profiles. It assigns tasks greedily to the highest scoring cache-affinity worker, satisfying basic capacity safety.
 3. **MILP/MCMF (Deferred)**: A global solver strategy reserved for federated scale ($|W| > 1000$). It solves the JIT assignment globally via mixed-integer programming or min-cost max-flow, operating over the coarsened EP DAG. Because the graph size is naturally bounded ($|S| \leq 20$), the solver completes in sub-millisecond time, bypassing NP-hardness in practice.
 
@@ -873,19 +873,31 @@ fork-join, convergence, independent) with weak fairness.
 - **Progress (P5)**: If a ready EP exists and a worker
   has available capacity, the EP is eventually dispatched.
   The scheduler never indefinitely holds a schedulable EP.
-- **Head-of-line freedom (P5')**: A large, slow EP on one
-  worker never blocks dispatch of unrelated ready EPs to other
-  workers — there is no dispatch queue or global ordering, so
-  no "head" can hold ready work behind it. This is verified as
-  the `HoLFreedom` structural invariant (checked in every
-  topology, including the independent one where several EPs are
-  ready while others occupy workers): in every reachable state,
-  any ready EP with a feasible worker is immediately
-  dispatchable, because `Dispatch(s, w)` is gated only by that
-  EP's readiness and the worker's capacity, never by any other
-  EP. The invariant is non-vacuous — a head-of-line-blocking
-  (serializing) dispatch rule violates it within two steps,
-  confirmed by mutation testing.
+- **Bounded-fair-dispatch (P5' + P12)**: no ready EP is blocked
+  indefinitely — neither by an unrelated running EP nor by a
+  stream of higher-priority arrivals. This is the umbrella
+  liveness guarantee, with two facets verified separately:
+  - **Head-of-line freedom (P5')** — the *no-contention /
+    structural* facet: a large, slow EP on one worker never
+    blocks dispatch of unrelated ready EPs to other workers
+    (no dispatch queue, no global ordering). Verified as the
+    `HoLFreedom` structural invariant (every topology, including
+    the independent one): any ready EP with a feasible worker is
+    immediately dispatchable, because `Dispatch(s, w)` is gated
+    only by that EP's readiness and the worker's capacity, never
+    by another EP. Non-vacuous — a serializing dispatch rule
+    violates it within two steps (mutation-tested).
+  - **Starvation-freedom (P12)** — the *contention* facet: under
+    continuous higher-priority arrival, a low-priority ready EP
+    is still eventually dispatched, because its priority carries
+    a delay credit $\gamma \cdot \operatorname{age}$ (§2b) that
+    rises until it outranks fresh arrivals. Verified in
+    `StarvationModel` (single worker, recurring high-priority
+    stream); non-vacuous — $\gamma = 0$ yields a TLC starvation
+    counterexample. This generalizes P9' from the
+    highest-priority ready EP (dispatched within Δ) to *every*
+    ready EP (dispatched within a larger but finite, delay-credit
+    bound), so priority ordering never breaks liveness.
 - **Completion propagation (P6)**: Every dispatched EP
   eventually reaches a terminal state (completed or
   failed). No EP hangs in `dispatched` indefinitely.
@@ -1900,6 +1912,7 @@ independent) using TLC with weak fairness.
 | Progress (P5)                | Liveness | ✅     |
 | Completion prop. (P6)        | Liveness | ✅     |
 | HoL freedom (P5')            | Safety   | ✅     |
+| Starvation-freedom (P12)     | Liveness | ✅     |
 | Per-request completion (P6') | Liveness | ✅     |
 | Frozen stability (P8)        | Safety   | ✅     |
 | Work conservation (P9, strict) | Liveness | ✅ (Δ = 0 case of P9') |
@@ -1990,7 +2003,7 @@ See `docs/models/lean/` for proof sources.
    the quantitative makespan penalty is not mechanized.
    Low risk: the transient is geometrically short and
    capacity safety (Track A) holds throughout.
-4. **Starvation prevention (P12)**: Even once the bounded-window work-conserving liveness property (P9', pending re-verification) is established, P9' would ensure only that a ready EP is *eventually* dispatched (within Δ); it would not prevent low-priority tasks from being starved indefinitely under continuous high-priority arrival. Formalizing starvation-freedom requires modeling arrival processes and priority queuing disciplines (e.g. aging or FIFO bounds), which is deferred to future work.
+4. **Starvation prevention (P12) — RESOLVED**: the priority ordering carries a delay credit $\gamma \cdot \operatorname{age}(e)$ (§2b) — the greedy-tier reading of the MCMF delay cost — so a low-priority EP's effective priority rises until it outranks continuous higher-priority arrivals. Starvation-freedom is model-checked in `StarvationModel` (TLA+; single worker, recurring high-priority stream), non-vacuously ($\gamma = 0$ reproduces the starvation counterexample). See §Guarantees, *Bounded-fair-dispatch (P5' + P12)*.
 5. **DAG Boundedness and Memory Limits (P13)**: The TLA+ and Lean models assume a finite vertex set $V$. At runtime, the unified global DAG must be bounded to prevent memory exhaustion under continuous request streams. Proving memory safety and progress under sliding window request pruning is a future modeling objective.
 
 ## Future Work: Federated Scale via Min-Cost Max-Flow (MCMF)
