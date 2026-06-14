@@ -14,9 +14,11 @@
 pub mod coarsen;
 pub mod config;
 pub mod graph;
+pub mod peft;
 pub mod trace;
 
 pub use coarsen::{Coarsening, Ep};
 pub use config::{HeuristicConfig, Seeding, Variant};
 pub use graph::Graph;
+pub use peft::{OctTable, Worker};
 pub use trace::{Trace, TraceEdge, TraceError, TraceNode, WorkerSpec};
