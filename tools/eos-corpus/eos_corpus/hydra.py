@@ -76,13 +76,25 @@ class HydraClient:
         self._record_schema("eval", data)
         return data
 
-    def get_eval_builds(self, eval_id: int) -> List[dict]:
-        """Return all builds for an eval (may be a large list for nixpkgs)."""
-        data = self._get(f"{BASE}/eval/{eval_id}/builds")
+    def get_eval_builds(self, eval_id: int, extended_timeout: int = 300) -> List[dict]:
+        """Return all builds for an eval.
+
+        nixpkgs evals have 60k+ build records (~60–80 MB JSON), so this uses
+        an extended timeout separate from the per-call default.
+        """
+        elapsed = time.monotonic() - self._last_call
+        if elapsed < self.delay:
+            time.sleep(self.delay - elapsed)
+        resp = self._session.get(
+            f"{BASE}/eval/{eval_id}/builds",
+            timeout=extended_timeout,
+        )
+        self._last_call = time.monotonic()
+        resp.raise_for_status()
+        data = resp.json()
         self._record_schema("eval_builds", data)
         if isinstance(data, list):
             return data
-        # Some Hydra versions wrap in an object
         return data.get("builds", [])
 
     # ------------------------------------------------------------------
@@ -148,37 +160,6 @@ class HydraClient:
         if revision:
             return str(revision)
 
-        return None
-
-    def find_eval_for_commit(
-        self,
-        commit: str,
-        start_eval: int,
-        max_lookback: int = 200,
-        project: str = "nixpkgs",
-        jobset: str = "unstable",
-    ) -> Optional[int]:
-        """Walk backwards from ``start_eval`` to find the eval containing ``commit``.
-
-        Checks up to ``max_lookback`` consecutive eval IDs.  Returns the eval
-        ID of the first match, or None if not found.
-
-        The nixpkgs/unstable jobset evaluates roughly once per day, so 200
-        evals covers ~6 months of history.
-        """
-        for offset in range(max_lookback):
-            eid = start_eval - offset
-            if eid <= 0:
-                break
-            try:
-                ev = self.get_eval(eid)
-            except requests.HTTPError as exc:
-                if exc.response is not None and exc.response.status_code == 404:
-                    continue
-                raise
-            sha = self.nixpkgs_commit(ev)
-            if sha and commit in sha:
-                return eid
         return None
 
     def find_latest_eval_id(self) -> int:

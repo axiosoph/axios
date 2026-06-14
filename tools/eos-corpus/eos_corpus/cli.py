@@ -72,37 +72,84 @@ def main() -> None:
 # ---------------------------------------------------------------------------
 
 @main.command("find-anchor")
-@click.option("--nixpkgs", required=True, type=click.Path(exists=True), help="Local nixpkgs checkout path.")
-@click.option("--anchor", default="00e16e88fac4", show_default=True,
-              help="Known anchor commit (staging-next merge).")
+@click.option("--nixpkgs", required=True, type=click.Path(exists=True),
+              help="Local nixpkgs checkout (used to verify the commit exists locally).")
+@click.option("--max-lookback", default=50, show_default=True,
+              help="Max eval IDs to walk backward from latest.")
 @click.option("--delay", default=2.0, show_default=True, help="Seconds between Hydra API calls.")
-def find_anchor(nixpkgs: str, anchor: str, delay: float) -> None:
-    """Find the Hydra eval matching a staging-next merge commit.
+def find_anchor(nixpkgs: str, max_lookback: int, delay: float) -> None:
+    """Find a suitable Hydra eval for nixpkgs/unstable and derive the anchor commit.
 
-    Prints: anchor commit SHA, Hydra eval ID, and nrsucceeded.
+    Walks backward from the latest Hydra eval ID, picks the most-built
+    nixpkgs eval whose commit exists in the local checkout, and prints:
+    anchor commit SHA, Hydra eval ID, build count.
+
+    This is the correct direction: start at Hydra, derive the commit,
+    then use it in the local nixpkgs checkout.
     """
+    import subprocess as _sp
+
     client = HydraClient(delay=delay)
 
-    click.echo(f"Resolving latest eval ID …")
+    click.echo("Resolving latest eval ID …")
     try:
         latest = client.find_latest_eval_id()
     except Exception as exc:
         click.echo(f"ERROR: cannot resolve latest eval: {exc}", err=True)
         sys.exit(1)
-    click.echo(f"Latest eval: {latest}")
+    click.echo(f"Latest Hydra eval: {latest}")
 
-    click.echo(f"Searching for eval containing nixpkgs commit {anchor!r} …")
-    eval_id = client.find_eval_for_commit(anchor, start_eval=latest, max_lookback=300)
-    if eval_id is None:
-        click.echo(f"ERROR: no eval found for commit {anchor!r} within 300 evals", err=True)
+    click.echo(f"Walking backward (max {max_lookback} evals) to find a nixpkgs/unstable eval …")
+    best_eval_id: Optional[int] = None
+    best_commit: Optional[str] = None
+    best_build_count = 0
+
+    for offset in range(max_lookback):
+        eid = latest - offset
+        if eid <= 0:
+            break
+        try:
+            ev = client.get_eval(eid)
+        except Exception as exc:
+            click.echo(f"  skip {eid}: {exc}", err=True)
+            continue
+
+        sha = client.nixpkgs_commit(ev)
+        if sha is None:
+            click.echo(f"  {eid}: not a nixpkgs eval, skipping", err=True)
+            continue
+
+        build_count = len(ev.get("builds", []))
+        click.echo(f"  {eid}: commit={sha[:16]}… builds={build_count}")
+
+        # Verify commit exists in local checkout.
+        try:
+            _sp.run(
+                ["git", "-C", nixpkgs, "cat-file", "-e", f"{sha}^{{commit}}"],
+                check=True, capture_output=True,
+            )
+        except _sp.CalledProcessError:
+            click.echo(f"  {eid}: commit not in local checkout, skipping", err=True)
+            continue
+
+        # Prefer the eval with the most builds (proxy for most succeeded).
+        if build_count > best_build_count:
+            best_eval_id = eid
+            best_commit = sha
+            best_build_count = build_count
+            click.echo(f"  → new best: eval={eid} builds={build_count}")
+
+        # After finding at least one candidate, scan a few more then stop.
+        if best_eval_id is not None and offset >= 5:
+            break
+
+    if best_eval_id is None or best_commit is None:
+        click.echo("ERROR: no suitable nixpkgs eval found within lookback window", err=True)
         sys.exit(1)
 
-    ev = client.get_eval(eval_id)
-    nrsucceeded = ev.get("nrsucceeded", len(ev.get("builds", [])))
-
-    click.echo(f"\nanchor_commit={anchor}")
-    click.echo(f"hydra_eval_id={eval_id}")
-    click.echo(f"nrsucceeded={nrsucceeded}")
+    click.echo(f"\nanchor_commit={best_commit}")
+    click.echo(f"hydra_eval_id={best_eval_id}")
+    click.echo(f"build_count={best_build_count}")
     click.echo("\nDiscovered API schema snippet:")
     click.echo(json.dumps(client.discovered_schema.get("eval", {}), indent=2))
 
@@ -198,14 +245,23 @@ def extract(
     click.echo(f"Discovered eval schema: {json.dumps(client.discovered_schema.get('eval', {}))}", err=True)
 
     # Build a drvpath → build dict index from the eval.
-    click.echo(f"Fetching build list for eval {hydra_eval} …", err=True)
-    eval_builds = client.get_eval_builds(hydra_eval)
+    # nixpkgs evals have 60k+ builds; extended timeout of 300 s.
+    click.echo(f"Fetching build list for eval {hydra_eval} (may take up to 5 min) …", err=True)
     drv_to_build: Dict[str, dict] = {}
-    for b in eval_builds:
-        dp = b.get("drvpath")
-        if dp:
-            drv_to_build[dp] = b
-    click.echo(f"Indexed {len(drv_to_build)} builds by drvpath", err=True)
+    try:
+        eval_builds = client.get_eval_builds(hydra_eval, extended_timeout=300)
+        for b in eval_builds:
+            dp = b.get("drvpath")
+            if dp:
+                drv_to_build[dp] = b
+        click.echo(f"Indexed {len(drv_to_build)} builds by drvpath", err=True)
+    except Exception as exc:
+        click.echo(
+            f"WARNING: could not fetch eval builds ({exc}); "
+            f"falling back to latestbuilds per-package for top-level nodes only",
+            err=True,
+        )
+        drv_to_build = {}  # will hit tier-2 for all transitive deps
 
     with at_commit(nixpkgs, anchor):
         for pkg in packages:
@@ -397,16 +453,17 @@ def validate(corpus: str, sim_bin: Optional[str]) -> None:
         sim_ok = _sim_load_check(sim, trace_path) if sim else None
         sim_status = "OK" if sim_ok else ("FAIL" if sim_ok is False else "skip")
 
-        # Compute coverage cells from the graph.
+        # Compute coverage cells from the graph using actual trace durations.
         from .graph import parse_drv_closure, StructuralMetrics, DrvNode
-        # Reconstruct nodes dict from trace format for metric computation.
         node_map = {nd["id"]: DrvNode(path=nd["id"], name=nd.get("plan_name", nd["id"])) for nd in nodes}
         for edge in edges:
             frm = edge.get("from")
             to = edge.get("to")
             if frm in node_map and to in node_map:
                 node_map[frm].deps.append(to)
-        m = StructuralMetrics.compute(node_map)
+        # Use actual durations from the trace (Hydra-measured or heuristic).
+        trace_durations = {nd["id"]: nd.get("duration", 1.0) for nd in nodes}
+        m = StructuralMetrics.compute(node_map, durations=trace_durations)
         all_filled.update(m.coverage_cells)
 
         rows.append({

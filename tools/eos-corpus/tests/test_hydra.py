@@ -105,28 +105,20 @@ class TestSchemaDiscovery:
 
 
 # ---------------------------------------------------------------------------
-# find_eval_for_commit
+# find_latest_eval_id
 # ---------------------------------------------------------------------------
 
-class TestFindEvalForCommit:
-    def test_finds_commit_immediately(self, client):
-        ev = {"id": 100, "flake": "github:NixOS/nixpkgs/00e16e88fac4", "jobsetevalinputs": {}}
-        with patch.object(client, "get_eval", return_value=ev):
-            result = client.find_eval_for_commit("00e16e88fac4", start_eval=100)
-        assert result == 100
+class TestFindLatestEvalId:
+    def test_parses_eval_id_from_redirect(self, client):
+        mock_resp = MagicMock()
+        mock_resp.headers = {"Location": "https://hydra.nixos.org/eval/1826247?name=unstable"}
+        with patch.object(client._session, "get", return_value=mock_resp):
+            result = client.find_latest_eval_id()
+        assert result == 1826247
 
-    def test_finds_commit_after_offset(self, client):
-        def fake_get_eval(eid):
-            if eid == 98:
-                return {"id": 98, "flake": "github:NixOS/nixpkgs/00e16e88fac4", "jobsetevalinputs": {}}
-            return {"id": eid, "flake": "github:NixOS/nixpkgs/ffffffffffffffff", "jobsetevalinputs": {}}
-
-        with patch.object(client, "get_eval", side_effect=fake_get_eval):
-            result = client.find_eval_for_commit("00e16e88fac4", start_eval=100)
-        assert result == 98
-
-    def test_returns_none_when_not_found(self, client):
-        ev = {"id": 1, "flake": "github:NixOS/nixpkgs/ffffffffffffffff", "jobsetevalinputs": {}}
-        with patch.object(client, "get_eval", return_value=ev):
-            result = client.find_eval_for_commit("00e16e88fac4", start_eval=5, max_lookback=5)
-        assert result is None
+    def test_raises_on_missing_location(self, client):
+        mock_resp = MagicMock()
+        mock_resp.headers = {"Location": "https://hydra.nixos.org/"}
+        with patch.object(client._session, "get", return_value=mock_resp):
+            with pytest.raises(RuntimeError):
+                client.find_latest_eval_id()
