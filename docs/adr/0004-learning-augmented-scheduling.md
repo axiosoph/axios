@@ -255,7 +255,7 @@ the consistency/robustness/smoothness framework.
 
 To prevent redundant computation across concurrent requests and minimize myopic scheduling, all requests contribute to a **unified global plan graph** $G_\cup = (V_\cup, E_\cup)$ keyed by plan hash (N1). When a new build request arrives, its plan sub-graph is merged JIT into the global DAG in $O(|V_{\text{new}}| + |E_{\text{new}}|)$ time. Plans whose outputs are already cached in the artifact store are immediately filtered out.
 
-The scheduler partitions the mutable portion of $G_\cup$ into coarsened **entry points** ($S$) with a greedy top-down walk that covers the uncached sub-DAG. *Which* nodes become entry points is governed by promotion criteria. The criteria below are the **leading hypothesis (H1)** — they are **not settled**. The campaign's trace-driven simulator (campaign node `P10-heuristic-eval`) compares H1 against the alternatives H2–H4 on real nixpkgs DAGs (constraint C2), and that simulation, not this ADR, selects the production heuristic.
+The scheduler partitions the mutable portion of $G_\cup$ into coarsened **entry points** ($S$) with a greedy top-down walk that covers the uncached sub-DAG. *Which* nodes become entry points is governed by promotion criteria. The criteria below are the **leading hypothesis (H1)** — they are **not settled**. A trace-driven simulation compares H1 against the alternatives H2–H4 on real nixpkgs DAGs, and that simulation, not this ADR, selects the production heuristic.
 
 **Hypothesis H1 (leading) — priority-ordered promotion.** Derived from the formal objective (minimize $\text{makespan} + \lambda \cdot \text{concurrent\_redundant\_work}$, makespan primary, redundancy avoidance secondary). A node $v$ is promoted to a standalone entry point if any criterion fires, evaluated in priority order:
 
@@ -269,13 +269,15 @@ Where $d(v)$ is the predicted isolated build duration of plan $v$ (from `P[plan_
 $$\theta_{\text{eff}} = \frac{\theta}{1 + \operatorname{conf}(v) \cdot \theta_{\text{scale}}}, \qquad \operatorname{conf}(v) = 1 - \operatorname{EMA}(|\eta_v|)$$
 Low confidence raises the effective threshold (conservative coarsening — fewer EPs, fewer scheduling decisions); high confidence lowers it (finer-grained promotion for PEFT to optimize). For the critical-path criterion, $\operatorname{conf}$ is the *minimum* confidence of any node on the path (weakest-link model — the chain is only as reliable as its least-predicted node).
 
-**Alternative hypotheses (simulation candidates).** The simulator (campaign node `P10-heuristic-eval`) evaluates H1 against:
+**Alternative hypotheses (simulation candidates).** The simulation evaluates H1 against:
 
 - **H2 — combined score**: a weighted sum $w_1 \cdot \operatorname{critical_path}(v) + w_2 \cdot (\operatorname{fan_in}(v) - 1) \cdot d(v) + w_3 \cdot d(v) > \theta_{\text{combined}}$, letting partial signals jointly trigger promotion even when no single criterion is met (more expressive, but more weights to tune and harder to interpret).
 - **H3 — redundancy-aware critical path**: the critical-path and troublesome-node criteria only, with **no** explicit fan-in term — relying on the cache-skip scan (§2b) to absorb convergence points organically (simplest; risks missing off-critical-path convergence that causes expensive redundancy).
 - **H4 — ADR-0004 original (baseline)**: the prior formulation $$\operatorname{predicted_cost}(v) > \theta_{\text{eff,cost}} \;\lor\; \operatorname{fan_in}(v) > \theta_{\text{fanin}} \;\lor\; \operatorname{subgraph_cost}(v) > \theta_{\text{eff,subgraph}}$$ retained as the comparison baseline against which H1–H3 are judged.
 
 The simulator sweeps thresholds per variant against the nixpkgs trace corpus and reports makespan (primary), redundant work, EP count, and worker utilization (§Optimality, *The Simulation Gap*). Until those results land, H1 is the default but provisional choice.
+
+**Initialization hypothesis (orthogonal axis) — atom-seeded coarsening.** The walk above seeds entry points from individual plan nodes. An alternative seeds the initial EP cover from **atom boundaries**: the atoms present in the uncached DAG become the initial EP set, which the promotion criteria + confidence gating then refine (splitting an internal node into its own EP when it earns promotion; absorbing trivial atoms). This is a **soft prior, not a hard partition** — the plan/derivation substrate is retained, so finer-than-atom EPs remain reachable, and atom durations stay exact (an EP's cost is the sum of its *uncached* member plans, which remain individually visible). The motivation is alignment with the *predictability frontier*: the atom-id is the profile key (§The Atom-Id Advantage), so atom boundaries are exactly where predictions — and therefore confidence gating — are most reliable, while refining below an atom enters low-confidence, unprofiled territory where the learning-augmented advantage thins. Whether this prior improves *realized* makespan/redundancy is **not assumed**; it is evaluated as a seeding axis (`from-scratch` vs `atom-seeded`) crossed with the promotion variants in the trace-driven simulation. Because nixpkgs does not use the atom format, the trace corpus demarks top-level `pkgs`-set attributes as **synthetic atoms** for this axis — a proxy adequate for the comparison.
 
 **The Scheduling Table T (one graph, not two)**:
 There is exactly **one** graph — $G_\cup$. The coarsened
@@ -425,8 +427,7 @@ one round trip while the shim absorbs the per-digest fan-out.
 This keeps the scheduler free of snix dependencies and gRPC code
 (`[eos-scheduler-state-isolation]`) even in federated
 topologies. A batch-native existence RPC (e.g. a `Stat`/bulk
-API) is **PROPOSED upstream on the snix canon** (campaign node
-`P12-snix-pathinfo-stat`); the shim will consume it once it lands to drop the
+API) is **PROPOSED upstream on the snix canon**; the shim will consume it once it lands to drop the
 fan-out, but it is **not** an existing snix capability and the
 design does not assume one. An earlier draft claimed the store's
 gRPC protocol natively answered a batch existence query; that
@@ -832,7 +833,7 @@ fork-join, convergence, independent) with weak fairness.
 > `readySince` timestamps and checks **P9'** (`WorkConservation`)
 > as a clock-guarded liveness property — in both the Δ = 2 window
 > configuration and the Δ = 0 degenerate case (which recovers the
-> strict P9), under TLC (campaign node `P2-tla-p9prime`). The
+> strict P9), under TLC. The
 > time-free safety properties (P1, P3, P4, P8, P11) are
 > independent of the dispatch window.
 
@@ -1212,10 +1213,9 @@ Bridging this gap requires trace-driven simulation:
    dispatch without coarsening or prediction), measuring
    makespan, redundant work, EP count, and worker utilization
 
-This is campaign node `P10-heuristic-eval`: it is the binding evaluator
-(constraint C2) for the promotion heuristic. The ADR adopts H1
-as the leading hypothesis, but that node's simulation
-results — not this document — select the production variant.
+This trace-driven simulation is the binding evaluator for the promotion
+heuristic. The ADR adopts H1 as the leading hypothesis, but the
+simulation results — not this document — select the production variant.
 
 If the simulator demonstrates order-of-magnitude DAG
 reduction without serializing the critical path, the
@@ -1892,9 +1892,8 @@ point selection is a potential novel contribution.
 
 The scheduling model has been formally verified through a
 two-track approach. Bounded-window work conservation (**P9'**)
-is model-checked under the dispatch-window relaxation
-(campaign node `P2-tla-p9prime`). The formal model is defined in
-`docs/models/eos-scheduling.md`.
+is model-checked under the dispatch-window relaxation. The formal model
+is defined in `docs/models/eos-scheduling.md`.
 
 ### Track A: Protocol Correctness (TLA+)
 
