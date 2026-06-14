@@ -21,3 +21,10 @@ docs/compliance.json
 
 # TLC model check directories
 states/
+
+# Local campaign scratch files
+.scratch/
+
+.agents
+.prior_art_cache
+
