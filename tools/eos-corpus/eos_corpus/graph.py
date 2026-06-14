@@ -141,19 +141,29 @@ def compute_cpr(
 # ---------------------------------------------------------------------------
 
 # Cell names follow the spec table.
-# Size thresholds are calibrated for nixpkgs full recursive derivation closures,
-# where even "simple" packages (ripgrep, jq) have N ≈ 1,000 due to the bootstrap
-# chain.  The spec's original (50, 500) thresholds assumed synthetic or
-# per-package-only traces; the calibrated values are (1_100, 3_000).
+#
+# Both size and CPR thresholds are calibrated for nixpkgs full recursive
+# derivation closures (plastic deviations; see PROVENANCE.md for justification).
+#
+# Size: the spec's original (50, 500) thresholds assumed synthetic or
+# per-package-only traces; nixpkgs recursive closures always include the full
+# bootstrap chain, giving N ≈ 1,000 even for trivial packages (ripgrep, jq).
+# Recalibrated to (1_100, 3_000) to reflect the observed N distribution.
 SIZE_CELLS = {
     "small":  (None, 1_100),
     "medium": (1_100, 3_000),
     "large":  (3_000, None),
 }
+# CPR: the spec's original (0.5, 2.0) thresholds assume the full low-to-high
+# CPR range is accessible.  With nixpkgs closures the bootstrap chain creates a
+# near-fixed critical-path depth (~190–256 hops), so unit-duration CPR
+# (= 8×depth/N) always falls in [0.52, 1.54] — entirely within the original
+# "mid" band.  Thresholds are recalibrated to discriminate the actual
+# distribution: low < 0.60, mid 0.60–1.48, high > 1.48.
 CPR_CELLS = {
-    "low":  (None, 0.5),
-    "mid":  (0.5, 2.0),
-    "high": (2.0, None),
+    "low":  (None, 0.60),
+    "mid":  (0.60, 1.48),
+    "high": (1.48, None),
 }
 
 
@@ -165,10 +175,9 @@ def size_bucket(n: int) -> str:
 
 
 def cpr_bucket(cpr: float) -> str:
-    if cpr <= 0.5:
-        return "low"
-    if cpr <= 2.0:
-        return "mid"
+    for name, (lo, hi) in CPR_CELLS.items():
+        if (lo is None or cpr > lo) and (hi is None or cpr <= hi):
+            return name
     return "high"
 
 

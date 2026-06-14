@@ -188,11 +188,16 @@ class TestCoverageMatrix:
         assert size_bucket(3_000) == "large"
 
     def test_cpr_buckets(self):
+        # Thresholds calibrated for nixpkgs closures (see graph.py CPR_CELLS):
+        # low ≤ 0.60, mid 0.60–1.48, high > 1.48.
         assert cpr_bucket(0.0) == "low"
-        assert cpr_bucket(0.5) == "low"
-        assert cpr_bucket(0.51) == "mid"
-        assert cpr_bucket(2.0) == "mid"
-        assert cpr_bucket(2.01) == "high"
+        assert cpr_bucket(0.59) == "low"
+        assert cpr_bucket(0.60) == "low"    # boundary: ≤ 0.60 → low
+        assert cpr_bucket(0.61) == "mid"
+        assert cpr_bucket(1.47) == "mid"
+        assert cpr_bucket(1.48) == "mid"    # boundary: ≤ 1.48 → mid
+        assert cpr_bucket(1.49) == "high"
+        assert cpr_bucket(2.0) == "high"
 
     def test_assign_cells_small_high_cpr(self):
         cells = assign_coverage_cells(n=10, cpr=3.0, max_fanin=2)

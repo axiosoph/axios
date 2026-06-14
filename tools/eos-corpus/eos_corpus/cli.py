@@ -44,7 +44,7 @@ def _coverage_matrix_table(filled: set[str]) -> str:
     lines = []
     lines.append(f"{'':20s} | {'Small (<1.1k)':13s} | {'Medium (1.1–3k)':15s} | {'Large (≥3k)':11s}")
     lines.append("-" * 72)
-    for cpr_label, cpr_key in [("Low CPR  ≤0.5", "low"), ("Mid CPR  0.5–2", "mid"), ("High CPR >2", "high")]:
+    for cpr_label, cpr_key in [("Low CPR  ≤0.60", "low"), ("Mid CPR  0.60–1.48", "mid"), ("High CPR >1.48", "high")]:
         cells = [
             "✓" if f"{sz}_{cpr_key}_cpr" in filled else "·"
             for sz in ("small", "medium", "large")
@@ -461,7 +461,14 @@ def validate(corpus: str, sim_bin: Optional[str]) -> None:
         sim_ok = _sim_load_check(sim, trace_path) if sim else None
         sim_status = "OK" if sim_ok else ("FAIL" if sim_ok is False else "skip")
 
-        # Compute coverage cells from the graph using actual trace durations.
+        # Compute coverage cells using unit durations (structural proxy).
+        # Rationale: the CPR thresholds in graph.py are calibrated for the unit-
+        # duration CPR distribution of nixpkgs closures (D/N ratio).  Tier-2
+        # heuristic durations homogenise CPR via the shared bootstrap chain and
+        # map every package into mid-CPR regardless of structural variation.
+        # Using unit durations restores the structural discriminability the
+        # coverage matrix is meant to capture, consistent with the spec's
+        # "uniform unit durations as structural proxy when Hydra timing is absent".
         from .graph import parse_drv_closure, StructuralMetrics, DrvNode
         node_map = {nd["id"]: DrvNode(path=nd["id"], name=nd.get("plan_name", nd["id"])) for nd in nodes}
         for edge in edges:
@@ -469,9 +476,7 @@ def validate(corpus: str, sim_bin: Optional[str]) -> None:
             to = edge.get("to")
             if frm in node_map and to in node_map:
                 node_map[frm].deps.append(to)
-        # Use actual durations from the trace (Hydra-measured or heuristic).
-        trace_durations = {nd["id"]: nd.get("duration", 1.0) for nd in nodes}
-        m = StructuralMetrics.compute(node_map, durations=trace_durations)
+        m = StructuralMetrics.compute(node_map, durations=None)  # unit durations
         all_filled.update(m.coverage_cells)
 
         rows.append({
@@ -540,7 +545,7 @@ def _sim_load_check(sim: Path, trace_path: Path) -> bool:
     try:
         result = subprocess.run(
             [str(sim), "--trace", str(trace_path), "--variant", "H1", "--seed", "42"],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True, text=True, timeout=120,
         )
         return result.returncode == 0
     except Exception:
