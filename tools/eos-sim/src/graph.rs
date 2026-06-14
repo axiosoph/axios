@@ -36,6 +36,8 @@ pub struct Graph {
     is_atom: Vec<bool>,
     /// Prediction confidence in `[0, 1]` by index.
     confidence: Vec<f64>,
+    /// Arrival time (system-entry) by index; `0.0` when present from the start.
+    arrival: Vec<f64>,
     /// `deps[v]` = indices `v` depends on (ascending).
     deps: Vec<Vec<usize>>,
     /// `dependents[v]` = indices that depend on `v` (ascending).
@@ -68,6 +70,7 @@ impl Graph {
         let mut peak_mem = Vec::with_capacity(kept.len());
         let mut is_atom = Vec::with_capacity(kept.len());
         let mut confidence = Vec::with_capacity(kept.len());
+        let mut arrival = Vec::with_capacity(kept.len());
         for (i, n) in kept.iter().enumerate() {
             index.insert(n.id.clone(), i);
             ids.push(n.id.clone());
@@ -75,6 +78,7 @@ impl Graph {
             peak_mem.push(n.peak_mem.unwrap_or(0));
             is_atom.push(n.is_atom);
             confidence.push(n.confidence());
+            arrival.push(n.arrival.unwrap_or(0.0).max(0.0));
         }
 
         let n = kept.len();
@@ -99,6 +103,7 @@ impl Graph {
             peak_mem,
             is_atom,
             confidence,
+            arrival,
             deps,
             dependents,
             index,
@@ -145,6 +150,11 @@ impl Graph {
     /// Prediction confidence of `v` in `[0, 1]`.
     pub fn confidence(&self, v: usize) -> f64 {
         self.confidence[v]
+    }
+
+    /// System-entry (arrival) time of `v`; `0.0` when present from the start.
+    pub fn arrival(&self, v: usize) -> f64 {
+        self.arrival[v]
     }
 
     /// Dependencies of `v` (built before `v`).

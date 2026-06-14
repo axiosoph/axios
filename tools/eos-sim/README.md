@@ -30,7 +30,8 @@ keys. It is the data contract for node P9 (corpus extraction) and node P10
       "peak_mem": 1000000000, // optional: predicted peak memory, bytes
       "is_atom": false,       // optional: synthetic atom marker (atom-seeded variant)
       "plan_name": "top-1.0", // optional: version-stable profile key (corpus fidelity)
-      "confidence": 0.9       // optional: prediction confidence [0,1] (default 0.5)
+      "confidence": 0.9,      // optional: prediction confidence [0,1] (default 0.5)
+      "arrival": 0.0          // optional: system-entry time (RequestArrival staggering; default 0)
     }
   ],
   "edges": [
@@ -59,21 +60,45 @@ negative durations.
 ## CLI
 
 ```
-eos-sim --trace <FILE> [--seed <U64>]
+eos-sim --trace <FILE> [OPTIONS]
 ```
 
-(Heuristic flags — `--variant`, thresholds, `--gamma`, `--delta`, `--lambda` —
-are documented as they land. See `eos-sim --help`.)
+| Flag | Default | Meaning |
+| :--- | :--- | :--- |
+| `--seed <U64>` | `0` | Deterministic tie-break seed. |
+| `--variant <H1\|H2\|H3\|H4>` | `H1` | Promotion variant (ADR §2a). |
+| `--seeding <from-scratch\|atom-seeded>` | `from-scratch` | Initial-cover seeding axis. |
+| `--theta-critical <F>` | `30` | Critical-path-cut threshold. |
+| `--theta-redundancy <F>` | `20` | Cost-gated convergence threshold. |
+| `--theta-cost <F>` | `60` | Troublesome-node threshold. |
+| `--theta-scale <F>` | `1` | Confidence-gating scale (`0` disables gating). |
+| `--theta-subgraph <F>` | `120` | H4 subgraph-cost threshold. |
+| `--theta-fanin <N>` | `2` | H4 fan-in threshold. |
+| `--theta-trivial <F>` | `10` | Atom-absorption threshold (atom-seeded). |
+| `--cache-speedup <F>` | `0.5` | Cache-affinity speedup factor (Option C). |
+| `--beta <F>` | `0.5` | Resource-fit penalty weight (Option C). |
+| `--delta <F>` | `0` | Bounded dispatch window Δ, seconds (P9′). |
+| `--gamma <F>` | `0` | Delay-credit weight γ (P12 fairness). |
+| `--lambda <F>` | `1` | Redundant-work weight in the objective. |
+| `--json` | off | Emit the metrics JSON line instead of the human summary. |
 
 On a successful run the simulator prints the two contract lines consumed by
-node P10 / constraint C2:
+node P10 / constraint C2, around the metrics block:
 
 ```
 Loaded <N> plans
+<metrics summary or --json line>
 Simulation completed
 ```
 
 `N` is the number of plan nodes loaded from the trace.
+
+### Metrics
+
+`makespan`, `redundant_work` (CPU-time on plan nodes built concurrently by more
+than one EP), `ep_count`, `mean_utilization`, `critical_path_accuracy`
+(predicted EP-DAG critical path / actual makespan), `max_dispatch_wait` (the
+fairness / starvation indicator), and `objective` (`makespan + λ·redundant_work`).
 
 ### Determinism
 
@@ -88,5 +113,7 @@ cargo test  -p eos-sim
 cargo clippy -p eos-sim -- -D warnings
 ```
 
-Fixtures live in `fixtures/`. Each is a self-contained trace used by the
-integration tests (diamond DAG, H1-vs-H4 divergence, starvation contention).
+Fixtures live in `fixtures/` (the diamond DAG and the documented H1-vs-H4
+divergence DAG). The bounded-window and starvation-contention scenarios are
+constructed programmatically in the integration tests, since they parameterise
+over Δ, γ, and stream length.

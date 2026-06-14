@@ -1,11 +1,12 @@
 //! The discrete-event scheduling engine.
 //!
 //! A single-threaded simulation of the event-driven PEFT dispatch protocol
-//! (ADR-0004 §2b): ready EPs are ranked by `avg_OCT` (the delay-credit term is
-//! added in a later change), placed on the worker minimising `EFT + OCT`, and
-//! advanced in wall-clock time as builds complete. On each completion the store
-//! is populated, overlapping mutable EPs are cache-skipped, and dependents
-//! cascade to ready.
+//! (ADR-0004 §2b): ready EPs are ranked by `avg_OCT + γ·age` (OCT downstream
+//! impact plus the delay-credit fairness term), placed on the worker minimising
+//! `EFT + OCT` within the bounded dispatch window Δ, and advanced in wall-clock
+//! time as builds complete or new EPs arrive. On each completion the store is
+//! populated, overlapping mutable EPs are cache-skipped, and dependents cascade
+//! to ready.
 //!
 //! Concurrency model: one EP per worker at a time plus a capacity-feasibility
 //! gate (the identical-machines, one-task-per-machine model the Lean Graham
@@ -39,6 +40,8 @@ struct EpRun {
     scope: Vec<usize>,
     deps: Vec<usize>,
     status: Status,
+    /// System-entry time of the EP's entry node (ADR `RequestArrival`).
+    arrival: f64,
     ready_time: f64,
     dispatch_time: f64,
     finish_time: f64,
@@ -65,6 +68,8 @@ struct Engine<'a> {
     builders: Vec<usize>,
     /// Accumulated busy time per worker (for utilization).
     busy_time: Vec<f64>,
+    /// Time each busy worker becomes free (for the Δ dispatch hold).
+    busy_until: Vec<f64>,
     time: f64,
 }
 
@@ -81,7 +86,9 @@ impl<'a> Engine<'a> {
         let mut by_entry = std::collections::BTreeMap::new();
         for ep in &coarsening.eps {
             by_entry.insert(ep.entry, eps.len());
-            let status = if ep.deps.is_empty() {
+            let arrival = graph.arrival(ep.entry);
+            // Ready immediately only if it has no dependencies and has arrived.
+            let status = if ep.deps.is_empty() && arrival <= 0.0 {
                 Status::Ready
             } else {
                 Status::Pending
@@ -91,6 +98,7 @@ impl<'a> Engine<'a> {
                 scope: ep.scope.clone(),
                 deps: ep.deps.clone(),
                 status,
+                arrival,
                 ready_time: 0.0,
                 dispatch_time: 0.0,
                 finish_time: 0.0,
@@ -111,14 +119,19 @@ impl<'a> Engine<'a> {
             free: vec![true; n_w],
             builders: vec![0usize; graph.len()],
             busy_time: vec![0.0; n_w],
+            busy_until: vec![0.0; n_w],
             time: 0.0,
         }
     }
 
-    /// Effective priority of a ready EP. The delay-credit fairness term is
-    /// folded in by a later change; here priority is the average OCT.
+    /// Effective priority of a ready EP: `avg_OCT(e) + γ · age(e)` (ADR-0004
+    /// §2b, P12). The delay credit `γ · age` makes a waiting EP's priority rise
+    /// without bound, so it eventually overtakes any stream of higher-priority
+    /// arrivals — starvation-freedom by construction. At γ = 0 it degenerates
+    /// to pure OCT and admits starvation (the model-checked counterexample).
     fn priority(&self, ep: &EpRun) -> f64 {
-        self.oct.avg(ep.entry)
+        let age = (self.time - ep.ready_time).max(0.0);
+        self.oct.avg(ep.entry) + self.cfg.gamma * age
     }
 
     /// Dispatch as many ready EPs as possible at the current time.
@@ -175,7 +188,15 @@ impl<'a> Engine<'a> {
                 continue; // all feasible workers busy
             }
             let d = peft::predicted_duration(self.graph, self.cfg, &self.workers[w], &effective);
+            // Bounded dispatch window Δ (P9'): a high-confidence EP may be held
+            // up to Δ to wait for a higher-affinity worker about to free, unless
+            // the delay credit overrides the hold (age ≥ Δ ⇒ release rather than
+            // starve).
+            if self.should_hold(i, &effective, self.time + d) {
+                continue;
+            }
             self.free[w] = false;
+            self.busy_until[w] = self.time + d;
             for &v in &effective {
                 self.builders[v] += 1;
             }
@@ -187,6 +208,42 @@ impl<'a> Engine<'a> {
             ep.worker = w;
             ep.effective = effective;
         }
+    }
+
+    /// Whether to hold ready EP `i` within the bounded window Δ rather than
+    /// dispatch it to the chosen free worker now (whose earliest finish time is
+    /// `eft_free`). The hold fires only when prediction confidence is high, the
+    /// window is not exhausted (`age < Δ` — the delay-credit override releases
+    /// the EP at the boundary rather than letting it starve), and some busy but
+    /// feasible worker freeing within Δ would finish the EP strictly sooner.
+    ///
+    /// (OCT is worker-independent at τ = 0, so comparing earliest finish times
+    /// is equivalent to comparing the full `EFT + OCT` objective.)
+    fn should_hold(&self, i: usize, effective: &[usize], eft_free: f64) -> bool {
+        if self.cfg.delta <= 0.0 {
+            return false;
+        }
+        let conf = self.graph.confidence(self.eps[i].entry);
+        if conf < self.cfg.confidence_threshold {
+            return false;
+        }
+        let age = self.time - self.eps[i].ready_time;
+        if age >= self.cfg.delta {
+            return false; // window exhausted: delay-credit override, dispatch now
+        }
+        let requirement = peft::resource_requirement(self.graph, effective);
+        for w in 0..self.workers.len() {
+            if self.free[w] || !peft::feasible(&self.workers[w], &requirement) {
+                continue;
+            }
+            if self.busy_until[w] <= self.time + self.cfg.delta {
+                let d = peft::predicted_duration(self.graph, self.cfg, &self.workers[w], effective);
+                if self.busy_until[w] + d + EPS < eft_free {
+                    return true;
+                }
+            }
+        }
+        false
     }
 
     /// Mark a mutable EP complete without building (cache-skip).
@@ -209,8 +266,8 @@ impl<'a> Engine<'a> {
             })
     }
 
-    /// Complete all EPs finishing at `self.time`, then run the cache-skip scan
-    /// and dependency cascade to a fixpoint.
+    /// Complete all dispatched EPs finishing at `self.time`, freeing their
+    /// workers and publishing outputs to the store and local cache.
     fn completion_phase(&mut self) {
         for i in 0..self.eps.len() {
             if self.eps[i].status == Status::Dispatched
@@ -218,7 +275,6 @@ impl<'a> Engine<'a> {
             {
                 let w = self.eps[i].worker;
                 self.free[w] = true;
-                // Publish outputs to the store and warm the worker's cache.
                 let effective = self.eps[i].effective.clone();
                 for v in effective {
                     self.store.insert(v);
@@ -227,20 +283,27 @@ impl<'a> Engine<'a> {
                 self.eps[i].status = Status::Complete;
             }
         }
-        // Fixpoint: a cache-skip can satisfy a dependent, and a cascade can
-        // expose a newly-cached EP.
+    }
+
+    /// Promote mutable EPs to a fixpoint: a fully-cached scope is cache-skipped;
+    /// an EP whose dependencies are complete becomes ready once it has also
+    /// arrived (`self.time ≥ arrival`). `ready_time` is stamped when the EP
+    /// actually becomes ready, so the delay-credit age is measured from then.
+    fn refresh(&mut self) {
         loop {
             let mut changed = false;
             for i in 0..self.eps.len() {
-                if matches!(self.eps[i].status, Status::Pending | Status::Ready) {
-                    let fully_cached = self.eps[i].scope.iter().all(|v| self.store.contains(v));
-                    if fully_cached {
-                        self.complete_skip(i);
-                        changed = true;
-                        continue;
-                    }
+                if matches!(self.eps[i].status, Status::Pending | Status::Ready)
+                    && self.eps[i].scope.iter().all(|v| self.store.contains(v))
+                {
+                    self.complete_skip(i);
+                    changed = true;
+                    continue;
                 }
-                if self.eps[i].status == Status::Pending && self.deps_complete(i) {
+                if self.eps[i].status == Status::Pending
+                    && self.deps_complete(i)
+                    && self.time + EPS >= self.eps[i].arrival
+                {
                     self.eps[i].status = Status::Ready;
                     self.eps[i].ready_time = self.time;
                     changed = true;
@@ -250,6 +313,27 @@ impl<'a> Engine<'a> {
                 break;
             }
         }
+    }
+
+    /// Earliest future arrival of a dependency-satisfied EP still waiting to
+    /// enter the system — an event the loop must wake for even when no build is
+    /// in flight.
+    fn next_arrival(&self) -> Option<f64> {
+        self.eps
+            .iter()
+            .filter(|e| e.status == Status::Pending && e.arrival > self.time + EPS)
+            .filter(|e| {
+                e.deps.iter().all(|&dep| {
+                    self.by_entry
+                        .get(&dep)
+                        .is_some_and(|&j| self.eps[j].status == Status::Complete)
+                })
+            })
+            .map(|e| e.arrival)
+            .fold(None, |acc, t| match acc {
+                Some(m) if m <= t => Some(m),
+                _ => Some(t),
+            })
     }
 
     fn deps_complete(&self, i: usize) -> bool {
@@ -264,22 +348,31 @@ impl<'a> Engine<'a> {
         self.eps.iter().all(|e| e.status == Status::Complete)
     }
 
-    fn run(&mut self) -> Result<Metrics, TraceError> {
+    fn run(&mut self) -> Result<(), TraceError> {
         loop {
+            self.refresh();
             self.dispatch_phase();
             if self.all_terminal() {
                 break;
             }
-            let Some(tn) = self.next_completion() else {
+            // Advance to the next event: a build completing or an EP arriving.
+            let next = match (self.next_completion(), self.next_arrival()) {
+                (Some(a), Some(b)) => Some(a.min(b)),
+                (Some(a), None) => Some(a),
+                (None, Some(b)) => Some(b),
+                (None, None) => None,
+            };
+            let Some(tn) = next else {
                 return Err(TraceError::Invalid(
                     "scheduling deadlock: ready EPs but no feasible worker (check capacities)"
                         .into(),
                 ));
             };
-            self.time = tn;
+            // Guard against a non-advancing loop (e.g. a permanent Δ-hold).
+            self.time = tn.max(self.time);
             self.completion_phase();
         }
-        Ok(self.metrics())
+        Ok(())
     }
 
     fn metrics(&self) -> Metrics {
@@ -320,6 +413,26 @@ impl<'a> Engine<'a> {
         }
     }
 
+    /// Build the detailed report: metrics plus per-EP dispatch waits and worker
+    /// assignments (keyed by entry-node id), for tests that probe a specific
+    /// EP's fate — e.g. the starvation victim.
+    fn report(&self) -> SimReport {
+        let mut ep_waits = std::collections::BTreeMap::new();
+        let mut ep_workers = std::collections::BTreeMap::new();
+        for e in &self.eps {
+            if e.status == Status::Complete && !e.effective.is_empty() {
+                let id = self.graph.id(e.entry).to_string();
+                ep_waits.insert(id.clone(), (e.dispatch_time - e.ready_time).max(0.0));
+                ep_workers.insert(id, self.workers[e.worker].id.clone());
+            }
+        }
+        SimReport {
+            metrics: self.metrics(),
+            ep_waits,
+            ep_workers,
+        }
+    }
+
     /// Longest path through the EP DAG by best-worker full-scope duration — the
     /// predicted makespan lower bound.
     fn predicted_critical_path(&self) -> f64 {
@@ -347,9 +460,25 @@ impl<'a> Engine<'a> {
     }
 }
 
-/// Run a full simulation: cache-filter, coarsen, build workers, and schedule the
-/// request to completion, returning its metrics.
-pub fn simulate(trace: &Trace, cfg: &HeuristicConfig, seed: u64) -> Result<Metrics, TraceError> {
+/// A detailed simulation result: the metrics plus per-EP dispatch waits and
+/// worker assignments, keyed by the EP's entry-node id.
+#[derive(Debug, Clone)]
+pub struct SimReport {
+    /// Aggregate metrics.
+    pub metrics: Metrics,
+    /// Dispatch wait (`dispatch_time − ready_time`) per dispatched EP.
+    pub ep_waits: std::collections::BTreeMap<String, f64>,
+    /// Assigned worker id per dispatched EP.
+    pub ep_workers: std::collections::BTreeMap<String, String>,
+}
+
+/// Run a full simulation and return the detailed report: cache-filter, coarsen,
+/// build workers, then schedule the request to completion.
+pub fn simulate_report(
+    trace: &Trace,
+    cfg: &HeuristicConfig,
+    seed: u64,
+) -> Result<SimReport, TraceError> {
     let graph = Graph::from_trace(trace)?;
     let coarsening = Coarsening::build(&graph, cfg);
     let workers = peft::build_workers(trace, &graph);
@@ -357,7 +486,13 @@ pub fn simulate(trace: &Trace, cfg: &HeuristicConfig, seed: u64) -> Result<Metri
         return Err(TraceError::Invalid("no workers to schedule on".into()));
     }
     let mut engine = Engine::new(&graph, cfg, &coarsening, workers, seed);
-    engine.run()
+    engine.run()?;
+    Ok(engine.report())
+}
+
+/// Run a full simulation, returning just the aggregate metrics.
+pub fn simulate(trace: &Trace, cfg: &HeuristicConfig, seed: u64) -> Result<Metrics, TraceError> {
+    Ok(simulate_report(trace, cfg, seed)?.metrics)
 }
 
 #[cfg(test)]
@@ -451,5 +586,54 @@ mod tests {
         let m = run(json, &clean(0.0));
         assert_eq!(m.ep_count, 0);
         assert_eq!(m.makespan, 0.0);
+    }
+
+    #[test]
+    fn bounded_window_holds_for_a_warmer_worker() {
+        // F (OCT 5 via payload P) is dispatched first to w0; X (cached on w0)
+        // then chooses between cold w1 (free now, d=10) and warm w0 (busy until
+        // 3, d=2). With Δ=0 X must dispatch immediately to w1; with Δ≥3 and high
+        // confidence it is held for w0.
+        let json = r#"{
+            "nodes": [
+                {"id": "X", "duration": 10.0, "confidence": 1.0},
+                {"id": "F", "duration": 3.0},
+                {"id": "P", "duration": 5.0}
+            ],
+            "edges": [{"from": "P", "to": "F"}],
+            "workers": [{"id": "w0", "cached": ["X"]}, {"id": "w1"}]
+        }"#;
+        let cfg = |delta: f64| HeuristicConfig {
+            variant: Variant::H1,
+            theta_cost: 0.0,
+            theta_critical: 1e9,
+            theta_redundancy: 1e9,
+            theta_scale: 0.0,
+            cache_speedup: 0.8,
+            beta: 0.0,
+            // A small delay credit lets the older X outrank the freshly-ready P
+            // for the warm worker at t=3 (otherwise they tie and the seed
+            // decides); it does not affect the t=0 hold decision.
+            gamma: 0.1,
+            delta,
+            confidence_threshold: 0.7,
+            lambda: 1.0,
+            ..HeuristicConfig::default()
+        };
+        let trace = Trace::from_json(json).expect("valid");
+
+        let immediate = simulate_report(&trace, &cfg(0.0), 42).expect("runs");
+        assert_eq!(
+            immediate.ep_workers["X"], "w1",
+            "Δ=0 dispatches X to the cold free worker"
+        );
+        assert_eq!(immediate.metrics.makespan, 10.0);
+
+        let held = simulate_report(&trace, &cfg(5.0), 42).expect("runs");
+        assert_eq!(
+            held.ep_workers["X"], "w0",
+            "Δ=5 holds X for the warm worker"
+        );
+        assert_eq!(held.metrics.makespan, 8.0); // X on warm finishes at 5; P at 8
     }
 }

@@ -22,7 +22,7 @@ pub mod trace;
 
 pub use coarsen::{Coarsening, Ep};
 pub use config::{HeuristicConfig, Seeding, Variant};
-pub use engine::simulate;
+pub use engine::{SimReport, simulate, simulate_report};
 pub use graph::Graph;
 pub use metrics::Metrics;
 pub use peft::{OctTable, Worker};

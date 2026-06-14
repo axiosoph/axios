@@ -60,6 +60,12 @@ pub struct TraceNode {
     /// [`Self::DEFAULT_CONFIDENCE`] when absent.
     #[serde(default)]
     pub confidence: Option<f64>,
+    /// Simulated time at which this plan enters the system (models the ADR
+    /// `RequestArrival` staggering). An EP whose entry node arrives at `t`
+    /// cannot become ready before `t`. Defaults to `0.0` (present from the
+    /// start), so it is inert unless a trace stages arrivals.
+    #[serde(default)]
+    pub arrival: Option<f64>,
 }
 
 impl TraceNode {
