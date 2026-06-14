@@ -35,6 +35,7 @@ CHECKS=(
     "IndependentModel IndependentModel.cfg"
     "MultiRequestModel MultiRequestModel.cfg"
     "MultiRequestModel MultiRequestModel_Delta0.cfg"
+    "StarvationModel StarvationModel.cfg"
 )
 
 : > "$LOG"
