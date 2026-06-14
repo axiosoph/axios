@@ -76,22 +76,27 @@ class HydraClient:
         self._record_schema("eval", data)
         return data
 
-    def get_eval_builds(self, eval_id: int, extended_timeout: int = 300) -> List[dict]:
+    def get_eval_builds(self, eval_id: int, extended_timeout: int = 600) -> List[dict]:
         """Return all builds for an eval.
 
-        nixpkgs evals have 60k+ build records (~60–80 MB JSON), so this uses
-        an extended timeout separate from the per-call default.
+        nixpkgs evals have 284k build records (~100 MB JSON).  Uses streaming
+        to avoid read-buffer timeout on slow connections; the connect timeout
+        is 30 s, read timeout is ``extended_timeout`` (default 600 s = 10 min).
         """
         elapsed = time.monotonic() - self._last_call
         if elapsed < self.delay:
             time.sleep(self.delay - elapsed)
         resp = self._session.get(
             f"{BASE}/eval/{eval_id}/builds",
-            timeout=extended_timeout,
+            stream=True,
+            timeout=(30, extended_timeout),
         )
         self._last_call = time.monotonic()
         resp.raise_for_status()
-        data = resp.json()
+        chunks: list[bytes] = []
+        for chunk in resp.iter_content(chunk_size=1024 * 1024):
+            chunks.append(chunk)
+        data = __import__("json").loads(b"".join(chunks))
         self._record_schema("eval_builds", data)
         if isinstance(data, list):
             return data

@@ -42,8 +42,8 @@ def _echo_table(rows: list[dict], columns: list[str]) -> None:
 
 def _coverage_matrix_table(filled: set[str]) -> str:
     lines = []
-    lines.append(f"{'':20s} | {'Small (<50)':12s} | {'Medium (50–500)':15s} | {'Large (>500)':12s}")
-    lines.append("-" * 70)
+    lines.append(f"{'':20s} | {'Small (<1.1k)':13s} | {'Medium (1.1–3k)':15s} | {'Large (≥3k)':11s}")
+    lines.append("-" * 72)
     for cpr_label, cpr_key in [("Low CPR  ≤0.5", "low"), ("Mid CPR  0.5–2", "mid"), ("High CPR >2", "high")]:
         cells = [
             "✓" if f"{sz}_{cpr_key}_cpr" in filled else "·"
@@ -248,6 +248,7 @@ def extract(
     # nixpkgs evals have 60k+ builds; extended timeout of 300 s.
     click.echo(f"Fetching build list for eval {hydra_eval} (may take up to 5 min) …", err=True)
     drv_to_build: Dict[str, dict] = {}
+    eval_builds_timed_out = False
     try:
         eval_builds = client.get_eval_builds(hydra_eval, extended_timeout=300)
         for b in eval_builds:
@@ -258,10 +259,11 @@ def extract(
     except Exception as exc:
         click.echo(
             f"WARNING: could not fetch eval builds ({exc}); "
-            f"falling back to latestbuilds per-package for top-level nodes only",
+            f"all nodes will use tier-2 heuristic durations (measured=false)",
             err=True,
         )
-        drv_to_build = {}  # will hit tier-2 for all transitive deps
+        drv_to_build = {}
+        eval_builds_timed_out = True
 
     with at_commit(nixpkgs, anchor):
         for pkg in packages:
@@ -310,10 +312,16 @@ def extract(
                 f"  measured {measured_count}/{n} nodes ({ratio:.1%}){flag}", err=True
             )
             if ratio < 0.40:
-                click.echo(
-                    f"  cause: most transitive deps are cache hits in eval "
-                    f"{hydra_eval} (buildstatus≠0 or starttime==stoptime)", err=True
-                )
+                if eval_builds_timed_out:
+                    click.echo(
+                        f"  cause: eval build list fetch timed out; all durations are "
+                        f"tier-2 heuristic estimates", err=True
+                    )
+                else:
+                    click.echo(
+                        f"  cause: most transitive deps are cache hits in eval "
+                        f"{hydra_eval} (buildstatus≠0 or starttime==stoptime)", err=True
+                    )
 
             base = emit_trace(nodes, durations, measured_flags, atom_path=atom_path, pkg_name=pkg)
 
