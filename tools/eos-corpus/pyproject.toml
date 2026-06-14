@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "eos-corpus"
+version = "0.1.0"
+description = "nixpkgs trace corpus extraction toolkit for eos-scheduler-validation"
+requires-python = ">=3.11"
+dependencies = [
+    "click>=8.0",
+    "requests>=2.31",
+]
+
+[project.scripts]
+eos-corpus = "eos_corpus.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["eos_corpus*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
