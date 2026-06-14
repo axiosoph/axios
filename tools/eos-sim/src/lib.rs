@@ -13,12 +13,17 @@
 
 pub mod coarsen;
 pub mod config;
+pub mod engine;
 pub mod graph;
+pub mod metrics;
 pub mod peft;
+pub mod rng;
 pub mod trace;
 
 pub use coarsen::{Coarsening, Ep};
 pub use config::{HeuristicConfig, Seeding, Variant};
+pub use engine::simulate;
 pub use graph::Graph;
+pub use metrics::Metrics;
 pub use peft::{OctTable, Worker};
 pub use trace::{Trace, TraceEdge, TraceError, TraceNode, WorkerSpec};
