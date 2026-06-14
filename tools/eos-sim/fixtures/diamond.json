@@ -1,0 +1,18 @@
+{
+  "nodes": [
+    {"id": "top", "duration": 1.0, "peak_mem": 1000000000},
+    {"id": "a", "duration": 5.0, "peak_mem": 2000000000},
+    {"id": "b", "duration": 5.0, "peak_mem": 2000000000},
+    {"id": "leaf", "duration": 2.0, "peak_mem": 1000000000}
+  ],
+  "edges": [
+    {"from": "top", "to": "a"},
+    {"from": "top", "to": "b"},
+    {"from": "a", "to": "leaf"},
+    {"from": "b", "to": "leaf"}
+  ],
+  "workers": [
+    {"id": "w0", "capacity": {"mem": 8000000000}},
+    {"id": "w1", "capacity": {"mem": 8000000000}}
+  ]
+}

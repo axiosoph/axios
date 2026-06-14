@@ -1,0 +1,22 @@
+[workspace]
+members  = ["."]
+resolver = "2"
+
+[package]
+edition = "2024"
+name    = "eos-sim"
+version = "0.1.0"
+
+[[bin]]
+name = "eos-sim"
+path = "src/main.rs"
+
+[lib]
+name = "eos_sim"
+path = "src/lib.rs"
+
+[dependencies]
+clap       = { version = "4", features = ["derive"] }
+serde      = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror  = "2"
