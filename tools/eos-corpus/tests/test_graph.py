@@ -180,11 +180,12 @@ class TestCoverageMatrix:
         assert len(ALL_COVERAGE_CELLS) == 11  # 9 size×CPR + 2 convergence
 
     def test_size_buckets(self):
+        # Thresholds calibrated for nixpkgs full recursive closures (see graph.py).
         assert size_bucket(0) == "small"
-        assert size_bucket(49) == "small"
-        assert size_bucket(50) == "medium"
-        assert size_bucket(500) == "medium"
-        assert size_bucket(501) == "large"
+        assert size_bucket(1_099) == "small"
+        assert size_bucket(1_100) == "medium"
+        assert size_bucket(2_999) == "medium"
+        assert size_bucket(3_000) == "large"
 
     def test_cpr_buckets(self):
         assert cpr_bucket(0.0) == "low"
@@ -199,15 +200,16 @@ class TestCoverageMatrix:
         assert "low_convergence" in cells  # max_fanin=2 < 3
 
     def test_assign_cells_large_low_cpr_high_conv(self):
-        cells = assign_coverage_cells(n=1000, cpr=0.3, max_fanin=8)
+        # n=4000 is "large" under nixpkgs-calibrated thresholds (≥3000)
+        cells = assign_coverage_cells(n=4000, cpr=0.3, max_fanin=8)
         assert "large_low_cpr" in cells
         assert "high_convergence" in cells
         assert "low_convergence" not in cells
 
     def test_assign_cells_can_fill_multiple(self):
-        # A single large trace can fill both large_xxx and a convergence cell
-        cells = assign_coverage_cells(n=600, cpr=1.0, max_fanin=5)
-        assert "large_mid_cpr" in cells
+        # n=1500 is "medium" under nixpkgs-calibrated thresholds (1100–3000)
+        cells = assign_coverage_cells(n=1500, cpr=1.0, max_fanin=5)
+        assert "medium_mid_cpr" in cells
         assert "high_convergence" in cells
 
 

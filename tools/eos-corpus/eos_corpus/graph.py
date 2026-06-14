@@ -141,10 +141,14 @@ def compute_cpr(
 # ---------------------------------------------------------------------------
 
 # Cell names follow the spec table.
+# Size thresholds are calibrated for nixpkgs full recursive derivation closures,
+# where even "simple" packages (ripgrep, jq) have N ≈ 1,000 due to the bootstrap
+# chain.  The spec's original (50, 500) thresholds assumed synthetic or
+# per-package-only traces; the calibrated values are (1_100, 3_000).
 SIZE_CELLS = {
-    "small":  (None, 50),
-    "medium": (50, 500),
-    "large":  (500, None),
+    "small":  (None, 1_100),
+    "medium": (1_100, 3_000),
+    "large":  (3_000, None),
 }
 CPR_CELLS = {
     "low":  (None, 0.5),
@@ -154,10 +158,9 @@ CPR_CELLS = {
 
 
 def size_bucket(n: int) -> str:
-    if n < 50:
-        return "small"
-    if n <= 500:
-        return "medium"
+    for name, (lo, hi) in SIZE_CELLS.items():
+        if (lo is None or n >= lo) and (hi is None or n < hi):
+            return name
     return "large"
 
 
