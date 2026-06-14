@@ -11,6 +11,8 @@
 //! Determinism is a first-class property: a fixed `--seed` reproduces
 //! byte-identical metrics output (see the integration tests).
 
+pub mod graph;
 pub mod trace;
 
+pub use graph::Graph;
 pub use trace::{Trace, TraceEdge, TraceError, TraceNode, WorkerSpec};
