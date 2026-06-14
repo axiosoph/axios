@@ -331,6 +331,103 @@ mod tests {
     }
 
     #[test]
+    fn h2_combined_score_promotes_when_no_single_h1_criterion_fires() {
+        // A node where no individual H1 criterion reaches threshold, but the
+        // combined weighted sum does: each signal contributes partially.
+        // Chain: top(d=1) -> mid(d=3) -> leaf(d=9).
+        // For `mid`: cp(mid) = 3+9 = 12; fan_in(mid) = 1 so convergence = 0; d = 3.
+        // With w_critical=1, w_redundancy=1, w_cost=1:
+        //   score = 12 + 0 + 3 = 15.
+        // theta_combined=14 (fired), theta_critical=20 (not fired alone), theta_cost=10 (not fired alone).
+        // Confidence gating off (theta_scale=0).
+        let json = r#"{
+            "nodes": [
+                {"id": "top",  "duration": 1.0},
+                {"id": "mid",  "duration": 3.0},
+                {"id": "leaf", "duration": 9.0}
+            ],
+            "edges": [
+                {"from": "top", "to": "mid"},
+                {"from": "mid", "to": "leaf"}
+            ],
+            "workers": [{"id": "w0"}]
+        }"#;
+        let g = graph(json);
+        let cfg = HeuristicConfig {
+            variant: Variant::H2,
+            theta_scale: 0.0,
+            theta_critical: 20.0,   // cp(mid)=12 < 20 → H1 criterion alone wouldn't fire
+            theta_cost: 10.0,       // d(mid)=3 < 10 → troublesome alone wouldn't fire
+            theta_redundancy: 1e9,  // inert
+            theta_combined: 14.0,   // score=15 > 14 → combined fires
+            w_critical: 1.0,
+            w_redundancy: 1.0,
+            w_cost: 1.0,
+            ..HeuristicConfig::default()
+        };
+        let entries = Coarsening::build(&g, &cfg).entries();
+        assert!(
+            entries.contains(&g.index_of("mid").unwrap()),
+            "H2 must promote `mid` when combined score exceeds theta_combined"
+        );
+        // Verify H1 alone would NOT have promoted it (sanity cross-check).
+        let h1_cfg = HeuristicConfig { variant: Variant::H1, ..cfg.clone() };
+        assert!(
+            !Coarsening::build(&g, &h1_cfg).entries().contains(&g.index_of("mid").unwrap()),
+            "H1 must not promote `mid` when no individual criterion fires"
+        );
+    }
+
+    #[test]
+    fn h3_promotes_on_critical_path_and_cost_but_not_on_convergence_alone() {
+        // H3 = critical-path + troublesome-node only; no fan-in/convergence term.
+        // Two roots (p1, p2) share an expensive dependency `shared` (fan_in=2).
+        // convergence = (2-1)*d(shared) = 10 → would fire H1's cost-gated convergence.
+        // cp(shared) = 10, d(shared) = 10, theta_critical = 20, theta_cost = 15.
+        // H3 should NOT promote `shared` (neither cp nor d criterion fires alone).
+        // A separate lone node `heavy` with d=20 DOES fire the troublesome-node criterion.
+        let json = r#"{
+            "nodes": [
+                {"id": "p1",     "duration": 1.0},
+                {"id": "p2",     "duration": 1.0},
+                {"id": "shared", "duration": 10.0},
+                {"id": "heavy",  "duration": 20.0}
+            ],
+            "edges": [
+                {"from": "p1", "to": "shared"},
+                {"from": "p2", "to": "shared"}
+            ],
+            "workers": [{"id": "w0"}]
+        }"#;
+        let g = graph(json);
+        let cfg = HeuristicConfig {
+            variant: Variant::H3,
+            theta_scale: 0.0,
+            theta_critical: 20.0, // cp(shared)=10 < 20 → no fire
+            theta_cost: 15.0,     // d(shared)=10 < 15 → no fire; d(heavy)=20 > 15 → fires
+            theta_redundancy: 5.0, // inert for H3 (no convergence term)
+            ..HeuristicConfig::default()
+        };
+        let entries = Coarsening::build(&g, &cfg).entries();
+        // `shared` must NOT be promoted by H3 (high fan-in alone does not trigger H3).
+        assert!(
+            !entries.contains(&g.index_of("shared").unwrap()),
+            "H3 must not promote a high-fan-in node when neither cp nor cost criterion fires"
+        );
+        // `heavy` MUST be promoted (troublesome-node criterion: d=20 > theta_cost=15).
+        assert!(
+            entries.contains(&g.index_of("heavy").unwrap()),
+            "H3 must promote `heavy` via the troublesome-node criterion"
+        );
+        // Contrast: H1 WOULD promote `shared` via convergence (fan_in=2, d=10, (2-1)*10=10 > 5).
+        let h1_cfg = HeuristicConfig { variant: Variant::H1, ..cfg.clone() };
+        assert!(
+            Coarsening::build(&g, &h1_cfg).entries().contains(&g.index_of("shared").unwrap()),
+            "H1 must promote `shared` via cost-gated convergence (contrast with H3)"
+        );
+    }
+
+    #[test]
     fn atom_seeding_seeds_nontrivial_and_absorbs_trivial() {
         // `big` atom (subgraph 1+5=6) seeded; `small` atom (subgraph 1) absorbed.
         let json = r#"{
