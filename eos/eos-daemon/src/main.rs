@@ -11,6 +11,7 @@
 mod config;
 mod scheduler;
 mod server;
+mod services;
 
 use std::sync::Arc;
 
@@ -55,22 +56,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     info!("Path info service: {}", config.path_info_service_addr);
 
     // 3. Initialize Snix services
-    let urls = snix_store::utils::ServiceUrls::parse_from([
-        "eosd",
-        "--blob-service-addr",
-        &config.blob_service_addr,
-        "--directory-service-addr",
-        &config.directory_service_addr,
-        "--path-info-service-addr",
-        &config.path_info_service_addr,
-    ]);
-
     let (blob_service, directory_service, path_info_service, nar_calculation_service) =
-        snix_store::utils::construct_services(urls)
-            .await
-            .map_err(|e| {
-                std::io::Error::other(format!("Failed to initialize Snix services: {}", e))
-            })?;
+        services::construct_store_services(&config).await?;
 
     let sandbox_config = SandboxConfig {
         remote_builder: None,
@@ -217,22 +204,8 @@ async fn run_eval_worker(
         .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { Box::new(e) })?;
 
     // 2. Initialize Snix services
-    let urls = snix_store::utils::ServiceUrls::parse_from([
-        "eosd",
-        "--blob-service-addr",
-        &config.blob_service_addr,
-        "--directory-service-addr",
-        &config.directory_service_addr,
-        "--path-info-service-addr",
-        &config.path_info_service_addr,
-    ]);
-
     let (blob_service, directory_service, path_info_service, nar_calculation_service) =
-        snix_store::utils::construct_services(urls)
-            .await
-            .map_err(|e| {
-                std::io::Error::other(format!("Failed to initialize Snix services: {}", e))
-            })?;
+        services::construct_store_services(&config).await?;
 
     // Create a dummy build service for the evaluator since builds are decoupled.
     let build_service = Arc::new(snix_build::buildservice::DummyBuildService::default());
