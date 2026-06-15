@@ -187,6 +187,34 @@ def gamma_starvation_table(results: list[dict]) -> list[dict]:
     return rows
 
 
+def _dominant_fraction_at_scale(
+    results: list[dict], winner: str, loser: str, metric: str,
+    other_scale: float, compiler_scale: float,
+) -> float:
+    """Like dominant_fraction but filters on explicit scale values."""
+    filtered = [
+        r for r in results
+        if r["variant"] in (winner, loser)
+        and r["seeding"] == "from-scratch"
+        and r["delta"] == 0.0
+        and r["gamma"] == 0.0
+        and r["lambda"] == 1.0
+        and abs(r["other_scale"] - other_scale) < 1e-9
+        and abs(r["compiler_scale"] - compiler_scale) < 1e-9
+    ]
+    by_trace: dict[str, dict[str, float]] = defaultdict(dict)
+    for r in filtered:
+        by_trace[r["trace"]][r["variant"]] = r["metrics"][metric]
+    wins = 0
+    total = 0
+    for scores in by_trace.values():
+        if winner in scores and loser in scores:
+            total += 1
+            if scores[winner] < scores[loser]:
+                wins += 1
+    return wins / total if total > 0 else 0.0
+
+
 def ablation_rank_stability(results: list[dict]) -> dict:
     """For each (other_scale, compiler_scale) pair, re-rank H1 vs H4.
 
@@ -197,24 +225,20 @@ def ablation_rank_stability(results: list[dict]) -> dict:
         if (r["other_scale"] != 1.0 or r["compiler_scale"] != 1.0)
         and r["variant"] in ("H1", "H4")
     ]
-    by_config: dict[tuple, list[dict]] = defaultdict(list)
+    by_config: dict[tuple, float] = {}
+    seen: set[tuple] = set()
     for r in ablation_results:
         key = (r["other_scale"], r["compiler_scale"])
-        by_config[key].append(r)
-
-    output: dict[str, float] = {}
-    for (os_, cs), rows in sorted(by_config.items()):
-        frac = dominant_fraction(
-            rows + [  # splice in baseline filter refs
-                {**r, "other_scale": os_, "compiler_scale": cs}
-                for r in rows
-            ],
-            winner="H1", loser="H4", metric="makespan",
-            seeding="from-scratch", delta=0.0, gamma=0.0,
+        if key in seen:
+            continue
+        seen.add(key)
+        frac = _dominant_fraction_at_scale(
+            ablation_results, "H1", "H4", "makespan",
+            other_scale=key[0], compiler_scale=key[1],
         )
-        label = f"other×{os_}_compiler×{cs}"
-        output[label] = frac
-    return output
+        label = f"other×{key[0]}_compiler×{key[1]}"
+        by_config[label] = frac
+    return dict(sorted(by_config.items()))
 
 
 def lambda_pareto_table(results: list[dict], variant: str) -> list[dict]:
