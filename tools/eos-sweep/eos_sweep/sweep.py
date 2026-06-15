@@ -229,9 +229,9 @@ def run_cell(cell: SweepCell, log_fh=None) -> dict | None:
 
 CORPUS_DIR = Path(__file__).parent.parent.parent / "eos-sim-traces"
 
-# All 44 corpus traces grouped by size class
+# All 48 corpus traces grouped by size class (node count)
 _SMALL_PKGS  = ["jq", "python3"]
-_MEDIUM_PKGS = ["curl", "ripgrep", "bat", "fd", "openssh", "rustc", "git"]
+_MEDIUM_PKGS = ["curl", "ripgrep", "bat", "fd", "openssh", "rustc", "git", "linux"]
 _LARGE_PKGS  = ["ffmpeg", "libreoffice"]
 _ALL_PKGS    = _SMALL_PKGS + _MEDIUM_PKGS + _LARGE_PKGS
 
