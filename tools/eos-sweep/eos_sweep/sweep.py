@@ -233,11 +233,12 @@ def run_cell(cell: SweepCell, log_fh=None) -> dict | None:
 
 CORPUS_DIR = Path(__file__).parent.parent.parent / "eos-sim-traces"
 
-# All 48 corpus traces grouped by size class (node count)
+# Corpus traces grouped by size class (node count)
 _SMALL_PKGS  = ["jq", "python3"]
 _MEDIUM_PKGS = ["curl", "ripgrep", "bat", "fd", "openssh", "rustc", "git", "linux"]
 _LARGE_PKGS  = ["ffmpeg", "libreoffice"]
-_ALL_PKGS    = _SMALL_PKGS + _MEDIUM_PKGS + _LARGE_PKGS
+_XLARGE_PKGS = ["chromium"]      # extreme-scale validation only
+_ALL_PKGS    = _SMALL_PKGS + _MEDIUM_PKGS + _LARGE_PKGS + _XLARGE_PKGS
 
 _CACHE_VARIANTS = ["json", "cold.json", "warm.json", "partial.json"]
 
@@ -261,7 +262,7 @@ def generate_core_matrix() -> list[SweepCell]:
     for pkg in _SMALL_PKGS + _MEDIUM_PKGS:
         for cv in _CACHE_VARIANTS:
             tp = _trace(pkg, cv)
-            for variant in ["H1", "H2", "H3", "H4", "H5", "H6"]:
+            for variant in ["H0", "H1", "H2", "H3", "H4", "H5", "H6"]:
                 for seeding in ["from-scratch", "atom-seeded"]:
                     for delta in [0.0, 30.0]:
                         for gamma in [0.0, 0.5]:
@@ -273,19 +274,33 @@ def generate_core_matrix() -> list[SweepCell]:
     # Large packages: limited matrix to control runtime
     for pkg in _LARGE_PKGS:
         tp = _trace(pkg)
-        for variant in ["H1", "H4", "H5", "H6"]:
+        for variant in ["H0", "H1", "H4", "H5", "H6"]:
             for delta in [0.0, 30.0]:
                 for gamma in [0.0, 0.5]:
                     cells.append(SweepCell(
                         trace_path=tp, variant=variant,
                         seeding="from-scratch", delta=delta, gamma=gamma,
                     ))
-        # atom-seeded for large too (H1, H4, H5, H6)
-        for variant in ["H1", "H4", "H5", "H6"]:
+        # atom-seeded for large too
+        for variant in ["H0", "H1", "H4", "H5", "H6"]:
             cells.append(SweepCell(
                 trace_path=tp, variant=variant,
                 seeding="atom-seeded", delta=0.0, gamma=0.0,
             ))
+
+    # Extra-large packages (chromium): base + cold × all variants, from-scratch only.
+    # Exhaustive across H0–H6 to demonstrate scale behaviour; seeding and δ/γ
+    # axes are fixed to control total cell count.
+    for pkg in _XLARGE_PKGS:
+        for cv in ["json", "cold.json"]:
+            tp = _trace(pkg, cv)
+            if not tp.exists():
+                continue
+            for variant in ["H0", "H1", "H2", "H3", "H4", "H5", "H6"]:
+                cells.append(SweepCell(
+                    trace_path=tp, variant=variant,
+                    seeding="from-scratch", delta=0.0, gamma=0.0,
+                ))
 
     return cells
 
@@ -298,6 +313,7 @@ def generate_threshold_matrix() -> list[SweepCell]:
     cells: list[SweepCell] = []
     for pkg in _SMALL_PKGS + _MEDIUM_PKGS:
         tp = _trace(pkg)
+        # H0 needs no threshold sweep (fires() always returns false)
         for variant in ["H1", "H4", "H6"]:
             for tc in [15.0, 30.0, 60.0]:
                 for tr in [10.0, 20.0, 40.0]:
@@ -318,12 +334,12 @@ def generate_threshold_matrix() -> list[SweepCell]:
 
 
 def generate_lambda_matrix() -> list[SweepCell]:
-    """λ Pareto sweep: H1 and H4 × non-large base traces × λ values."""
+    """λ Pareto sweep: H0, H1, H4 × non-large base traces × λ values."""
     cells: list[SweepCell] = []
     lambdas = [0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0]
     for pkg in _SMALL_PKGS + _MEDIUM_PKGS:
         tp = _trace(pkg)
-        for variant in ["H1", "H4"]:
+        for variant in ["H0", "H1", "H4"]:
             for lam in lambdas:
                 cells.append(SweepCell(
                     trace_path=tp, variant=variant,
@@ -345,7 +361,7 @@ def generate_ablation_matrix() -> list[SweepCell]:
     compiler_scales = [0.5, 2.0, 5.0]
     for pkg in _SMALL_PKGS + _MEDIUM_PKGS:
         tp = _trace(pkg)
-        for variant in ["H1", "H4"]:
+        for variant in ["H0", "H1", "H4"]:
             for os_ in other_scales:
                 cells.append(SweepCell(
                     trace_path=tp, variant=variant,
