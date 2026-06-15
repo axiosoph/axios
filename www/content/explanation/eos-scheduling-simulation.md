@@ -7,7 +7,7 @@ audience = "Developers evaluating Eos who are comfortable with concepts like dep
 
 Before the Eos scheduler dispatches a single task, it makes a decision that shapes everything that follows: which nodes in the build graph to expose as **entry points** — independently-dispatchable units of work. Too few and the scheduler idles workers while a single thread of tasks unwinds. Too many and you pay coordination overhead on work that would naturally chain anyway.
 
-Getting this right is not obvious. A build graph for a real package contains thousands of nodes, most of them shared with every other package you're building at the same time. The entry point selection heuristic is the mechanism that decides, for each node, whether it earns its own scheduling slot — and the choice has measurable consequences for build time. This page explains what a 3,700-cell simulation study over 13 real packages found about how to make that choice well.
+Getting this right is not obvious. A build graph for a real package contains thousands of nodes spanning a deep toolchain bootstrap, and the heuristic must decide which of them merit their own scheduling slot without knowing in advance which tasks will be slow, which workers will free up, or what else will be building concurrently. The choice has measurable consequences for build time. This page explains what a 3,700-cell simulation study over 13 real packages found about how to make that choice well.
 
 ## What the simulation covers
 
@@ -20,7 +20,9 @@ Across those traces, we swept:
 - **Worker pool sizes from 4 to 64** homogeneous workers, to check whether rankings change with parallelism
 - **The actual scheduler surface** — a single unified DAG formed by merging all 13 package closures with shared nodes deduplicated, exactly as the real scheduler would encounter them when building multiple packages at once
 
-The unified DAG test matters. The 13 packages share a deep common bootstrap chain — 974 nodes appear in every single closure, and the merged graph of all 13 packages contains only 4,323 distinct nodes despite the per-package traces totalling 26,419 nodes before deduplication. Testing packages in isolation would miss how fan-in inflates on shared nodes in a real multi-package build.
+The unified DAG test matters, and its design requires a word of clarification. Because all 13 packages come from the same nixpkgs anchor commit, their derivation closures share store-path hashes for common bootstrap infrastructure — 974 nodes appear identically in every closure, so the merged graph of all 13 packages contains only 4,323 distinct nodes despite per-package traces totalling 26,419 nodes before deduplication. This is an accurate model of a specific and important scenario: the first build of these packages from a fresh nixpkgs checkout. Packages from different nixpkgs revisions would not share store paths even if structurally similar, so the merged graph in that case would be larger and the shared-node fan-in would not inflate in the same way.
+
+In practice, the bootstrap chain is typically cached after its first build and reused indefinitely. Our warm cache state — where 80% of nodes are already in the store — models exactly this more common scenario, and the heuristic rankings are consistent across all four cache states (cold through warm). The per-package results (which are agnostic to cross-package sharing) also show the same directional ranking. Both lines of evidence point to the same conclusion, which is why we are confident it holds under realistic deployment conditions and not only in the same-checkout first-build scenario.
 
 ## What no entry point selection costs you
 
@@ -71,6 +73,8 @@ H2 with equal weights and θ_combined = 30 is the best-measured entry point sele
 
 ## The honest scope
 
-The corpus is 13 packages from a single nixpkgs anchor commit, all sharing the same bootstrap chain topology. The quantitative gaps (0.28%, 0.43%) are specific to this graph family and its estimated build durations; the directional rankings are structural and expected to hold across nixpkgs versions, since the shared-bootstrap topology is a permanent property of how nixpkgs packages are built. The study has not validated behavior on fundamentally different graph structures — sparse graphs with few shared nodes, or build systems without a deep common toolchain — and a different study would be needed to make claims there.
+The corpus is 13 packages from a single nixpkgs anchor commit. The unified DAG result — where shared nodes are deduplicated and fan-in inflates — applies specifically to building those packages together from the same checkout; it is not a claim about multi-package builds in general. The per-package results do not depend on cross-package sharing and apply more broadly to any single-package build against a nixpkgs-like bootstrap graph.
+
+The quantitative gaps (0.28%, 0.43%) are specific to this graph family and its estimated build durations. The directional rankings are structural and expected to hold across nixpkgs versions, since the deep bootstrap topology is a stable property of how nixpkgs packages are built — but have not been validated on fundamentally different graph structures (sparse graphs with few shared nodes, or build systems without a deep common toolchain), and a separate study would be needed to make claims there.
 
 The simulation binary, corpus traces, sweep harness, and raw result files are all in the repository under `tools/eos-sim`, `tools/eos-sim-traces`, and `tools/eos-sweep` respectively.
