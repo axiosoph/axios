@@ -15,6 +15,10 @@ Eos is the L2 layer of the Axios stack. Requests arrive from **Ion** (L3), the C
 
 Eos's specific job is everything between "here is a dependency graph" and "here are the build outputs": cache checking, deduplication across requests, parallelism decisions, worker assignment, failure recovery, and re-planning as new requests arrive or builds complete.
 
+One property of this stack deserves early mention because it's load-bearing for the entire scheduling model: Snix's blob store performs intra-file chunk-level deduplication. When a package produces similar outputs across versions — as Nix packages almost always do, since output hashes change completely on any input change while the actual binary content changes only partially — Snix transfers only the novel chunks, not the full archive. Transfer cost is proportional to content novelty, not output size, and declines as the store fills with chunks from prior builds. Without this property, cross-worker artifact dependencies would impose transfer costs that make aggressive parallelism prohibitively expensive; with it, the scheduling model is viable. This document describes the build scheduling layer. The evaluation scheduling layer — which handles the Nix evaluation step that produces derivation DAGs from atom expressions — is still being specified and is not yet fully implemented.
+
+> **Status:** Eos is a work in progress. The build scheduling design described here is the formal basis; the evaluation scheduling layer and full implementation are ongoing.
+
 ## One graph for everything
 
 When a request arrives, Eos does not isolate it in its own queue. It merges the incoming dependency graph into a single **unified global graph** shared across all currently active requests. Every node in that graph is keyed by a content-addressed plan hash — the same plan, requested by two different users simultaneously, maps to the same node and is scheduled exactly once. This is structural deduplication, not opportunistic: it is impossible for two requests in the same global graph to produce separate builds of the same content-addressed plan.
@@ -47,7 +51,7 @@ An entry point that looks cheap in isolation but sits above ten critical downstr
 
 Two placement signals enter the decision through the predicted duration estimate, not as a separate scoring layer:
 
-**Cache affinity.** A worker that already holds an entry point's input artifacts can build it faster — no fetch required. Eos uses Local Rendezvous Hashing to compute affinity scores: a content-routing scheme that achieves near-optimal load balance while exploiting CPU cache locality in the hash computation itself. An affinity advantage shrinks the predicted duration for that worker, and PEFT naturally favors it.
+**Cache affinity.** A worker that already holds an entry point's input artifacts can build it faster — no fetch required. Eos uses Local Rendezvous Hashing to compute affinity scores: a content-routing scheme that achieves near-optimal load balance while keeping per-worker score comparisons efficient. An affinity advantage shrinks the predicted duration for that worker, and PEFT naturally favors it.
 
 **Resource fit.** A worker whose free CPU and memory closely match the entry point's predicted resource demand runs it faster than a poorly-fitted worker. Resource fit inflates or reduces the predicted duration accordingly. This is what steers heavy builds toward capable workers and prevents memory overcommit — a predictive placement signal rather than a runtime enforcement mechanism.
 
@@ -57,7 +61,9 @@ When prediction confidence is high, the scheduler may hold a ready entry point b
 
 Duration and resource estimates come from **historical build profiles** maintained for every plan the scheduler has seen. After each completed build, the profile for that plan is updated via exponential moving average. Subsequent requests for the same plan arrive with a calibrated estimate rather than a conservative default.
 
-What makes this work reliably is a property specific to Nix: package identity is cryptographically stable. The content-addressed atom-id is the same for every build of the same atom at the same version. There's no need to train a model — the atom identifier is the prediction oracle. A scheduler that has built `openssl-3.0.12` a hundred times has an accurate estimate for `openssl-3.0.13` without any retraining, because the two share the same structural history.
+What makes this work reliably is a property of **Atom** — Axios's own identity protocol, one of the three projects in this monorepo, not a property inherited from the existing Nix ecosystem. In the standard Nix package model, packages lack meaningful encapsulation: their identity is tied to a full derivation hash that changes completely on any content change, including minor version bumps, and consuming a remote package requires transferring the entire repository closure. Atom introduces a stable identifier — the atom-id — derived from the atom's label and structural role rather than its content hash.
+
+The key advantage is cross-version stability. When openssl bumps from 3.0.12 to 3.0.13, the atom-id doesn't change — the scheduler's historical profile carries forward directly. A system that accumulates profiles across every version of every atom it has ever built becomes progressively more accurate in a way that derivation-hash-keyed systems never can, because derivation hashes treat every version bump as an entirely new package. The relevant build characteristics — duration, memory footprint, parallelism headroom — are typically stable across minor versions, and the atom-id is the structural guarantee that lets the scheduler exploit that stability. There's no need to train a model; the atom identifier is the prediction oracle.
 
 For packages the scheduler has never seen, developers can supply scheduling hints in atom metadata: expected build duration, memory requirements, whether the task needs specialized hardware. After the first build, historical data takes over and the metadata becomes a fallback.
 
@@ -78,6 +84,14 @@ The delay credit also makes the bounded dispatch window work without risking sta
 This partition is what makes failure recovery local: when a worker fails, only that worker's dispatched entry points need to be reverted to ready and re-dispatched. Everything else continues undisturbed. Transient failures (worker crash, network partition) trigger automatic re-dispatch with no manual intervention. Deterministic failures propagate to downstream dependents and ultimately to the requesting client.
 
 New requests arriving mid-flight are handled identically to initial requests: merge into the unified graph, run the cache filter, re-coarsen the mutable portion, re-run the dispatch algorithm. Frozen work is untouched. The scheduler never needs to know whether a request is "new" or "concurrent" — the unified graph structure handles the rest.
+
+## The evaluation gap
+
+The build scheduling layer described above has a predecessor step that is not yet fully specified: evaluation scheduling. Before builds can be dispatched, Eos must evaluate the Nix expressions that produce the derivation DAG — the actual build graph the scheduler operates on. Evaluation is a separate CPU-bound step that must run before the build scheduler has a graph to work with.
+
+The atom lock file — a per-project manifest of resolved atom versions — is a coarser representation of the same dependency structure the derivation DAG captures. When multiple requests arrive concurrently, their lock files will typically share substantial overlap: the same atoms at the same versions, producing identical derivation subgraphs. An evaluation scheduler that exploits this — grouping concurrent requests by lock-file similarity to evaluate overlapping atoms once and feed a richer unified derivation graph to the build scheduler in a single pass — could meaningfully reduce redundant evaluation work.
+
+The shape of this optimization is clear; the exact scheduling semantics are not yet specified. Evaluation is expected to be substantially simpler than build scheduling: it is structurally shallow, CPU-bound rather than I/O-bound, and produces the build graph rather than executing it. The build scheduler, the harder of the two problems, was specified first.
 
 ## The two-sentence version
 
