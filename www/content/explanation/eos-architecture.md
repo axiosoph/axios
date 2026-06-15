@@ -12,7 +12,7 @@ This page explains how each piece of that works, and why it's designed the way i
 
 ## The stack Eos sits in
 
-Eos is the L2 layer of the Axios stack. Requests arrive from **Ion** (L3), the CLI that resolves your package manifest into a concrete dependency graph and hands it off. Eos schedules and coordinates the actual builds, delegating sandboxed execution to **Snix** workers — Nix-compatible build environments that write their outputs to a content-addressed artifact store. The **Atom** protocol (L1) provides the identity and signing layer underneath everything.
+Eos is the L2 layer of the Axios stack. Requests arrive from **Ion** (L3), the atom-centric frontend that resolves your atom declarations into a lock file and dispatches atoms to Eos for evaluation and building. Eos schedules and coordinates the actual builds, delegating sandboxed execution to **Snix** workers — Nix-compatible build environments that write their outputs to a content-addressed artifact store. The **Atom** protocol (L1) provides the identity and signing layer underneath everything.
 
 Eos's specific job is everything between "here is a dependency graph" and "here are the build outputs": cache checking, deduplication across requests, parallelism decisions, worker assignment, failure recovery, and re-planning as new requests arrive or builds complete.
 
