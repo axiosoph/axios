@@ -420,6 +420,70 @@ def _trim_closure(nodes, target_min: int = 500):
 
 
 # ---------------------------------------------------------------------------
+# merge-traces
+# ---------------------------------------------------------------------------
+
+@main.command("merge-traces")
+@click.option("--corpus", required=True, type=click.Path(exists=True), metavar="DIR",
+              help="Directory containing per-package base trace JSONs.")
+@click.option("--packages", required=True, multiple=True, metavar="PKG",
+              help="Package names to merge (matches <PKG>.json filenames).")
+@click.option("--out", required=True, type=click.Path(), metavar="FILE",
+              help="Output path for the merged base trace.")
+@click.option("--cache-variants/--no-cache-variants", default=True, show_default=True,
+              help="Also emit cold/partial/warm cache-state variants.")
+def merge_traces_cmd(corpus: str, packages: tuple[str, ...], out: str,
+                     cache_variants: bool) -> None:
+    """Merge per-package traces into a unified multi-package DAG.
+
+    Deduplicates shared nodes by store-path ID (globally unique for a
+    given nixpkgs anchor commit).  Every requested package's root node
+    retains is_atom=True in the merged graph so the scheduler sees each
+    package as a distinct top-level deliverable.
+    """
+    from .merge import merge_traces
+    from .trace import emit_cache_variants, write_trace
+
+    corpus_dir = Path(corpus)
+    out_path = Path(out)
+
+    traces = []
+    for pkg in packages:
+        safe = pkg.replace(".", "_").replace("/", "_")
+        p = corpus_dir / f"{safe}.json"
+        if not p.exists():
+            click.echo(f"ERROR: {p} not found", err=True)
+            sys.exit(1)
+        with open(p) as fh:
+            t = json.load(fh)
+        traces.append(t)
+        click.echo(f"  loaded {p.name}: {len(t['nodes'])} nodes", err=True)
+
+    merged = merge_traces(traces)
+    n_nodes = len(merged["nodes"])
+    n_edges = len(merged["edges"])
+    n_atoms = sum(1 for nd in merged["nodes"] if nd.get("is_atom"))
+    click.echo(
+        f"Merged: {n_nodes} nodes, {n_edges} edges, {n_atoms} atoms "
+        f"(from {len(packages)} packages)",
+        err=True,
+    )
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    write_trace(str(out_path), merged)
+    click.echo(f"Wrote {out_path}", err=True)
+
+    if cache_variants:
+        variants = emit_cache_variants(merged, n=n_nodes)
+        stem = out_path.stem
+        parent = out_path.parent
+        for vname, vtrace in variants.items():
+            vpath = parent / f"{stem}.{vname}.json"
+            write_trace(str(vpath), vtrace)
+            click.echo(f"Wrote {vpath}", err=True)
+
+
+# ---------------------------------------------------------------------------
 # validate
 # ---------------------------------------------------------------------------
 
