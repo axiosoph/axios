@@ -15,7 +15,7 @@ use eos_core::request::{
 use eos_core::{AtomIndex, Digest};
 use eos_proto::eos_capnp;
 
-use crate::scheduler::{JobState, Scheduler};
+use crate::scheduler::{InjectedSource, JobState, Scheduler};
 
 /// Helper to parse a Cap'n Proto `AtomId` reader into an `atom_id::AtomId`.
 fn resolve_atom_id(capnp_id: eos_capnp::atom_id::Reader) -> Result<AtomId, capnp::Error> {
@@ -52,15 +52,18 @@ fn populate_atom_meta(
 }
 
 /// Implementation of the `EosDaemon` Cap'n Proto interface.
-pub struct EosDaemonImpl {
-    scheduler: Arc<Scheduler>,
+///
+/// Generic over the injected atom source `S`, carried through from the
+/// [`Scheduler`].
+pub struct EosDaemonImpl<S> {
+    scheduler: Arc<Scheduler<S>>,
     index: Arc<RequestIndex>,
 }
 
-impl EosDaemonImpl {
+impl<S: InjectedSource> EosDaemonImpl<S> {
     /// Creates a new `EosDaemonImpl`.
     #[must_use]
-    pub fn new(scheduler: Arc<Scheduler>, index: Arc<RequestIndex>) -> Self {
+    pub fn new(scheduler: Arc<Scheduler<S>>, index: Arc<RequestIndex>) -> Self {
         Self { scheduler, index }
     }
 }
@@ -257,7 +260,7 @@ fn deserialize_request(
     })
 }
 
-impl eos_capnp::eos_daemon::Server for EosDaemonImpl {
+impl<S: InjectedSource> eos_capnp::eos_daemon::Server for EosDaemonImpl<S> {
     fn submit_build(
         &mut self,
         params: eos_capnp::eos_daemon::SubmitBuildParams,
@@ -371,14 +374,14 @@ impl eos_capnp::eos_daemon::Server for EosDaemonImpl {
 }
 
 /// Implementation of the `BuildJob` Cap'n Proto interface.
-pub struct BuildJobImpl {
+pub struct BuildJobImpl<S> {
     job_state: JobState,
-    scheduler: Arc<Scheduler>,
+    scheduler: Arc<Scheduler<S>>,
 }
 
-impl BuildJobImpl {
+impl<S: InjectedSource> BuildJobImpl<S> {
     /// Creates a new `BuildJobImpl`.
-    pub fn new(job_state: JobState, scheduler: Arc<Scheduler>) -> Self {
+    pub fn new(job_state: JobState, scheduler: Arc<Scheduler<S>>) -> Self {
         Self {
             job_state,
             scheduler,
@@ -386,7 +389,7 @@ impl BuildJobImpl {
     }
 }
 
-impl eos_capnp::build_job::Server for BuildJobImpl {
+impl<S: InjectedSource> eos_capnp::build_job::Server for BuildJobImpl<S> {
     fn attach_progress(
         &mut self,
         params: eos_capnp::build_job::AttachProgressParams,

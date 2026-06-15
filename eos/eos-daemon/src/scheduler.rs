@@ -28,6 +28,20 @@ use tracing::{error, info};
 
 use crate::config::DaemonConfig;
 
+/// The bounds the daemon requires of an injected atom source.
+///
+/// Beyond content observation ([`atom_core::AtomContent`]) and cloneability,
+/// the source's entry type must be `Send`: build jobs are spawned onto the
+/// multi-threaded Tokio runtime, so the orchestrator future — which holds a
+/// resolved entry across `await` points — must itself be `Send`. This blanket
+/// trait bundles those bounds so callers name a single contract.
+pub trait InjectedSource: atom_core::AtomContent + atom_core::AtomSource<Entry: Send> + Clone {}
+
+impl<T> InjectedSource for T where
+    T: atom_core::AtomContent + atom_core::AtomSource<Entry: Send> + Clone
+{
+}
+
 /// State for a single scheduled or running job.
 #[derive(Clone)]
 pub struct JobState {
@@ -42,21 +56,29 @@ pub struct JobState {
 }
 
 /// The build job scheduler.
-pub struct Scheduler {
+///
+/// Generic over the injected atom source `S`. The source is bound by
+/// [`atom_core::AtomContent`] — the same content/observation contract the
+/// orchestrator and castore bridge are generic over — and is constructed once
+/// in the daemon's composition layer (`main.rs`), never per job.
+pub struct Scheduler<S> {
     config: Arc<DaemonConfig>,
     engine: Arc<SnixEngine>,
     index: Arc<eos::index::RequestIndex>,
     jobs: Arc<Mutex<HashMap<Blake3Digest, JobState>>>,
     semaphore: Arc<Semaphore>,
+    /// Injected atom source, shared by every spawned build task.
+    source: S,
 }
 
-impl Scheduler {
-    /// Creates a new `Scheduler`.
+impl<S: InjectedSource> Scheduler<S> {
+    /// Creates a new `Scheduler` over an injected atom `source`.
     #[must_use]
     pub fn new(
         config: Arc<DaemonConfig>,
         engine: Arc<SnixEngine>,
         index: Arc<eos::index::RequestIndex>,
+        source: S,
     ) -> Self {
         let max_concurrency = config.max_concurrency;
 
@@ -66,6 +88,7 @@ impl Scheduler {
             index,
             jobs: Arc::new(Mutex::new(HashMap::new())),
             semaphore: Arc::new(Semaphore::new(max_concurrency)),
+            source,
         }
     }
 
@@ -114,6 +137,7 @@ impl Scheduler {
         let sender = tx.clone();
         let job_id = JobId(plan_digest);
         let index = self.index.clone();
+        let source = self.source.clone();
 
         let join_handle = tokio::spawn(async move {
             // Send initial queued status
@@ -184,32 +208,8 @@ impl Scheduler {
                 }
             }
 
-            // Open the local workspace git repository to act as an AtomSource
-            let repo = match gix::open(&config.workspace_dir) {
-                Ok(r) => r,
-                Err(e) => {
-                    let err_msg = format!("Failed to open workspace git repository: {}", e);
-                    error!("{}", err_msg);
-                    let event = ProgressEvent {
-                        job_id,
-                        timestamp: SystemTime::now(),
-                        status: JobStatus::Failed {
-                            error: err_msg,
-                            exit_code: None,
-                        },
-                        log_line: None,
-                    };
-                    let _ = sender.send(event.clone());
-                    if let Ok(mut guard) = jobs_map.lock()
-                        && let Some(j) = guard.get_mut(&plan_digest)
-                    {
-                        j.status = event.status;
-                    }
-                    return;
-                },
-            };
-            let source = atom_git::GitSource::new(repo);
-
+            // The atom source is injected once at composition time; every job
+            // shares this clone instead of reopening the workspace repository.
             let ingest_service = eos_snix::SnixIngestService {
                 blob_service: engine.blob_service.clone(),
                 directory_service: engine.directory_service.clone(),
@@ -328,5 +328,177 @@ impl Scheduler {
         } else {
             Ok(false)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+    use std::time::Duration;
+
+    use atom_core::{AtomContent, AtomEntry, AtomSource, AtomVersion, ContentEntry, RawVersion};
+    use atom_id::{Anchor, AtomId, Label};
+    use clap::Parser;
+    use eos::index::RequestIndex;
+    use eos_core::request::{AtomFetchDescriptor, BuildRequest, ComposerSpec, FetchDescriptor};
+    use eos_snix::SnixEngine;
+    use snix_build::buildservice::DummyBuildService;
+    use snix_store::utils::{ServiceUrlsMemory, construct_services};
+    use tokio::sync::mpsc;
+
+    use super::*;
+    use crate::config::DaemonConfig;
+
+    /// Error type for the test source. Never surfaced to a user.
+    #[derive(Debug)]
+    struct TestError;
+
+    impl std::fmt::Display for TestError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str("test source error")
+        }
+    }
+
+    impl std::error::Error for TestError {}
+
+    /// Placeholder version observation. `RecordingSource::resolve` returns
+    /// `Ok(None)`, so this is never constructed — it only satisfies the
+    /// associated-type bounds.
+    struct NeverVersion;
+
+    impl AtomVersion for NeverVersion {
+        fn version(&self) -> &RawVersion {
+            unreachable!("RecordingSource never yields an entry")
+        }
+
+        fn dig(&self) -> &[u8] {
+            unreachable!("RecordingSource never yields an entry")
+        }
+
+        fn czd(&self) -> Option<&atom_core::Czd> {
+            None
+        }
+
+        fn claim_msg(&self) -> Option<&str> {
+            None
+        }
+
+        fn publish_msg(&self) -> Option<&str> {
+            None
+        }
+    }
+
+    /// Placeholder entry observation; see [`NeverVersion`].
+    struct NeverEntry;
+
+    impl AtomEntry for NeverEntry {
+        type Version = NeverVersion;
+        type VersionIter<'a> = std::iter::Empty<&'a NeverVersion>;
+
+        fn id(&self) -> &AtomId {
+            unreachable!("RecordingSource never yields an entry")
+        }
+
+        fn versions(&self) -> Self::VersionIter<'_> {
+            std::iter::empty()
+        }
+    }
+
+    /// A non-git [`AtomSource`] that records every `resolve` call. Injecting it
+    /// proves the scheduler drives the *injected* source rather than a
+    /// hardcoded git backend.
+    #[derive(Clone)]
+    struct RecordingSource {
+        resolved: mpsc::UnboundedSender<AtomId>,
+    }
+
+    impl AtomSource for RecordingSource {
+        type Entry = NeverEntry;
+        type Error = TestError;
+
+        async fn resolve(&self, id: &AtomId) -> Result<Option<NeverEntry>, TestError> {
+            let _ = self.resolved.send(id.clone());
+            Ok(None)
+        }
+
+        async fn discover(&self, _query: &str) -> Result<Vec<AtomId>, TestError> {
+            Ok(Vec::new())
+        }
+    }
+
+    impl AtomContent for RecordingSource {
+        async fn content(
+            &self,
+            _id: &AtomId,
+            _dig: &[u8],
+        ) -> Result<Option<Vec<ContentEntry>>, TestError> {
+            Ok(None)
+        }
+    }
+
+    fn test_atom_id() -> AtomId {
+        AtomId::new(
+            Anchor::new(vec![1, 2, 3, 4]),
+            Label::try_from("regression").unwrap(),
+        )
+    }
+
+    async fn memory_engine() -> Arc<SnixEngine> {
+        let (blob_service, directory_service, path_info_service, nar_calculation_service) =
+            construct_services(ServiceUrlsMemory::parse_from(std::iter::empty::<&str>()))
+                .await
+                .unwrap();
+        Arc::new(SnixEngine::new(
+            blob_service,
+            directory_service,
+            path_info_service,
+            nar_calculation_service.into(),
+            Arc::new(DummyBuildService::default()),
+            None,
+        ))
+    }
+
+    /// Regression: a submitted build reaches the orchestrator through the
+    /// injected (non-git) atom source. Mitigates F8 — the scheduler must no
+    /// longer construct its own git backend.
+    #[tokio::test]
+    async fn injected_source_reaches_orchestrator() {
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let source = RecordingSource { resolved: tx };
+
+        let config = Arc::new(DaemonConfig::parse_from(["eosd"]));
+        let engine = memory_engine().await;
+        let index = Arc::new(RequestIndex::new());
+        let scheduler = Scheduler::new(config, engine, index, source);
+
+        let id = test_atom_id();
+        let request = BuildRequest {
+            plan_digest: Blake3Digest([7u8; 32]),
+            sets: HashMap::new(),
+            deps: vec![FetchDescriptor::Atom(AtomFetchDescriptor {
+                id: id.clone(),
+                label: "regression".to_string(),
+                version: "1.0.0".to_string(),
+                set: "default".to_string(),
+                rev: None,
+                requires: Vec::new(),
+                direct: true,
+            })],
+            composer: ComposerSpec::Static,
+            eval_args: Vec::new(),
+        };
+
+        scheduler.submit(request).expect("submit should schedule the job");
+
+        // The spawned build task must drive the injected source's `resolve`.
+        let observed = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+            .await
+            .expect("injected source was not reached within timeout")
+            .expect("recording channel closed without a resolve call");
+
+        assert_eq!(
+            observed, id,
+            "orchestrator resolved through the injected source"
+        );
     }
 }

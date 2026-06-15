@@ -107,9 +107,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         eval_sandbox,
     ));
 
-    // 4. Initialize Scheduler and Index
+    // 4. Initialize Scheduler and Index.
+    //    Open the workspace repository once, here in the composition layer, and
+    //    inject it as the scheduler's atom source. A bad workspace path fails
+    //    daemon startup rather than surfacing as a per-job build failure.
+    let repo = gix::open(&config.workspace_dir).map_err(|e| {
+        std::io::Error::other(format!(
+            "Failed to open workspace git repository at {:?}: {}",
+            config.workspace_dir, e
+        ))
+    })?;
+    let source = atom_git::GitSource::new(repo);
+
     let index = Arc::new(RequestIndex::new());
-    let scheduler = Arc::new(Scheduler::new(config.clone(), engine, index.clone()));
+    let scheduler = Arc::new(Scheduler::new(config.clone(), engine, index.clone(), source));
 
     // Ensure parent directory of socket exists
     if let Some(parent) = socket_path.parent() {
