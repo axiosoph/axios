@@ -10442,8 +10442,8 @@
     },
     {
       "id": "x9yvb2gyzp0s8psjahjs55grqifs6lhk-openssh-10.3p1.drv",
-      "duration": 75.0,
-      "measured": false,
+      "duration": 73.0,
+      "measured": true,
       "is_atom": true,
       "peak_mem": null,
       "plan_name": "openssh:openssh-10.3p1"

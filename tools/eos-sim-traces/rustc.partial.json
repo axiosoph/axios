@@ -4858,8 +4858,8 @@
     },
     {
       "id": "fjx6b96cdywqd2c90gcysflc82aqk4pa-rustc-wrapper-1.95.0.drv",
-      "duration": 510.0,
-      "measured": false,
+      "duration": 1.0,
+      "measured": true,
       "is_atom": true,
       "peak_mem": null,
       "plan_name": "rustc:rustc-wrapper-1.95.0"

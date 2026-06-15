@@ -6442,8 +6442,8 @@
     },
     {
       "id": "hg2n96ng32fxylxqci9jb8rwgd4hpc5g-git-2.54.0.drv",
-      "duration": 75.0,
-      "measured": false,
+      "duration": 677.0,
+      "measured": true,
       "is_atom": true,
       "peak_mem": null,
       "plan_name": "git:git-2.54.0"

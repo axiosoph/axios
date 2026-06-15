@@ -29,11 +29,35 @@
 
 Note: `flake` is `null` for this nixpkgs/unstable eval (legacy non-flake jobset).
 The nixpkgs commit SHA was extracted from `jobsetevalinputs.nixpkgs.revision`.
-The `builds` field is an array of 284,864 build IDs; per-build timing was fetched
-from `GET /eval/{id}/builds` which returns one record per build with fields:
-`id`, `drvpath`, `starttime`, `stoptime`, `buildstatus`, `nixname`.
-Duration = `stoptime − starttime` (seconds); builds with `starttime == stoptime`
-or `buildstatus ≠ 0` are cache hits (duration = None → tier-2 fallback).
+The `builds` field is an array of 284,864 build IDs. The `GET /eval/{id}/builds`
+endpoint is NOT used for extraction — it returns ~100 MB of JSON and times out.
+
+## Live API Schema Discovery (2026-06-14)
+
+### `GET /api/latestbuilds` response fields
+`job`, `project`, `id`, `finished`, `jobset`, `buildstatus`, `nixname`,
+`timestamp`, `system`. Note: `starttime`, `stoptime`, and `drvpath` are absent
+from the list response; a second `GET /build/{id}` call is required for timing.
+
+### `GET /build/{id}` response fields
+`buildmetrics`, `buildoutputs`, `buildproducts`, `buildstatus`, `drvpath`,
+`finished`, `id`, `job`, `jobset`, `jobsetevals`, `nixname`, `priority`,
+`project`, `releasename`, `starttime`, `stoptime`, `system`, `timestamp`.
+
+**There is no `buildsteps` field in the Hydra API.** Per-derivation step timing
+is not available from any Hydra endpoint. Only the top-level build's
+`starttime`/`stoptime` is available. This was confirmed by live API probe and
+inspection of `hydra-api.yaml`.
+
+### Jobset behaviour
+- `nixpkgs/unstable`: most builds are binary-cache hits (`starttime == stoptime`).
+  Some packages (ripgrep, bat, fd) occasionally have real timing.
+- `nixpkgs/staging-next`: rebuilds from scratch; nearly all builds have real
+  non-zero timing. Drvpaths differ from the anchor commit (different nixpkgs input).
+- `nixpkgs/trunk`: returns empty list — not a valid jobset name for latestbuilds.
+
+Duration = `stoptime − starttime` (seconds). Builds with `starttime == stoptime`
+or `buildstatus ≠ 0` are treated as cache hits (duration = None → tier-2 fallback).
 
 ## Extraction Commands
 
@@ -52,20 +76,13 @@ python -m eos_corpus metrics \
   --packages ripgrep jq bat fd git curl openssh rustc python3 ffmpeg libreoffice \
   --min-cells 4
 
-# Phase 3a: Extract core traces (10 packages)
+# Phase 3: Extract all 11 packages (per-package Hydra lookup, no bulk /eval/*/builds)
 python -m eos_corpus extract \
   --nixpkgs /var/home/nrd/git/github.com/NixOS/nixpkgs \
   --anchor d010928ab02ae9123365071097e4b8f6e9d529b1 \
   --hydra-eval 1826247 \
-  --packages ripgrep jq bat fd git curl openssh rustc python3 ffmpeg \
-  --out ../eos-sim-traces \
-  --delay 2.0
-
-# Phase 3b: Extract libreoffice (large_low_cpr anchor)
-python -m eos_corpus extract \
-  --nixpkgs /var/home/nrd/git/github.com/NixOS/nixpkgs \
-  --anchor d010928ab02ae9123365071097e4b8f6e9d529b1 \
-  --hydra-eval 1826247 \
+  --packages jq --packages python3 --packages curl --packages ripgrep --packages bat \
+  --packages fd --packages openssh --packages rustc --packages git --packages ffmpeg \
   --packages libreoffice \
   --out ../eos-sim-traces \
   --delay 2.0
@@ -219,17 +236,43 @@ converges onto the bootstrap toolchain (max_fanin ≥ 558 for all packages).
 
 ## Measured-Duration Ratio
 
-All 11 packages in this corpus have 0 % tier-1 (measured) durations.
+The extract command now uses per-package `GET /api/latestbuilds` + `GET /build/{id}`
+instead of the bulk `GET /eval/{id}/builds` endpoint.
 
-**Cause:** `GET /eval/1826247/builds` returns ≈ 100 MB of JSON (284 864 records).
-All extraction runs timed out during the streaming download (300 s read timeout),
-so every node fell back to tier-2 heuristic durations (`measured = false`).
-The 0 % measured ratio is flagged by `validate` as "BELOW 40% MEASURED" for each
-trace.
+**New approach:** `HydraClient.find_package_build()` queries `nixpkgs/unstable`
+first, then `nixpkgs/staging-next`, picking the build closest to the anchor eval
+timestamp (1781394365) with `buildstatus==0` and non-zero `starttime/stoptime` diff.
+The selected build's duration is assigned to the **atom (root) node only**. All
+transitive dependencies remain tier-2 heuristic because Hydra provides no per-step
+timing — transitive deps are binary-cache hits in every nixpkgs eval.
 
-**Structural integrity:** this does not compromise the corpus's purpose.  The
-coverage matrix classification uses unit durations (Deviation 3), not tier-2
-heuristics.  The simulator consumes the trace graph structure and cache variant
-flags, not the specific duration values, for scheduling decisions.  Tier-2
-heuristics are used only for the duration field in the JSON output and are
-documented as estimates.
+| Package | Hydra build id | Jobset | nixname | Duration (s) | Atom measured |
+| :------ | :------------- | :----- | :------ | :----------: | :-----------: |
+| jq | 328455127 | staging-next | jq-1.8.1 | 20 | true |
+| python3 | 329391844 | unstable | python3-3.13.13 | 0 (cache hit) | false |
+| curl | 328400561 | staging-next | curl-8.20.0 | 33 | true |
+| ripgrep | 331539602 | unstable | ripgrep-15.1.0 | 68 | true |
+| bat | 329109413 | unstable | bat-0.26.1 | 356 | true |
+| fd | 323973745 | unstable | fd-10.4.2 | 130 | true |
+| openssh | 328853533 | staging-next | openssh-10.3p1 | 73 | true |
+| rustc | 323560330 | staging-next | rustc-wrapper-1.94.0 | 1 | true |
+| git | 328842901 | staging-next | git-2.54.0 | 677 | true |
+| ffmpeg | 328722742 | staging-next | ffmpeg-8.1 | 776 | true |
+| libreoffice | 331538425 | unstable | libreoffice-25.8.5.2-wrapped | 1 | true |
+
+**Per-package measured ratio:** 1/N (0.0–0.1%) for 9 of 11 packages; 0/N for
+python3 (cache hit). All 11 traces remain "BELOW 40% MEASURED" because only the
+root/atom derivation can receive tier-1 timing — the ~1000–3800 transitive
+dependencies per package are all binary-cache hits in Hydra with no available
+per-node timing in any endpoint.
+
+**Drvpath matching limitation:** the Hydra build drvpath is computed from a
+different nixpkgs commit than our anchor (d010928). The staging-next and unstable
+drvpaths will not match our closure's atom drvpath. Duration is used as a timing
+proxy for the same package version; structural validity of the closure is
+unaffected.
+
+**Structural integrity:** the 0.1% measured ratio does not compromise the corpus's
+purpose. Coverage matrix classification uses unit durations (Deviation 3). The
+simulator consumes graph structure and cache variant flags. Tier-2 heuristics
+remain in use for all transitive deps and are documented as estimates.

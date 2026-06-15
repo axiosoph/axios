@@ -5906,8 +5906,8 @@
     },
     {
       "id": "pq80zlnpxhzi25ninrrjjl0y1sd90hzk-jq-1.8.1.drv",
-      "duration": 75.0,
-      "measured": false,
+      "duration": 20.0,
+      "measured": true,
       "is_atom": true,
       "peak_mem": null,
       "plan_name": "jq:jq-1.8.1"

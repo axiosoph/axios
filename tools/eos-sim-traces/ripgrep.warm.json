@@ -7738,8 +7738,8 @@
     },
     {
       "id": "nakjvs3pq06lpxmba15s4nzx6qr6q7rn-ripgrep-15.1.0.drv",
-      "duration": 75.0,
-      "measured": false,
+      "duration": 68.0,
+      "measured": true,
       "is_atom": true,
       "peak_mem": null,
       "plan_name": "ripgrep:ripgrep-15.1.0"

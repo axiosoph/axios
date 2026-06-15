@@ -8818,8 +8818,8 @@
     },
     {
       "id": "s24lcldgfvmjxvlxspn3wbv2xnxxrlnf-bat-0.26.1.drv",
-      "duration": 75.0,
-      "measured": false,
+      "duration": 356.0,
+      "measured": true,
       "is_atom": true,
       "peak_mem": null,
       "plan_name": "bat:bat-0.26.1"

@@ -9058,8 +9058,8 @@
     },
     {
       "id": "y9i32nhnad2cgnqzaf4brmpg8qv4cwvc-curl-8.20.0.drv",
-      "duration": 75.0,
-      "measured": false,
+      "duration": 33.0,
+      "measured": true,
       "is_atom": true,
       "peak_mem": null,
       "plan_name": "curl:curl-8.20.0"
