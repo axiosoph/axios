@@ -279,6 +279,83 @@ def lambda_pareto_table(results: list[dict], variant: str) -> list[dict]:
     return rows
 
 
+def h0_speedup_summary(
+    results: list[dict],
+    baseline: str = "H0",
+    target: str = "H1",
+    metric: str = "makespan",
+) -> dict:
+    """Speedup of *target* over *baseline* across matched traces.
+
+    Filters to from-scratch, δ=0, γ=0, λ=1, no scaling.  Returns
+    per-trace ratios and aggregate statistics.
+    """
+    filtered = [
+        r for r in results
+        if r["seeding"] == "from-scratch"
+        and r["delta"] == 0.0
+        and r["gamma"] == 0.0
+        and r["lambda"] == 1.0
+        and r["other_scale"] == 1.0
+        and r["compiler_scale"] == 1.0
+        and r["variant"] in (baseline, target)
+    ]
+    by_trace: dict[str, dict[str, float]] = defaultdict(dict)
+    for r in filtered:
+        trace = r["trace"]
+        by_trace[trace][r["variant"]] = r["metrics"][metric]
+
+    ratios: dict[str, float] = {}
+    for trace, scores in by_trace.items():
+        if baseline in scores and target in scores and scores[target] > 0:
+            ratios[trace] = scores[baseline] / scores[target]
+
+    if not ratios:
+        return {"n": 0, "ratios": {}}
+
+    vals = list(ratios.values())
+    return {
+        "n": len(vals),
+        "median": statistics.median(vals),
+        "mean": statistics.mean(vals),
+        "min": min(vals),
+        "max": max(vals),
+        "ratios": ratios,
+    }
+
+
+def xlarge_detail(
+    results: list[dict],
+    pkg_prefix: str = "chromium",
+) -> list[dict]:
+    """Per-variant summary for xlarge traces (base and cold cache states).
+
+    Returns rows with variant, cache, makespan, ep_count, and redundant_work.
+    """
+    subset = [
+        r for r in results
+        if r["trace"].startswith(pkg_prefix)
+        and r["seeding"] == "from-scratch"
+        and r["delta"] == 0.0
+        and r["gamma"] == 0.0
+        and r["lambda"] == 1.0
+        and r["other_scale"] == 1.0
+        and r["compiler_scale"] == 1.0
+        and not any(s in r["trace"] for s in (".warm.", ".partial."))
+    ]
+    rows = []
+    for r in sorted(subset, key=lambda x: (x["variant"], x["trace"])):
+        cache = "cold" if ".cold." in r["trace"] else "base"
+        rows.append({
+            "variant": r["variant"],
+            "cache": cache,
+            "makespan": r["metrics"]["makespan"],
+            "ep_count": r["metrics"]["ep_count"],
+            "redundant_work": r["metrics"].get("redundant_work", 0.0),
+        })
+    return rows
+
+
 def load_results(jsonl_path: Path) -> list[dict]:
     records = []
     with open(jsonl_path) as f:
