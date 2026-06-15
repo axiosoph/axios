@@ -356,6 +356,59 @@ def xlarge_detail(
     return rows
 
 
+def unified_dag_comparison(results: list[dict]) -> list[dict]:
+    """Per-variant comparison on the unified 13-package DAG trace.
+
+    Filters to unified.* traces, from-scratch seeding, no δ/γ/λ/scale
+    overrides.  Returns rows with variant, cache_state, makespan,
+    ep_count, and makespan relative to H1 on the same cache state.
+    """
+    subset = [
+        r for r in results
+        if r["trace"].startswith("unified")
+        and r.get("seeding", "from-scratch") == "from-scratch"
+        and r.get("delta", 0.0) == 0.0
+        and r.get("gamma", 0.0) == 0.0
+        and r.get("lambda", 1.0) == 1.0
+        and r.get("other_scale", 1.0) == 1.0
+        and r.get("compiler_scale", 1.0) == 1.0
+    ]
+
+    # H1 makespan per cache state
+    h1_by_cache: dict[str, float] = {}
+    for r in subset:
+        if r["variant"] == "H1" and r.get("theta_combined", 60.0) == 60.0:
+            cache = _cache_label(r["trace"])
+            h1_by_cache[cache] = r["metrics"]["makespan"]
+
+    rows = []
+    for r in sorted(subset, key=lambda x: (x["trace"], x["metrics"]["makespan"])):
+        cache = _cache_label(r["trace"])
+        variant_label = r["variant"]
+        if r["variant"] == "H2":
+            variant_label = f"H2(θ={r.get('theta_combined', 60.0):.0f})"
+        h1_ref = h1_by_cache.get(cache)
+        vs_h1 = (r["metrics"]["makespan"] - h1_ref) / h1_ref if h1_ref else None
+        rows.append({
+            "variant": variant_label,
+            "cache": cache,
+            "makespan": r["metrics"]["makespan"],
+            "ep_count": r["metrics"]["ep_count"],
+            "vs_h1": vs_h1,
+        })
+    return rows
+
+
+def _cache_label(trace_name: str) -> str:
+    if ".cold." in trace_name:
+        return "cold"
+    if ".warm." in trace_name:
+        return "warm"
+    if ".partial." in trace_name:
+        return "partial"
+    return "base"
+
+
 def load_results(jsonl_path: Path) -> list[dict]:
     records = []
     with open(jsonl_path) as f:
