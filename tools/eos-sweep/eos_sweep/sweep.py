@@ -92,7 +92,7 @@ def build_starvation_trace(k_high: int, d_high: float, d_hub: float) -> dict:
 @dataclass
 class SweepCell:
     trace_path: Path
-    variant: str           # H1 | H2 | H3 | H4 | H5 | H6
+    variant: str           # H0 | H1 | H2 | H3 | H4 | H5 | H6
     seeding: str           # from-scratch | atom-seeded
     delta: float = 0.0
     gamma: float = 0.0
@@ -102,7 +102,13 @@ class SweepCell:
     theta_cost: float = 60.0
     theta_scale: float = 1.0   # 0 = conf-gating off
     theta_rel_critical: float = 0.3   # H5 relative-CP fraction threshold
+    # H2 combined-score weights and threshold
+    w_critical: float = 1.0
+    w_redundancy: float = 1.0
+    w_cost: float = 1.0
+    theta_combined: float = 60.0
     worker_pool: str = "medium_homogeneous"
+    worker_count: int = 8          # homogeneous pool size override
     other_scale: float = 1.0   # duration ablation
     compiler_scale: float = 1.0
     seed: int = 0
@@ -121,7 +127,12 @@ class SweepCell:
             f"tr{self.theta_redundancy}",
             f"ts{self.theta_scale}",
             f"trc{self.theta_rel_critical}",
+            f"wc{self.w_critical}",
+            f"wr{self.w_redundancy}",
+            f"wd{self.w_cost}",
+            f"tcomb{self.theta_combined}",
             self.worker_pool,
+            f"p{self.worker_count}",
             f"os{self.other_scale}",
             f"cs{self.compiler_scale}",
         ]
@@ -145,6 +156,10 @@ def _sim_binary() -> Path:
     raise RuntimeError(f"eos-sim binary not found at {_SIM_BIN}; run `cargo build --release -p eos-sim`")
 
 
+def _homogeneous_workers(count: int) -> list[dict]:
+    return [{"id": f"w{i}", "speed": 1.0} for i in range(count)]
+
+
 def run_cell(cell: SweepCell, log_fh=None) -> dict | None:
     """Run a single sweep cell; return the result record or None on failure."""
     trace_data = cell._trace_override or json.loads(cell.trace_path.read_text())
@@ -153,14 +168,15 @@ def run_cell(cell: SweepCell, log_fh=None) -> dict | None:
     if cell.other_scale != 1.0 or cell.compiler_scale != 1.0:
         trace_data = scale_durations(trace_data, cell.other_scale, cell.compiler_scale)
 
-    # Apply worker injection for heterogeneous pool
+    # Worker pool injection: heterogeneous or explicit count override
     if cell.worker_pool == "small_heterogeneous":
-        het_workers = [
+        trace_data = inject_workers(trace_data, [
             {"id": "w0", "speed": 0.5},
             {"id": "w1", "speed": 1.0},
             {"id": "w2", "speed": 2.0},
-        ]
-        trace_data = inject_workers(trace_data, het_workers)
+        ])
+    elif cell.worker_count != 8:
+        trace_data = inject_workers(trace_data, _homogeneous_workers(cell.worker_count))
 
     with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False) as tf:
         json.dump(trace_data, tf)
@@ -180,6 +196,10 @@ def run_cell(cell: SweepCell, log_fh=None) -> dict | None:
             "--theta-cost", str(cell.theta_cost),
             "--theta-scale", str(cell.theta_scale),
             "--theta-rel-critical", str(cell.theta_rel_critical),
+            "--w-critical", str(cell.w_critical),
+            "--w-redundancy", str(cell.w_redundancy),
+            "--w-cost", str(cell.w_cost),
+            "--theta-combined", str(cell.theta_combined),
             "--seed", str(cell.seed),
             "--json",
         ]
@@ -217,7 +237,12 @@ def run_cell(cell: SweepCell, log_fh=None) -> dict | None:
             "theta_cost": cell.theta_cost,
             "theta_scale": cell.theta_scale,
             "theta_rel_critical": cell.theta_rel_critical,
+            "w_critical": cell.w_critical,
+            "w_redundancy": cell.w_redundancy,
+            "w_cost": cell.w_cost,
+            "theta_combined": cell.theta_combined,
             "worker_pool": cell.worker_pool,
+            "worker_count": cell.worker_count,
             "other_scale": cell.other_scale,
             "compiler_scale": cell.compiler_scale,
             "seed": cell.seed,
@@ -425,14 +450,110 @@ def generate_small_het_matrix() -> list[SweepCell]:
     return cells
 
 
+def generate_pool_scale_matrix() -> list[SweepCell]:
+    """Worker-pool scale study: P ∈ {4,16,32,64} × H0/H1/H2/H4 × all packages.
+
+    Uses base cache and from-scratch seeding to isolate the pool-size effect.
+    P=8 (the existing default) is not re-run here — the core matrix covers it.
+    """
+    cells: list[SweepCell] = []
+    for p in [4, 16, 32, 64]:
+        for pkg in _ALL_PKGS:
+            tp = _trace(pkg)
+            if not tp.exists():
+                continue
+            for variant in ["H0", "H1", "H2", "H4"]:
+                cells.append(SweepCell(
+                    trace_path=tp, variant=variant,
+                    seeding="from-scratch", delta=0.0, gamma=0.0,
+                    worker_count=p,
+                ))
+    return cells
+
+
+# H2 weight modes: (w_critical, w_redundancy, w_cost, theta_combined, label)
+# Designed to map the H2 parameter space from "CP-only" through "balanced"
+# to "cost-only", plus a θ_combined grid at the default 1:1:1 weights.
+_H2_MODES: list[tuple[float, float, float, float]] = [
+    # θ_combined grid at default 1:1:1 weights
+    (1.0, 1.0, 1.0,   30.0),   # tight — promotes almost everything
+    (1.0, 1.0, 1.0,   60.0),   # default
+    (1.0, 1.0, 1.0,  120.0),   # loose
+    (1.0, 1.0, 1.0,  480.0),   # very loose
+    (1.0, 1.0, 1.0, 1920.0),   # extremely loose
+    # Axis-aligned extremes (approach H3, pure-convergence, H4-cost)
+    (1.0, 0.0, 0.0,   30.0),   # CP-only  ≈ H3 CP criterion
+    (0.0, 1.0, 0.0,   20.0),   # convergence-only
+    (0.0, 0.0, 1.0,   60.0),   # cost-only ≈ H4 cost criterion
+    # Balanced: weights chosen so each term contributes equally at median signal
+    # values (E[cp]≈3000s, E[conv]≈200s, E[d]≈38s → w_c:w_r:w_d = 1:15:79)
+    (1.0, 15.0, 79.0, 3000.0),
+    # CP-suppressed: let convergence + cost dominate
+    (0.01,  1.0,  1.0,  60.0),
+    # CP-emphasized: CP alone should drive promotion
+    (5.0,   0.1,  0.1, 150.0),
+    # Convergence-heavy with moderate CP
+    (1.0,   5.0,  1.0, 300.0),
+    # Cost-heavy with moderate CP
+    (1.0,   1.0,  5.0, 300.0),
+]
+
+
+def generate_h2_weight_matrix() -> list[SweepCell]:
+    """H2 weight-space exploration: find if any (w_c, w_r, w_d, θ) beats H1.
+
+    Runs all 13 weight modes on non-large packages (base cache, from-scratch).
+    The best 3 configurations are then validated on large + chromium traces.
+    """
+    cells: list[SweepCell] = []
+    # All non-large packages for the primary sweep
+    for pkg in _SMALL_PKGS + _MEDIUM_PKGS:
+        tp = _trace(pkg)
+        for w_c, w_r, w_d, t_comb in _H2_MODES:
+            cells.append(SweepCell(
+                trace_path=tp, variant="H2",
+                seeding="from-scratch", delta=0.0, gamma=0.0,
+                w_critical=w_c, w_redundancy=w_r, w_cost=w_d,
+                theta_combined=t_comb,
+            ))
+    # Reference H1 cells (needed for comparison; deduplicated at analysis time
+    # against the core matrix results, but included here so this matrix is
+    # self-contained when run in isolation)
+    for pkg in _SMALL_PKGS + _MEDIUM_PKGS:
+        tp = _trace(pkg)
+        cells.append(SweepCell(
+            trace_path=tp, variant="H1",
+            seeding="from-scratch", delta=0.0, gamma=0.0,
+        ))
+    # Large + xlarge validation for every mode
+    for pkg in _LARGE_PKGS + _XLARGE_PKGS:
+        tp = _trace(pkg)
+        if not tp.exists():
+            continue
+        for w_c, w_r, w_d, t_comb in _H2_MODES:
+            cells.append(SweepCell(
+                trace_path=tp, variant="H2",
+                seeding="from-scratch", delta=0.0, gamma=0.0,
+                w_critical=w_c, w_redundancy=w_r, w_cost=w_d,
+                theta_combined=t_comb,
+            ))
+        cells.append(SweepCell(
+            trace_path=tp, variant="H1",
+            seeding="from-scratch", delta=0.0, gamma=0.0,
+        ))
+    return cells
+
+
 def generate_full_matrix() -> dict[str, list[SweepCell]]:
     return {
-        "core":      generate_core_matrix(),
-        "threshold": generate_threshold_matrix(),
-        "lambda":    generate_lambda_matrix(),
-        "ablation":  generate_ablation_matrix(),
+        "core":       generate_core_matrix(),
+        "threshold":  generate_threshold_matrix(),
+        "lambda":     generate_lambda_matrix(),
+        "ablation":   generate_ablation_matrix(),
         "starvation": generate_starvation_matrix(),
-        "small_het": generate_small_het_matrix(),
+        "small_het":  generate_small_het_matrix(),
+        "pool_scale": generate_pool_scale_matrix(),
+        "h2_weights": generate_h2_weight_matrix(),
     }
 
 
