@@ -8,13 +8,23 @@ Key endpoints used:
   GET /eval/{eval-id}/builds
       → [{id, drvpath, job, starttime, stoptime, buildstatus, nixname, ...}]
   GET /build/{build-id}
-      → {id, drvpath, job, starttime, stoptime, buildstatus, nixname, ...}
+      → {id, drvpath, job, starttime, stoptime, buildstatus, nixname, buildproducts,
+         buildoutputs, buildmetrics, releasename, jobsetevals, priority, finished,
+         project, system}
+      NOTE: no 'buildsteps' field exists in the Hydra API (confirmed via live API probe
+      and hydra-api.yaml schema inspection on 2026-06-14). Per-dependency timing is not
+      available from Hydra. Only top-level package starttime/stoptime is available.
   GET /api/latestbuilds?project=P&jobset=J&job=JOB&nr=N
-      → [{id, drvpath, job, starttime, stoptime, buildstatus, ...}]
+      → [{id, job, project, finished, jobset, buildstatus, nixname, timestamp, system}]
+      NOTE: the latestbuilds list response does NOT include starttime/stoptime or drvpath;
+      you must call GET /build/{id} to retrieve those fields.
 
 Duration per build: stoptime - starttime (seconds).
 buildstatus==0 means succeeded; other values mean failed/cached/queued.
 Cache hits show starttime==stoptime (or stoptime==0).
+Builds fetched from nixpkgs/unstable are nearly always cache hits (diff=0) because
+packages already exist in the binary cache. nixpkgs/staging-next rebuilds from scratch
+and typically has real non-zero durations.
 
 Schema discovered on first live call and stored in self.discovered_schema.
 """
@@ -166,6 +176,70 @@ class HydraClient:
             return str(revision)
 
         return None
+
+    def find_package_build(
+        self,
+        pkg_attr: str,
+        anchor_ts: int,
+        nr: int = 10,
+    ) -> Optional[dict]:
+        """Find the best Hydra build record for a nixpkgs package attribute.
+
+        Strategy:
+        1. Try nixpkgs/unstable first (evals are close to anchor commit).
+           Most unstable builds are cache hits (starttime==stoptime); a real
+           duration here is rare but preferred because the drv is from the same
+           eval as the anchor.
+        2. Fall back to nixpkgs/staging-next, which rebuilds from scratch and
+           nearly always has real non-zero durations.  The drvpath differs from
+           the anchor commit's closure, so duration is used as a proxy only —
+           it cannot be matched by drvpath.
+
+        Returns the build dict from GET /build/{id} for the best candidate, or
+        None if no reachable build with real timing is found.
+
+        The returned dict has keys:
+            id, drvpath, nixname, starttime, stoptime, buildstatus,
+            jobset, jobsetevals, project, system, ...
+        No 'buildsteps' key exists in the Hydra API.
+        """
+        job = f"{pkg_attr}.x86_64-linux"
+        best: Optional[dict] = None
+
+        for jobset in ("unstable", "staging-next"):
+            try:
+                candidates = self.latest_builds(
+                    project="nixpkgs", jobset=jobset, job=job, nr=nr
+                )
+            except Exception:
+                continue
+
+            # Sort by closeness to anchor timestamp, prefer succeeded builds.
+            succeeded = [b for b in candidates if b.get("buildstatus") == 0]
+            ordered = sorted(
+                succeeded,
+                key=lambda b: abs(b.get("timestamp", 0) - anchor_ts),
+            )
+
+            for candidate in ordered:
+                build_id = candidate.get("id")
+                if not build_id:
+                    continue
+                try:
+                    full = self.get_build(build_id)
+                except Exception:
+                    continue
+
+                dur = self.build_duration(full)
+                if dur is not None and dur > 0:
+                    # Real timing found — prefer this over a cache-hit build.
+                    return full
+
+                # Cache hit: keep as fallback in case nothing better exists.
+                if best is None:
+                    best = full
+
+        return best
 
     def find_latest_eval_id(self) -> int:
         """Resolve the latest eval ID via the latest-eval redirect."""

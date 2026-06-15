@@ -242,28 +242,16 @@ def extract(
     # Probe and record Hydra eval schema on first call.
     click.echo(f"Probing Hydra eval {hydra_eval} for schema discovery …", err=True)
     ev = client.get_eval(hydra_eval)
+    anchor_ts = ev.get("timestamp", 0)
     click.echo(f"Discovered eval schema: {json.dumps(client.discovered_schema.get('eval', {}))}", err=True)
-
-    # Build a drvpath → build dict index from the eval.
-    # nixpkgs evals have 60k+ builds; extended timeout of 300 s.
-    click.echo(f"Fetching build list for eval {hydra_eval} (may take up to 5 min) …", err=True)
-    drv_to_build: Dict[str, dict] = {}
-    eval_builds_timed_out = False
-    try:
-        eval_builds = client.get_eval_builds(hydra_eval, extended_timeout=300)
-        for b in eval_builds:
-            dp = b.get("drvpath")
-            if dp:
-                drv_to_build[dp] = b
-        click.echo(f"Indexed {len(drv_to_build)} builds by drvpath", err=True)
-    except Exception as exc:
-        click.echo(
-            f"WARNING: could not fetch eval builds ({exc}); "
-            f"all nodes will use tier-2 heuristic durations (measured=false)",
-            err=True,
-        )
-        drv_to_build = {}
-        eval_builds_timed_out = True
+    click.echo(f"Anchor eval timestamp: {anchor_ts}", err=True)
+    click.echo(
+        "NOTE: Using per-package /api/latestbuilds lookup (unstable then staging-next).\n"
+        "      /eval/{id}/builds is NOT used — it returns ~100 MB of JSON and times out.\n"
+        "      Hydra /build/{id} has no 'buildsteps' field; only top-level timing is\n"
+        "      available. Transitive dep timing is not available from any Hydra endpoint.",
+        err=True,
+    )
 
     with at_commit(nixpkgs, anchor):
         for pkg in packages:
@@ -291,14 +279,38 @@ def extract(
             # Identify the top-level drv (atom).
             atom_path = _find_atom(nodes, pkg)
 
-            # Resolve durations.
+            # Look up the best Hydra build for this package.
+            # Per-package lookup avoids the 100 MB /eval/{id}/builds download.
+            # Only the root/atom node can be matched to a Hydra build; all
+            # transitive dependencies are cache hits in Hydra and have no
+            # per-node timing available from any endpoint.
+            click.echo(f"  fetching Hydra build for {pkg} (unstable → staging-next) …", err=True)
+            pkg_build = client.find_package_build(pkg, anchor_ts=anchor_ts, nr=10)
+            atom_tier1: Optional[float] = None
+            if pkg_build:
+                atom_tier1 = client.build_duration(pkg_build)
+                jobset_used = pkg_build.get("jobset", "?")
+                nixname = pkg_build.get("nixname", "?")
+                diff = pkg_build.get("stoptime", 0) - pkg_build.get("starttime", 0)
+                click.echo(
+                    f"  found build id={pkg_build.get('id')} jobset={jobset_used} "
+                    f"nixname={nixname} diff={diff}s "
+                    f"{'(real timing)' if atom_tier1 else '(cache hit → no timing)'}",
+                    err=True,
+                )
+            else:
+                click.echo(f"  no Hydra build found for {pkg}; atom uses tier-2 heuristic", err=True)
+
+            # Resolve durations: only the atom node gets tier-1 if available.
             durations: Dict[str, float] = {}
             measured_flags: Dict[str, bool] = {}
             measured_count = 0
 
             for path in nodes:
-                build = drv_to_build.get(path)
-                tier1 = client.build_duration(build) if build else None
+                # Only the atom (root) node gets a tier-1 duration from Hydra.
+                # Transitive deps are not available in Hydra's API — they are
+                # all cache hits in nixpkgs/unstable evals.
+                tier1 = atom_tier1 if (path == atom_path and atom_tier1 is not None) else None
                 dur, meas = resolve_duration(nodes[path].name, tier1=tier1)
                 durations[path] = dur
                 measured_flags[path] = meas
@@ -312,16 +324,12 @@ def extract(
                 f"  measured {measured_count}/{n} nodes ({ratio:.1%}){flag}", err=True
             )
             if ratio < 0.40:
-                if eval_builds_timed_out:
-                    click.echo(
-                        f"  cause: eval build list fetch timed out; all durations are "
-                        f"tier-2 heuristic estimates", err=True
-                    )
-                else:
-                    click.echo(
-                        f"  cause: most transitive deps are cache hits in eval "
-                        f"{hydra_eval} (buildstatus≠0 or starttime==stoptime)", err=True
-                    )
+                click.echo(
+                    f"  cause: only the root (atom) derivation has Hydra timing; "
+                    f"all {n - measured_count} transitive deps are binary-cache hits "
+                    f"with no per-node timing in any Hydra endpoint",
+                    err=True,
+                )
 
             base = emit_trace(nodes, durations, measured_flags, atom_path=atom_path, pkg_name=pkg)
 
