@@ -96,7 +96,7 @@ def process_section(src_dir, dst_dir, section, description_tpl, default_title="D
         print(f"  {filename} -> {title}")
 
 
-def process_single(src_path, dst_path, section, description, default_title="Document"):
+def process_single(src_path, dst_path, section, description, default_title="Document", tags=None):
     """Process a single .md file with frontmatter."""
     os.makedirs(os.path.dirname(dst_path), exist_ok=True)
 
@@ -117,7 +117,12 @@ def process_single(src_path, dst_path, section, description, default_title="Docu
     body_content = "".join(lines[body_start:])
     body_content = rewrite_links(body_content, section)
 
-    frontmatter = f'+++\ntitle = "{title}"\ndescription = "{description}"\nquadrant = "Explanation"\naudience = "Developers and architects of the Axios stack"\n+++\n\n'
+    tags_str = ""
+    if tags:
+        tags_json = "[" + ", ".join(f'"{t}"' for t in tags) + "]"
+        tags_str = f"tags = {tags_json}\n"
+
+    frontmatter = f'+++\ntitle = "{title}"\ndescription = "{description}"\nquadrant = "Explanation"\n{tags_str}audience = "Developers and architects of the Axios stack"\n+++\n\n'
 
     with open(dst_path, "w", encoding="utf-8") as f:
         f.write(frontmatter + body_content)
@@ -164,4 +169,5 @@ if __name__ == "__main__":
         "../docs/spec-audit.md", "content/explanation/spec-audit.md", "explanation",
         "Completeness and coherence audit of the Axios specifications",
         "Specification Audit Report",
+        tags=["audit"],
     )

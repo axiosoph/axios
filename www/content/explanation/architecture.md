@@ -2,6 +2,7 @@
 title = "Stack architecture and implementation"
 description = "Technical overview of the Axios monorepo workspaces, crate organization, and trait boundaries"
 quadrant = "Explanation"
+tags = ["general"]
 audience = "Axios stack developers, codebase contributors, and architects"
 +++
 

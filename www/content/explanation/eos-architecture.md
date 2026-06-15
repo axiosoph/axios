@@ -2,6 +2,7 @@
 title = "How the Eos scheduler works"
 description = "A cohesive end-to-end walkthrough of the Eos build scheduler: what it does, how each piece is designed, and why — for engineers who want to understand the system well enough to use it"
 quadrant = "Explanation"
+tags = ["eos"]
 audience = "Engineers evaluating or operating Eos who are comfortable with distributed systems concepts and want to understand the scheduler's design without reading a formal specification"
 +++
 

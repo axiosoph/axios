@@ -2,6 +2,7 @@
 title = "What Eos's formal proofs guarantee"
 description = "A plain-language tour of the safety, fairness, and performance properties proven about the Eos scheduler in TLA+ and Lean — no formal-methods background required"
 quadrant = "Explanation"
+tags = ["eos"]
 audience = "Developers evaluating Eos who understand systems concepts like head-of-line blocking and deadlock but are not formal-methods or scheduling-theory experts"
 +++
 

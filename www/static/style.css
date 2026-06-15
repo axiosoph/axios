@@ -370,6 +370,10 @@
     max-width: 76ch;
   }
 
+  .page-description-lead {
+    max-width: 76ch;
+  }
+
   @media (max-width: 960px) {
     main {
       padding: 2.5rem 2rem;

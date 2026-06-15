@@ -2,6 +2,7 @@
 title = "Ecosystem agnosticism"
 description = "How the Atom protocol works as a decentralized source publishing overlay for Cargo, npm, PyPI, and other ecosystems"
 quadrant = "Explanation"
+tags = ["general"]
 audience = "Systems architects, package manager maintainers, and developers interested in using Atom with traditional toolchains"
 +++
 

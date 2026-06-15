@@ -2,6 +2,7 @@
 title = "What the Eos scheduling simulation found"
 description = "A plain-language account of the simulation study that determined how Eos selects build entry points — what we tested, what the data showed, and why the result holds under realistic conditions"
 quadrant = "Explanation"
+tags = ["eos"]
 audience = "Developers evaluating Eos who are comfortable with concepts like dependency graphs and parallelism but are not scheduling-theory specialists"
 +++
 

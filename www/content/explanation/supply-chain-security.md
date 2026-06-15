@@ -2,6 +2,7 @@
 title = "Supply chain security"
 description = "How Atom's Surety of Source model replaces registry trust with cryptographic proofs of repository origin"
 quadrant = "Explanation"
+tags = ["general"]
 audience = "Security engineers, package manager designers, and developers evaluating Atom's trust guarantees"
 +++
 
