@@ -23,7 +23,7 @@ struct Cli {
     #[arg(long, default_value_t = 0)]
     seed: u64,
 
-    /// Promotion variant: H1 | H2 | H3 | H4 | H5 | H6.
+    /// Promotion variant: H0 (roots only) | H1 | H2 | H3 | H4 | H5 | H6.
     #[arg(long, default_value_t = Variant::H1)]
     variant: Variant,
     /// Initial-cover seeding: from-scratch | atom-seeded.

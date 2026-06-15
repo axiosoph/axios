@@ -112,6 +112,9 @@ fn fires(g: &Graph, cfg: &HeuristicConfig, m: &Metrics, v: usize) -> bool {
     let conf = g.confidence(v);
     let convergence = (fan_in - 1.0) * d;
     match cfg.variant {
+        // Naive baseline: never promote beyond roots.  All EP selection
+        // benefit is zeroed out; used to measure the value of H1–H6.
+        Variant::H0 => false,
         Variant::H1 => {
             m.cp[v] > cfg.theta_eff(cfg.theta_critical, m.cp_conf[v])
                 || convergence > cfg.theta_eff(cfg.theta_redundancy, conf)
@@ -237,6 +240,31 @@ mod tests {
         "edges": [{"from": "top", "to": "mid"}, {"from": "mid", "to": "leaf"}],
         "workers": [{"id": "w0"}]
     }"#;
+
+    #[test]
+    fn h0_promotes_only_roots() {
+        // H0 fires() is always false; only the mandatory root is an EP.
+        // Its scope must span the full chain.
+        let g = graph(CHAIN);
+        let cfg = HeuristicConfig {
+            variant: Variant::H0,
+            ..inert()
+        };
+        let c = Coarsening::build(&g, &cfg);
+        assert_eq!(c.eps.len(), 1, "H0: only root EP");
+        assert_eq!(c.eps[0].entry, g.index_of("top").unwrap());
+        assert_eq!(c.eps[0].scope.len(), 3, "H0: root scope covers full chain");
+        // Contrast: H1 with a low threshold creates additional EPs.
+        let h1_cfg = HeuristicConfig {
+            variant: Variant::H1,
+            theta_critical: 5.0,
+            ..inert()
+        };
+        assert!(
+            Coarsening::build(&g, &h1_cfg).eps.len() > 1,
+            "H1 with low threshold creates more EPs than H0"
+        );
+    }
 
     #[test]
     fn only_roots_promoted_when_inert() {

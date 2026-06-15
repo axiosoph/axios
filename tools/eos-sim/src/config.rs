@@ -13,6 +13,10 @@ use std::str::FromStr;
 /// standalone entry point when the variant's criteria fire.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Variant {
+    /// Naive baseline: no promotion beyond mandatory roots.  Every root
+    /// output covers its entire transitive closure as a single EP.  Used
+    /// to quantify the value of all intelligent EP selection schemes.
+    H0,
     /// Priority-ordered promotion (leading): critical-path cut, cost-gated
     /// convergence, troublesome node. Any criterion firing promotes.
     H1,
@@ -41,6 +45,7 @@ impl FromStr for Variant {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_ascii_uppercase().as_str() {
+            "H0" => Ok(Variant::H0),
             "H1" => Ok(Variant::H1),
             "H2" => Ok(Variant::H2),
             "H3" => Ok(Variant::H3),
@@ -48,7 +53,7 @@ impl FromStr for Variant {
             "H5" => Ok(Variant::H5),
             "H6" => Ok(Variant::H6),
             other => Err(format!(
-                "unknown variant `{other}` (expected H1|H2|H3|H4|H5|H6)"
+                "unknown variant `{other}` (expected H0|H1|H2|H3|H4|H5|H6)"
             )),
         }
     }
@@ -57,6 +62,7 @@ impl FromStr for Variant {
 impl fmt::Display for Variant {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
+            Variant::H0 => "H0",
             Variant::H1 => "H1",
             Variant::H2 => "H2",
             Variant::H3 => "H3",
