@@ -544,16 +544,52 @@ def generate_h2_weight_matrix() -> list[SweepCell]:
     return cells
 
 
+def generate_unified_dag_matrix() -> list[SweepCell]:
+    """Unified 13-package DAG sweep.
+
+    Tests whether per-package heuristic rankings (H1 > H4, H2(θ=30) >
+    H1) hold on the real scheduler surface: a single DAG formed by
+    merging all 13 corpus package closures with shared nodes
+    deduplicated.  Shared bootstrap nodes gain fan-in proportional to
+    the number of packages that depend on them, substantially
+    strengthening H1's convergence criterion relative to per-package
+    traces.
+
+    Runs H0–H4 plus H2 at θ_combined=30 (the per-package optimum)
+    across all four cache states.
+    """
+    cells: list[SweepCell] = []
+    for cv in _CACHE_VARIANTS:
+        tp = _trace("unified", cv)
+        if not tp.exists():
+            continue
+        # Core variants at default parameters
+        for variant in ["H0", "H1", "H2", "H3", "H4"]:
+            cells.append(SweepCell(
+                trace_path=tp, variant=variant,
+                seeding="from-scratch", delta=0.0, gamma=0.0,
+            ))
+        # H2(θ_combined=30): per-package optimum — test whether the
+        # advantage persists when fan-in is inflated by shared nodes.
+        cells.append(SweepCell(
+            trace_path=tp, variant="H2",
+            seeding="from-scratch", delta=0.0, gamma=0.0,
+            theta_combined=30.0,
+        ))
+    return cells
+
+
 def generate_full_matrix() -> dict[str, list[SweepCell]]:
     return {
-        "core":       generate_core_matrix(),
-        "threshold":  generate_threshold_matrix(),
-        "lambda":     generate_lambda_matrix(),
-        "ablation":   generate_ablation_matrix(),
-        "starvation": generate_starvation_matrix(),
-        "small_het":  generate_small_het_matrix(),
-        "pool_scale": generate_pool_scale_matrix(),
-        "h2_weights": generate_h2_weight_matrix(),
+        "core":        generate_core_matrix(),
+        "threshold":   generate_threshold_matrix(),
+        "lambda":      generate_lambda_matrix(),
+        "ablation":    generate_ablation_matrix(),
+        "starvation":  generate_starvation_matrix(),
+        "small_het":   generate_small_het_matrix(),
+        "pool_scale":  generate_pool_scale_matrix(),
+        "h2_weights":  generate_h2_weight_matrix(),
+        "unified_dag": generate_unified_dag_matrix(),
     }
 
 
