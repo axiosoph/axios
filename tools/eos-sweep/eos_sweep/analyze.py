@@ -40,11 +40,13 @@ def dominant_fraction(
     seeding: str = "from-scratch",
     delta: float = 0.0,
     gamma: float = 0.0,
+    worker_pool: str = "medium_homogeneous",
 ) -> float:
     """Fraction of traces where *winner* beats *loser* on *metric* (lower is better).
 
-    Filters to the given seeding/delta/gamma slice.  Returns the fraction of
-    traces in which winner's metric value is strictly less than loser's.
+    Filters to the given seeding/delta/gamma/worker_pool slice.  Returns the
+    fraction of traces in which winner's metric value is strictly less than
+    loser's.
     """
     filtered = [
         r for r in results
@@ -54,6 +56,7 @@ def dominant_fraction(
         and r["lambda"] == 1.0
         and r["other_scale"] == 1.0
         and r["compiler_scale"] == 1.0
+        and r.get("worker_pool", "medium_homogeneous") == worker_pool
     ]
     by_trace: dict[str, dict[str, float]] = defaultdict(dict)
     for r in filtered:
@@ -76,6 +79,7 @@ def rank_within_trace(
     seeding: str = "from-scratch",
     delta: float = 0.0,
     gamma: float = 0.0,
+    worker_pool: str = "medium_homogeneous",
 ) -> list[str]:
     """Rank variants by median relative performance within each trace.
 
@@ -93,6 +97,7 @@ def rank_within_trace(
         and r["lambda"] == 1.0
         and r["other_scale"] == 1.0
         and r["compiler_scale"] == 1.0
+        and r.get("worker_pool", "medium_homogeneous") == worker_pool
     ]
 
     # Group by trace
@@ -118,7 +123,8 @@ def rank_within_trace(
 
 def relative_effect(results: list[dict], v1: str, v2: str, metric: str,
                     seeding: str = "from-scratch", delta: float = 0.0,
-                    gamma: float = 0.0) -> dict:
+                    gamma: float = 0.0,
+                    worker_pool: str = "medium_homogeneous") -> dict:
     """Compute median and IQR of the (v1−v2)/v2 relative difference across traces.
 
     Positive = v1 is worse; negative = v1 is better.
@@ -131,6 +137,7 @@ def relative_effect(results: list[dict], v1: str, v2: str, metric: str,
         and r["lambda"] == 1.0
         and r["other_scale"] == 1.0
         and r["compiler_scale"] == 1.0
+        and r.get("worker_pool", "medium_homogeneous") == worker_pool
         and r["variant"] in (v1, v2)
     ]
     by_trace: dict[str, dict[str, float]] = defaultdict(dict)
@@ -155,7 +162,8 @@ def relative_effect(results: list[dict], v1: str, v2: str, metric: str,
 
 
 def ep_count_stats(results: list[dict], variant: str,
-                   seeding: str = "from-scratch") -> dict:
+                   seeding: str = "from-scratch",
+                   worker_pool: str = "medium_homogeneous") -> dict:
     """Median EP count for a variant across all non-large base traces."""
     filtered = [
         r for r in results
@@ -166,6 +174,7 @@ def ep_count_stats(results: list[dict], variant: str,
         and r["lambda"] == 1.0
         and r["other_scale"] == 1.0
         and r["compiler_scale"] == 1.0
+        and r.get("worker_pool", "medium_homogeneous") == worker_pool
     ]
     counts = [r["metrics"]["ep_count"] for r in filtered]
     if not counts:

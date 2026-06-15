@@ -350,7 +350,13 @@ def generate_ablation_matrix() -> list[SweepCell]:
 
 
 def generate_starvation_matrix() -> list[SweepCell]:
-    """Starvation/fairness sweep: synthetic contention traces × γ values."""
+    """Starvation/fairness sweep: synthetic contention traces × γ values.
+
+    Uses theta_cost=0 to force per-node EPs (matching the starvation.rs
+    fixture pattern), which is necessary to preserve the L vs H_k contention
+    structure.  Without this, H1 default thresholds absorb H_k into the hub
+    EP's scope, collapsing the contention to a 2-EP schedule.
+    """
     cells: list[SweepCell] = []
     k_values = [5, 10, 20]
     gamma_values = [0.0, 0.1, 0.5, 1.0, 2.0]
@@ -363,6 +369,12 @@ def generate_starvation_matrix() -> list[SweepCell]:
                 seeding="from-scratch",
                 delta=0.0,
                 gamma=gamma,
+                # theta_cost=0 forces all nodes to be promoted to EPs,
+                # preserving the hub+stagger contention structure.
+                theta_cost=0.0,
+                theta_critical=1e9,
+                theta_redundancy=1e9,
+                theta_scale=0.0,
                 _trace_override=trace,
             ))
     return cells
