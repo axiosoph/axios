@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Post-process existing trace files to apply the heft-based duration model.
+"""Post-process existing trace files to apply the full tier-2 duration model.
 
 Reads each *.json trace in the given directory, computes per-node direct
 input count from the edges array, and updates `duration` for every
-non-measured node using fallback.tier2_duration(name, input_count=N).
+non-measured node using fallback.tier2_duration(name, input_count=N, drv_id=ID).
 Measured nodes (from Hydra) are left unchanged.
 
 Usage:
@@ -38,11 +38,13 @@ def apply_heft(path: Path) -> tuple[int, int]:
         if node.get("measured"):
             continue
         input_count = fan_out.get(node["id"], 0)
-        # plan_name is "pkg:output-name"; DrvNode.name is the output-name without .drv
+        # plan_name is "pkg:output-name"; DrvNode.name is output-name without .drv
         name = node.get("plan_name", "").split(":")[-1] or node["id"].split("-", 1)[-1]
-        new_dur = tier2_duration(name, input_count=input_count)
-        if new_dur != node["duration"]:
-            node["duration"] = new_dur
+        # drv_id: the full basename (hash-name.drv) used as jitter seed
+        drv_id = node["id"]
+        new_dur = tier2_duration(name, input_count=input_count, drv_id=drv_id)
+        if abs(new_dur - node["duration"]) > 0.01:
+            node["duration"] = round(new_dur, 2)
             updated += 1
 
     with path.open("w") as f:

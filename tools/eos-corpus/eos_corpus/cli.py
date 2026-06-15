@@ -311,10 +311,13 @@ def extract(
                 # Transitive deps are not available in Hydra's API — they are
                 # all cache hits in nixpkgs/unstable evals.
                 tier1 = atom_tier1 if (path == atom_path and atom_tier1 is not None) else None
+                # drv_id: basename of the store path (hash prefix) used as jitter seed.
+                drv_id = path.rsplit("/", 1)[-1]
                 dur, meas = resolve_duration(
                     nodes[path].name,
                     tier1=tier1,
                     input_count=len(nodes[path].deps),
+                    drv_id=drv_id,
                 )
                 durations[path] = dur
                 measured_flags[path] = meas
