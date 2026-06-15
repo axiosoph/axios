@@ -55,6 +55,19 @@ struct Cli {
     #[arg(long)]
     theta_rel_critical: Option<f64>,
 
+    /// H2 weight on the critical-path term.
+    #[arg(long)]
+    w_critical: Option<f64>,
+    /// H2 weight on the cost-gated convergence term.
+    #[arg(long)]
+    w_redundancy: Option<f64>,
+    /// H2 weight on the isolated duration term.
+    #[arg(long)]
+    w_cost: Option<f64>,
+    /// H2 combined-score threshold θ_combined.
+    #[arg(long)]
+    theta_combined: Option<f64>,
+
     /// Cache-affinity speedup factor.
     #[arg(long)]
     cache_speedup: Option<f64>,
@@ -100,6 +113,10 @@ impl Cli {
         set!(theta_fanin);
         set!(theta_trivial);
         set!(theta_rel_critical);
+        set!(w_critical);
+        set!(w_redundancy);
+        set!(w_cost);
+        set!(theta_combined);
         set!(cache_speedup);
         set!(beta);
         set!(delta);
