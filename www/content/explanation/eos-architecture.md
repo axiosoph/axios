@@ -22,7 +22,7 @@ One property of this stack deserves early mention because it's load-bearing for 
 
 ## One graph for everything
 
-When a request arrives, Eos does not isolate it in its own queue. It merges the incoming dependency graph into a single **unified global graph** shared across all currently active requests. Every node in that graph is keyed by a content-addressed plan hash — the same plan, requested by two different users simultaneously, maps to the same node and is scheduled exactly once. This is structural deduplication, not opportunistic: it is impossible for two requests in the same global graph to produce separate builds of the same content-addressed plan.
+When a request arrives, Eos does not isolate it in its own queue. It merges the incoming dependency graph into a single **unified global graph** shared across all currently active requests. Every node in that graph is keyed by a content-addressed plan hash (i.e. a derivation) — the same plan, requested by two different users simultaneously, maps to the same node and is scheduled exactly once. This is structural deduplication, not opportunistic: it is impossible for two requests in the same global graph to produce separate builds of the same content-addressed plan.
 
 Before the graph enters scheduling, every node is checked against the artifact store. Plans whose outputs are already cached are pruned immediately — they never become scheduling decisions. What remains is the uncached subgraph: the work that actually needs to happen.
 
