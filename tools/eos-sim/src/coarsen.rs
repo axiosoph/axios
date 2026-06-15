@@ -52,12 +52,15 @@ struct Metrics {
     cp_conf: Vec<f64>,
     /// `subgraph_cost(v)`.
     subgraph: Vec<f64>,
+    /// Maximum CP value across all nodes = estimated total makespan (H5).
+    cp_max: f64,
 }
 
 impl Metrics {
     fn compute(g: &Graph) -> Self {
         let cp = g.critical_paths();
         let subgraph = g.subgraph_costs();
+        let cp_max = cp.iter().cloned().fold(0.0_f64, f64::max);
         let order = g.topo_order().expect("acyclic: checked at construction");
         let mut cp_conf = vec![0.0f64; g.len()];
         for &v in &order {
@@ -81,6 +84,7 @@ impl Metrics {
             cp,
             cp_conf,
             subgraph,
+            cp_max,
         }
     }
 }
@@ -125,6 +129,22 @@ fn fires(g: &Graph, cfg: &HeuristicConfig, m: &Metrics, v: usize) -> bool {
             d > cfg.theta_eff(cfg.theta_eff_cost, conf)
                 || g.fan_in(v) > cfg.theta_fanin
                 || m.subgraph[v] > cfg.theta_eff(cfg.theta_subgraph, conf)
+        },
+        Variant::H5 => {
+            // Relative-CP: promote when this node's chain exceeds a
+            // fraction of the total estimated makespan, or the node is
+            // individually expensive. Avoids the absolute-threshold
+            // over-promotion seen on dense/homogeneous graphs.
+            let cp_frac = if m.cp_max > 0.0 { m.cp[v] / m.cp_max } else { 0.0 };
+            cp_frac > cfg.theta_rel_critical
+                || d > cfg.theta_eff(cfg.theta_cost, conf)
+        },
+        Variant::H6 => {
+            // Strict-AND: both CP prominence AND individual cost must fire.
+            // More conservative than H1/H3 (OR); prevents cheap nodes that
+            // happen to sit on a long chain from fragmenting the EP set.
+            m.cp[v] > cfg.theta_eff(cfg.theta_critical, m.cp_conf[v])
+                && d > cfg.theta_eff(cfg.theta_cost, conf)
         },
     }
 }
@@ -202,6 +222,8 @@ mod tests {
             theta_fanin: usize::MAX,
             theta_subgraph: 1e9,
             theta_combined: 1e9,
+            // H5: fraction > 1.0 never fires (cp[v] <= cp_max always)
+            theta_rel_critical: 1.0,
             ..HeuristicConfig::default()
         }
     }
@@ -424,6 +446,122 @@ mod tests {
         assert!(
             Coarsening::build(&g, &h1_cfg).entries().contains(&g.index_of("shared").unwrap()),
             "H1 must promote `shared` via cost-gated convergence (contrast with H3)"
+        );
+    }
+
+    #[test]
+    fn h6_and_criterion_requires_both_cp_and_cost() {
+        // CHAIN: top(1) -> mid(2) -> leaf(4).
+        // cp(leaf)=4, cp(mid)=6, cp(top)=7. theta_critical=5, theta_cost=3.
+        //   leaf: cp=4 < 5 (CP fails), d=4 > 3 (cost passes) → AND fails.
+        //   mid:  cp=6 > 5 (CP passes), d=2 < 3 (cost fails) → AND fails.
+        // Only root (`top`) promoted.
+        let g = graph(CHAIN);
+        let cfg = HeuristicConfig {
+            variant: Variant::H6,
+            theta_scale: 0.0,
+            theta_critical: 5.0,
+            theta_cost: 3.0,
+            ..inert()
+        };
+        let entries = Coarsening::build(&g, &cfg).entries();
+        assert!(
+            !entries.contains(&g.index_of("leaf").unwrap()),
+            "H6: leaf not promoted (cp criterion fails)"
+        );
+        assert!(
+            !entries.contains(&g.index_of("mid").unwrap()),
+            "H6: mid not promoted (cost criterion fails)"
+        );
+        // Contrast: H3 (OR) promotes mid because cp=6 > theta_critical=5.
+        let h3_cfg = HeuristicConfig { variant: Variant::H3, ..cfg.clone() };
+        assert!(
+            Coarsening::build(&g, &h3_cfg)
+                .entries()
+                .contains(&g.index_of("mid").unwrap()),
+            "H3 OR: mid promoted (cp=6 > 5); contrast shows H6 is stricter"
+        );
+    }
+
+    #[test]
+    fn h6_promotes_when_both_criteria_fire() {
+        // A node that is both on a long CP and expensive should be promoted.
+        // Chain: top(1) -> mid(10) -> leaf(50); cp(leaf)=50, cp(mid)=60.
+        // theta_critical=55, theta_cost=5. mid: cp=60>55 AND d=10>5 → promoted.
+        let json = r#"{
+            "nodes": [
+                {"id": "top",  "duration": 1.0},
+                {"id": "mid",  "duration": 10.0},
+                {"id": "leaf", "duration": 50.0}
+            ],
+            "edges": [
+                {"from": "top", "to": "mid"},
+                {"from": "mid", "to": "leaf"}
+            ],
+            "workers": [{"id": "w0"}]
+        }"#;
+        let g = graph(json);
+        let cfg = HeuristicConfig {
+            variant: Variant::H6,
+            theta_scale: 0.0,
+            theta_critical: 55.0,
+            theta_cost: 5.0,
+            ..inert()
+        };
+        let entries = Coarsening::build(&g, &cfg).entries();
+        assert!(
+            entries.contains(&g.index_of("mid").unwrap()),
+            "H6: mid promoted (cp=60>55 AND d=10>5)"
+        );
+        assert!(
+            !entries.contains(&g.index_of("leaf").unwrap()),
+            "H6: leaf not promoted (cp=50 < 55)"
+        );
+    }
+
+    #[test]
+    fn h5_relative_cp_promotes_by_fraction() {
+        // CHAIN: top(1) -> mid(2) -> leaf(4).
+        // cp(leaf)=4, cp(mid)=6, cp(top)=7. cp_max=7.
+        // With theta_rel_critical=0.8 and theta_cost=1e9:
+        //   leaf: 4/7 ≈ 0.571 < 0.8 → not promoted.
+        //   mid:  6/7 ≈ 0.857 > 0.8 → promoted.
+        let g = graph(CHAIN);
+        let cfg = HeuristicConfig {
+            variant: Variant::H5,
+            theta_scale: 0.0,
+            theta_rel_critical: 0.8,
+            // theta_cost already 1e9 from inert() — cost fallback inert
+            ..inert()
+        };
+        let entries = Coarsening::build(&g, &cfg).entries();
+        assert!(
+            entries.contains(&g.index_of("mid").unwrap()),
+            "H5: mid promoted (cp/cp_max=6/7≈0.857 > 0.8)"
+        );
+        assert!(
+            !entries.contains(&g.index_of("leaf").unwrap()),
+            "H5: leaf not promoted (cp/cp_max=4/7≈0.571 < 0.8)"
+        );
+    }
+
+    #[test]
+    fn h5_cost_fallback_promotes_expensive_nodes() {
+        // H5 also has a cost-gate fallback (OR with the relative criterion).
+        // With theta_rel_critical=1.0 (always false) and theta_cost=3:
+        // leaf (d=4) fires the cost criterion even though cp_frac never fires.
+        let g = graph(CHAIN);
+        let cfg = HeuristicConfig {
+            variant: Variant::H5,
+            theta_scale: 0.0,
+            theta_rel_critical: 1.0, // never fires on its own
+            theta_cost: 3.0,
+            ..inert()
+        };
+        let entries = Coarsening::build(&g, &cfg).entries();
+        assert!(
+            entries.contains(&g.index_of("leaf").unwrap()),
+            "H5: leaf promoted via cost fallback (d=4 > theta_cost=3)"
         );
     }
 

@@ -24,6 +24,16 @@ pub enum Variant {
     /// ADR-0004 original baseline: `d > θ_cost ∨ fan_in > θ_fanin ∨
     /// subgraph_cost > θ_subgraph`.
     H4,
+    /// Relative-CP gate: `cp[v] / cp_max > θ_rel_critical ∨ d > θ_cost`.
+    /// Normalises by estimated makespan so the threshold is graph-scale
+    /// independent; avoids the over-promotion H3 exhibits on dense graphs
+    /// when absolute CP values rise uniformly.
+    H5,
+    /// Strict-AND intersection: `cp[v] > θ_critical ∧ d > θ_cost`.
+    /// More conservative than H1/H3 (OR); promotes only nodes that are
+    /// both on a long critical path AND individually expensive, preventing
+    /// cheap CP-adjacent nodes from fragmenting the EP set.
+    H6,
 }
 
 impl FromStr for Variant {
@@ -35,7 +45,11 @@ impl FromStr for Variant {
             "H2" => Ok(Variant::H2),
             "H3" => Ok(Variant::H3),
             "H4" => Ok(Variant::H4),
-            other => Err(format!("unknown variant `{other}` (expected H1|H2|H3|H4)")),
+            "H5" => Ok(Variant::H5),
+            "H6" => Ok(Variant::H6),
+            other => Err(format!(
+                "unknown variant `{other}` (expected H1|H2|H3|H4|H5|H6)"
+            )),
         }
     }
 }
@@ -47,6 +61,8 @@ impl fmt::Display for Variant {
             Variant::H2 => "H2",
             Variant::H3 => "H3",
             Variant::H4 => "H4",
+            Variant::H5 => "H5",
+            Variant::H6 => "H6",
         };
         f.write_str(s)
     }
@@ -105,6 +121,13 @@ pub struct HeuristicConfig {
     /// `0` disables gating (effective threshold equals the bare threshold).
     pub theta_scale: f64,
 
+    // --- H5 relative-CP threshold ---
+    /// Relative-CP fraction threshold for H5: promote when
+    /// `cp[v] / cp_max > θ_rel_critical`.  Range [0, 1]; 0.3 promotes the
+    /// top 70% of the CP distribution (all nodes whose chain is longer than
+    /// 30% of the estimated makespan).
+    pub theta_rel_critical: f64,
+
     // --- H2 combined score ---
     /// Weight on critical path.
     pub w_critical: f64,
@@ -157,6 +180,7 @@ impl Default for HeuristicConfig {
             theta_redundancy: 20.0,
             theta_cost: 60.0,
             theta_scale: 1.0,
+            theta_rel_critical: 0.3,
             w_critical: 1.0,
             w_redundancy: 1.0,
             w_cost: 1.0,

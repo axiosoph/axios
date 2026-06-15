@@ -92,7 +92,7 @@ def build_starvation_trace(k_high: int, d_high: float, d_hub: float) -> dict:
 @dataclass
 class SweepCell:
     trace_path: Path
-    variant: str           # H1 | H2 | H3 | H4
+    variant: str           # H1 | H2 | H3 | H4 | H5 | H6
     seeding: str           # from-scratch | atom-seeded
     delta: float = 0.0
     gamma: float = 0.0
@@ -101,6 +101,7 @@ class SweepCell:
     theta_redundancy: float = 20.0
     theta_cost: float = 60.0
     theta_scale: float = 1.0   # 0 = conf-gating off
+    theta_rel_critical: float = 0.3   # H5 relative-CP fraction threshold
     worker_pool: str = "medium_homogeneous"
     other_scale: float = 1.0   # duration ablation
     compiler_scale: float = 1.0
@@ -119,6 +120,7 @@ class SweepCell:
             f"tc{self.theta_critical}",
             f"tr{self.theta_redundancy}",
             f"ts{self.theta_scale}",
+            f"trc{self.theta_rel_critical}",
             self.worker_pool,
             f"os{self.other_scale}",
             f"cs{self.compiler_scale}",
@@ -177,6 +179,7 @@ def run_cell(cell: SweepCell, log_fh=None) -> dict | None:
             "--theta-redundancy", str(cell.theta_redundancy),
             "--theta-cost", str(cell.theta_cost),
             "--theta-scale", str(cell.theta_scale),
+            "--theta-rel-critical", str(cell.theta_rel_critical),
             "--seed", str(cell.seed),
             "--json",
         ]
@@ -213,6 +216,7 @@ def run_cell(cell: SweepCell, log_fh=None) -> dict | None:
             "theta_redundancy": cell.theta_redundancy,
             "theta_cost": cell.theta_cost,
             "theta_scale": cell.theta_scale,
+            "theta_rel_critical": cell.theta_rel_critical,
             "worker_pool": cell.worker_pool,
             "other_scale": cell.other_scale,
             "compiler_scale": cell.compiler_scale,
@@ -257,7 +261,7 @@ def generate_core_matrix() -> list[SweepCell]:
     for pkg in _SMALL_PKGS + _MEDIUM_PKGS:
         for cv in _CACHE_VARIANTS:
             tp = _trace(pkg, cv)
-            for variant in ["H1", "H2", "H3", "H4"]:
+            for variant in ["H1", "H2", "H3", "H4", "H5", "H6"]:
                 for seeding in ["from-scratch", "atom-seeded"]:
                     for delta in [0.0, 30.0]:
                         for gamma in [0.0, 0.5]:
@@ -269,15 +273,15 @@ def generate_core_matrix() -> list[SweepCell]:
     # Large packages: limited matrix to control runtime
     for pkg in _LARGE_PKGS:
         tp = _trace(pkg)
-        for variant in ["H1", "H4"]:
+        for variant in ["H1", "H4", "H5", "H6"]:
             for delta in [0.0, 30.0]:
                 for gamma in [0.0, 0.5]:
                     cells.append(SweepCell(
                         trace_path=tp, variant=variant,
                         seeding="from-scratch", delta=delta, gamma=gamma,
                     ))
-        # atom-seeded for large too (H1, H4 only)
-        for variant in ["H1", "H4"]:
+        # atom-seeded for large too (H1, H4, H5, H6)
+        for variant in ["H1", "H4", "H5", "H6"]:
             cells.append(SweepCell(
                 trace_path=tp, variant=variant,
                 seeding="atom-seeded", delta=0.0, gamma=0.0,
@@ -287,11 +291,14 @@ def generate_core_matrix() -> list[SweepCell]:
 
 
 def generate_threshold_matrix() -> list[SweepCell]:
-    """θ sensitivity sweep: H1 and H4 × non-large base traces × θ grid."""
+    """θ sensitivity sweep: H1/H4/H6 × non-large base traces × θ grid.
+
+    Also sweeps H5's theta_rel_critical in the range [0.1, 0.2, 0.3, 0.5].
+    """
     cells: list[SweepCell] = []
     for pkg in _SMALL_PKGS + _MEDIUM_PKGS:
         tp = _trace(pkg)
-        for variant in ["H1", "H4"]:
+        for variant in ["H1", "H4", "H6"]:
             for tc in [15.0, 30.0, 60.0]:
                 for tr in [10.0, 20.0, 40.0]:
                     for ts in [0.0, 1.0]:  # confidence gating off/on
@@ -300,6 +307,13 @@ def generate_threshold_matrix() -> list[SweepCell]:
                             seeding="from-scratch", delta=0.0, gamma=0.0,
                             theta_critical=tc, theta_redundancy=tr, theta_scale=ts,
                         ))
+        # H5: sweep the relative-CP threshold
+        for trc in [0.1, 0.2, 0.3, 0.5]:
+            cells.append(SweepCell(
+                trace_path=tp, variant="H5",
+                seeding="from-scratch", delta=0.0, gamma=0.0,
+                theta_rel_critical=trc,
+            ))
     return cells
 
 

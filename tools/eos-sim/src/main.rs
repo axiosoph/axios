@@ -23,7 +23,7 @@ struct Cli {
     #[arg(long, default_value_t = 0)]
     seed: u64,
 
-    /// Promotion variant: H1 | H2 | H3 | H4.
+    /// Promotion variant: H1 | H2 | H3 | H4 | H5 | H6.
     #[arg(long, default_value_t = Variant::H1)]
     variant: Variant,
     /// Initial-cover seeding: from-scratch | atom-seeded.
@@ -51,6 +51,9 @@ struct Cli {
     /// Atom-absorption threshold θ_trivial.
     #[arg(long)]
     theta_trivial: Option<f64>,
+    /// H5 relative-CP fraction threshold θ_rel_critical (range 0–1).
+    #[arg(long)]
+    theta_rel_critical: Option<f64>,
 
     /// Cache-affinity speedup factor.
     #[arg(long)]
@@ -96,6 +99,7 @@ impl Cli {
         set!(theta_subgraph);
         set!(theta_fanin);
         set!(theta_trivial);
+        set!(theta_rel_critical);
         set!(cache_speedup);
         set!(beta);
         set!(delta);
