@@ -56,9 +56,11 @@ Support for local sets is OPTIONAL but enables development workflows.
 pins a set of atoms to a single source history. Defined in
 atom-transactions.md §Anchor.
 
-**Atom digest** (`cad`): A compact, self-describing multihash of the
-`AtomId` (anchor + label). Used for store-level indexing. Defined in
-atom-transactions.md §AtomDigest.
+**Publish digest** (`publish_czd`): The canonical Coz digest (`czd`) of
+the **publish `CozMessage`**. Stored **bare** (original algorithm) in the
+lock — representing the actual cryptographic security the signature covers.
+`blake3(publish_czd)` is used exclusively as the store-key (never stored
+in the lock). See atom-sad.md §6.5–6.6.
 
 **Claim digest** (`czd`): The canonical digest of a claim `CozMessage`.
 Uniquely identifies a specific claim. Defined in atom-transactions.md
@@ -86,20 +88,21 @@ TYPE  AtomRef = {
         label:    Label,
         version:  Version,
         dig:      Vec<u8>,                    -- atom snapshot digest (atom commit hash)
-        czd:      Czd                         -- claim digest
+        publish_czd: Czd                      -- bare publish digest (locked; store-keyed via blake3); claim reachable via the publish payload
       }
 
 TYPE  LockEntry = {
-        anchor:   Anchor,                     -- which atom-set
-        label:    Label,                      -- which atom
-        version:  Version,                    -- which version (opaque)
-        czd:      Czd,                        -- claim digest (ownership binding)
-        dig:      Vec<u8>,                    -- atom snapshot digest (content binding)
+        set:         Anchor,                  -- atom-set identity = the genesis anchor; keys into anchor → mirrors
+        label:       Label,                   -- which atom
+        version:     Version,                 -- which version (opaque)
+        publish_czd: Czd,                     -- bare publish digest (actual crypto security)
       }
       -- Minimum per-entry fields. Mirror URLs are captured at the set
-      -- level (anchor → mirrors), not per-entry. Adapters MAY add src
-      -- (provenance), requires (transitive deps), pkg (PURL type), or
-      -- any ecosystem-specific fields.
+      -- level (anchor → mirrors), not per-entry. `dig` is NOT stored —
+      -- it lives in the signed publish payload and MUST be verified by
+      -- peeling the publish_czd tag chain on acquisition. Adapters MAY
+      -- add src (provenance), requires (transitive deps), pkg (PURL
+      -- type), or any ecosystem-specific fields.
 ```
 
 ### Invariants
@@ -138,17 +141,23 @@ order for constraint satisfaction and highest-match selection.
 `VERIFIED: unverified`
 
 **[lock-entry-sufficient]**: A lock entry for a **published** atom
-MUST capture at minimum: `anchor`, `label`, `version`, `czd`, and
-`dig`. Mirror URLs are NOT per-entry — the lock MUST separately
+MUST capture at minimum: `set`, `label`, `version`, and
+`publish_czd`. Mirror URLs are NOT per-entry — the lock MUST separately
 capture the mapping from anchors to mirror sets (anchor → mirrors),
 enabling any entry to derive its fetch targets by anchor lookup.
-These fields MUST be sufficient to reproduce the exact fetch without
-re-resolving and to verify integrity after fetching. Adapters MAY
-extend the lock entry with additional fields.
+These four fields are sufficient to reproduce the exact fetch without
+re-resolving: `set` + `label` + `version` locates the atom by name;
+`publish_czd` pins the exact signed publish. The atom's `dig` is NOT
+stored in the lock — it lives in the signed publish payload (the
+`publish_czd`-pinned source of truth); on acquisition the peeled
+content-addressed sha MUST equal `payload.dig`, or the fetch MUST be
+rejected as tampered (SAD §6.5; SAD §8 failure mode 8.3). The atom
+commit is peelable from the `publish_czd` tag chain; no `rev` field is
+needed. Adapters MAY extend the lock entry with additional fields.
 
 Local development atoms (see §Local Development Sets) are exempt from
-the `czd` requirement — they have no claim. A dev lock entry MUST
-still capture `anchor`, `label`, `version`, `dig`, and SHOULD indicate
+the `publish_czd` requirement — they have no publish. A dev lock entry
+MUST still capture `set`, `label`, and `version`, and SHOULD indicate
 that the resolution is local-only.
 `VERIFIED: unverified`
 
@@ -181,9 +190,13 @@ the resolver MUST validate mirror consistency.
 the resolution in a lock entry.
 
 - **PRE**: A specific version of a specific atom has been selected. The
-  atom's `dig` and `czd` are known. At least one source URL is known.
-- **POST**: A `LockEntry` exists with all required fields populated.
-  The lock entry is sufficient to reproduce the fetch and verify
+  atom's `publish_czd` is known (located in the publish tag chain). At
+  least one source set (anchor) is known.
+- **POST**: A `LockEntry` exists with `set`, `label`, `version`, and
+  `publish_czd` populated per `[lock-entry-sufficient]`. The `dig` is
+  NOT stored in the lock; it is verified on acquisition by peeling the
+  publish tag chain (`payload.dig` MUST equal the peeled atom commit
+  sha). The lock entry is sufficient to reproduce the fetch and verify
   integrity without re-resolving.
   `VERIFIED: unverified`
 
@@ -226,7 +239,7 @@ This is a consequence of `[mirror-staleness-tolerance]`.
 
 **[resolution-reproducible]**: Given the same lock file, a resolver
 MUST reproduce the same fetch targets. Lock entries contain sufficient
-information (`anchor`, `label`, `version`, `czd`, `dig`, sources) to
+information (`set`, `label`, `version`, `publish_czd`, sources) to
 deterministically identify the exact atom version without re-resolving.
 
 - **Type**: Safety
@@ -242,7 +255,8 @@ validation — the invariant checks are commutative over mirror ordering.
 
 **[czd-divergence-handling]**: If two mirrors in the same set advertise
 the same atom at the same version with identical `dig` but different
-`czd` values, the resolver MUST check whether the claims are in the
+`publish_czd` values, the resolver MUST derive each publish's claim
+(from the publish payload) and check whether the claims are in the
 same claim chain (one is an ancestor of the other). If they are, the
 resolver SHOULD prefer the newest claim and SHOULD surface the claim's
 `meta` fields (see atom-transactions.md `[claim-payload-extensible]`)
@@ -303,16 +317,15 @@ resolved atom, the fields defined in the `LockEntry` type:
 
 **Per-entry fields:**
 
-| Field      | Purpose                                 | Required    |
-| :--------- | :-------------------------------------- | :---------- |
-| `anchor`   | Atom-set identity (genesis commit hash) | MUST        |
-| `label`    | Atom label within the set               | MUST        |
-| `version`  | Resolved version (opaque string)        | MUST        |
-| `czd`      | Claim digest (ownership chain binding)  | MUST        |
-| `dig`      | Atom snapshot digest (content binding)  | MUST        |
-| `src`      | Source revision hash (provenance audit) | RECOMMENDED |
-| `requires` | Transitive atom dependencies            | RECOMMENDED |
-| `pkg`      | PURL type (tooling interop)             | OPTIONAL    |
+| Field         | Purpose                                             | Required    |
+| :------------ | :-------------------------------------------------- | :---------- |
+| `set`         | Atom-set identity (genesis commit hash)             | MUST        |
+| `label`       | Atom label within the set                           | MUST        |
+| `version`     | Resolved version (opaque string)                    | MUST        |
+| `publish_czd` | Bare publish digest (cryptographic security anchor) | MUST        |
+| `src`         | Source revision hash (provenance audit)             | RECOMMENDED |
+| `requires`    | Transitive atom dependencies                        | RECOMMENDED |
+| `pkg`         | PURL type (tooling interop)                         | OPTIONAL    |
 
 **Set-level fields:**
 
@@ -321,7 +334,7 @@ resolved atom, the fields defined in the `LockEntry` type:
 | `anchor → mirrors` | Mapping from anchor to mirror URLs | MUST     |
 
 Mirror URLs are captured at the set level, not duplicated per entry.
-Each entry's `anchor` serves as the lookup key into the mirror set
+Each entry's `set` serves as the lookup key into the mirror set
 mapping. This matches the PoC's lock format and avoids redundancy.
 
 The lock format itself (TOML, JSON, etc.) is NOT constrained.
