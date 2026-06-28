@@ -54,9 +54,12 @@ uniquely identifies an atom-set. Serialized as a 40-character lowercase
 hexadecimal string (SHA-1) or 64-character string (SHA-256). Serves as
 the key in `[sets.<anchor>]` tables.
 
-**Atom-id**: A content-addressed digest computed as `digest(anchor, label)`.
-Globally unique. Encoded as a 52-character Base32 string
-(BLAKE3-derived). Used by `id`, `use`, `requires`, and `owner` fields.
+**Atom-id**: The abstract `(anchor, label)` pair that permanently and
+uniquely identifies an atom. It is NOT a hash — the pair itself is the
+identity. Serves as the key in the lock's `DepMap`. Intra-lock
+cross-references that point at an atom carry that atom's `publish_czd`
+(a `Czd`), which is the unambiguous cryptographic pin for the specific
+publish event.
 
 **Label**: A human-readable name for an atom within an atom-set. Used
 by the `label` field on `type = "atom"` entries.
@@ -175,23 +178,26 @@ the dependency graph into an evaluable expression.
 
 ```
 TYPE Using =
-    Atom { at: SemVer, entry: Path, use: AtomId }   -- Full composer
+    Atom { at: SemVer, entry: Path, use: Czd }      -- Full composer (use = publish_czd of composer atom)
   | NixTrivial { entry: Path }                       -- Trivial nix import
   | Config                                           -- Static configuration
 ```
 
 The `Using` enum is discriminated by the `use` field:
 
-- **`use = "<atom-id>"`** (untagged, matches an atom-id) → `Atom` variant
+- **`use = <Czd>`** (untagged; value is a Czd that matches the `publish_czd` of exactly one `type = "atom"` entry) → `Atom` variant
 - **`use = "nix"`** → `NixTrivial` variant
 - **`use = "static"`** (or absent, as default) → `Config` variant
 
-**[lock-compose-atom-variant]**: When `use` contains an atom-id, the
-`at` and `entry` fields MUST also be present. `at` is the semver version
-of the composer atom. `entry` is the relative filesystem path within the
-composer atom that serves as the evaluation entrypoint. The atom-id
-referenced by `use` MUST correspond to an `id` field of exactly one
-`type = "atom"` entry in `[[deps]]`.
+**[lock-compose-atom-variant]**: When `use` holds a `Czd` value, the
+`Atom` variant is selected. The `at` and `entry` fields MUST also be
+present. `at` is the semver version of the composer atom. `entry` is the
+relative filesystem path within the composer atom that serves as the
+evaluation entrypoint. The `Czd` in `use` is the `publish_czd` of the
+composer atom and MUST equal the `publish_czd` field of exactly one
+`type = "atom"` entry in `[[deps]]`. The `Atom` variant is discriminated
+from `"nix"` and `"static"` by the value being a Czd (matching an entry's
+`publish_czd`) rather than one of those literal strings.
 `VERIFIED: unverified`
 
 **[lock-compose-nix-variant]**: When `use = "nix"`, only the `entry`
@@ -233,7 +239,7 @@ emit `[compose.args]` for the `Config` variant. Consumers SHOULD ignore
 [compose]
 at = "0.4.5"
 entry = "mod/default.nix"
-use = "r9ilp2p4nei65m8kevs1l37b2eefu440k725fsj6pqj3mq3ob20sfhb64ud0"
+use = "12207a5c47bd2e1f8093ccdb0dbd49b6e79e12c6e48e35bb18f3e0cd527a5d34729"
 
 [compose.args]
 system = "x86_64-linux"
@@ -297,14 +303,13 @@ entries interleave according to their unified sort key.
 
 ```
 TYPE AtomDep = {
-    type     : "atom",
-    label    : Label,           -- Human-readable label within the atom-set
-    version  : SemVer,          -- Resolved semantic version
-    set      : Anchor,          -- Anchor hash (references [sets.<anchor>])
-    rev      : GitDigest,       -- Pinned git revision (commit hash)
-    id       : AtomId,          -- Content-addressed atom identifier
-    requires : Array<AtomId>,   -- Transitive atom dependencies (optional)
-    direct   : Bool,            -- false = transitive dep (optional)
+    type        : "atom",
+    label       : Label,                     -- Human-readable label within the atom-set (AtomId component)
+    version     : SemVer,                    -- Resolved semantic version (atom-core)
+    set         : Anchor,                    -- Anchor hash (AtomId component; references [sets.<anchor>]) (atom-core)
+    publish_czd : Czd,                       -- Bare Coz digest of the publish CozMessage (atom-core)
+    requires    : Array<Czd>,                 -- publish_czd of each direct dep atom (ion extension, optional)
+    direct      : Bool,                      -- false = transitive dep (ion extension, optional)
 }
 ```
 
@@ -323,27 +328,24 @@ that matches a key in the `[sets]` table. This binds the atom to its
 atom-set, providing mirror information for fetching.
 `VERIFIED: unverified`
 
-**[lock-atom-rev]**: The `rev` field MUST contain a valid git object
-hash (40-char hex for SHA-1, 64-char hex for SHA-256) identifying the
-exact commit from which this atom's snapshot is extracted. The revision
-is the fetching/verification coordinate — eos uses it to check out the
-precise source tree.
-`VERIFIED: unverified`
-
-**[lock-atom-id]**: The `id` field MUST contain a valid atom-id
-(52-character Base32-encoded BLAKE3 digest). This is the
-content-addressed identity of the atom, computed as
-`blake3(anchor ‖ label)`. It is the globally-unique identifier used for
-cross-referencing within the lock file (in `requires`, `owner`, and
-`[compose].use` fields).
+**[lock-atom-publish-czd]**: The `publish_czd` field MUST be the bare
+Coz digest of the publish `CozMessage` for this atom version. It is the
+cryptographic pin: the lock commits to exactly this signed publish event.
+`publish_czd` is the sole verifiable identity anchor in the atom entry;
+it is verified by peeling the publish tag chain and confirming the pinned
+czd appears in the chain. `dig` (the hash of the reproducible atom
+snapshot) is NOT stored in the lock — it lives inside the signed publish
+payload and is verified by peel on acquisition (`peeled_sha == payload.dig`).
+The atom commit (`rev`) is also NOT stored — it is peelable from the
+publish tag chain via `publish_czd`.
 `VERIFIED: unverified`
 
 **[lock-atom-requires]**: The `requires` field is OPTIONAL. When
-present, it MUST be an array of atom-id strings. Each entry MUST
-correspond to the `id` field of another `type = "atom"` entry in
-`[[deps]]`. This field encodes the transitive atom dependency graph as
-a flat adjacency list. An empty array and an absent field are
-semantically equivalent.
+present, it MUST be an array of `Czd` values. Each element is the
+`publish_czd` of another `type = "atom"` entry in `[[deps]]` and MUST
+correspond to exactly one such entry matched by `publish_czd`. This
+field encodes the transitive atom dependency graph as a flat adjacency
+list. An empty array and an absent field are semantically equivalent.
 `VERIFIED: unverified`
 
 **[lock-atom-direct]**: The `direct` field is OPTIONAL. When absent, the
@@ -354,12 +356,6 @@ dependencies (it defaults to `true`) and MUST include `direct = false`
 for transitive ones.
 `VERIFIED: unverified`
 
-**[lock-atom-rev-optional]**: The `rev` field MAY be absent for local
-atom-sets (those whose `mirrors` contains only `"::"`). Local atoms are
-resolved from the working tree, not from a pinned revision. Remote atom
-entries MUST always include `rev`.
-`VERIFIED: unverified`
-
 #### Example
 
 ```toml
@@ -368,17 +364,15 @@ type = "atom"
 label = "hosts"
 version = "0.1.1"
 set = "b7d610651b8dd7975eb0265fbf93ee70bc39c291"
-rev = "e38c54245b638eae16bdca1a65dcdc453fe33624"
-id = "nei65m8kevs1l37b2eefu440k725fsj6pqj3mq3ob20sfhb64ud0"
+publish_czd = "12207a5c47bd2e1f8093ccdb0dbd49b6e79e12c6e48e35bb18f3e0cd527a5d34729"
 
 [[deps]]
 type = "atom"
 label = "home"
 version = "0.1.8"
 set = "f36300e6cd435c5b56751f2792e67f32cf1b666e"
-rev = "795ae541b7fd67dd3c6e1a9dddf903312696aa17"
-id = "nei65m8kevs1l37b2eefu440k725fsj6pqj3mq3ob20sfhb64ud0"
-requires = ["nei65m8kevs1l37b2eefu440k725fsj6pqj3mq3ob20sfhb64ud0"]
+publish_czd = "12201c4f43d8ed0e2d18d3e9b472d22b7d30c83ad27ab33d1e9cf7a7a3c45aeae61"
+requires = ["12207a5c47bd2e1f8093ccdb0dbd49b6e79e12c6e48e35bb18f3e0cd527a5d34729"]
 direct = false
 ```
 
@@ -394,7 +388,7 @@ TYPE NixDep = {
     name  : String,         -- Human-readable identifier
     url   : URL,            -- Fetch URL
     hash  : SriHash,        -- SRI-format content hash
-    owner : AtomId,         -- Owning atom (optional)
+    owner : Czd,            -- publish_czd of owning atom (optional)
 }
 ```
 
@@ -427,7 +421,7 @@ TYPE NixGitDep = {
     url     : GitURL,       -- Git repository URL
     rev     : GitDigest,    -- Pinned commit hash
     version : SemVer,       -- Resolved version (optional)
-    owner   : AtomId,       -- Owning atom (optional)
+    owner   : Czd,          -- publish_czd of owning atom (optional)
 }
 ```
 
@@ -465,7 +459,7 @@ TYPE NixTarDep = {
     name  : String,         -- Human-readable identifier
     url   : URL,            -- Tarball URL
     hash  : SriHash,        -- SRI-format content hash
-    owner : AtomId,         -- Owning atom (optional)
+    owner : Czd,            -- publish_czd of owning atom (optional)
 }
 ```
 
@@ -493,7 +487,7 @@ TYPE BuildSrc = {
     name  : String,         -- Human-readable identifier
     url   : URL,            -- Source URL
     hash  : SriHash,        -- SRI-format content hash
-    owner : AtomId,         -- Owning atom (optional)
+    owner : Czd,            -- publish_czd of owning atom (optional)
 }
 ```
 
@@ -505,7 +499,7 @@ type = "nix+src"
 name = "flake-registry"
 url = "https://raw.githubusercontent.com/NixOS/flake-registry/master/flake-registry.json"
 hash = "sha256-hClMprWwiEQe7mUUToXZAR5wbhoVFi+UuqLL2K/eIPw="
-owner = "nei65m8kevs1l37b2eefu440k725fsj6pqj3mq3ob20sfhb64ud0"
+owner = "12207a5c47bd2e1f8093ccdb0dbd49b6e79e12c6e48e35bb18f3e0cd527a5d34729"
 ```
 
 ---
@@ -516,10 +510,10 @@ owner = "nei65m8kevs1l37b2eefu440k725fsj6pqj3mq3ob20sfhb64ud0"
 
 **`owner`** — Present on all non-atom dependency types (`nix`,
 `nix+git`, `nix+tar`, `nix+src`). OPTIONAL. When present, its value
-MUST be a valid atom-id referencing a `type = "atom"` entry's `id`
-field. It traces _provenance_: which atom's evaluation introduced this
-external dependency into the graph. When absent, the dependency is a
-direct dependency of the root atom.
+MUST be the `publish_czd` of exactly one `type = "atom"` entry in
+`[[deps]]`. It traces _provenance_: which atom's evaluation introduced
+this external dependency into the graph. When absent, the dependency is
+a direct dependency of the root atom.
 
 The `owner` field serves two consumers:
 
@@ -527,25 +521,12 @@ The `owner` field serves two consumers:
   manifest, its owned external dependencies can be pruned.
 - **Eos**: Dependency closure — eos can determine which external
   fetches must complete before a given atom's evaluation begins by
-  collecting all deps whose `owner` matches that atom's `id`.
+  collecting all deps whose `owner` matches that atom's `publish_czd`.
 
 **`name`** — Present on all non-atom dependency types. MUST be a
 non-empty UTF-8 string. Serves as the human-readable identifier and
 the deduplication key within the lock's `DepMap`. Two non-atom entries
 MUST NOT share the same `name`.
-
-#### `id` vs `rev`
-
-These two fields on `type = "atom"` entries serve fundamentally different
-purposes:
-
-- **`id`** (atom-id) is the _identity_ — a BLAKE3 digest of
-  `(anchor, label)`, invariant across revisions. It is the stable
-  cross-reference key used by `requires`, `owner`, and `[compose].use`.
-- **`rev`** (git digest) is the _coordinate_ — a git commit hash
-  identifying the exact source tree snapshot. It changes with every
-  publish. Eos uses `rev` to fetch the correct source; `id` to verify
-  identity.
 
 #### `set`
 
@@ -557,10 +538,11 @@ set of mirrors without duplicating URL lists.
 #### `requires`
 
 The `requires` field encodes the atom-level dependency graph as a flat
-adjacency list. Each atom-id in the array represents an edge: "this atom
-depends on that atom." The complete dependency DAG is reconstructable by
-iterating `[[deps]]` entries of `type = "atom"` and building a
-`Map<AtomId, Vec<AtomId>>` from their `requires` fields.
+adjacency list. Each `Czd` in the array is the `publish_czd` of a
+depended-on atom entry and represents an edge: "this atom depends on that
+atom." The complete dependency DAG is reconstructable by iterating
+`[[deps]]` entries of `type = "atom"` and building a
+`Map<Czd, Vec<Czd>>` from their `requires` fields.
 
 > **Note:** `requires` captures only _atom_ dependencies. External
 > dependencies (nix, nix+git, etc.) introduced by an atom are traced
@@ -666,11 +648,13 @@ or resolution history — is required. This is the `handoff-lock-sufficiency`
 invariant from [ion-eos-contract.md](ion-eos-contract.md).
 `VERIFIED: unverified`
 
-**[lock-hash-integrity]**: Every digest in the lock file — `id` fields
-(atom-id), `rev` fields (git digest), `hash` fields (SRI hash) — MUST
-be verifiable against the fetched content. Eos MUST verify all digests
-before using the corresponding artifact. Verification failure MUST abort
-the build.
+**[lock-hash-integrity]**: Every digest in the lock file MUST be
+verifiable against the fetched content. For atom entries, `publish_czd`
+is the cryptographic pin: eos verifies by locating it in the publish tag
+chain and confirming `peeled_sha == payload.dig`. For non-atom entries,
+`hash` fields (SRI hash) MUST be verified against the fetched content.
+Eos MUST verify all digests before using the corresponding artifact.
+Verification failure MUST abort the build.
 `VERIFIED: unverified`
 
 **[lock-dag-acyclicity]**: The dependency graph encoded by `requires`
@@ -679,19 +663,21 @@ during lock production (by ion) and SHOULD be detected during lock
 consumption (by eos).
 `VERIFIED: unverified`
 
-**[lock-requires-closure]**: Every atom-id appearing in any `requires`
-array MUST correspond to exactly one `type = "atom"` entry in `[[deps]]`
-with a matching `id` field. Dangling references MUST be rejected.
+**[lock-requires-closure]**: Every `Czd` appearing in any `requires`
+array MUST equal the `publish_czd` of exactly one `type = "atom"` entry
+in `[[deps]]`. Matching is by `publish_czd` — not by `(set, label)`.
+Dangling references MUST be rejected.
 `VERIFIED: unverified`
 
-**[lock-owner-closure]**: Every atom-id appearing in any `owner` field
-MUST correspond to exactly one `type = "atom"` entry in `[[deps]]` with
-a matching `id` field. Dangling owner references MUST be rejected.
+**[lock-owner-closure]**: Every `Czd` appearing in any `owner` field MUST
+equal the `publish_czd` of exactly one `type = "atom"` entry in `[[deps]]`.
+Matching is by `publish_czd` — not by `(set, label)`. Dangling owner
+references MUST be rejected.
 `VERIFIED: unverified`
 
-**[lock-compose-closure]**: If `[compose].use` contains an atom-id, that
-atom-id MUST correspond to exactly one `type = "atom"` entry in
-`[[deps]]` with a matching `id` field.
+**[lock-compose-closure]**: If `[compose].use` holds a `Czd` value, it
+MUST equal the `publish_czd` of exactly one `type = "atom"` entry in
+`[[deps]]`. Matching is by `publish_czd` — not by `(set, label)`.
 `VERIFIED: unverified`
 
 **[lock-version-compatibility]**: Consumers MUST reject lock files whose
@@ -705,50 +691,48 @@ spec.
 
 ## Verification
 
-| Constraint                         | Method                  | Result     | Detail                                 |
-| :--------------------------------- | :---------------------- | :--------- | :------------------------------------- |
-| `lock-version-field`               | Unit tests              | UNVERIFIED | Parse valid and invalid version values |
-| `lock-auto-generated-comment`      | N/A (advisory)          | UNVERIFIED | SHOULD-level; not enforceable          |
-| `lock-set-key-format`              | Regex validation        | UNVERIFIED | Validate hex length and character set  |
-| `lock-set-tag`                     | Deserialization tests   | UNVERIFIED | Empty string rejection                 |
-| `lock-set-mirrors`                 | Deserialization tests   | UNVERIFIED | Empty array rejection, URL validation  |
-| `lock-set-mirror-local-sentinel`   | Unit tests              | UNVERIFIED | `"::"` as sole entry semantics         |
-| `lock-set-referenced`              | Cross-reference check   | UNVERIFIED | Ensure all `set` fields resolve        |
-| `lock-compose-atom-variant`        | Deserialization tests   | UNVERIFIED | Required field enforcement             |
-| `lock-compose-nix-variant`         | Deserialization tests   | UNVERIFIED | Field presence constraints             |
-| `lock-compose-config-variant`      | Deserialization tests   | UNVERIFIED | Field absence constraints              |
-| `lock-compose-default`             | Default value tests     | UNVERIFIED | Absent `[compose]` → `Config`          |
-| `lock-compose-args`                | Deserialization tests   | UNVERIFIED | Arbitrary key-value parsing            |
-| `lock-compose-args-scope`          | Validation logic        | UNVERIFIED | Reject args on Config variant          |
-| `lock-dep-type-dispatch`           | Tagged enum tests       | UNVERIFIED | All five type values parse correctly   |
-| `lock-dep-no-unknown-fields`       | `deny_unknown_fields`   | UNVERIFIED | Unrecognized field rejection           |
-| `lock-dep-ordering`                | Serialization roundtrip | UNVERIFIED | Deterministic output comparison        |
-| `lock-atom-label`                  | Label grammar tests     | UNVERIFIED | Invalid label rejection                |
-| `lock-atom-version`                | Semver parsing          | UNVERIFIED | Pre-release identifier support         |
-| `lock-atom-set-ref`                | Cross-reference check   | UNVERIFIED | Dangling set reference rejection       |
-| `lock-atom-rev`                    | Hex validation          | UNVERIFIED | Length and character set               |
-| `lock-atom-id`                     | Base32 validation       | UNVERIFIED | Length and character set               |
-| `lock-atom-requires`               | Closure validation      | UNVERIFIED | Dangling reference rejection           |
-| `lock-atom-direct`                 | Default value tests     | UNVERIFIED | Absent → true, explicit false          |
-| `lock-atom-rev-optional`           | Conditional presence    | UNVERIFIED | Local vs remote enforcement            |
-| `lock-nix-hash-format`             | SRI parsing             | UNVERIFIED | Algorithm prefix + encoding            |
-| `lock-nix-git-rev`                 | Hex validation          | UNVERIFIED | Same as `lock-atom-rev`                |
-| `lock-nix-git-version`             | Semver parsing          | UNVERIFIED | Optional field handling                |
-| `lock-type-namespace`              | Pattern validation      | UNVERIFIED | Compound identifier grammar            |
-| `lock-type-extension-mechanism`    | Design review           | UNVERIFIED | Architectural property                 |
-| `lock-type-backend-dispatch`       | Integration tests       | UNVERIFIED | Eos backend routing                    |
-| `lock-deterministic-serialization` | Roundtrip tests         | UNVERIFIED | Byte-identical output                  |
-| `lock-serde-tag-dispatch`          | Serde attribute audit   | UNVERIFIED | Code inspection                        |
-| `lock-serde-deny-unknown`          | Serde attribute audit   | UNVERIFIED | Code inspection                        |
-| `lock-depmap-values-only`          | Serialization tests     | UNVERIFIED | Array-of-tables output                 |
-| `lock-optional-field-elision`      | Serialization tests     | UNVERIFIED | Absent vs default equivalence          |
-| `lock-sufficiency`                 | Integration tests       | UNVERIFIED | Build from lock only                   |
-| `lock-hash-integrity`              | Fetch + verify tests    | UNVERIFIED | Content vs digest comparison           |
-| `lock-dag-acyclicity`              | Graph validation        | UNVERIFIED | Cycle detection algorithm              |
-| `lock-requires-closure`            | Cross-reference check   | UNVERIFIED | Dangling atom-id rejection             |
-| `lock-owner-closure`               | Cross-reference check   | UNVERIFIED | Dangling owner rejection               |
-| `lock-compose-closure`             | Cross-reference check   | UNVERIFIED | Dangling compose ref rejection         |
-| `lock-version-compatibility`       | Version gate tests      | UNVERIFIED | Unknown version rejection              |
+| Constraint                         | Method                  | Result     | Detail                                   |
+| :--------------------------------- | :---------------------- | :--------- | :--------------------------------------- |
+| `lock-version-field`               | Unit tests              | UNVERIFIED | Parse valid and invalid version values   |
+| `lock-auto-generated-comment`      | N/A (advisory)          | UNVERIFIED | SHOULD-level; not enforceable            |
+| `lock-set-key-format`              | Regex validation        | UNVERIFIED | Validate hex length and character set    |
+| `lock-set-tag`                     | Deserialization tests   | UNVERIFIED | Empty string rejection                   |
+| `lock-set-mirrors`                 | Deserialization tests   | UNVERIFIED | Empty array rejection, URL validation    |
+| `lock-set-mirror-local-sentinel`   | Unit tests              | UNVERIFIED | `"::"` as sole entry semantics           |
+| `lock-set-referenced`              | Cross-reference check   | UNVERIFIED | Ensure all `set` fields resolve          |
+| `lock-compose-atom-variant`        | Deserialization tests   | UNVERIFIED | Required field enforcement               |
+| `lock-compose-nix-variant`         | Deserialization tests   | UNVERIFIED | Field presence constraints               |
+| `lock-compose-config-variant`      | Deserialization tests   | UNVERIFIED | Field absence constraints                |
+| `lock-compose-default`             | Default value tests     | UNVERIFIED | Absent `[compose]` → `Config`            |
+| `lock-compose-args`                | Deserialization tests   | UNVERIFIED | Arbitrary key-value parsing              |
+| `lock-compose-args-scope`          | Validation logic        | UNVERIFIED | Reject args on Config variant            |
+| `lock-dep-type-dispatch`           | Tagged enum tests       | UNVERIFIED | All five type values parse correctly     |
+| `lock-dep-no-unknown-fields`       | `deny_unknown_fields`   | UNVERIFIED | Unrecognized field rejection             |
+| `lock-dep-ordering`                | Serialization roundtrip | UNVERIFIED | Deterministic output comparison          |
+| `lock-atom-label`                  | Label grammar tests     | UNVERIFIED | Invalid label rejection                  |
+| `lock-atom-version`                | Semver parsing          | UNVERIFIED | Pre-release identifier support           |
+| `lock-atom-set-ref`                | Cross-reference check   | UNVERIFIED | Dangling set reference rejection         |
+| `lock-atom-publish-czd`            | Czd format + chain peel | UNVERIFIED | Verify czd in chain; peeled sha == dig   |
+| `lock-atom-requires`               | Closure validation      | UNVERIFIED | Dangling publish_czd reference rejection |
+| `lock-atom-direct`                 | Default value tests     | UNVERIFIED | Absent → true, explicit false            |
+| `lock-nix-hash-format`             | SRI parsing             | UNVERIFIED | Algorithm prefix + encoding              |
+| `lock-nix-git-rev`                 | Hex validation          | UNVERIFIED | Git commit hash length and character set |
+| `lock-nix-git-version`             | Semver parsing          | UNVERIFIED | Optional field handling                  |
+| `lock-type-namespace`              | Pattern validation      | UNVERIFIED | Compound identifier grammar              |
+| `lock-type-extension-mechanism`    | Design review           | UNVERIFIED | Architectural property                   |
+| `lock-type-backend-dispatch`       | Integration tests       | UNVERIFIED | Eos backend routing                      |
+| `lock-deterministic-serialization` | Roundtrip tests         | UNVERIFIED | Byte-identical output                    |
+| `lock-serde-tag-dispatch`          | Serde attribute audit   | UNVERIFIED | Code inspection                          |
+| `lock-serde-deny-unknown`          | Serde attribute audit   | UNVERIFIED | Code inspection                          |
+| `lock-depmap-values-only`          | Serialization tests     | UNVERIFIED | Array-of-tables output                   |
+| `lock-optional-field-elision`      | Serialization tests     | UNVERIFIED | Absent vs default equivalence            |
+| `lock-sufficiency`                 | Integration tests       | UNVERIFIED | Build from lock only                     |
+| `lock-hash-integrity`              | Fetch + verify tests    | UNVERIFIED | Content vs digest comparison             |
+| `lock-dag-acyclicity`              | Graph validation        | UNVERIFIED | Cycle detection algorithm                |
+| `lock-requires-closure`            | Cross-reference check   | UNVERIFIED | Dangling atom-id rejection               |
+| `lock-owner-closure`               | Cross-reference check   | UNVERIFIED | Dangling owner rejection                 |
+| `lock-compose-closure`             | Cross-reference check   | UNVERIFIED | Dangling compose ref rejection           |
+| `lock-version-compatibility`       | Version gate tests      | UNVERIFIED | Unknown version rejection                |
 
 ---
 
@@ -777,7 +761,7 @@ mirrors = ["::"]
 [compose]
 at = "0.1.0"
 entry = "mod/default.nix"
-use = "nei65m8kevs1l37b2eefu440k725fsj6pqj3mq3ob20sfhb64ud0"
+use = "12207a5c47bd2e1f8093ccdb0dbd49b6e79e12c6e48e35bb18f3e0cd527a5d34729"
 
 [compose.args]
 system = "x86_64-linux"
@@ -787,17 +771,15 @@ type = "atom"
 label = "hosts"
 version = "0.1.1"
 set = "b7d610651b8dd7975eb0265fbf93ee70bc39c291"
-rev = "e38c54245b638eae16bdca1a65dcdc453fe33624"
-id = "nei65m8kevs1l37b2eefu440k725fsj6pqj3mq3ob20sfhb64ud0"
+publish_czd = "12207a5c47bd2e1f8093ccdb0dbd49b6e79e12c6e48e35bb18f3e0cd527a5d34729"
 
 [[deps]]
 type = "atom"
 label = "home"
 version = "0.1.8"
 set = "f36300e6cd435c5b56751f2792e67f32cf1b666e"
-rev = "795ae541b7fd67dd3c6e1a9dddf903312696aa17"
-id = "nei65m8kevs1l37b2eefu440k725fsj6pqj3mq3ob20sfhb64ud0"
-requires = ["nei65m8kevs1l37b2eefu440k725fsj6pqj3mq3ob20sfhb64ud0"]
+publish_czd = "12201c4f43d8ed0e2d18d3e9b472d22b7d30c83ad27ab33d1e9cf7a7a3c45aeae61"
+requires = ["12207a5c47bd2e1f8093ccdb0dbd49b6e79e12c6e48e35bb18f3e0cd527a5d34729"]
 direct = false
 
 [[deps]]
@@ -805,7 +787,7 @@ type = "atom"
 label = "users"
 version = "0.1.4-local"
 set = "47478f45ed0de99d42495a0842b1fa41eac1ce14"
-id = "nei65m8kevs1l37b2eefu440k725fsj6pqj3mq3ob20sfhb64ud0"
+publish_czd = "1220f8a2c9d4e6b7a138cf9e4d2f53a1b7e0c45d28a9f3e6b74c2d1a8f53e0b962"
 
 [[deps]]
 type = "nix"
@@ -830,7 +812,7 @@ type = "nix+src"
 name = "flake-registry"
 url = "https://raw.githubusercontent.com/NixOS/flake-registry/master/flake-registry.json"
 hash = "sha256-hClMprWwiEQe7mUUToXZAR5wbhoVFi+UuqLL2K/eIPw="
-owner = "nei65m8kevs1l37b2eefu440k725fsj6pqj3mq3ob20sfhb64ud0"
+owner = "12207a5c47bd2e1f8093ccdb0dbd49b6e79e12c6e48e35bb18f3e0cd527a5d34729"
 
 [[deps]]
 type = "nix+tar"
@@ -881,7 +863,7 @@ pub struct SetDetails {
 pub enum Using {
     /// Full composer: atom with entry point and version.
     #[serde(untagged)]
-    Atom { at: Version, entry: PathBuf, r#use: AtomDigest },
+    Atom { at: Version, entry: PathBuf, r#use: Czd },     // publish_czd reference to the composer atom entry
     /// Trivial Nix import.
     #[serde(rename = "nix")]
     NixTrivial { entry: PathBuf },
@@ -910,6 +892,7 @@ pub enum Dep {
 /// Values-only array wrapper over BTreeMap for deterministic ordering.
 /// Serializes as [[deps]] (TOML array of tables).
 /// Keys are reconstructed from entry contents during deserialization.
+/// AtomId = (Anchor, Label) — the abstract pair, NOT a hash.
 pub struct DepMap(BTreeMap<Either<AtomId, Name>, Dep>);
 ```
 
@@ -935,7 +918,7 @@ pub struct DepMap(BTreeMap<Either<AtomId, Name>, Dep>);
 4. **`owner` Graph Traversal**: To compute the complete fetch closure
    for a given atom, consumers must:
    (a) Follow the `requires` adjacency list for atom-level deps.
-   (b) Collect all non-atom deps whose `owner` matches the atom's `id`.
+   (b) Collect all non-atom deps whose `owner` matches the atom's `publish_czd`.
    (c) Recurse through transitive atom deps and repeat (b).
    This two-path traversal is implicit in the schema design; consumers
    are responsible for implementing it correctly.
