@@ -68,24 +68,22 @@ TYPE  SetDetails = {
       }
 
 TYPE  AtomDep = {
-        anchor:   Anchor,                     -- atom-set identity
-        label:    Label,                      -- atom label
-        version:  Version,                    -- resolved version (exact)
-        czd:      Czd,                        -- publish transaction digest
-        dig:      Vec<u8>,                    -- atom snapshot digest (content binding)
-        cad:      AtomDigest,                 -- content-addressed identifier
-        requires: Vec<AtomDigest>,            -- direct atom deps of this atom
-        direct:   bool,                       -- true if from root manifest
+        set:         Anchor,                  -- atom-set identity (type: Anchor digest)
+        label:       Label,                   -- atom label
+        version:     Version,                 -- resolved version (exact)
+        publish_czd: Czd,                     -- publish transaction digest (the lock pin)
+        requires:    Vec<Czd>,               -- publish_czd of each direct atom dep
+        direct:      bool,                    -- true if from root manifest
       }
-      -- The czd is the digest of the publish CozMessage. From a publish
-      -- czd, the claim czd, dig, anchor, label, version, and provenance
-      -- (src, path) are all derivable. It is the canonical single
-      -- reference binding ownership, content, and identity.
-      -- anchor, label, version, czd, dig are REQUIRED per atom-sourcing.md
-      -- [lock-entry-sufficient]. cad, requires, direct are ion extensions.
+      -- publish_czd is the digest of the publish CozMessage. From it,
+      -- the claim czd, anchor, label, version, and provenance (src, path)
+      -- are all derivable. dig lives in the signed payload, verified by
+      -- peel — it is NOT lock-stored (atom-sad §6.5).
+      -- atom-core (L1 [lock-entry-sufficient]): set, label, version,
+      -- publish_czd. ion extensions: requires, direct.
 
 TYPE  Lockfile = {
-        version:  LockVersion,                -- REQUIRED, currently 1
+        version:  LockVersion,                -- REQUIRED, currently 0
         sets:     Map<Anchor, SetDetails>,    -- anchor → mirrors
         compose:  Using,                      -- resolved composer
         deps:     DepMap,                     -- all resolved deps
@@ -104,7 +102,7 @@ precedence.
 `VERIFIED: unverified`
 
 **[lock-schema-version]**: The lock file MUST contain a `version`
-field. The current schema version is `1`. Implementations MUST reject
+field. The current schema version is `0`. Implementations MUST reject
 lock files with unrecognized schema versions rather than silently
 misinterpreting them.
 `VERIFIED: unverified`
@@ -117,22 +115,23 @@ table MUST contain the set's `tag` (for human readability) and its
 `VERIFIED: unverified`
 
 **[lock-atom-entry-fields]**: Each locked atom dependency MUST contain:
-`anchor`, `label`, `version`, `czd` (publish transaction digest), and
-`dig` (atom snapshot digest). The `czd` is the digest of the publish
-`CozMessage` — from it, the claim czd is derivable (via the publish
-payload's `claim` field), making it the single canonical ownership
-binding. These are the REQUIRED fields from atom-sourcing.md's
-`[lock-entry-sufficient]`. Ion extends these with `cad` (AtomDigest),
-`requires` (transitive deps), and `direct` (provenance flag). The
-`anchor` field serves as the lookup key into the lock's `[sets]` table
+`set`, `label`, `version`, and `publish_czd` (publish transaction
+digest). The `publish_czd` is the digest of the publish `CozMessage` —
+from it, the claim czd, anchor, label, version, and provenance (src,
+path) are all derivable; `dig` lives in the signed payload and is
+verified by peel, not lock-stored (atom-sad §6.5). These are the
+REQUIRED fields from atom-sourcing.md's `[lock-entry-sufficient]`. Ion
+extends these with `requires` (dep graph edges, as `publish_czd` values
+of direct atom deps) and `direct` (provenance flag). The `set` field
+(type: Anchor digest) is the lookup key into the lock's `[sets]` table
 for mirror resolution.
 `VERIFIED: unverified`
 
 **[lock-requires-graph]**: Each locked atom dependency SHOULD include
-a `requires` field listing the `AtomDigest` values of its direct atom
-dependencies. This enables dependency graph reconstruction from the
-lock file without re-resolving and supports targeted updates when a
-transitive dependency changes.
+a `requires` field listing the **`publish_czd`** values of its
+direct atom dependencies. This enables dependency graph reconstruction
+from the lock file without re-resolving and supports targeted updates
+when a transitive dependency changes.
 `VERIFIED: unverified`
 
 **[lock-direct-flag]**: Each locked atom dependency SHOULD include a
@@ -143,8 +142,8 @@ the field MAY be omitted for direct deps. Transitive deps MUST set
 `VERIFIED: unverified`
 
 **[lock-compose-capture]**: The lock file MUST capture the resolved
-composer configuration. This includes the resolved atom digest and
-version of the composer atom (for `with` variant), or the evaluation
+composer configuration. This includes the `publish_czd` and version
+of the composer atom (for `with` variant), or the evaluation
 mode (for `as` variants). The composer is resolved through the same
 pipeline as regular dependencies.
 `VERIFIED: unverified`
@@ -166,6 +165,10 @@ MUST NOT fail for solvable instances. (Completeness.)
 **[resolution-deterministic]**: Given the same manifest and the same
 set of available atoms, the resolver MUST produce the same lock file.
 Non-deterministic resolution (e.g., random tie-breaking) is forbidden.
+ALL provider and discovery outputs (candidate enumeration, dependency
+lists, git-ref and map iteration) MUST be consumed in a stable,
+normalized order; ordering nondeterminism is the primary determinism
+footgun and is forbidden (SAD §6.1, §6.7).
 `VERIFIED: unverified`
 
 **[resolution-highest-match]**: When multiple versions of an atom
@@ -244,8 +247,11 @@ lock is invalid.
 **[lock-reproducibility]**: Given the same lock file and the same
 mirror state, fetching all dependencies MUST produce the same set of
 artifacts. This is a consequence of atom-sourcing.md's
-`[resolution-reproducible]`, restated in ion's context. The lock's
-`dig` field (atom snapshot digest) is the ultimate content binding.
+`[resolution-reproducible]`, restated in ion's context. Content
+binding flows through `publish_czd`: each locked entry's `publish_czd`
+pins the publish `CozMessage`; on fetch, the peeled content sha MUST
+equal `payload.dig`, which is verified by peel — `dig` is NOT stored
+in the lock (atom-sad §6.5).
 
 - **Type**: Safety
   `VERIFIED: unverified`
@@ -278,36 +284,32 @@ is NOT REQUIRED — it depends on the specific atom storage backend.
 ## Lock File Schema (Informative)
 
 ```toml
-version = 1
+version = 0
 
 [sets.<anchor-hex>]
 tag = "company-atoms"
 mirrors = ["git@github.com:our-company/atoms", "https://mirror.example.com/atoms"]
 
 [compose]
-use = "atom"
+use = "<publish-czd-of-composer-atom>"
 at = "2.0.0"
 entry = "default.nix"
 
 [[deps]]
-type = "atom"
-anchor = "<anchor-hex>"
-label = "auth-service"
-version = "1.5.2"
-czd = "<publish-czd-b64ut>"
-dig = "<atom-snapshot-hex>"
-cad = "<atomdigest-alg.b64ut>"
-requires = ["<atomdigest-of-dep>"]
+type        = "atom"
+set         = "<anchor-hex>"
+label       = "auth-service"
+version     = "1.5.2"
+publish_czd = "<bare-czd>"
+requires    = ["<publish-czd-of-dep>"]
 
 [[deps]]
-type = "atom"
-anchor = "<anchor-hex>"
-label = "shared-config"
-version = "0.1.0"
-czd = "<publish-czd-b64ut>"
-dig = "<atom-snapshot-hex>"
-cad = "<atomdigest-alg.b64ut>"
-direct = false
+type        = "atom"
+set         = "<anchor-hex>"
+label       = "shared-config"
+version     = "0.1.0"
+publish_czd = "<bare-czd>"
+direct      = false
 
 [[deps]]
 type = "nix+git"
@@ -320,7 +322,7 @@ type = "nix+tar"
 name = "openssl"
 url = "https://www.openssl.org/source/openssl-3.1.0.tar.gz"
 hash = "sha256:..."
-owner = "<atomdigest-of-owning-atom>"
+owner = "<publish-czd-of-owning-atom>"
 ```
 
 ## Verification
