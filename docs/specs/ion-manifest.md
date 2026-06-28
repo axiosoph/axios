@@ -197,8 +197,9 @@ verification strategy without understanding ion's plugin mechanism.
 **[plugin-owner-tracking]**: When a plugin dependency originates from
 a transitive atom dependency (not the root manifest), the lock entry
 SHOULD include an `owner` field containing the owning atom's
-`AtomDigest`. This enables dependency graph reconstruction and
-targeted re-resolution when the owning atom updates.
+`publish_czd` (a Czd). This enables dependency
+graph reconstruction and targeted re-resolution when the owning atom
+updates.
 `VERIFIED: unverified`
 
 **[plugin-resolution-locality]**: Plugin resolution MUST execute
