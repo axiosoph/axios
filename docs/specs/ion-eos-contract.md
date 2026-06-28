@@ -149,23 +149,29 @@ lock file content. The schema of the lock file is defined in
 `VERIFIED: unverified`
 
 **[handoff-atom-fields]**: For each `type = "atom"` dependency in
-`[[deps]]`, eos MUST receive at minimum: `label`, `version`, `set`
-(anchor hash referencing mirror information), `rev` (pinned git
-revision), and `id` (content-addressed atom identifier). These fields
-are transmitted as structured `eos-core` dependency descriptor types,
-not as raw lock file TOML. The `set` field references an `AtomSetInfo`
-entry in the `BuildRequest`, which the `AtomSource` composite
-implementation uses for registry mirror resolution (see
-[atom-sourcing.md §Composite AtomSource](atom-sourcing.md)) — eos
-does not directly fetch from URLs embedded in set data. The `rev`
-identifies the exact source tree snapshot. The `id` is the
-globally-unique cross-reference key (used by `requires`, `owner`, and
-the composer reference). These fields are sufficient for eos's
-`AtomSource` to: (1) resolve the atom from configured sources
-(local store, registry mirrors, ion peer fallback), (2) identify the
-atom within the dependency graph via `id`. See
-[lock-file-schema.md §type = "atom"](lock-file-schema.md) for
-the normative field definitions.
+`[[deps]]`, eos MUST receive the minimal pointer: `label`, `version`,
+`set` (anchor hash referencing mirror information), and `publish_czd`
+(the bare publish digest pin). These fields are transmitted as
+structured `eos-core` dependency descriptor types, not as raw lock file
+TOML. The `set` field references an `AtomSetInfo` entry in the
+`BuildRequest`, which the `AtomSource` composite implementation uses for
+registry mirror resolution (see
+[atom-sourcing.md §Composite AtomSource](atom-sourcing.md)) — eos does
+not directly fetch from URLs embedded in set data. Eos obtains the
+source revision (`rev`), `dig`, and content by reading the atom's
+self-describing git object (the signed publish payload + the peeled
+commit), resolved via L1 `AtomSource` by `publish_czd`; these are
+git-object-readable, not lock/wire-copied. Whether eos reads the object
+directly or ion materializes wire fields from it at handoff time is an
+implementation choice that does not change the contract's minimal
+required set. The `(set, label)` pair is the dependency graph key (used
+by `requires`, `owner`, and the composer reference). The minimal pointer
+`(set, label, version, publish_czd)` is sufficient for eos's
+`AtomSource` to: (1) resolve the atom from configured sources (local
+store, registry mirrors, ion peer fallback), (2) identify the atom
+within the dependency graph. See
+[lock-file-schema.md §type = "atom"](lock-file-schema.md) for the
+normative field definitions.
 `VERIFIED: unverified`
 
 **[handoff-plugin-fields]**: For each non-atom dependency (`type` ∈
@@ -363,11 +369,11 @@ build or alter daemon state.
 **Query Operations**: The `AtomDiscovery` capability exposes three
 operations:
 
-| Method          | Signature                      | Purpose                                                                                       |
-| :-------------- | :----------------------------- | :-------------------------------------------------------------------------------------------- |
-| `resolve(id)`   | `AtomId → Option<AtomMeta>`    | Look up specific atom metadata (label, version, set, mirrors) by content-addressed identifier |
-| `contains(id)`  | `AtomId → Bool`                | Existence check — returns whether eos has knowledge of the given atom                         |
-| `search(query)` | `SearchQuery → List<AtomMeta>` | Find atoms matching a label pattern, atom-set filter, version range, or combination thereof   |
+| Method          | Signature                      | Purpose                                                                                                |
+| :-------------- | :----------------------------- | :----------------------------------------------------------------------------------------------------- |
+| `resolve(id)`   | `AtomId → Option<AtomMeta>`    | Look up specific atom metadata (label, version, set, mirrors) by `AtomId` — the `(anchor, label)` pair |
+| `contains(id)`  | `AtomId → Bool`                | Existence check — returns whether eos has knowledge of the given atom                                  |
+| `search(query)` | `SearchQuery → List<AtomMeta>` | Find atoms matching a label pattern, atom-set filter, version range, or combination thereof            |
 
 **Use Cases**:
 
@@ -692,6 +698,12 @@ include the translated equivalents of all lock file sections:
 | Composer config        | MUST be present; determines evaluation strategy              | `[compose]`      | [lock-file-schema.md §[compose]](lock-file-schema.md)           |
 | Dependency descriptors | MUST describe all transitive dependencies                    | `[[deps]]`       | [lock-file-schema.md §[[deps]]](lock-file-schema.md)            |
 
+For `type = "atom"` dependency descriptors, the required fields are the
+minimal pointer `(set, label, version, publish_czd)` per
+`[handoff-atom-fields]`. No additional fields (`rev`, `id`, `dig`) are
+required in the build request; eos reads those from the atom's
+self-describing git object.
+
 ### Structural Validation
 
 Before beginning fetch-verify-build, eos MUST validate the
@@ -798,38 +810,38 @@ This returns the current `BuildStatus` as a snapshot value.
 
 ## Verification
 
-| Constraint                     | Method                 | Result     | Detail                                                   |
-| :----------------------------- | :--------------------- | :--------- | :------------------------------------------------------- |
-| `handoff-lock-sufficiency`     | Integration test       | UNVERIFIED | Submit lock-only; verify eos never reads manifest        |
-| `handoff-atom-fields`          | Schema conformance     | UNVERIFIED | Validate `rev`, `id`, `set`, `label`, `version` presence |
-| `handoff-plugin-fields`        | Schema conformance     | UNVERIFIED | Validate `type`, `name`, and fetch coordinates per type  |
-| `eos-verification-obligation`  | Fault injection        | UNVERIFIED | Corrupt artifact, verify build abort                     |
-| `eos-backend-agnosticism`      | Cross-backend test     | UNVERIFIED | Same lock succeeds on different backend configs          |
-| `compose-handoff`              | Integration test       | UNVERIFIED | Lock with composer → eos fetches composer first          |
-| `compose-args-passthrough`     | Unit test              | UNVERIFIED | Verify args reach evaluator verbatim                     |
-| `daemon-connection-required`   | Architecture audit     | UNVERIFIED | No library-mode code paths exist                         |
-| `result-reporting`             | Integration test       | UNVERIFIED | Attach callback, verify `completed` with `ArtifactInfo`  |
-| `error-reporting-format`       | Fault injection        | UNVERIFIED | Trigger each error category, verify structured output    |
-| `daemon-discovery-v1`          | Unit test              | UNVERIFIED | Test socket resolution order                             |
-| `daemon-discovery-vN`          | Design review          | UNVERIFIED | Architectural property (future)                          |
-| `capability-negotiation`       | Handshake test         | UNVERIFIED | Query capabilities, verify response structure            |
-| `capability-mismatch-handling` | Integration test       | UNVERIFIED | Submit unsupported type, verify rejection message        |
-| `daemon-connect`               | Integration test       | UNVERIFIED | Verify handshake and bootstrap cap                       |
-| `build-request`                | Integration test       | UNVERIFIED | Submit lock, receive `BuildJob`                          |
-| `attach-progress`              | Integration test       | UNVERIFIED | Attach callback, verify status delivery                  |
-| `fetch-verify-build`           | Integration test       | UNVERIFIED | End-to-end: fetch, verify, build                         |
-| `compose-evaluation`           | Integration test       | UNVERIFIED | Full composer with args → successful eval                |
-| `concurrent-builds`            | Dedup test             | UNVERIFIED | Two clients, same lock, one execution                    |
-| `no-manifest-leakage`          | Code audit             | UNVERIFIED | No manifest-reading code in eos                          |
-| `no-unverified-execution`      | Fault injection        | UNVERIFIED | Bypass verification, verify rejection                    |
-| `no-daemon-bypass`             | Architecture audit     | UNVERIFIED | No direct backend invocation in ion                      |
-| `backend-substitutability`     | Cross-backend test     | UNVERIFIED | Same lock, different backend, no lock changes            |
-| `plugin-type-extensibility`    | Extension test         | UNVERIFIED | Add unknown type, verify clean rejection                 |
-| `idempotent-submission`        | Repeat submission test | UNVERIFIED | Same lock twice → same `JobId`, no duplicate work        |
-| `progress-liveness`            | Integration test       | UNVERIFIED | Attach → verify all state transitions delivered          |
-| `discovery-read-only`          | Code audit             | UNVERIFIED | No mutating code paths reachable via `AtomDiscovery`     |
-| `query-discovery`              | Integration test       | UNVERIFIED | Obtain `AtomDiscovery`, issue resolve/contains/search    |
-| `content-delivery-negotiation` | Integration test       | UNVERIFIED | getMissing flow; store-to-store ingest for missing atoms |
+| Constraint                     | Method                 | Result     | Detail                                                                       |
+| :----------------------------- | :--------------------- | :--------- | :--------------------------------------------------------------------------- |
+| `handoff-lock-sufficiency`     | Integration test       | UNVERIFIED | Submit lock-only; verify eos never reads manifest                            |
+| `handoff-atom-fields`          | Schema conformance     | UNVERIFIED | Validate `set`, `label`, `version`, `publish_czd` presence (minimal pointer) |
+| `handoff-plugin-fields`        | Schema conformance     | UNVERIFIED | Validate `type`, `name`, and fetch coordinates per type                      |
+| `eos-verification-obligation`  | Fault injection        | UNVERIFIED | Corrupt artifact, verify build abort                                         |
+| `eos-backend-agnosticism`      | Cross-backend test     | UNVERIFIED | Same lock succeeds on different backend configs                              |
+| `compose-handoff`              | Integration test       | UNVERIFIED | Lock with composer → eos fetches composer first                              |
+| `compose-args-passthrough`     | Unit test              | UNVERIFIED | Verify args reach evaluator verbatim                                         |
+| `daemon-connection-required`   | Architecture audit     | UNVERIFIED | No library-mode code paths exist                                             |
+| `result-reporting`             | Integration test       | UNVERIFIED | Attach callback, verify `completed` with `ArtifactInfo`                      |
+| `error-reporting-format`       | Fault injection        | UNVERIFIED | Trigger each error category, verify structured output                        |
+| `daemon-discovery-v1`          | Unit test              | UNVERIFIED | Test socket resolution order                                                 |
+| `daemon-discovery-vN`          | Design review          | UNVERIFIED | Architectural property (future)                                              |
+| `capability-negotiation`       | Handshake test         | UNVERIFIED | Query capabilities, verify response structure                                |
+| `capability-mismatch-handling` | Integration test       | UNVERIFIED | Submit unsupported type, verify rejection message                            |
+| `daemon-connect`               | Integration test       | UNVERIFIED | Verify handshake and bootstrap cap                                           |
+| `build-request`                | Integration test       | UNVERIFIED | Submit lock, receive `BuildJob`                                              |
+| `attach-progress`              | Integration test       | UNVERIFIED | Attach callback, verify status delivery                                      |
+| `fetch-verify-build`           | Integration test       | UNVERIFIED | End-to-end: fetch, verify, build                                             |
+| `compose-evaluation`           | Integration test       | UNVERIFIED | Full composer with args → successful eval                                    |
+| `concurrent-builds`            | Dedup test             | UNVERIFIED | Two clients, same lock, one execution                                        |
+| `no-manifest-leakage`          | Code audit             | UNVERIFIED | No manifest-reading code in eos                                              |
+| `no-unverified-execution`      | Fault injection        | UNVERIFIED | Bypass verification, verify rejection                                        |
+| `no-daemon-bypass`             | Architecture audit     | UNVERIFIED | No direct backend invocation in ion                                          |
+| `backend-substitutability`     | Cross-backend test     | UNVERIFIED | Same lock, different backend, no lock changes                                |
+| `plugin-type-extensibility`    | Extension test         | UNVERIFIED | Add unknown type, verify clean rejection                                     |
+| `idempotent-submission`        | Repeat submission test | UNVERIFIED | Same lock twice → same `JobId`, no duplicate work                            |
+| `progress-liveness`            | Integration test       | UNVERIFIED | Attach → verify all state transitions delivered                              |
+| `discovery-read-only`          | Code audit             | UNVERIFIED | No mutating code paths reachable via `AtomDiscovery`                         |
+| `query-discovery`              | Integration test       | UNVERIFIED | Obtain `AtomDiscovery`, issue resolve/contains/search                        |
+| `content-delivery-negotiation` | Integration test       | UNVERIFIED | getMissing flow; store-to-store ingest for missing atoms                     |
 
 ---
 
