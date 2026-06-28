@@ -47,15 +47,15 @@ those guarantees.
 The git backend serves two distinct roles with different addressing
 schemes, ref layouts, and invariants:
 
-| Property       | Registry                        | Store                                     |
-| :------------- | :------------------------------ | :---------------------------------------- |
-| Purpose        | Source-side: claims + publishes | Consumer-side: aggregation + consumption  |
-| Addressing     | Human-readable by label         | Machine-addressed by claim czd            |
-| Scope          | Single source repository        | Many sources, many registries             |
-| Collision-free | Labels unique per registry      | Claim czd unique globally (crypto-unique) |
-| Claim per atom | Exactly one active              | Multiple (from different sources/forks)   |
-| Anchor         | One anchor (genesis commit)     | Many anchors (one per ingested source)    |
-| Ref prefix     | `refs/atom/{pub,claims/pub}/..` | `refs/atom/{d,dev,claims/d}/...`          |
+| Property       | Registry                        | Store                                         |
+| :------------- | :------------------------------ | :-------------------------------------------- |
+| Purpose        | Source-side: claims + publishes | Consumer-side: aggregation + consumption      |
+| Addressing     | Human-readable by label         | Machine-addressed by `blake3(publish_czd)`    |
+| Scope          | Single source repository        | Many sources, many registries                 |
+| Collision-free | Labels unique per registry      | publish_czd cryptographically unique globally |
+| Claim per atom | Exactly one active              | Multiple (from different sources/forks)       |
+| Anchor         | One anchor (genesis commit)     | Many anchors (one per ingested source)        |
+| Ref prefix     | `refs/atom/{pub,claims/pub}/..` | `refs/atom/{d,dev,claims/d}/...`              |
 
 A repository MAY serve as both a registry and a store simultaneously
 (e.g., a project that publishes its own atoms and ingests dependencies).
@@ -104,7 +104,7 @@ claim or publish transactions exist, the ingested atoms are
 carry provenance guarantees. The store SHOULD mark such atoms as
 unsigned to distinguish them from atoms ingested from registries.
 No publish tags or claim refs are created for unsigned atoms.
-Unsigned dev atoms are stored under `refs/atom/dev/{atom_digest}`
+Unsigned dev atoms are stored under `refs/atom/dev/{anchor}/{label}`
 (see Ref Layout).
 
 ## Constraints
@@ -324,13 +324,12 @@ be the previous claim commit, forming a chain. The ref
 All historical claims are reachable by walking the chain from the tip.
 `VERIFIED: unverified`
 
-**[store-claim-disambiguation]**: In a store, multiple claims for the
+**[store-claim-disambiguation]**: In a store, multiple publishes for the
 same `AtomId` MAY coexist (from different sources/forks). The store's
-ref layout MUST disambiguate them by claim `czd`. Two atoms with the
-same `AtomId` but different claim czds MUST occupy different ref paths.
-Claim czd is cryptographically unique, preventing collisions by
-construction — this is the fundamental advantage of claim-czd-addressed
-storage.
+ref layout MUST disambiguate them by `blake3(publish_czd)`. Distinct
+publishes produce distinct publish czds and therefore distinct flat ref
+keys — disambiguation is guaranteed by the cryptographic uniqueness of
+the publish czd, without coordination.
 `VERIFIED: unverified`
 
 ### Ref Layout
@@ -373,11 +372,11 @@ or targets a previous tag in the update chain (updates). The
 
 ```
 # Published atoms (d = digest-addressed)
-refs/atom/d/{claim_czd}/{version}                → publish tag [→ chain] → atom commit
+refs/atom/d/{blake3(publish_czd)}                → publish tag [→ chain] → atom commit
 refs/atom/claims/d/{claim_czd}                   → claim commit (shallow-fetched)
 
-# Development atoms (unsigned, digest-addressed by AtomId, versioned)
-refs/atom/dev/{atom_digest}/{dev_version}        → atom commit (no tags, no claims)
+# Development atoms (unsigned, identified by the (anchor, label) pair, versioned)
+refs/atom/dev/{anchor}/{label}/{dev_version}        → atom commit (no tags, no claims)
 ```
 
 Dev versions SHOULD include the tree object hash to avoid clobbering
@@ -391,10 +390,10 @@ The `d/` sub-prefix under `claims/` denotes digest-addressed claims
 `refs/atom/claims/` namespace while preventing collision with
 registry label-addressed claims.
 
-**[store-ref-by-claim-czd]**: Store version refs MUST be keyed by the
-claim `czd` (the canonical digest of the claim). This ensures global
-uniqueness — two forks of the same source with different owners
-produce different claim czds and therefore different ref paths.
+**[store-ref-by-publish-czd]**: Store version refs MUST be keyed by
+`blake3(publish_czd)` (the BLAKE3 reduction of the publish CozMessage
+digest). This ensures global uniqueness — distinct publishes produce
+distinct publish czds and therefore distinct flat ref keys.
 `VERIFIED: unverified`
 
 **[store-claim-ref]**: Each ingested claim MUST have a corresponding
@@ -411,18 +410,22 @@ error.
 `VERIFIED: unverified`
 
 **[store-ownership-migration]**: If the ownership of an atom changes
-(new claim, new czd), the atom's versions in the store naturally
-migrate to a new ref path (under the new `{claim_czd}`). Versions
-published under the old claim remain under the old czd — they are
-still valid artifacts signed by the old claim.
+(new claim), new versions published under the new claim produce new
+publish czds and therefore new flat ref keys
+(`refs/atom/d/{blake3(new_publish_czd)}`). Versions published under
+the old claim remain under their original `blake3(publish_czd)` keys —
+they are still valid artifacts signed by the old claim.
 `VERIFIED: unverified`
 
-**[store-claim-cleanup]**: When the last version ref under a
-`refs/atom/d/{claim_czd}/` prefix is deleted (e.g., cache eviction),
-the backend SHOULD also delete the corresponding
+**[store-claim-cleanup]**: When a store ref
+`refs/atom/d/{blake3(publish_czd)}` is deleted (e.g., cache eviction),
+the backend SHOULD check whether any remaining store refs reference the
+same claim czd (by inspecting the publish tag payloads reachable from
+surviving `refs/atom/d/` refs). If no remaining store ref references
+that claim czd, the backend SHOULD also delete the corresponding
 `refs/atom/claims/d/{claim_czd}` ref to prevent orphaned claim
-accumulation. Git has no cross-namespace reference counting, so
-this cleanup is the backend's responsibility.
+accumulation. Git has no cross-namespace reference counting, so this
+cleanup is the backend's responsibility.
 `VERIFIED: unverified`
 
 ### Transitions
@@ -477,7 +480,7 @@ another store) into a store.
   referenced by `refs/atom/claims/d/{claim_czd}`. Claim chains are
   lightweight by design (empty trees) and require no special filtering.
   Version refs follow the store layout:
-  `refs/atom/d/{claim_czd}/{version}`. AtomId is preserved through
+  `refs/atom/d/{blake3(publish_czd)}`. AtomId is preserved through
   ingestion. Refs MUST NOT be committed until all cryptographic
   verification (`[verification-local]`) passes — objects may exist
   in the ODB during verification, but are invisible to consumers
@@ -507,10 +510,14 @@ chain.
   exists. The new tag's `CozMessage` MUST be valid.
 - **POST**: A new tag object is created targeting the _previous_ tag
   object (not the atom commit). The ref
-  `refs/atom/pub/{label}/{version}` (registry) or
-  `refs/atom/d/{claim_czd}/{version}` (store) is updated to point to
-  the new tip. The old tag object persists in the object database.
-  Git's tag-peeling resolves the chain to the underlying atom commit.
+  `refs/atom/pub/{label}/{version}` (registry) is updated to point to
+  the new tip. In the store, a new flat ref
+  `refs/atom/d/{blake3(new_publish_czd)}` is created pointing to the
+  new tag; the previous ref `refs/atom/d/{blake3(old_publish_czd)}`
+  persists, keeping any lock pin on the old publish_czd resolvable
+  (consistent with `[tag-chain-immutable]`). The old tag object
+  persists in the object database. Git's tag-peeling resolves the
+  chain to the underlying atom commit.
   `VERIFIED: unverified`
 
 **[tag-chain-semantic-immutable]**: All tags within a single publish
@@ -530,7 +537,7 @@ be ingested into a git `AtomStore` without claims or publishes.
   (as defined in atom-transactions.md). The store is a valid git
   AtomStore.
 - **POST**: Atom commits exist in the store for each discovered atom,
-  referenced by `refs/atom/dev/{atom_digest}/{dev_version}`. No publish
+  referenced by `refs/atom/dev/{anchor}/{label}/{dev_version}`. No publish
   tags or claim refs exist for dev atoms. The store MUST treat dev atoms
   as unsigned/unclaimed. The dev version string SHOULD incorporate the
   tree object hash to prevent clobbering across concurrent evaluations.
@@ -545,10 +552,11 @@ be ingested into a git `AtomStore` without claims or publishes.
 **[dev-atom-resolution]**: Tooling consuming atoms from a store
 resolves through two namespaces in order of precedence:
 
-1. `refs/atom/dev/{atom_digest}/` — local development atoms (unsigned,
+1. `refs/atom/dev/{anchor}/{label}/` — local development atoms (unsigned,
    in-progress evaluations from filesystem or local git sources)
-2. `refs/atom/d/{claim_czd}/` — all ingested published atoms, regardless
-   of origin (local registry, remote registry, or mirror)
+2. `refs/atom/d/` — all ingested published atoms, regardless of origin
+   (local registry, remote registry, or mirror); each keyed flat by
+   `blake3(publish_czd)`
 
 Published atoms from the local registry are ingested into `d/` via
 the same `[ingest-transition]` as remote atoms — there is no special
@@ -632,6 +640,21 @@ enabling verification of the complete signing history.
 - **Type**: Safety
   `VERIFIED: unverified`
 
+**[peel-content-integrity]**: When acquiring an atom via
+`refs/atom/d/{blake3(publish_czd)}`, a consumer MUST walk the publish
+tag chain from the tip (following tag-to-tag pointers until reaching
+an atom commit), then verify that the **peeled content-addressed sha
+equals `payload.dig`** in the publish `CozMessage`. A mismatch MUST
+be treated as tampering — the fetched atom MUST be rejected (SAD
+§8.3). Open failure mode: if a serving mirror has garbage-collected a
+chain tip (e.g., for a superseded publish_czd no longer advertised),
+the chain walk may fail to locate the expected tag; the backend SHOULD
+surface this as a distinct "chain tip unavailable" error and MUST NOT
+silently fall back to a different publish.
+
+- **Type**: Safety
+  `VERIFIED: unverified`
+
 **[store-accumulates]**: After ingestion, a store's `resolve` MUST
 return at least what the source's `resolve` returns for every
 ingested atom. (Model §2.3, ⊇ condition.)
@@ -661,11 +684,11 @@ ingested atom. (Model §2.3, ⊇ condition.)
 | tag-chain-immutable          | integration-test | pending | Update creates chain, old tags persist            |
 | coz-bit-perfect              | integration-test | pending | Store → retrieve → byte-compare                   |
 | single-active-claim-registry | integration-test | pending | Second claim for same label replaces ref          |
-| store-claim-disambiguation   | integration-test | pending | Two claims, same AtomId, different ref paths      |
+| store-claim-disambiguation   | integration-test | pending | Two publishes, same AtomId, distinct blake3 keys  |
 | registry-ref-label-unique    | integration-test | pending | Conflicting labels rejected                       |
 | registry-ref-claim           | integration-test | pending | Ref points to active claim commit                 |
 | registry-ref-version         | integration-test | pending | Ref points to publish tag tip                     |
-| store-ref-by-claim-czd       | integration-test | pending | Store refs use claim czd as key                   |
+| store-ref-by-publish-czd     | integration-test | pending | Store refs keyed by blake3(publish_czd)           |
 | store-claim-ref              | integration-test | pending | Claim commit ref exists, GC-protected             |
 | store-ownership-migration    | integration-test | pending | New claim → new ref path                          |
 | claim-transition-git         | integration-test | pending | Claim creates commit + 2 refs, chains if needed   |
@@ -684,7 +707,8 @@ ingested atom. (Model §2.3, ⊇ condition.)
 | ingestion-portable           | integration-test | pending | git fetch transfers all objects correctly         |
 | update-chain-auditable       | integration-test | pending | Tag chain walkable, all CozMessages retrievable   |
 | store-accumulates            | integration-test | pending | Post-ingest resolve ⊇ source resolve              |
-| dev-atom-resolution          | integration-test | pending | Local → dev/{digest}/{ver}, remote → d/           |
+| dev-atom-resolution          | integration-test | pending | Local → dev/{anchor}/{label}/{ver}, remote → d/   |
+| peel-content-integrity       | integration-test | pending | Peeled sha == payload.dig; mismatch → reject      |
 | store-claim-cleanup          | integration-test | pending | Orphaned claim ref cleaned on version eviction    |
 | tag-chain-semantic-immutable | unit-test        | pending | Update tags preserve (label,version,dig,src,path) |
 
@@ -775,7 +799,7 @@ ingested atom. (Model §2.3, ⊇ condition.)
   commits can be fetched shallowly (no need for their ancestry).
 
 - **Dev atom ingestion**: Create atom commits from filesystem content.
-  Reference under `refs/atom/dev/{atom_digest}/{dev_version}`. No
+  Reference under `refs/atom/dev/{anchor}/{label}/{dev_version}`. No
   tags, no claims, no verification ceremony. Dev version SHOULD include
   tree hash (e.g., `1.0.0.dev-{tree_hash_prefix}`) to avoid clobbering
   across concurrent evaluations. AtomId is derivable for all atoms
