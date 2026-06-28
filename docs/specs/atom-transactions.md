@@ -52,10 +52,16 @@ An anchor MUST satisfy the following properties:
 4. **Discoverable**: Given access to a source, a consumer MUST be able to
    independently derive the anchor without trusting the publisher.
 
+**Note on git hash agility** (`[anchor-hash-agile]`): a SHA-256 re-hash of a
+SHA-1 repository history produces a **distinct anchor** and therefore a
+distinct atom-set. Such sources are never silently converted or merged —
+they are treated as two separate repos with no protocol-level relationship.
+
 The anchor feeds into identity: `AtomId = (anchor, label)`. Because
 the anchor is immutable and the label is fixed per atom, the AtomId is
-permanent. An `AtomDigest` MAY be derived from an `AtomId` for store
-indexing, but the digest is a representation — not the identity itself.
+permanent. The `AtomId` is the abstract pair — no identity-layer digest
+is derived from it. Algorithm agility for content addressing lives only
+in the Coz `czd`.
 
 ## Implementor Abstraction
 
@@ -291,17 +297,6 @@ TYPE  AtomId      = { anchor: Anchor, label: Label }              (atom-id)
   -- Two atoms with the same (anchor, label) ARE the same atom.
   -- NOT a hash — this is the abstract identity pair.
 
-TYPE  AtomDigest  = { alg: Alg, cad: Cad }                        (atom-core)
-  where cad = canonical_hash_for_alg(
-    canonical({"anchor": <b64ut>, "label": <str>}, ["anchor", "label"]),
-    alg
-  )
-  -- Store-level multihash. A compact, self-describing digest of
-  -- the AtomId for indexing, git ref paths, and wire format.
-  -- The `alg` is chosen by the store/ingestor, NOT the protocol.
-  -- Multiple valid AtomDigests exist for the same AtomId — one
-  -- per algorithm. Display format: `alg.b64ut`.
-
 TYPE  ClaimPayload = {
         alg:    Alg,
         anchor: Anchor,
@@ -361,9 +356,8 @@ TYPE  VersionScheme = trait {                                      (atom-id)
 **[identity-content-addressed]**: An atom's identity (`AtomId`) MUST be
 determined solely by the pair `(anchor, label)`. The `AtomId` MUST NOT
 depend on any key, signature, signed message, or hash algorithm. Identity
-is permanent and content-addressed. An `AtomDigest` MAY be derived from
-an `AtomId` for store indexing, but the digest is not the identity — it
-is a representation. Multiple valid digests exist for the same identity.
+is permanent and content-addressed. The `AtomId` is the abstract pair —
+not a hash of it; there is no identity-layer digest type.
 `VERIFIED: machine (Alloy)`
 
 **[identity-stability]**: An atom's `AtomId` MUST NOT change across
@@ -426,15 +420,6 @@ MUST carry raw `anchor` and `label` fields. A consumer MUST be able
 to reconstruct the `AtomId` from either payload independently by
 extracting `(anchor, label)`.
 `VERIFIED: rustc (atom-id: both payloads carry anchor + label)`
-
-**[digest-algorithm-agile]**: An `AtomDigest` MUST be computed using
-Coz's `canonical_hash_for_alg` function with the field canon
-`["anchor", "label"]`. The input JSON MUST contain exactly these two
-fields with `anchor` encoded as b64ut and `label` as a UTF-8 string.
-The `alg` is chosen by the store or ingestor, NOT the protocol.
-Multiple valid `AtomDigest` values exist for the same `AtomId` —
-one per algorithm. No standalone hash crates are required.
-`VERIFIED: unverified`
 
 **[publish-chains-claim]**: The `claim` field in `PublishPayload` MUST
 contain the `czd` of a valid claim for the same `(anchor, label)`.
@@ -516,7 +501,8 @@ blobs (cf. Coz bit-perfect preservation).
 
 **[atomid-per-source-unique]**: Within a single source, an `AtomId`
 MUST be unique — no two atoms in the same source MAY share the same
-label. `AtomId = hash(anchor, label)` guarantees this by construction.
+label. All atoms in a source share the same anchor, so label uniqueness
+within a source directly implies `(anchor, label)` pair uniqueness.
 This prevents ambiguous references within a source.
 `VERIFIED: machine (TLC)`
 
@@ -718,10 +704,12 @@ for filesystem directories (paths without git history). Such a source:
   signed transactions)
 - MUST be ingestible into an `AtomStore` for consumption
 - MUST use a well-known constant sentinel value as its anchor, so
-  that AtomId (`hash(anchor, label)`) is derivable for all atoms.
-  The sentinel anchor distinguishes filesystem-sourced atoms from
-  git-sourced atoms and prevents them from being confused with
-  published atoms.
+  that the `AtomId` (the pair `(anchor, label)`) is reconstructible
+  for all atoms. The sentinel anchor distinguishes filesystem-sourced
+  atoms from git-sourced atoms and prevents them from being confused
+  with published atoms. **Note**: the exact byte encoding of the
+  `FsSource` sentinel anchor is a protocol-level constant that MUST
+  be specified; its value is currently unspecified (SAD §9, gap 2).
 
 This enables local development workflows where atoms are evaluated
 from the working tree without requiring publication. The `FsSource`
@@ -741,16 +729,16 @@ The following defines the normative verification steps for consumers.
 A consumer who has the atom snapshot, publish transaction, and claim
 transaction MUST be able to perform all of the following locally:
 
-| Step | Check                            | Field(s)                                  |
-| :--- | :------------------------------- | :---------------------------------------- |
-| 1    | Atom snapshot hash matches `dig` | `publish.dig`                             |
-| 2    | Claim signature valid            | `claim.pay`, `claim.sig`, `claim.key`     |
-| 3    | Publish signature valid          | `publish.pay`, `publish.sig`, key         |
-| 4    | Key thumbprint matches           | `tmb(claim.key) == claim.pay.tmb`         |
-| 5    | Publish chains to claim          | `publish.claim == czd(claim)`             |
-| 6    | Temporal ordering                | `publish.now > claim.now`                 |
-| 7    | Signer authorized by owner       | `publish.tmb` authorized by `claim.owner` |
-| 8    | AtomId derivable                 | `hash(anchor, label) == expected`         |
+| Step | Check                            | Field(s)                                                             |
+| :--- | :------------------------------- | :------------------------------------------------------------------- |
+| 1    | Atom snapshot hash matches `dig` | `publish.dig`                                                        |
+| 2    | Claim signature valid            | `claim.pay`, `claim.sig`, `claim.key`                                |
+| 3    | Publish signature valid          | `publish.pay`, `publish.sig`, key                                    |
+| 4    | Key thumbprint matches           | `tmb(claim.key) == claim.pay.tmb`                                    |
+| 5    | Publish chains to claim          | `publish.claim == czd(claim)`                                        |
+| 6    | Temporal ordering                | `publish.now > claim.now`                                            |
+| 7    | Signer authorized by owner       | `publish.tmb` authorized by `claim.owner`                            |
+| 8    | AtomId matches payload fields    | extract `(anchor, label)` from payload, compare to expected `AtomId` |
 
 ### Provenance Verification (minimal network)
 
@@ -797,7 +785,6 @@ Fork scenario confirmed satisfiable (SAT).
 | owner-compatibility           | machine (Alloy)  | **pass** | Alloy `ownership_independence`             | —     |
 | owner-authorization-delegated | integration-test | pending  | Signing key auth varies by identity system | 4     |
 | symmetric-payloads            | rustc            | **pass** | Both structs have `anchor` + `label`       | 1     |
-| digest-algorithm-agile        | unit-test        | pending  | Cad via canonical_hash_for_alg             | 3     |
 | publish-chains-claim          | machine (TLC)    | **pass** | TLA+ `PublishChainsClaim` — 2 configs      | —     |
 | claim-typ                     | rustc            | **pass** | `TYP_CLAIM` const = `"atom/claim"`         | 1     |
 | publish-typ                   | rustc            | **pass** | `TYP_PUBLISH` const = `"atom/publish"`     | 1     |
