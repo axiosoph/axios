@@ -149,7 +149,9 @@ fact manifest_properties {
 // 4. ASSERTIONS & VERIFICATIONS
 // ============================================================================
 
-// [identity-content-addressed]
+// [identity-content-addressed]: AtomId is the (anchor, label) PAIR, not a hash of it.
+// "content-addressed" means the anchor is a content digest and identity is permanent —
+// it does NOT mean the AtomId is a digest. This assertion checks pair-uniqueness.
 assert identity_content_addressed {
   all a1, a2: AtomId |
     (a1.anchor = a2.anchor and a1.label = a2.label) implies a1 = a2
