@@ -247,8 +247,7 @@ proceeds.
 
 **[boundary-L1-concerns]**: L1 (atom) owns:
 
-- Identity primitives: `AtomId`, `Label`, `Tag`, `Identifier`, `Anchor`
-- Content addressing: `AtomDigest`, digest computation
+- Identity primitives: `AtomId` (`(anchor, label)` pair), `Label`, `Tag`, `Identifier`, `Anchor`
 - URI parsing: `RawAtomUri`, `AtomUri`, alias resolution
 - Protocol traits: `AtomSource`, `AtomRegistry`, `AtomStore`
 - Protocol types: `Manifest`, `VersionScheme`, `ClaimPayload`,
@@ -411,14 +410,14 @@ After lock file migration, `ion-eos` additionally depends on
 artifact store (L2) are architecturally distinct and MUST NOT
 be conflated.
 
-| Property            | Atom Store (L1)                        | Artifact Store (L2)                   |
-| :------------------ | :------------------------------------- | :------------------------------------ |
-| **Data**            | Atom source trees (source code)        | Build outputs (derivations, binaries) |
-| **Trait**           | `AtomSource` / `AtomStore` (atom-core) | `ArtifactStore` (eos-core)            |
-| **Addressing**      | `AtomId` / `AtomDigest`                | Plan hash / output digest             |
-| **Primary backend** | git                                    | snix store                            |
-| **Populated by**    | Ion (ingestion), eos composite source  | Eos (build outputs)                   |
-| **Read by**         | Eos (build inputs via `AtomSource`)    | Eos (cache hits), ion (build results) |
+| Property            | Atom Store (L1)                         | Artifact Store (L2)                   |
+| :------------------ | :-------------------------------------- | :------------------------------------ |
+| **Data**            | Atom source trees (source code)         | Build outputs (derivations, binaries) |
+| **Trait**           | `AtomSource` / `AtomStore` (atom-core)  | `ArtifactStore` (eos-core)            |
+| **Addressing**      | `AtomId` (pair) / `blake3(publish_czd)` | Plan hash / output digest             |
+| **Primary backend** | git                                     | snix store                            |
+| **Populated by**    | Ion (ingestion), eos composite source   | Eos (build outputs)                   |
+| **Read by**         | Eos (build inputs via `AtomSource`)     | Eos (cache hits), ion (build results) |
 
 A host MAY run both an atom store and an artifact store, but
 they are logically and physically separate. An implementation
