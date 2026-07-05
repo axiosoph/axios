@@ -1,5 +1,11 @@
 # Specification Audit Report
 
+> **SUPERSEDED (2026-07-05).** Superseded by the atom-ion SAD keystone
+> campaign's realignment (waves 1–2 of this campaign); its headline
+> findings — including the lock-file schema-version conflict between
+> `lock-file-schema.md` and `ion-resolution.md` — are resolved (both now
+> specify schema version 0). Retained as historical record only.
+
 - **Quadrant:** Explanation
 - **Audience:** Axios core architects and engineers
 

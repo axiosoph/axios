@@ -1,5 +1,11 @@
 # PLAN: Atom Protocol Library
 
+> **SUPERSEDED (2026-07-05).** Superseded by the realigned atom specs (e.g.
+> `docs/specs/atom-transactions.md`),
+> [ADR-0005](../adr/0005-hermetic-transactional-composition.md), and the P1
+> (atom stabilization) roadmap framing; retained as historical planning
+> record only.
+
 <!--
   Source sketch: .sketches/2026-02-15-atom-protocol-plan.md
   Plan stage: SCOPE (all phases defined, spec-driven)

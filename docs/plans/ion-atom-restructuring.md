@@ -1,5 +1,11 @@
 # PLAN: Ion-Atom Restructuring
 
+> **SUPERSEDED (2026-07-05).** Superseded by the realigned specs (e.g.
+> `docs/specs/lock-file-schema.md`, `docs/specs/ion-resolution.md`),
+> [ADR-0005](../adr/0005-hermetic-transactional-composition.md)'s L0–L5
+> layer renumbering, and the P1/P2 (atom stabilization / ion extraction)
+> roadmap framing; retained as historical planning record only.
+
 <!--
   Source sketch: .sketches/2026-02-07-ion-atom-restructuring.md
   Plan stage: SCOPE → COMMIT (revision 5)
