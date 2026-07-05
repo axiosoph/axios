@@ -120,6 +120,13 @@ in-process. Everything communicates via the same trait
 interfaces and Cap'n Proto protocol — just over in-process
 transports instead of network sockets.
 
+(Note: The "eval worker" component in the diagrams above and in Mode 3
+below is superseded in part by
+[ADR-0005](0005-hermetic-transactional-composition.md) — the primary
+executor has no evaluation stage; an eval worker/thread exists only inside
+the optional passthrough-snix executor. The three-mode decision structure
+itself — composable wiring, no codepath divergence — is unaffected.)
+
 #### Mode 2: Monolithic Eos (one daemon, many clients)
 
 ```
@@ -187,6 +194,14 @@ This preserves separation of concerns: ion's `monolithic`
 flag triggers eos's `monolithic` flag, but ion does not need
 to know how eos pulls in and composes snix components. Each
 layer manages its own internal composition.
+
+(Note: `dep:snix-eval` above is superseded in part by
+[ADR-0005](0005-hermetic-transactional-composition.md) — the flag's
+contents are stale for the primary executor (no MVP dependency on
+`snix-eval`/the Nix language); `dep:snix-eval` remains valid only when
+compiling in the optional passthrough-snix executor. The feature-flag
+layering mechanism and the composable-monolith decision structure are
+unaffected.)
 
 In distributed mode (no `monolithic` flag), eos compiles
 without snix dependencies and communicates with snix services

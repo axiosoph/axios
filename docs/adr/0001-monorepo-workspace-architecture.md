@@ -1,11 +1,11 @@
 # ADR-0001: Monorepo with independent workspace architecture
 
-- **Status**: PROPOSED (SUPERSEDED IN PART by ADR-0003)
+- **Status**: PROPOSED (SUPERSEDED IN PART by ADR-0003, ADR-0005)
 - **Date**: 2026-02-07 (revised)
 - **Deciders**: nrd
 - **Source**: [Plan](../plans/ion-atom-restructuring.md) | [Sketch](../../.sketches/2026-02-07-ion-atom-restructuring.md)
 - **Supersedes**: Revisions 1–3
-- **Related**: [ADR-0002](0002-decoupling-snix-backend.md), [ADR-0003](0003-composable-deployment-modes.md)
+- **Related**: [ADR-0002](0002-decoupling-snix-backend.md), [ADR-0003](0003-composable-deployment-modes.md), [ADR-0005](0005-hermetic-transactional-composition.md)
 
 ## Context
 
@@ -33,12 +33,20 @@ AtomId → Version → Revision → Plan → Output
 
 "Plan" is the abstract term. For the snix engine, a plan is a derivation
 (`.drv`). `BuildEngine::Plan` is an associated type, so other engines can
-define their own format.
+define their own format. (Note: Superseded in part by
+[ADR-0005](0005-hermetic-transactional-composition.md) — the MVP
+plan-equivalent is the atom **action**, identified by `action_id`; the
+associated-type design here is vindicated by the substitution, not broken
+by it.)
 
 Each step is verifiable and cacheable independently, which makes cache-skipping
 possible at every stage. The chain is a DAG: each atom's lock entry carries a
 `requires` field listing content-addressed digests of its transitive
-dependencies, so the lock file captures the full graph.
+dependencies, so the lock file captures the full graph. (Note: Superseded by
+the keystone lock decision (2026-06-28) and
+[ADR-0005](0005-hermetic-transactional-composition.md) — the decided 2-value
+lock entry `(set, label) → {version, publish_czd}` carries no `requires`
+field of this shape; the DAG is read directly off lock edges.)
 
 ### Forces
 
@@ -56,6 +64,12 @@ Three independent Cargo workspaces in a monorepo, mapped to a 5-layer stack:
 ```
 Cyphr (L0) → Atom (L1) → Eos (L2) → Ion (L3) → Plugins (L4)
 ```
+
+(Note: Superseded in part by
+[ADR-0005](0005-hermetic-transactional-composition.md) — a new L2
+"Hermetic Transactional Composition" (HTC) layer is inserted between Atom
+and Eos, and the stack renumbers in full: Cyphr (L0) → Atom (L1) → HTC (L2)
+→ Eos (L3) → Ion (L4) → Plugins (L5).)
 
 ### atom/ — Protocol workspace (L1)
 
@@ -107,6 +121,12 @@ ingestion from any source uses the same codepath.
 | `eos-daemon` | Dynamic build scheduler and RPC server daemon      | eos-core, eos-proto, eos-snix, eos |
 | `eos`        | Core orchestration engine and worker registry      | eos-core, eos-snix                 |
 
+(Note: Superseded in part by
+[ADR-0005](0005-hermetic-transactional-composition.md) — "evaluator
+implementations" is dead scope under the substrate re-scope; `eos-snix`
+survives only as one implementation of an executor trait, entangled with
+the GPL-seam decision (ADR-0005 §10).)
+
 **BuildEngine** — plan/apply with cache-skipping:
 
 ```rust
@@ -126,6 +146,12 @@ enum BuildPlan<P> {
 }
 ```
 
+(Note: Superseded in part by
+[ADR-0005](0005-hermetic-transactional-composition.md) — the three-variant
+cache ladder collapses to two rungs (`Cached`/`NeedsBuild`) for the primary
+executor; `NeedsEvaluation` survives only inside the optional
+passthrough-snix executor.)
+
 Associated types let each engine define its own formats. Object safety is not
 needed — ion uses compile-time generics via feature flags to select the engine.
 
@@ -141,7 +167,10 @@ trait ArtifactStore {
 ```
 
 Thin wrapper over snix BlobService/DirectoryService. The trait is eos's
-contract; snix is the default backend. (Note: Refined in [ADR-0002](0002-decoupling-snix-backend.md) to decouple the snix runtime by accessing these store backends over remote gRPC service boundaries.)
+contract; snix is the default backend. (Note: Refined in [ADR-0002](0002-decoupling-snix-backend.md) to decouple the snix runtime by accessing these store backends over remote gRPC service boundaries. Note: Superseded in part by
+[ADR-0005](0005-hermetic-transactional-composition.md) — "snix is the
+default backend" inverts to "an executor implementing the executor trait
+is one of possibly several backends.")
 
 ### ion/ — Frontend workspace (L3)
 

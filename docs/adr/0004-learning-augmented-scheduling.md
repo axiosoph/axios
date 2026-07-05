@@ -1,11 +1,15 @@
 # ADR-0004: Learning-Augmented Build Scheduling
 
-- **Status**: PROPOSED (DRAFT)
+- **Status**: PROPOSED (DRAFT) (SUPERSEDED IN PART by ADR-0005)
 - **Date**: 2026-06-05
 - **Deciders**: nrd
 - **Source**: [Eos SAD §7](../architecture/eos-sad.md) |
   [Eos Scheduler Spec](../specs/eos-scheduler.md) |
   [Formal Model](../models/publishing-stack-layers.md)
+- **Related**: [ADR-0005](0005-hermetic-transactional-composition.md) — the
+  plan/drv-DAG framing below is superseded in part; the verified theory
+  body (TLA⁺, Lean, PEFT/OCT, delay-credit fairness) transfers to
+  atom-DAG scheduling unchanged
 
 ---
 
@@ -25,6 +29,13 @@
 > brackets (e.g. `[derivation]`). Plan digests, plan DAGs,
 > and the profile store's `plan_name` keys are all stated in
 > this canonical vocabulary.
+>
+> **(Note: Superseded in part by
+> [ADR-0005](0005-hermetic-transactional-composition.md) — the scheduler's
+> unit under the substrate re-scope is the atom **action**, identified by
+> `action_id`, not a plan produced by evaluating a Nix expression. The
+> scheduling theory this ADR proves below is node-agnostic and transfers
+> to actions unchanged; only this plan/drv vocabulary is superseded.)**
 
 The Eos scheduler currently uses tag-based set-containment
 matching with Rendezvous hashing for cache affinity (SAD §7).
@@ -76,6 +87,15 @@ Nix/snix's execution model is:
 > the full dependency chain internally — there is no need
 > to explicitly schedule each transitive node.
 
+(Note: Superseded in part by
+[ADR-0005](0005-hermetic-transactional-composition.md) — under the
+executor trait, the executor builds exactly one atom action. The
+entry-point/coarsening apparatus this premise motivates below is
+reclassified from a core scheduling mechanism to a refinement path
+available *within* an atom action (upstream's own `make -j`), and,
+separately, a mechanism the optional passthrough-snix executor still needs
+for its own legacy DAG shape.)
+
 This means the scheduler's job is not to partition every
 uncached node into groups. Its job is to **select optimal
 entry points** (peaks) into the uncached DAG:
@@ -125,6 +145,14 @@ atom-id = `digest(anchor, label)` is **cryptographically
 stable across versions**. Build #1 and build #1000 of atom X
 share the same atom-id. This gives us a high-quality
 prediction oracle:
+
+(Note: **CONTRADICTS** the keystone identity decision (2026-06-28) and
+[ADR-0005](0005-hermetic-transactional-composition.md) — `AtomId` is the
+abstract pair `(anchor, label)`, not a digest of it (atom-sad §6.1,
+`[identity-content-addressed]`). The argument's substance — that atom
+identity is stable across builds and therefore a high-quality prediction
+key — survives unchanged over the pair; only the digest formula above is
+wrong and is struck.)
 
 - **Duration**: atom X consistently takes ~45s to evaluate,
   ~120s to build
@@ -194,6 +222,12 @@ human-readable, version-stable identifier from its
 `StorePath` (e.g., `openssl-3.0.12`). These keys are
 structurally stable: the same package produces
 similarly-keyed plans across versions.
+
+(Note: Superseded in part by
+[ADR-0005](0005-hermetic-transactional-composition.md) — the natural
+profile key under the substrate re-scope is the atom pair / `action_id`,
+not a `StorePath`-derived name; rekeying is tracked as re-scoped scheduler
+spec work outside this ADR.)
 
 **Storage architecture**: The profile store is a persistent
 database (e.g., embedded KV store like `sled`, `redb`, or
@@ -1182,7 +1216,11 @@ that close most of the gap to theoretical optimality:
    stable across versions, a cheap EMA over historical
    observations achieves the performance of a sophisticated
    learning system. The atom protocol IS the prediction
-   oracle.
+   oracle. (Note: the digest formula restates the
+   superseded claim at §The Atom-Id Advantage above — see
+   the note there and
+   [ADR-0005](0005-hermetic-transactional-composition.md);
+   the stability argument survives over the abstract pair.)
 
 3. **Fail-safe packing**: The $\beta_e$ decay mechanism
    (§3) guarantees that when predictions fail, the scoring
@@ -1580,6 +1618,12 @@ optimality assessment above:
     profiles can track FOD fetch durations per plan
     hash to refine bandwidth-adjusted predictions.
 
+    (Note: Superseded in part by
+    [ADR-0005](0005-hermetic-transactional-composition.md) — FODs restate
+    as fetch-heavy atom actions whose `[[deps.fetch]]` entries are executed
+    by the record/replay proxy; the `egress_bandwidth` resource-vector
+    insight transfers directly and unchanged.)
+
 13. **Worker reconnection protocol**: When a worker is
     marked unhealthy (heartbeat timeout), the scheduler
     reverts its running EPs to `ready` and re-dispatches
@@ -1781,6 +1825,13 @@ point selection is a potential novel contribution.
    `PathInfoService` call. This keeps the scheduler free of
    snix imports and gRPC client code while still constructing
    the uncached sub-DAG and entry-point DAG proactively.
+
+   (Note: Superseded in part by
+   [ADR-0005](0005-hermetic-transactional-composition.md) — under the
+   substrate re-scope, the answer to "where does the DAG come from"
+   changes from "introspect the evaluator's `KnownPaths`" to "read the DAG
+   directly off the locks." The two-level cache-filter mechanism described
+   here is unaffected and still applies against the atom-DAG.)
 
 2. **Dynamic re-evaluation** — RESOLVED (unnecessary).
    Because evaluation is deterministic (invariant

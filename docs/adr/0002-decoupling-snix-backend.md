@@ -1,11 +1,11 @@
 # ADR-0002: Snix Integration via Service Boundaries
 
-- **Status**: PROPOSED (REVISED DRAFT)
+- **Status**: PROPOSED (REVISED DRAFT) (SUPERSEDED IN PART by ADR-0005)
 - **Date**: 2026-06-05
 - **Deciders**: nrd
 - **Source**: [Eos Build Scheduler Specification](../specs/eos-scheduler.md) | [Eos Snix Backend Specification](../specs/eos-snix-backend.md) | [Eos Network Protocol](../specs/eos-network-protocol.md)
 - **Supersedes**: ADR-0002 (2026-06-03 draft, "Decoupling Snix Backend from Eos Core and Scheduler")
-- **Related**: [ADR-0003](0003-composable-deployment-modes.md), [ADR-0004](0004-learning-augmented-scheduling.md)
+- **Related**: [ADR-0003](0003-composable-deployment-modes.md), [ADR-0004](0004-learning-augmented-scheduling.md), [ADR-0005](0005-hermetic-transactional-composition.md)
 
 ---
 
@@ -55,6 +55,13 @@ The evaluator is intentionally not a network service. It is a language interpret
 
 We integrate with snix primarily through its gRPC service interfaces rather than linking its runtime code. The integration is organized into four tiers, each with a distinct rationale and coupling budget.
 
+(Note: Following
+[ADR-0005](0005-hermetic-transactional-composition.md), Tiers 1, 2, and 4
+below are **not** superseded — they hold, re-scoped as the spec for the
+optional passthrough-snix executor, and ADR-0005's wire-first GPL-seam
+decision widens rather than reverses the seam they establish here. Tier 3
+is superseded wholesale; see the note at its heading.)
+
 ### Tier 1: Store Access via gRPC
 
 The three store services (`BlobService`, `DirectoryService`, `PathInfoService`) SHALL be accessed as remote gRPC services. The eos daemon connects to one or more snix store daemons via gRPC URIs (e.g., `grpc+http://[::1]:8301`).
@@ -92,6 +99,13 @@ The shim:
 **Coupling eliminated:** `snix-build` runtime dependency removed from `eos-daemon`. The shim is a standalone binary that depends on `snix-build` for protobuf types only.
 
 ### Tier 3: Evaluation via Remote Eval Workers
+
+(Note: Superseded wholesale by
+[ADR-0005](0005-hermetic-transactional-composition.md) §Supersede ADR-0002
+§Tier 3 — the MVP has no evaluation stage to schedule workers for; this
+entire tier, including its Cap'n Proto `EvalWorker` interface and worker
+pool, is dead scope. Tiers 1, 2, and 4 below are unaffected and survive
+scoped to the optional passthrough-snix executor.)
 
 Evaluation SHALL be schedulable across a pool of remote eval workers, enabled by atom encapsulation. This is the key architectural differentiator from the Nix ecosystem.
 
@@ -201,6 +215,11 @@ Eos does NOT manage the lifecycle of snix store daemons, builders, or eval worke
 
 ### Scheduler Integration
 
+(Note: Superseded in part by
+[ADR-0005](0005-hermetic-transactional-composition.md) — with no
+evaluation stage, one worker pool (build) remains; the eval worker pool and
+its `ifdSystems` metadata below have no substrate analogue.)
+
 The scheduler manages two worker pools with separate registries:
 
 - **Eval worker pool**: Dynamic registration via Cap'n Proto handshake. Rendezvous hashing for routing. Deduplication via `compute_eval_cache_key()` (BLAKE3 hash of normalized request). No work-stealing (eval durations have low variance).
@@ -268,6 +287,12 @@ The service-boundary architecture decouples Eos from the snix runtime by separat
 IFD is an internal concern of the snix evaluator — the Eos scheduler is not aware of IFD builds. Eval workers handle IFD internally via `SnixStoreIO`'s `BuildService` gRPC handle. Operators configure IFD builder topology:
 
 An ADR-0003 is no longer needed for IFD topology. The decision has been made: IFD builds are internal to the IFD-enabled evaluator, not scheduled as separate eos cluster builds. The scheduler has no direct IFD visibility; it only needs to know which evaluators have IFD builders configured (via `ifdSystems` worker metadata). See [ADR-0003](0003-composable-deployment-modes.md) for the deployment model decision that now occupies this slot.
+
+(Note: Superseded by
+[ADR-0005](0005-hermetic-transactional-composition.md) — with no evaluator,
+IFD has no substrate analogue; this entire topology question is dead scope
+under the primary executor and survives only within the optional
+passthrough-snix executor's own internals.)
 
 ### Future ADR (proposed): Eos Caching and High Availability
 
