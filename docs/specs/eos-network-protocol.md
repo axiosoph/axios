@@ -43,10 +43,14 @@ validation without reliance on central Certificate Authorities.
   file translation
 - [atom-transactions.md](atom-transactions.md) — Cryptographic claims and
   verify operations
-- [eos-build-engine.md](eos-build-engine.md) — `BuildEngine` trait contracts
-  and cache model
+- [eos-build-engine.md](eos-build-engine.md) — `BuildEngine` trait contracts,
+  `ActionParams`, and cache model
 - [eos-scheduler.md](eos-scheduler.md) — Job queue, deduplication, and
   dispatch semantics
+- [htc-sad.md](../architecture/htc-sad.md) — §2 (core object taxonomy), §2.3
+  (`BuildRecord`), §6.5 (action identity)
+- [eos-sad.md](../architecture/eos-sad.md) — §8.3 (worker-facing interface
+  summary), atom-DAG scheduling model
 
 **Criticality Tier:** High — correctness preserves the security boundary of
 the publishing stack, protects hosts from executing unverified binaries, and
@@ -223,98 +227,157 @@ struct KeyValue {
 }
 ```
 
-#### Worker Protocol — PROPOSED (ADR-0002)
+#### Deprecated Fields (Post-ADR-0005)
 
-The following interfaces are L2-internal (scheduler-to-worker and
-worker-to-scheduler). They are **NOT** present in the implemented schema.
-**Status: PROPOSED** — pending the ADR-0002 implementation campaign.
+The Implemented Schema above is quoted verbatim from ground truth and is
+**not** edited by this pass (spec text only; the actual `eos.capnp` migration
+is separate implementation work). ADR-0005's atom-DAG re-scope
+(`[htc-atom-dag-executor-trait]`, §6) and the deletion of the evaluation
+stage retire the following implemented-schema fields/structs in *meaning*,
+not on the wire — per Cap'n Proto's append-only evolution model (§Wire
+Format, item 5, ~line 73), they remain present for backward compatibility
+with historical job records until an actual schema-evolution commit appends
+their replacements and marks them formally deprecated:
+
+- **`BuildStatus.evaluating`** — no eos build past this ADR ever produces
+  this status. See §Streaming Protocol below.
+- **`DepDescriptor`'s `nix`/`nixGit`/`nixTar`/`nixSrc` groups** — these
+  described dependencies fetched by eos itself "using normal Nix fetching
+  semantics." Under HTC, non-atom fetch dependencies are lock-side
+  `[[deps]]` entries of `type = "fetch"` (ADR-0005 §7,
+  `[htc-fetch-set-lock-plugin]`), executed by HTC's record/replay proxy
+  inside the executor's sandbox — not fetched by eos, and not resolved by
+  an evaluator. The `atom` group is unaffected.
+- **`ComposerSpec`** and **`BuildRequest.composer`** — composer
+  configuration was an evaluation-era construct (selecting and configuring
+  a Nix composer atom for `snix-eval`). Superseded by `ActionParams` (see
+  §Atom-DAG Intake Surface below), which is opaque to the daemon.
+- **`BuildRequest.evalArgs`** — superseded by `ActionParams.variantFlags`
+  (same successor as `ComposerSpec`).
+- **`AtomId.digest`** — this shipped shape names a hash of the
+  `(anchor, label)` pair, which CONTRADICTS the keystone identity decision
+  that `AtomId` is the abstract pair itself, not a digest of it (atom-sad
+  §6.1, `[identity-content-addressed]`). See the PROPOSED successor shape
+  below.
+
+#### Atom-DAG Intake Surface — PROPOSED (Post-ADR-0005)
+
+**Status: PROPOSED** — append-only additions to the client-facing
+`BuildRequest`; not yet in the implemented schema. Cap'n Proto's schema
+evolution is strictly append-only (§Wire Format, item 5): the fields named
+"Deprecated" above are never removed or renumbered, only superseded by new,
+higher-numbered fields, exactly as this section proposes.
+
+Per [htc-atom-dag-executor-trait] (ADR-0005 §6) and eos-sad §1.1/§4.1: there
+is no evaluation stage. The atom-DAG derives entirely from the lock (the
+ion → eos handoff, ion-sad §6.6); no evaluation-derived information is
+needed or accepted on this surface — the exact inversion of the
+pre-ADR-0005 `EvalResult`/`PlanDag` design this section replaces (that
+PROPOSED surface, where an eval worker reported a plan sub-DAG *back* to
+the scheduler after evaluation, is retired wholesale along with the
+evaluation stage itself).
 
 ```capnp
-# Worker-facing types and interfaces — PROPOSED (ADR-0002)
+# PROPOSED additions to BuildRequest (append-only; illustrative field
+# numbers — the actual appending happens in eos.capnp at implementation
+# time). ActionParams is defined ONCE in eos-build-engine.md; these are
+# the SAME fields (target_system, variant_flags), capnp-cased.
+struct ActionParams {
+  targetSystem @0 :Text;            # Target system triple (from [compose.args].system)
+  variantFlags @1 :List(KeyValue);  # Opaque variant flags (from [compose.args])
+}
+
+# A node in the submitted atom-DAG. Carries the atom reference plus
+# optional advisory weight annotations — re-scoped from the pre-ADR-0005
+# eval-worker PlanNode report (deleted along with the evaluation stage)
+# onto the submission surface instead. Annotations are predictions only —
+# the scheduler gates them through confidence weighting and they never
+# alter correctness guarantees (Theorem 3 decay applies, ADR-0004 §2).
+struct AtomDagNode {
+  atomId @0 :AtomId;                 # publish_czd / (set, label) reference — see below
+  predictedDurationMs @1 :UInt64;    # Predicted build duration (0 = unknown)
+  predictedMemPeakKb @2 :UInt64;     # Predicted peak memory in KiB (0 = unknown)
+  predictedOutputKb @3 :UInt64;      # Predicted output size in KiB (0 = unknown)
+}
+
+# Directed edge in the submitted atom-DAG (predecessor → successor),
+# read directly off the lock — not computed by an evaluator.
+struct AtomDagEdge {
+  from @0 :UInt32;  # index into BuildRequest's node list: predecessor
+  to @1 :UInt32;    # index into BuildRequest's node list: successor
+}
+
+# extend BuildRequest (illustrative — fields @0–@4 above are the
+# deprecated evaluation-era surface; new intake fields are appended,
+# never renumbered):
+#   dagNodes     @5 :List(AtomDagNode); # atom-DAG nodes, by publish_czd
+#   dagEdges     @6 :List(AtomDagEdge); # dependency edges, read off the lock
+#   actionParams @7 :ActionParams;      # successor of composer/evalArgs
+
+# PROPOSED successor to AtomId (append-only; keystone re-spec — ADR-0005,
+# atom-sad §6.1 `[identity-content-addressed]`). The shipped `AtomId.digest`
+# field (Implemented Schema, above) is deprecated per the note above; the
+# target shape references the atom by the abstract pair, not a digest of it:
+struct AtomId {
+  set   @0 :Text;   # anchor hash of the atom-set (see AtomSetEntry.anchor)
+  label @1 :Text;   # human-readable atom label within the set
+}
+```
+
+Non-atom fetch dependencies continue to use the existing (shipped)
+`deps: List(DepDescriptor)` field on `BuildRequest` — no new field is
+needed for fetch-set references. Each non-atom `DepDescriptor` variant now
+names a lock-side fetch-set entry that HTC's record/replay proxy serves
+inside the executor's sandbox (htc-sad §4.2), rather than a URL eos itself
+fetches.
+
+The scheduler's `G∪` merge and `MergeRequest` handling (eos-scheduler.md)
+are unaffected by this re-scope: `MergeRequest` is source-agnostic to where
+a DAG fragment came from, and now merges fragments read off the lock rather
+than reported by an eval worker.
+
+#### Worker Protocol — PROPOSED (Post-ADR-0005)
+
+The following interfaces are L3-internal (eos scheduler-to-worker and
+worker-to-scheduler; ADR-0005 §9 layer renumbering). They are **NOT**
+present in the implemented schema. **Status: PROPOSED**. There is exactly
+one worker kind — the executor
+worker (eos-sad §2.2, §8.3) — dispatching through HTC's executor trait
+regardless of which implementation (primary FHS, or optional legacy
+passthrough-snix) backs a given worker process.
+
+```capnp
+# Worker-facing types and interfaces — PROPOSED (Post-ADR-0005)
 # These types are NOT in the implemented schema.
 
-struct EvalRequest {
-  atomDigest @0 :Data;             # Content-addressed atom snapshot digest
-  expression @1 :Text;             # Plan expression path
-  evalArgs @2 :List(KeyValue);     # Evaluation arguments (compose.args)
-  inputs @3 :List(ResolvedInput);  # Pre-resolved atom inputs
-}
-
-struct ResolvedInput {
-  name @0 :Text;                   # Input name (label)
-  digest @1 :Data;                 # Content digest of the resolved atom
-  storePath @2 :Text;              # Store path of the resolved atom
-}
-
-# PROPOSED: plan sub-DAG node. Carries an opaque plan digest plus optional
-# advisory weight annotations. Annotations are predictions only — the
-# scheduler gates them through confidence weighting and they never alter
-# correctness guarantees (Theorem 3 decay applies).
-struct PlanNode {
-  digest @0 :Data;                 # Opaque plan digest (Blake3)
-  predictedDurationMs @1 :UInt64;  # Predicted build duration (0 = unknown)
-  predictedMemPeakKb @2 :UInt64;   # Predicted peak memory in KiB (0 = unknown)
-  predictedOutputKb @3 :UInt64;    # Predicted output size in KiB (0 = unknown)
-  atomProvenance @4 :AtomId;       # Atom-id provenance for cross-version profiling (optional)
-}
-
-# PROPOSED: directed edge in the plan sub-DAG (predecessor → successor).
-struct PlanEdge {
-  from @0 :Data;                   # Plan digest of the predecessor node
-  to @1 :Data;                     # Plan digest of the successor node
-}
-
-# PROPOSED: uncached plan sub-DAG fragment reported by the eval worker
-# to the scheduler for G∪ merge on evaluation completion.
-# v1 normative shape: the full sub-DAG is reported atomically when
-# evaluation completes (matches the formal model's atomic-merge semantics).
-# Future extension only (open verification questions — NOT specified here):
-# incremental fragment streaming during evaluation. Partial-graph semantics
-# and mid-stream cancellation handling require separate design work.
-struct PlanDag {
-  nodes @0 :List(PlanNode);
-  edges @1 :List(PlanEdge);
-}
-
-struct EvalResult {
-  union {
-    success :group {
-      planBytes @0 :Data;          # Serialized plan (engine-format)
-      planDigest @1 :Data;         # Content-addressed plan digest
-      subDag @2 :PlanDag;          # PROPOSED: uncached plan sub-DAG for scheduler G∪ merge
-    }
-    failure :group {
-      error @3 :Text;              # Evaluation error message
-      errorCode @4 :Int32;         # Structured error code
-    }
-  }
-}
-
+# Distinct from the client-facing BuildRequest (Implemented Schema, above)
+# to avoid a name collision between the whole-DAG client submission and a
+# single-action worker dispatch — two structurally different payloads.
 struct WorkerBuildRequest {
-  planBytes @0 :Data;              # Serialized plan (engine-format)
-  jobId @1 :Data;                  # Scheduler-assigned job ID
-  leaseId @2 :Data;                # Lease token for health monitoring
+  atomClosureRoot @0 :Data;           # atom_czd_closure_root (htc-sad §6.5)
+  toolchainCompositionRoot @1 :Data;  # toolchain_composition_root (htc-sad §6.5)
+  actionParams @2 :ActionParams;      # target system, variant flags
+  jobId @3 :Data;                     # Scheduler-assigned job ID (= action_id)
+  leaseId @4 :Data;                   # Lease token for health monitoring
 }
 
 struct WorkerBuildResult {
   union {
     success :group {
-      outputPaths @0 :List(Text);  # Built output store paths
-      outputDigest @1 :Data;       # Content digest of outputs
+      outputTreeDigest @0 :Data;       # htc-sad §2.3 BuildRecord.output_tree_digest
+      buildCompositionRoot @1 :Data;   # htc-sad §2.3 BuildRecord.build_composition_root
+      observedReadSetDigest @2 :Data;  # htc-sad §2.3 BuildRecord.observed_read_set_digest
     }
     failure :group {
-      error @2 :Text;              # Build error message
-      exitCode @3 :Int32;          # Builder exit code
+      error @3 :Text;                 # Build error message
+      exitCode @4 :Int32;              # Builder exit code
     }
   }
 }
 
 interface WorkerRegistry {
-  registerEval @0 (worker :EvalWorker,
-    caps :EvalWorkerCapabilities)
-    -> (registration :Registration);
-  registerBuild @1 (worker :BuildWorker,
-    caps :BuildWorkerCapabilities)
+  registerWorker @0 (worker :ExecutorWorker,
+    caps :WorkerCapabilities)
     -> (registration :Registration);
 }
 
@@ -327,56 +390,21 @@ interface Registration {
   updateMeta @1 (meta :WorkerMeta) -> ();
 }
 
-interface EvalWorker {
-  evaluate @0 (request :EvalRequest) -> (result :EvalResult);
-}
-
-interface BuildWorker {
+# Held by the scheduler. Methods invoked by scheduler. Wraps whichever
+# executor implementation (primary FHS, or optional legacy
+# passthrough-snix) the worker process runs — opaque to the scheduler
+# beyond the capability metadata advertised at registration (eos-sad §7.2).
+interface ExecutorWorker {
   build @0 (request :WorkerBuildRequest) -> (result :WorkerBuildResult);
   cancel @1 (jobId :Data) -> ();
   attachProgress @2 (jobId :Data, callback :ProgressStream) -> ();
 }
 ```
 
-#### Plan-DAG Reporting Surface — PROPOSED
-
-**Status: PROPOSED** — this surface is L2-internal (eval-worker → scheduler);
-it is NOT client-facing and is NOT in the implemented schema.
-
-When an eval worker completes evaluation successfully, it returns an
-`EvalResult` carrying — in addition to the serialized plan — the uncached
-plan sub-DAG (`subDag`) for the scheduler's G∪ merge. Plans are
-self-describing: the build graph derives entirely from evaluation output; no
-L3 (ion/lock) information is needed or accepted on this surface.
-
-**v1 normative shape.** The full uncached sub-DAG is reported atomically when
-evaluation completes. This matches the formal model's atomic-merge semantics:
-the scheduler receives a complete, consistent fragment before merging it into
-G∪. Incremental fragment streaming during evaluation is a future extension
-only (see `PlanDag` struct comment above for open verification questions).
-
-**Advisory weight annotations.** `PlanNode` MAY carry weight annotations
-(`predictedDurationMs`, `predictedMemPeakKb`, `predictedOutputKb`,
-`atomProvenance`). These are treated strictly as predictions under confidence
-gating — identical to historical profiles from the build profile store. A
-hostile or incorrect annotation degrades to the prediction-free baseline;
-correctness guarantees are unaffected (Theorem 3 decay bound applies,
-ADR-0004 §2).
-
-**Normative notes (nrd, 2026-06-12):**
-
-1. **Build-submission surface scope.** The `BuildRequest` submission surface
-   is NOT a dependency-intelligence channel. Lock-level dependency overlap is
-   an *evaluation-coalescing* concern, reserved for the forthcoming
-   evaluation-scheduler ADR. Any batching or grouping surface at the
-   submission level awaits that design and is not specified here.
-
-2. **Atom store as source of truth.** Eval workers pull atoms into the global
-   atom store before evaluation and read atom metadata — including
-   lock-derived dependency information — from the store as the presumptive
-   source of truth, rather than via explicit ion frontend handoff. This is the
-   working assumption and will be confirmed or revised by the
-   evaluation-scheduler ADR.
+The bidirectional capability exchange — worker passes `ExecutorWorker` →
+scheduler holds it; scheduler returns `Registration` → worker holds it;
+connection break invalidates both — is unchanged from the pre-ADR-0005
+design (eos-sad §7.1, §8.3).
 
 ### Schema–Type Correspondence
 
@@ -391,31 +419,31 @@ types define the behavioral contract. Both MUST remain synchronized.
 | `BuildStatus`        | `JobStatus`                       | Job lifecycle state                                             |
 | `ProgressStream`     | `ProgressEvent`                   | Streaming status callback                                       |
 | `AtomSetEntry`       | `AtomSetInfo`                     | Atom-set declaration (anchor → tag + mirrors)                   |
-| `DepDescriptor`      | `FetchDescriptor`                 | Pre-fetch dependency descriptor (union of atom/nix variants)    |
-| `ComposerSpec`       | `ComposerSpec`                    | Composer configuration (atom / nix-trivial / static)            |
-| `BuildRequest`       | `BuildRequest<D: Digest>`         | Structured build request (plan digest + sets + deps + composer) |
+| `DepDescriptor`      | `FetchDescriptor`                 | Pre-fetch dependency descriptor (union of atom/nix variants; `nix`/`nixGit`/`nixTar`/`nixSrc` deprecated — now HTC fetch-set entries, see §Deprecated Fields) |
+| `ComposerSpec`       | `ComposerSpec`                    | **Deprecated** — superseded by `ActionParams` (see §Atom-DAG Intake Surface) |
+| `BuildRequest`       | `BuildRequest<D: Digest>`         | Structured build request (plan digest + sets + deps + composer; `composer`/`evalArgs` deprecated, see §Atom-DAG Intake Surface for the PROPOSED successor fields) |
 | `VersionInfo`        | `(version, rev, set)` fields      | Per-version atom metadata                                       |
 | `EosDaemon`          | Daemon entry point                | Top-level client-facing RPC surface                             |
-| `BuildJob`           | Job handle                        | Per-build capability (client-facing)                            |
+| `BuildJob`           | Job handle                        | Per-build capability (client-facing)                             |
 | `AtomDiscovery`      | `AtomSource` (read-only)          | Atom resolution and search                                      |
-| `AtomMeta`           | Atom metadata                     | Per-atom identity and version info                              |
+| `AtomMeta`           | Atom metadata                     | Per-atom identity and version info                               |
 | `AtomQuery`          | Search parameters                 | Discovery query constraints                                     |
-| `KeyValue`           | `(String, String)`                | Evaluation arguments                                            |
+| `KeyValue`           | `(String, String)`                | Generic key-value pair (deprecated `evalArgs`/`ComposerSpec.args` role; reused by PROPOSED `ActionParams.variantFlags`) |
 
 The atom identifier struct (`atom-id` crate) appears throughout the schema
 as the canonical atom reference type. It is an L1 contract type — not an
 `eos-core` type — and is omitted from this table.
 
-**PROPOSED** (ADR-0002 — not yet in implemented schema):
+**PROPOSED** (Post-ADR-0005 — not yet in implemented schema):
 
-| Cap'n Proto Type     | `eos-core` Rust Type     | Role                                               |
-| :------------------- | :----------------------- | :------------------------------------------------- |
-| `EvalWorker`         | Eval worker interface    | Scheduler-to-eval-worker RPC (internal, ADR-0002)  |
-| `BuildWorker`        | Build worker interface   | Scheduler-to-build-worker RPC (internal, ADR-0002) |
-| `EvalRequest`        | `EvalRequest`            | Evaluation job specification                       |
-| `EvalResult`         | Evaluation result        | Plan or error from eval worker                     |
-| `WorkerBuildRequest` | Build job specification  | Plan bytes + lease for build worker                |
-| `WorkerBuildResult`  | Build result             | Output paths or error from build worker            |
+| Cap'n Proto Type      | `eos-core` Rust Type       | Role                                                            |
+| :--------------------- | :--------------------------- | :------------------------------------------------------------------ |
+| `ActionParams`        | `ActionParams`              | Target system + variant flags (defined once, eos-build-engine.md) |
+| `AtomDagNode`         | `AtomRef` + advisory weights | Atom-DAG submission node (re-scoped `PlanNode`)                  |
+| `AtomDagEdge`         | DAG edge                    | Atom-DAG submission edge, read off the lock                     |
+| `ExecutorWorker`      | Executor worker interface   | Scheduler-to-executor-worker RPC (internal)                      |
+| `WorkerBuildRequest`  | Build job specification     | Atom closure root + toolchain composition root + action params + lease |
+| `WorkerBuildResult`   | Build result                | `BuildRecord` fields (htc-sad §2.3) or error, from executor worker |
 
 ---
 
@@ -633,13 +661,13 @@ build.
 
 **[cancel-build]**: Cancel a running build.
 
-- **PRE**: A client holds a `BuildJob` capability for a job in `Queued`,
-  `Evaluating`, or `Building` state.
+- **PRE**: A client holds a `BuildJob` capability for a job in `Queued` or
+  `Building` state.
 - **POST**: The client invokes `cancel()` on the `BuildJob`. The daemon
   transitions the job to `Cancelled` state and notifies all attached
-  `ProgressStream` callbacks. In-flight evaluation or build work is
-  terminated. The `BuildJob` capability remains valid but subsequent
-  operations return the `Cancelled` status.
+  `ProgressStream` callbacks. In-flight build work is terminated. The
+  `BuildJob` capability remains valid but subsequent operations return the
+  `Cancelled` status.
   `VERIFIED: unverified`
 
 **[request-substitute]**: Query remote caches for pre-built artifacts.
@@ -851,10 +879,11 @@ Client                              Daemon
 1. **Configuration.** Parse daemon configuration: transport endpoint, backend
    selection, worker pool size, trust policy, substituter list.
 
-2. **Service Connection.** Connect to snix store daemons via gRPC URIs
-   (configured blob, directory, and path-info service addresses). Register
-   with eval worker and build worker pools via Cap'n Proto handshake. The
-   scheduler holds no snix dependencies — all worker communication is via
+2. **Service Connection.** Connect to HTC's shared CAS via gRPC URIs
+   (configured blob, directory, and path-info service addresses; reused
+   `snix-castore` services, htc-sad §2.4). Register with the executor
+   worker pool via Cap'n Proto handshake. The scheduler holds no
+   executor-implementation dependencies — all worker communication is via
    Cap'n Proto RPC.
 
 3. **Transport Binding.** Create the transport endpoint (bind UDS or TCP).
@@ -899,10 +928,7 @@ The daemon accommodates this via a dedicated threading model:
     │  ┌───────────────────────┐     │
     │  │  Scheduler (Send)     │     │
     │  │  ┌─────────────────┐  │     │
-    │  │  │ Eval Worker Pool│  │     │
-    │  │  │ (Cap'n Proto)   │  │     │
-    │  │  ├─────────────────┤  │     │
-    │  │  │ Build Worker    │  │     │
+    │  │  │ Executor Worker │  │     │
     │  │  │ Pool (Cap'n     │  │     │
     │  │  │ Proto)          │  │     │
     │  │  └─────────────────┘  │     │
@@ -916,11 +942,12 @@ All `!Send` Cap'n Proto state (capability tables, `Rc`-based references,
 `TwoPartyVatNetwork` instances) lives exclusively on this thread.
 
 **Scheduler:** Runs on the standard `tokio` multi-threaded runtime. The
-scheduler manages two Cap'n Proto worker pools (eval workers and build
-workers). All worker communication is via Cap'n Proto RPC — the scheduler
-has no snix dependencies and no in-process eval threads. Eval workers
-handle the `!Send` snix-eval constraint internally within their own
-processes.
+scheduler manages one Cap'n Proto worker pool (executor workers). All
+worker communication is via Cap'n Proto RPC — the scheduler has no
+executor-implementation dependencies and no in-process build state. Any
+`!Send` constraint specific to a given executor implementation (e.g. the
+optional legacy passthrough-snix executor's `snix-eval` state) is handled
+internally within that worker's own process.
 
 **Communication:** The RPC thread dispatches job requests to the scheduler
 via `tokio::sync::mpsc` channels. The scheduler communicates with external
@@ -1025,8 +1052,8 @@ The `BuildStatus` union covers the complete job lifecycle:
 | Variant      | Semantics                                                                |
 | :----------- | :----------------------------------------------------------------------- |
 | `queued`     | Job is waiting in the scheduler queue                                    |
-| `evaluating` | Nix expression is being evaluated; `message` carries evaluator output    |
-| `building`   | Derivation is being built; `phase` and `progress` carry build phase info |
+| `evaluating` (deprecated) | No eos build past ADR-0005 produces this status; retained on the wire per append-only evolution (§Wire Format, item 5) for historical job records |
+| `building`   | The action is being built; `phase` and `progress` carry build phase info |
 | `completed`  | Build succeeded; `outputPaths` and `outputDigest` carry results          |
 | `failed`     | Build failed; `error` and `exitCode` carry diagnostics                   |
 | `cancelled`  | Build was explicitly cancelled via `BuildJob.cancel()`                   |
@@ -1091,9 +1118,11 @@ Artifact transfer (for substitution and cache distribution) uses the
    The `!Send` nature of `capnp-rpc` is not a limitation to work around but
    an architectural driver. The dedicated RPC thread + channel-based
    scheduler dispatch pattern is the canonical design for Cap'n Proto
-   daemons. With the gRPC-first integration model, `!Send` snix-eval state
-   is fully encapsulated within eval worker processes — the daemon itself
-   has no `!Send` snix state.
+   daemons. Under the executor-trait architecture, all executor-
+   implementation state (including any `!Send` constraints specific to a
+   given executor, e.g. the optional legacy passthrough-snix executor) is
+   fully encapsulated within executor worker processes — the daemon itself
+   holds no executor-implementation state at all.
 
 3. **Decentralized Substitution Networks.**
    Because caches are content-addressed and verified via plan-to-output
