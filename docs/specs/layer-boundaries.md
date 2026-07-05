@@ -284,6 +284,14 @@ VERIFIED: _pending_
 **[boundary-L2-concerns]**: L2 (HTC — Hermetic Transactional
 Composition) owns:
 
+- **The build function and sandboxed execution**: `build(atom
+  closure, toolchain composition, action params) → output tree`,
+  executed by upstream's own unmodified build process inside a
+  materialized FHS view via an OCI/bwrap sandbox (`snix-build`,
+  reused) — the one function this layer exists to provide (htc-sad.md
+  §1.1, §3, §4.1). Eos dispatches to it through the executor trait
+  and performs no sandboxing of its own (htc-sad.md §1.3's Execution
+  boundary row).
 - **CAS**: content-addressed blob/tree storage (`snix-castore`,
   reused). Compositions, interface manifests, and build records are
   all CAS-resident, addressed by their own canonical-serialization
@@ -321,9 +329,9 @@ VERIFIED: _pending_
 **[boundary-L3-concerns]**: L3 (eos) owns:
 
 - Build engine trait: `BuildEngine`, `BuildPlan`
-- Build execution: sandboxing, plan/apply lifecycle (dispatched
-  through L2's executor trait — eos schedules; it does not build,
-  ADR-0005 §6)
+- Build dispatch: plan/apply lifecycle (dispatched through L2's
+  executor trait — eos schedules; it neither builds nor sandboxes,
+  ADR-0005 §6, htc-sad.md §1.3)
 - Scheduling: job queues, work-stealing, lease management, executor
   dispatch — invoking L2's `build(atom_closure, toolchain, params)`
   per atom action; the atom-DAG traversal itself (ADR-0005 §6,
@@ -343,10 +351,11 @@ L3 MUST NOT own: manifest formats (that's L4), dependency
 resolution (that's L4), CLI interface (that's L4), identity
 primitives (that's L1), **atom storage or fetching** (that's L1),
 **non-atom fetch-set declaration or execution** (declaration is
-L4's, execution is L2's — ADR-0005 §7), or **frontend-specific
-serialization formats** including the lock file (that's L4). Eos
-reads atom content through the `AtomSource` trait (L1) and MUST NOT
-implement its own atom fetching logic.
+L4's, execution is L2's — ADR-0005 §7), **the build function or
+sandboxing** (that's L2 — htc-sad.md §1.3's Execution boundary row),
+or **frontend-specific serialization formats** including the lock
+file (that's L4). Eos reads atom content through the `AtomSource`
+trait (L1) and MUST NOT implement its own atom fetching logic.
 
 VERIFIED: _pending_
 

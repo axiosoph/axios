@@ -768,6 +768,12 @@ Validation failures MUST abort the build with structured errors per
 
 ## Compose.args Flow
 
+> **Note:** this section's field names (`eval_args`/`evalArgs`) are
+> the current wire schema, pending N15's rename to `action_params`
+> for the network-protocol layer — see
+> [ion-sad.md](../architecture/ion-sad.md) §6.8, which already uses
+> the renamed term.
+
 The `[compose.args]` table flows from the manifest through the lock
 file and protocol to the backend evaluator:
 
