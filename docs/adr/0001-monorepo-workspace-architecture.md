@@ -124,7 +124,7 @@ trait AtomStore: AtomSource {
 Registries, other stores, and dev workspaces all implement `AtomSource`, so
 ingestion from any source uses the same codepath.
 
-### eos/ — Runtime engine workspace (L2)
+### eos/ — Runtime engine workspace (L3)
 
 | Crate        | Responsibility                                     | Dependencies                       |
 | :----------- | :------------------------------------------------- | :--------------------------------- |
