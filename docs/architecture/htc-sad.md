@@ -791,18 +791,21 @@ build-contract neutrality).
   executor's on-ramp (§6.8); the successor compose semantics this layer's
   executor trait implies are designed in ADR-0005/this SAD, but the spec
   re-derivation itself is **not** performed here — it is P2 debt.
-- `docs/specs/ion-eos-contract.md:557–564` currently states dependencies
-  are "fetched by snix from the lock-specified mirrors using normal Nix
-  fetching semantics," which contradicts both its own
-  `[fetch-verify-build]` and this layer's record/replay proxy model
-  (§4.2). This is a pre-existing internal contradiction in that spec,
-  independent of this ADR's timing; it is **not** amended by
-  this document (out of file scope — ion-eos-contract.md is a spec file,
-  not one of this node's two target files) and is tracked as follow-up
-  work outside this document's file scope.
-- `docs/specs/layer-boundaries.md` has no L2/HTC slot yet; this
-  SAD's §1.4/§9 register the ownership assignment ADR-0005 §9 makes, but
-  the spec file itself is unamended here.
+- **RESOLVED** — `docs/specs/ion-eos-contract.md` previously stated
+  (at its old §lines 557–564) that dependencies are "fetched by snix
+  from the lock-specified mirrors using normal Nix fetching
+  semantics," contradicting both its own `[fetch-verify-build]` and
+  this layer's record/replay proxy model (§4.2). The spec now reads
+  (around lines 592–596): "Nothing is fetched by backend-internal
+  'Nix fetching semantics'; no executor performs its own atom
+  resolution. (This corrects a prior internal contradiction against
+  `[eos-verification-obligation]`/`[no-unverified-execution]`...)".
+  The contradiction is closed; no further action outstanding.
+- **RESOLVED** — `docs/specs/layer-boundaries.md` previously had no
+  L2/HTC slot. It now carries a full L2/HTC section
+  (`[boundary-L2-concerns]`, crate/layer tables, ownership rules,
+  around lines 61–354), registering the ownership assignment ADR-0005
+  §9 makes. This SAD's §1.4/§9 cross-references are current.
 
 ## Appendix E: Stale Documentation
 

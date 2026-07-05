@@ -367,7 +367,13 @@ Convention: `!T` = send, `?T` = receive, `⊕` = internal choice
 !ClaimReq . ?Result<Czd> . !PublishReq . ?Result<()> . end
 ```
 
-AtomId = hash(anchor, label) is pre-computed by the client.
+**(Note: `AtomId = hash(anchor, label)` restates the dissolved
+hashed-identity construction — it CONTRADICTS the keystone identity
+decision that `AtomId` is the abstract pair `(anchor, label)` itself,
+not a digest of it (atom-sad §6.1, `[identity-content-addressed]`).
+The session-type protocol below is unaffected: `ClaimReq` still
+carries `anchor`/`label` directly, and no step in this protocol
+actually depends on a precomputed hash.)**
 ClaimReq carries (anchor, label, owner, key). On success, returns
 the claim's czd. PublishReq carries (anchor, label, claim_czd,
 dig, src, path, version). Claim MUST succeed before publish —
