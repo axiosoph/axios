@@ -15,7 +15,8 @@
 
 **Problem Domain:** The Axios publishing stack is decomposed into
 three workspaces (atom, eos, ion) mapped to a layered architecture
-(L1, L2, L3). The _behavioral_ boundaries between layers are
+(L1, L3, L4 — L2/HTC and L0/L5 are non-crate layers, see §1). The
+_behavioral_ boundaries between layers are
 formalized by the coalgebras and session types in the
 [layer model](../models/publishing-stack-layers.md). What remains
 unspecified — and what this document constrains — are the
@@ -55,14 +56,22 @@ via dependency analysis.
 
 ## §1 — Layer Architecture
 
-The stack comprises five logical layers. Only L1–L3 are active
-workspaces; L0 and L4 are defined for completeness and forward
-compatibility.
+The stack comprises six logical layers (renumbered 2026-07-05 per
+[ADR-0005](../adr/0005-hermetic-transactional-composition.md) §9,
+`[htc-layer-designation]`, which inserts L2/HTC and shifts eos,
+ion, and plugins down one slot each). L1, L3, and L4 are active
+workspaces; L0, L2, and L5 are defined for completeness and forward
+compatibility — L2/HTC has a landed ADR and SAD
+([htc-sad.md](../architecture/htc-sad.md)) but no crate workspace
+yet (spec authorship and implementation are P3/P4 work).
 
 ```
-L4  Plugins    Plugin crates extending ion (future)
-L3  ion/       Frontend: CLI, manifests, resolution
-L2  eos/       Engine: evaluation, builds, stores, scheduling
+L5  Plugins    Plugin crates extending ion (future)
+L4  ion/       Frontend: CLI, manifests, resolution
+L3  eos/       Engine: builds, stores, scheduling
+L2  HTC        Build-execution & composition substrate: CAS, compositions,
+                interface manifests, build records, fetch-proxy execution,
+                closure computation, materialization (no crate workspace yet)
 L1  atom/      Protocol: identity, addressing, publishing
 L0  Cyphr      Cryptographic substrate (external; future)
 ```
@@ -82,16 +91,16 @@ Examples:
 | `atom-core`    | Contract        | L1    |
 | `atom-uri`     | Contract        | L1    |
 | `atom-git`     | Implementation  | L1    |
-| `eos-core`     | Contract        | L2    |
-| `eos-proto`    | Contract (wire) | L2    |
-| `eos-snix`     | Implementation  | L2    |
-| `eos-daemon`   | Implementation  | L2    |
-| `eos`          | Implementation  | L2    |
-| `ion-manifest` | Contract        | L3    |
-| `ion-resolve`  | Contract        | L3    |
-| `ion-lock`     | Contract        | L3    |
-| `ion-eos`      | Bridge          | L3    |
-| `ion-cli`      | Implementation  | L3    |
+| `eos-core`     | Contract        | L3    |
+| `eos-proto`    | Contract (wire) | L3    |
+| `eos-snix`     | Implementation  | L3    |
+| `eos-daemon`   | Implementation  | L3    |
+| `eos`          | Implementation  | L3    |
+| `ion-manifest` | Contract        | L4    |
+| `ion-resolve`  | Contract        | L4    |
+| `ion-lock`     | Contract        | L4    |
+| `ion-eos`      | Bridge          | L4    |
+| `ion-cli`      | Implementation  | L4    |
 
 > [!NOTE]
 > `ion-eos` is a **bridge crate** — it connects two layers by
@@ -114,12 +123,12 @@ layer Lₘ where m > n.
 VERIFIED: _pending_
 
 ```
-Permitted:     ion → eos-core      (L3 → L2 contract)
-Permitted:     ion → atom-core     (L3 → L1 contract)
-Permitted:     eos → atom-core     (L2 → L1 contract)
-FORBIDDEN:     atom → eos-core     (L1 → L2)
-FORBIDDEN:     atom → ion-manifest (L1 → L3)
-FORBIDDEN:     eos → ion-manifest  (L2 → L3)
+Permitted:     ion → eos-core      (L4 → L3 contract)
+Permitted:     ion → atom-core     (L4 → L1 contract)
+Permitted:     eos → atom-core     (L3 → L1 contract)
+FORBIDDEN:     atom → eos-core     (L1 → L3)
+FORBIDDEN:     atom → ion-manifest (L1 → L4)
+FORBIDDEN:     eos → ion-manifest  (L3 → L4)
 ```
 
 ### §2.2 — Contract-Only Across Boundaries
@@ -194,7 +203,7 @@ serialize conforming output. This mirrors how `eos-core` defines
 | `AtomSource` trait              | —                  | `eos-core`     | `atom-core`         |
 | `Manifest` trait                | —                  | `ion-manifest` | `atom-core`         |
 | Cap'n Proto schema              | `eos-daemon`       | `ion-eos`      | `eos-proto`         |
-| Lock file (`atom.lock`)         | `ion-resolve`      | `ion-eos`      | **`ion-lock` (L3)** |
+| Lock file (`atom.lock`)         | `ion-resolve`      | `ion-eos`      | **`ion-lock` (L4)** |
 
 > [!IMPORTANT]
 > The lock file is NOT an inter-layer contract type — it is ion's
@@ -205,7 +214,7 @@ serialize conforming output. This mirrors how `eos-core` defines
 ### §3.2 — Dependency Budget for Contract Crates
 
 **[boundary-contract-dep-budget]**: Contract crates at L1 MUST
-have ≤ 5 non-`std` dependencies. Contract crates at L2 and L3
+have ≤ 5 non-`std` dependencies. Contract crates at L3 and L4
 SHOULD have ≤ 10 non-`std` dependencies. Implementation crates
 have no dependency budget.
 
@@ -257,48 +266,114 @@ proceeds.
   This is the sole storage interface for atom content. Consumers
   (eos, ion) read atoms through the `AtomSource` trait and MUST
   NOT implement their own atom fetching or storage logic.
+- **Signed-metadata-append channel**: post-publish fact publication
+  (build records, interface manifests) appended to an atom's signed
+  metadata (`[publish-payload-extensible]`, atom-transactions.md;
+  the append transition, git-storage-format.md) — the mechanism L2
+  (HTC) uses to record build provenance. Hardening (builder ≠
+  claim-owner signer authorization, a fact-append vs. moved-tip-
+  warning carve-out, a fact-kind convention) is an open gap
+  (atom-sad §9; design campaign P1, ADR-0005 §Open Items).
 
-L1 MUST NOT own: manifest _formats_ (that's L3), build recipes
-(that's L2), dependency resolution (that's L3), or lock files
-(that's L3).
+L1 MUST NOT own: manifest _formats_ (that's L4), build recipes
+(that's L2/L3), dependency resolution (that's L4), or lock files
+(that's L4).
 
 VERIFIED: _pending_
 
-**[boundary-L2-concerns]**: L2 (eos) owns:
+**[boundary-L2-concerns]**: L2 (HTC — Hermetic Transactional
+Composition) owns:
+
+- **The build function and sandboxed execution**: `build(atom
+  closure, toolchain composition, action params) → output tree`,
+  executed by upstream's own unmodified build process inside a
+  materialized FHS view via an OCI/bwrap sandbox (`snix-build`,
+  reused) — the one function this layer exists to provide (htc-sad.md
+  §1.1, §3, §4.1). Eos dispatches to it through the executor trait
+  and performs no sandboxing of its own (htc-sad.md §1.3's Execution
+  boundary row).
+- **CAS**: content-addressed blob/tree storage (`snix-castore`,
+  reused). Compositions, interface manifests, and build records are
+  all CAS-resident, addressed by their own canonical-serialization
+  digest (htc-sad.md §2.4).
+- **Composition objects**: the signed, content-addressed
+  name→digest binding that is the closure object — the successor to
+  a Nix derivation's output closure (htc-sad.md §2.1, §3.1).
+- **Interface-manifest analysis**: deriving provides/requires facts
+  from a build's output tree via namespace-plugin analyzers (ELF,
+  Python, …), keyed `(ns, analyzer_czd, subject_digest)` (htc-sad.md
+  §2.2, §3.2).
+- **Build records**: SLSA-shaped per-action provenance, signed and
+  appended via L1's metadata-append channel (htc-sad.md §2.3, §6.10).
+- **Fetch-proxy execution**: the record/replay HTTP(S) CONNECT proxy
+  that *executes* (never declares) the non-atom fetch entries L4
+  (ion) records as lock plugin entries (htc-sad.md §4.2).
+- **Closure computation**: the satisfaction fixpoint that computes a
+  justified runtime composition from declared + observed requires
+  (htc-sad.md §6.4).
+- **Materialization/views**: mounting a composition as a runtime view
+  at one of three tiers — Observe / Fast / Export (htc-sad.md §5).
+
+L2 has no crate workspace yet — spec authorship is P3/P4 work
+(htc-sad.md Appendix C); this concern list registers ownership ahead
+of implementation, per this section's own ownership rule.
+
+L2 MUST NOT own: atom identity or the lock's atom contribution
+(that's L1), dependency resolution, the lock file, fetch-entry
+_declaration_, or the manifest (that's L4), or scheduling policy,
+worker placement, or the atom-DAG (that's L3 — L2 is what L3's
+executor trait dispatches *to*, not the scheduler itself).
+
+VERIFIED: _pending_
+
+**[boundary-L3-concerns]**: L3 (eos) owns:
 
 - Build engine trait: `BuildEngine`, `BuildPlan`
-- Build execution: evaluation, sandboxing, plan/apply lifecycle
-- Scheduling: job queues, work-stealing, lease management
-- **Artifact store**: content-addressed storage for build outputs
-  (derivations, compiled artifacts). Defined by the `ArtifactStore`
-  trait in `eos-core`. Under the gRPC-first architecture
-  ([ADR-0002](../adr/0002-decoupling-snix-backend.md)), the store
-  runtime is an external snix store daemon accessed via gRPC; the
-  daemon (scheduler) does not hold `ArtifactStore` instances.
+- Build dispatch: plan/apply lifecycle (dispatched through L2's
+  executor trait — eos schedules; it neither builds nor sandboxes,
+  ADR-0005 §6, htc-sad.md §1.3)
+- Scheduling: job queues, work-stealing, lease management, executor
+  dispatch — invoking L2's `build(atom_closure, toolchain, params)`
+  per atom action; the atom-DAG traversal itself (ADR-0005 §6,
+  htc-sad.md §3.5, §6.7)
+- **Artifact store**: content-addressed storage for build outputs,
+  provided by L2's CAS. The `ArtifactStore` trait in `eos-core` is
+  the scheduler's read/cache-existence seam onto it — eos does not
+  run its own store daemon (re-framed from the prior "snix store
+  daemon" framing; which wire-first implementation backs the CAS is
+  deferred to P3, ADR-0005 §10).
 - Build input contract: `EvalRequest`, `ResolvedInput`,
   `ComposerConfig`, `BuildRequest`, `FetchDescriptor`, cache key
   computation
 - Daemon infrastructure: network protocol, RPC, discovery
-- Non-atom dependency fetching: Nix expressions, tarballs, git
-  sources. These are not atoms and do not flow through the atom
-  protocol.
 
-L2 MUST NOT own: manifest formats (that's L3), dependency
-resolution (that's L3), CLI interface (that's L3), identity
+L3 MUST NOT own: manifest formats (that's L4), dependency
+resolution (that's L4), CLI interface (that's L4), identity
 primitives (that's L1), **atom storage or fetching** (that's L1),
+**non-atom fetch-set declaration or execution** (declaration is
+L4's, execution is L2's — ADR-0005 §7), **the build function or
+sandboxing** (that's L2 — htc-sad.md §1.3's Execution boundary row),
 or **frontend-specific serialization formats** including the lock
-file (that's L3). Eos reads atom content through the `AtomSource`
+file (that's L4). Eos reads atom content through the `AtomSource`
 trait (L1) and MUST NOT implement its own atom fetching logic.
 
 VERIFIED: _pending_
 
-**[boundary-L3-concerns]**: L3 (ion) owns:
+**[boundary-L4-concerns]**: L4 (ion) owns:
 
 - Manifest format: `ion.toml` / `atom.toml` parsing and validation
 - Dependency resolution: SAT solver, constraint matching, version
   comparison
 - **Lock file format**: `atom.lock` types, parsing, validation,
   and production — ion's serialization of resolved dependencies
+- **Fetch-set declaration**: non-atom dependency pins (source
+  tarballs, crates, npm packages, …) as lock `[[deps]]` entries
+  dispatched by `type` (e.g. `type = "fetch"`), per
+  `[lock-type-extension-mechanism]` (lock-file-schema.md) — ion
+  declares, never executes, a fetch (ADR-0005 §7). "Nix expressions"
+  as a dependency class is removed from the MVP taxonomy; it
+  survives only within the optional passthrough-snix legacy
+  executor's scope (htc-sad.md §6.8).
 - Lock file → eos contract translation: converting lock file
   content into `eos-core` types (`EvalRequest`, `ResolvedInput`)
 - CLI interface: commands, user-facing output, dev workspace
@@ -306,12 +381,13 @@ VERIFIED: _pending_
 - Engine dispatch: compile-time generics selecting the build engine
 - Bridge to eos: connection, RPC invocation, progress monitoring
 
-L3 MUST NOT own: identity primitives (that's L1), build engine
-internals (that's L2), or storage backends (that's L1/L2).
+L4 MUST NOT own: identity primitives (that's L1), build engine
+internals (that's L3), fetch-set _execution_ (that's L2), or
+storage backends (that's L1/L2).
 
 VERIFIED: _pending_
 
-**[boundary-L4-concerns]**: L4 (plugins) extends L3 with
+**[boundary-L5-concerns]**: L5 (plugins) extends L4 with
 ecosystem-specific dependency handling. Plugins MAY produce
 lock file entries that conform to the lock file schema
 (`[lock-type-extension-mechanism]`), but MUST NOT bypass ion's
@@ -324,7 +400,7 @@ VERIFIED: _pending_
 ### §4.2 — Lock File Ownership
 
 **[boundary-lock-ownership]**: The lock file format (`atom.lock`)
-is owned by L3 (ion). The lock file is ion's serialization of
+is owned by L4 (ion). The lock file is ion's serialization of
 resolved dependencies — it is a frontend-specific artifact, not
 an inter-layer contract type.
 
@@ -343,10 +419,10 @@ already exist. The lock file is just ion's serialization of them.
 **Architectural flow:**
 
 ```
-ion-resolve ──produces──→ atom.lock  (ion's format, L3 types)
-ion-eos     ──parses────→ LockFile   (L3 types)
-ion-eos     ──translates→ EvalRequest, ResolvedInput (L2 contract)
-ion-eos     ──submits───→ eos-daemon via RPC (L2 contract)
+ion-resolve ──produces──→ atom.lock  (ion's format, L4 types)
+ion-eos     ──parses────→ LockFile   (L4 types)
+ion-eos     ──translates→ EvalRequest, ResolvedInput (L3 contract)
+ion-eos     ──submits───→ eos-daemon via RPC (L3 contract)
 eos-daemon  ──receives──→ EvalRequest (eos-core types only)
 ```
 
@@ -374,7 +450,7 @@ and `serde` + `toml` (for parsing). It does NOT depend on
 
 > [!IMPORTANT]
 > **Current violation:** Lock file types currently reside in
-> `eos/eos/src/lock.rs` — an L2 implementation crate. They MUST
+> `eos/eos/src/lock.rs` — an L3 implementation crate. They MUST
 > migrate to `ion/ion-lock/` per this constraint. See §6.1 for
 > the migration path.
 
@@ -407,15 +483,15 @@ After lock file migration, `ion-eos` additionally depends on
 ### §4.4 — Store Separation
 
 **[boundary-store-separation]**: The atom store (L1) and the
-artifact store (L2) are architecturally distinct and MUST NOT
+artifact store (L3) are architecturally distinct and MUST NOT
 be conflated.
 
-| Property            | Atom Store (L1)                         | Artifact Store (L2)                   |
+| Property            | Atom Store (L1)                         | Artifact Store (L3)                   |
 | :------------------ | :-------------------------------------- | :------------------------------------ |
 | **Data**            | Atom source trees (source code)         | Build outputs (derivations, binaries) |
 | **Trait**           | `AtomSource` / `AtomStore` (atom-core)  | `ArtifactStore` (eos-core)            |
 | **Addressing**      | `AtomId` (pair) / `blake3(publish_czd)` | Plan hash / output digest             |
-| **Primary backend** | git                                     | snix store                            |
+| **Primary backend** | git                                     | CAS (L2/HTC; `snix-castore`-backed — the fork-vs-speak-upstream-snix call is deferred to P3, ADR-0005 §10) |
 | **Populated by**    | Ion (ingestion), eos composite source   | Eos (build outputs)                   |
 | **Read by**         | Eos (build inputs via `AtomSource`)     | Eos (cache hits), ion (build results) |
 
@@ -427,7 +503,7 @@ outputs in the atom store.
 The atom store is the ONLY path through which atom content enters
 the eos pipeline. Eos reads atom content through the `AtomSource`
 trait and MUST NOT implement its own atom fetching or ingestion
-logic (see `[boundary-L2-concerns]`). Verification of atom
+logic (see `[boundary-L3-concerns]`). Verification of atom
 integrity is the atom protocol's responsibility at ingestion
 time — eos trusts atoms resolved from its `AtomSource`.
 
@@ -472,7 +548,7 @@ classification:
 
 ```toml
 [package.metadata.axios]
-layer = "L2"
+layer = "L3"
 kind = "contract"  # or "implementation" or "bridge"
 ```
 
@@ -510,7 +586,7 @@ evidence; open entries require remediation.
 
 ### §6.1 — Lock types in `eos` instead of `ion`
 
-**Violates:** `[boundary-lock-ownership]`, `[boundary-L2-concerns]`
+**Violates:** `[boundary-lock-ownership]`, `[boundary-L3-concerns]`
 
 **CLOSED** — `! test -f eos/eos/src/lock.rs` → exit 0.
 `eos/eos/src/lock.rs` has been removed. All lock types (`LockFile`,
@@ -538,7 +614,7 @@ type returned by the parser.
 
 ### §6.3 — Eos receives raw lock content
 
-**Violates:** `[boundary-L2-concerns]`
+**Violates:** `[boundary-L3-concerns]`
 
 **CLOSED** — `grep -q "BuildRequest" eos/eos/src/orchestrator.rs` → exit 0.
 `run_orchestrated_build()` (`eos/eos/src/orchestrator.rs:42-55`) now
@@ -552,7 +628,7 @@ eliminate snix-specific concrete types from the function signature.
 
 ### §6.4 — Eos daemon persists lock files to disk
 
-**Violates:** `[boundary-L2-concerns]`
+**Violates:** `[boundary-L3-concerns]`
 
 **CLOSED** — No lock directory configuration or filesystem lock-read
 logic exists in `eos-daemon`. `eos-daemon/src/config.rs` defines no
@@ -563,7 +639,7 @@ receives `BuildRequest` via Cap'n Proto RPC exclusively. Check: `! rg
 
 ### §6.5 — Eos reimplements atom fetching
 
-**Violates:** `[boundary-L2-concerns]`, `[boundary-L1-concerns]`
+**Violates:** `[boundary-L3-concerns]`, `[boundary-L1-concerns]`
 
 **Check:** `grep -n "curl\|fetch_git\|download_file\|extract_tarball" eos/eos/src/fetch.rs`
 
@@ -577,10 +653,17 @@ full composite `AtomSource` implementation (local store → registry →
 ion peer) that routes all dependency resolution through
 protocol-native abstractions.
 
-Per §6.1 migration notes, non-atom dependency fetching (Nix
-expressions, tarballs, git sources) remains in eos intentionally as
-those types do not flow through the atom protocol. The violation is
-that the composite `AtomSource` pattern is incomplete.
+Per the fetch-ownership split ([ADR-0005](../adr/0005-hermetic-transactional-composition.md)
+§7, `[htc-fetch-set-lock-plugin]`): non-atom dependency fetching
+(tarballs, git sources, …) is *declared* at L4 (ion, as lock
+`[[deps]]` entries) and *executed* at L2 (HTC's record/replay
+proxy) — eos owns neither end. `eos/eos/src/fetch.rs` performing
+its own `curl`/`git clone` for these deps is pre-substrate residual
+scope, not an intentional design placement; it is superseded by the
+L4-declares/L2-executes split once HTC's fetch proxy lands (P3/P4).
+The remaining violation is twofold: the composite `AtomSource`
+pattern is incomplete, and this fetch path itself needs migration
+off eos once the fetch proxy exists.
 
 ### §6.6 — `eos-daemon` depends on `atom-git` (L1 implementation crate)
 
@@ -591,10 +674,10 @@ that the composite `AtomSource` pattern is incomplete.
 `eos-daemon/Cargo.toml:11` declares a direct dependency on `atom-git`,
 an L1 implementation crate. `eos-daemon/src/scheduler.rs:188-211`
 uses `atom_git::GitSource::new()` to open the local workspace git
-repository inside scheduled build tasks. `eos-daemon` is an L2
+repository inside scheduled build tasks. `eos-daemon` is an L3
 implementation crate; it MUST NOT depend on any L1 implementation
 crate — this violates both `[boundary-impl-isolation]` (no L1 impl
-in L2 impl) and `[boundary-contract-only]` (cross-workspace dep MUST
+in L3 impl) and `[boundary-contract-only]` (cross-workspace dep MUST
 target a contract crate).
 
 **Remediation path:** Campaign node P11. Introduce a `WorkspaceSource`
@@ -615,7 +698,7 @@ apply these questions in order:
    → It MUST live in the consuming layer's contract crate.
 
 2. **Is it a serialization format specific to one frontend?**
-   → It MUST live in that frontend's workspace (L3/L4).
+   → It MUST live in that frontend's workspace (L4/L5).
    The inter-layer contract is the _structured types_ the
    consumer defines, not the frontend's serialization format.
 
@@ -652,9 +735,10 @@ apply these questions in order:
 | `[boundary-contract-dep-budget]` | `UNVERIFIED`            | `cargo metadata` dep count          | Pending CI script                                 |
 | `[boundary-no-backend-leakage]`  | `UNVERIFIED`            | Public API audit                    | Pending                                           |
 | `[boundary-L1-concerns]`         | `VERIFIED: agent-check` | Cross-referenced with ADR-0001      | Consistent                                        |
-| `[boundary-L2-concerns]`         | `VERIFIED: agent-check` | Cross-referenced with ADR-0001      | Amended: lock file removed from L2                |
-| `[boundary-L3-concerns]`         | `VERIFIED: agent-check` | Cross-referenced with ADR-0001      | Amended: lock file format added to L3             |
-| `[boundary-L4-concerns]`         | `VERIFIED: agent-check` | Deferred                            | Minimal constraints pending plugin maturity       |
+| `[boundary-L2-concerns]`         | `UNVERIFIED`            | Cross-referenced with ADR-0005/htc-sad.md | New layer (2026-07-05); no crate workspace yet (P3/P4) |
+| `[boundary-L3-concerns]`         | `VERIFIED: agent-check` | Cross-referenced with ADR-0001      | Amended: lock file removed from L3                |
+| `[boundary-L4-concerns]`         | `VERIFIED: agent-check` | Cross-referenced with ADR-0001      | Amended: lock file format added to L4             |
+| `[boundary-L5-concerns]`         | `VERIFIED: agent-check` | Deferred                            | Minimal constraints pending plugin maturity       |
 | `[boundary-lock-ownership]`      | `VERIFIED: agent-check` | Cargo-atom test; format vs contract | §4.2 rationale                                    |
 | `[boundary-bridge-crate]`        | `VERIFIED: agent-check` | `ion-eos` Cargo.toml verified       | Conforms                                          |
 | `[boundary-store-separation]`    | `UNVERIFIED`            | Manual audit                        | New constraint; pending implementation            |

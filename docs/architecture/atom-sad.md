@@ -36,8 +36,8 @@ Atom owns:
 - **Discovery** — object-free version enumeration over advertised refs, and the
   set→mirrors indirection that makes resolution decentralized.
 
-Atom does **not** own: evaluation or build (L2, eos), dependency resolution or the
-lock file as a whole (L3, ion), or key management and signing primitives (Cyphr/Coz,
+Atom does **not** own: evaluation or build (L3, eos), dependency resolution or the
+lock file as a whole (L4, ion), or key management and signing primitives (Cyphr/Coz,
 below L1). Atom defines the identity contract those layers consume; it never
 consumes them.
 
@@ -45,10 +45,10 @@ consumes them.
 
 ```mermaid
 graph TB
-  subgraph L3["Ion (L3)"]
+  subgraph L4["Ion (L4)"]
     ION["Resolver / Lock author"]
   end
-  subgraph L2["Eos (L2)"]
+  subgraph L3["Eos (L3)"]
     EOS["Scheduler / Eval input"]
   end
   subgraph L1["Atom (L1)"]
@@ -75,15 +75,15 @@ graph TB
 | :------------ | :----------------------------------------------------------------------- | :------------------------------------------------------------------------------ |
 | **Identity**  | `AtomId = (anchor, label)`; anchor derivation from the genesis commit    | Key material, signature primitives (Coz/Cyphr)                                  |
 | **Ownership** | claim/publish protocol; claim/publish chains; the owner→identity binding | Owner identity _systems_ (Coz `tmb`, Cyphr `PR`) — `Owner` is opaque            |
-| **Storage**   | git-object encoding; registry + store ref layout; ingest                 | Build execution, artifact store (L2)                                            |
+| **Storage**   | git-object encoding; registry + store ref layout; ingest                 | Build execution, artifact store (L3)                                            |
 | **Discovery** | object-free ref advertisement; set→mirrors indirection                   | Version _semantics_ (`VersionScheme` is a trait; ecosystem adapters live above) |
-| **Lock**      | the atom-required lock contribution (`[lock-entry-sufficient]`)          | The lock file as a whole, resolution, plugin/non-atom deps (L3)                 |
+| **Lock**      | the atom-required lock contribution (`[lock-entry-sufficient]`)          | The lock file as a whole, resolution, plugin/non-atom deps (L4)                 |
 
 ### 1.4 Layer Discipline
 
 Atom is the bottom layer. `atom-*` crates **MUST NOT** depend on `eos-*` or `ion-*`.
-Ion (L3) and Eos (L2) depend on atom; the reverse is forbidden
-(`layer-boundaries.md` `[boundary-downward-only]`). The L2/L3 export surface is
+Ion (L4) and Eos (L3) depend on atom; the reverse is forbidden
+(`layer-boundaries.md` `[boundary-downward-only]`). The L3/L4 export surface is
 `AtomContent` (a forgetful functor over `AtomStore` that drops `ingest`/`contains`);
 consumers never see store-mutating operations.
 
@@ -185,7 +185,7 @@ Defines the four traits and their algebraic relationships (`atom-core/src/lib.rs
 - **`AtomSource`** (:139) — discovery/metadata observation: resolve an atom's
   availability and metadata.
 - **`AtomContent`** (:205) — extends `AtomSource` with content access. The forgetful
-  map `F_content → F_source` drops the content observer; this is the **L2/L3 export
+  map `F_content → F_source` drops the content observer; this is the **L3/L4 export
   surface** (`publishing-stack-layers.md §2.1a`).
 - **`AtomRegistry`** (:231) — extends `AtomSource` with the signed `claim()`/
   `publish()` operations (append-only).
@@ -386,7 +386,7 @@ copied lock fields:
 - **Ion** may derive wire-handoff fields from that same object at resolution time.
 
 Nothing about the atom is copied into the lock beyond the `(set, label) →
-{version, publish_czd}` pointer. The L2/L3 boundary is `AtomContent` (the forgetful
+{version, publish_czd}` pointer. The L3/L4 boundary is `AtomContent` (the forgetful
 functor dropping store-mutating observers). _Note:_ `ion-eos-contract.md`
 `[handoff-atom-fields]` carries only the minimal pointer `(set, label, version,
 publish_czd)`; eos reads `rev`/`dig`/content from the self-describing git object.
@@ -429,13 +429,14 @@ PoC's `get_atoms` proves the pattern). See Appendix D.
 | 2   | FsSource sentinel anchor value/encoding unconstrained                           | local atoms; needs a protocol-level constant            |
 | 3   | `rev` peel mechanism (locate commit from `publish_czd`; GC of an old chain tip) | specify the failure mode when a serving mirror has GC'd |
 | 4   | Cross-ecosystem `VersionScheme` adapters                                        | trait surface defined; concrete adapters are above L1   |
+| 5   | Signed metadata append as the substrate's fact-publication channel (build records, interface manifests — HTC/L2, per ADR-0005 §Open Items, htc-sad.md §6.10) | Builder ≠ claim-owner signer authorization is unspecified; every routine fact append currently trips §8.6's "moved tip / optional czd bump" warning path, which needs a fact-append carve-out; a fact-kind convention is also open. Design campaign **P1**. No change to §4.2/§8.6 semantics in this pass. |
 
 ## 10. Scope Boundaries
 
 Out of scope for the atom layer:
 
-- **Build/evaluation** (L2/eos) and the artifact store.
-- **Dependency resolution, the lock file as a whole, plugin/non-atom deps** (L3/ion).
+- **Build/evaluation** (L3/eos) and the artifact store.
+- **Dependency resolution, the lock file as a whole, plugin/non-atom deps** (L4/ion).
 - **Key management and signing primitives** (Cyphr/Coz) — `Owner` and `czd` are
   opaque to atom.
 - **Concrete version semantics** — `VersionScheme` is a trait; ecosystem adapters are
@@ -490,7 +491,7 @@ None at the atom layer. The keystone realignment — pair-only `AtomId` (no
 `AtomDigest`/`[digest-algorithm-agile]`), the 2-value name-anchored lock, the flat
 `blake3(publish_czd)` store, and name-anchored acquisition — has been applied across
 `atom-transactions.md`, `atom-sourcing.md`, and `git-storage-format.md`, which are
-aligned to this SAD. (The L3 consequences — the ion lock cross-references and the eos
+aligned to this SAD. (The L4 consequences — the ion lock cross-references and the eos
 handoff — are tracked by `ion-sad.md`.)
 
 ## Appendix E: Stale Documentation

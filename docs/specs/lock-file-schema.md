@@ -17,7 +17,7 @@
 ## Domain
 
 **Problem Domain:** The lock file is the sole serialized contract between
-Ion (L3 — resolution frontend) and Eos (L2 — build engine). Ion produces
+Ion (L4 — resolution frontend) and Eos (L3 — build engine). Ion produces
 lock files by resolving manifests against atom-sets and external sources.
 Eos consumes lock files to fetch, verify, and build the complete
 dependency closure. No other input — manifest, plugin state, resolution
@@ -175,6 +175,16 @@ mirrors = ["::"]
 The compose section declares how the root atom is evaluated. It
 controls which atom provides the import/composition logic that wires
 the dependency graph into an evaluable expression.
+
+> **Note (2026-07-05, no semantic change):** The `NixTrivial` variant
+> below bakes a Nix-shaped evaluation assumption into the **core** lock
+> schema (not a plugin); it remains valid today only as the optional
+> passthrough-snix legacy executor's on-ramp. The substrate's successor
+> compose semantics — a signed composition object, not an evaluated
+> expression — are designed in
+> [ADR-0005](../adr/0005-hermetic-transactional-composition.md) /
+> [htc-sad.md](../architecture/htc-sad.md); re-deriving this section's
+> schema against that model is **P2** debt, not performed here.
 
 ```
 TYPE Using =
@@ -591,6 +601,17 @@ determines which eos backend handles the entry:
 - `nix`, `nix+*` → Nix/Snix backend fetchers
 - `guix`, `guix+*` → Guix backend fetchers (future)
   `VERIFIED: unverified`
+
+> **Note (2026-07-05, no semantic change):** "Backend" here predates
+> the executor-trait framing: dispatch is no longer to a whole-package
+> Nix/Snix/Guix *backend* but to a fetch-type-specific handler behind
+> the executor's fetch proxy (HTC/L2, `htc-sad.md` §4.2) or, for the
+> `nix`/`nix+*` rows specifically, the optional passthrough-snix legacy
+> executor. Re-deriving this row's dispatch model is **P4** debt (a
+> compiled-in fetch-type registry vs. a preservation mode — see
+> `[lock-dep-no-unknown-fields]`/ion-sad §6.5), not performed here; see
+> [ADR-0005](../adr/0005-hermetic-transactional-composition.md) §Open
+> Items.
 
 ---
 
