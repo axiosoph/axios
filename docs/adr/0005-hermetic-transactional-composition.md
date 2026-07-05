@@ -35,10 +35,10 @@ runtime: an evaluator producing a DAG of derivations, a store keyed by
 input-addressed hashes embedded in the artifacts themselves, and snix as
 "the" backend. That assumption is no longer load-bearing, and holding onto it
 in doctrine while abandoning it in direction is worse than either extreme —
-it is exactly the "doctrine absence" root cause this ADR exists to close
-(survey finding D1/D2: the substrate vision existed only in scratch notes,
-with no ADR, no SAD, and no layer slot, while five ADR-doctrine loci across
-the corpus asserted an eval subsystem as central design).
+it is exactly the "doctrine absence" root cause this ADR exists to close:
+the substrate vision existed only in scratch notes, with no ADR, no SAD,
+and no layer slot, while five ADR-doctrine loci across the corpus asserted
+an eval subsystem as central design.
 
 ### The self-reference obstruction
 
@@ -88,15 +88,15 @@ construction rather than by patching.
   nodes) is a substitution the theory was already agnostic to.
 - **The doctrine currently contradicts the direction in four places.**
   ADR-0002 §Tier 3 calls remote-evaluation scheduling "the key architectural
-  differentiator from the Nix ecosystem" (survey D13) — the roadmap deletes
+  differentiator from the Nix ecosystem" — the roadmap deletes
   the evaluation scheduler and any MVP dependency on `snix-eval`/the Nix
   language outright. ADR-0001's cryptographic chain claims the lock's
-  `requires` field captures "the full graph" (survey F1.1) — the decided
+  `requires` field captures "the full graph" — the decided
   2-value lock carries no such field. ADR-0004's atom-id-as-prediction-oracle
-  argument states `atom-id = digest(anchor, label)` (survey D19) — the
+  argument states `atom-id = digest(anchor, label)` — the
   keystone identity decision made `AtomId` the abstract pair, not a digest of
   it. `layer-boundaries.md` has no slot for compositions, manifests, or
-  build records to be owned by (survey D2) — its own ownership rule demands
+  build records to be owned by — its own ownership rule demands
   this be resolved before implementation, which is what the layer
   designation below does.
 
@@ -106,17 +106,24 @@ construction rather than by patching.
 
 The substrate's entire vocabulary: an **atom** is signed intent (sources +
 lock — already defined at L1, unchanged by this ADR); a **tree** is a
-castore Merkle output; an **interface manifest** is a derived fact
-(provides/requires/observed, computed once per output blob); a
+castore Merkle output; an **interface manifest** is a derived, static fact
+(provides/requires, keyed by analyzer and blob — §4 explains why
+dynamically observed facts are a separate object, not part of this one);
+a
 **composition** is a signed, content-addressed binding of conventional names
 to content digests — the closure object, the successor to the drv-closure;
 a **view** is a composition mounted at runtime. The **one function** is
-`build: (atom closure, toolchain composition) → output tree`, executed by
-upstream's own, unmodified build process inside a materialized FHS view. An
-**action** is one invocation of `build`; it is not a sixth persistent noun,
-it is the function applied — the identity of that application is defined
-next. There is no interpreted composition language: compositions are pure
-data, and the only function over them is `build`. Full schemas: HTC SAD §2.
+`build: (atom closure, toolchain composition, action params) → output
+tree`, executed by upstream's own, unmodified build process inside a
+materialized FHS view. `build` is deterministic and hermetic (the same
+three inputs always produce the same result, success or failure) — it is
+**not** total: an unmodified upstream build can fail for the same reasons
+it would fail outside this substrate, and the substrate makes no claim
+otherwise. An **action** is one invocation of `build`; it is not a sixth
+persistent noun, it is the function applied — the identity of that
+application is defined next. There is no interpreted composition language:
+compositions are pure data, and the only function over them is `build`.
+Full schemas: HTC SAD §2.
 
 ### 2. Action identity replaces the drv hash [htc-action-identity]
 
@@ -151,13 +158,21 @@ SAD §2.1, §6.5.
 ### 4. Interface manifests are binding-free [htc-manifest-binding-free]
 
 An interface manifest is `{subject: tree_digest, provides: [(ns, name,
-iface_digest)], requires: [(ns, name, needs)], observed: [(ns, name,
-evidence)]}` — never a foreign artifact hash. One manifest can satisfy many
-compositions, each with its own root; bindings exist only inside
-compositions, never inside manifests. This is what makes manifests
-memoizable per-blob in the CAS independent of who eventually composes
-against them. Full schema and the ELF/Python analyzer algorithms: HTC SAD
-§2.2, §6.
+iface_digest)], requires: [(ns, name, needs)]}` — never a foreign artifact
+hash. It is keyed `(ns, analyzer_czd, subject_digest)` (§5), not by
+`subject` alone: analysis is a pure function of *(analyzer, blob)*, not of
+the blob in isolation, since a newer analyzer version can extract
+different facts from the same bytes. **Dynamically observed facts are not
+part of this object.** A manifest's static provides/requires are
+memoizable exactly once per `(analyzer, subject)` pair; observed facts
+(§6.3) come from a specific check-phase run against a specific mounted
+composition and are not a pure function of the blob at all, so they cannot
+share that memoization story. They are tracked as a separate, run-scoped
+observation record consumed directly by the closure computer ([htc-closure-
+computation], §12) rather than folded into the manifest. One manifest can
+satisfy many compositions, each with its own root; bindings exist only
+inside compositions, never inside manifests. Full schema and the
+ELF/Python analyzer algorithms: HTC SAD §2.2, §6.
 
 ### 5. Analyzers are atoms [htc-analyzers-are-atoms]
 
@@ -165,9 +180,13 @@ Interface analysis is not a privileged system stage; an analyzer's
 execution is an ordinary eos action (the same `build`-shaped invocation as
 any other), and its semantics (namespace, satisfaction relation) register
 in an ion-style namespace registry, mirroring the lock's own plugin
-mechanism. Facts are keyed `(ns, analyzer_czd, subject_digest)` —
-recomputable, provenance-clean, and versionable independent of the
-analyzer's own evolution. Full detail: HTC SAD §3, §6.1–§6.2.
+mechanism. The static provides/requires facts an analyzer produces are
+keyed `(ns, analyzer_czd, subject_digest)` (§4) — recomputable,
+provenance-clean, and correctly versioned as the analyzer itself evolves,
+since a new analyzer version is a new key rather than an overwrite of the
+old one's facts. Dynamically observed facts are a separate, run-scoped
+record, not part of this keying scheme (§4). Full detail: HTC SAD §3,
+§6.1–§6.2, §6.3.
 
 ### 6. Atom-DAG re-scope; executor becomes a trait [htc-atom-dag-executor-trait]
 
@@ -191,9 +210,14 @@ The governing rule for every "where does X live" question in this
 architecture: **lock = everything needed before the build (intent); atom
 metadata = everything derived after the build (fact).** Non-atom fetch
 dependencies (source tarballs, crates, npm packages) are input-pinning, so
-they are lock-side, declared as a plugin-typed `[[deps.fetch]]` entry
-(`url`, `blob` digest, normalized `method`) using ion's pre-existing
-`[lock-type-extension-mechanism]` — built for exactly this shape. Execution
+they are lock-side, declared the same way every other non-atom dependency
+type already is: a `[[deps]]` array entry dispatched by its `type` field
+(`type = "fetch"`, illustratively carrying `url`, a CAS `blob` digest, and
+a normalized `method` — the exact field set beyond `type` is P2/P4 design
+work, not settled by this ADR), using ion's pre-existing
+`[lock-type-extension-mechanism]` (ion-sad §6.5, `[lock-dep-type-
+dispatch]`) — built for exactly this shape, not a new lock-schema shape of
+its own. Execution
 is a content-addressing HTTP(S) CONNECT proxy with two modes: **record**
 (first build, explicitly impure — every response body becomes a CAS blob,
 every request→blob tuple is written back into the lock, mechanically, like
@@ -216,8 +240,8 @@ add → resolve → lock → build → analyze → compose → run` path. Any
 `compose`/lock-schema surface that still bakes in a Nix-shaped assumption
 (the `[compose]` NixTrivial variant, `ion-manifest.md`'s `TrivialAtom=Nix`)
 remains valid **only** as the passthrough-snix executor's on-ramp, pending
-the P2 re-derivation of successor compose semantics (recorded as a P2 debt,
-survey D16 — not resolved by this ADR; the spec re-derivation is out of
+the P2 re-derivation of successor compose semantics (recorded as a P2 debt
+— not resolved by this ADR; the spec re-derivation is out of
 this ADR's non-goals).
 
 ### 9. Layer designation: L2, "Hermetic Transactional Composition" (HTC) [htc-layer-designation]
@@ -243,7 +267,7 @@ source layer (atom) through the artifact layer (composition) to, eventually,
 the execution layer. Every layer-owning document (`layer-boundaries.md`,
 `ADR-0001`'s stack diagram, `AGENTS.md` glossaries) that still shows the old
 4-layer numbering is stale against this decision; realigning them is
-tracked as N21/N24 work outside this ADR's file scope (Non-Goal: this ADR
+follow-up work outside this ADR's file scope (Non-Goal: this ADR
 does not itself edit `layer-boundaries.md` or any spec file).
 
 ### 10. The GPL seam: wire-first, fork-vs-upstream deferred [htc-gpl-seam-wire-first]
@@ -265,7 +289,7 @@ formal call is implementation-time work, registered as an open item below,
 not a decision this ADR makes. ADR-0002 Tiers 1, 2, and 4 (store access via
 gRPC, build dispatch via gRPC with a Cap'n Proto shim, compile-time-only
 type dependencies) are **unaffected** and continue to hold as the
-optional-snix-executor's own spec, per survey F2.5 — this ADR widens the
+optional-snix-executor's own spec — this ADR widens the
 seam they already established rather than reversing it.
 
 ### 11. Materialization: three tiers over one composition object [htc-materialization-tiers]
@@ -297,7 +321,7 @@ with the exact unsatisfied require. Full derivation: HTC SAD §6.4.
      string. This ADR separates them into a pure CAS (storage), a signed
      composition (binding), and a mounted view (execution) — three
      independently reasoned-about objects instead of one overloaded one.
-   - **Four nouns replace a million-line corpus.** What a newcomer must
+   - **Five nouns, one function replace a million-line corpus.** What a newcomer must
      hold in their head is atom / tree / interface manifest / composition /
      view + the one function `build` — no lazy functional language, no
      `stdenv`/`cc-wrapper`/patchelf lore, no fixed-output exceptions, no
@@ -338,10 +362,12 @@ with the exact unsatisfied require. Full derivation: HTC SAD §6.4.
   tarballs, PyPI wheels) are ingestible on day one with zero rebuilds —
   the adoption wedge does not require anyone to build natively on the
   substrate first.
-- Deletes the evaluation-scheduler subsystem outright, resolving the
-  corpus's largest cluster of doctrine/design contradictions (survey
-  Cluster B, ~12 blocking loci across `eos-sad.md`/specs, mitigated by
-  sibling nodes N14–N18 against this ADR's re-scope) at the root.
+- Deletes the evaluation-scheduler subsystem outright, resolving at the
+  root the corpus's largest cluster of doctrine/design contradictions —
+  roughly a dozen blocking loci across `eos-sad.md` and its specs that
+  assert the eval subsystem as central design (amending those documents
+  themselves is out of this ADR's own file scope, but this re-scope is
+  what makes their resolution possible).
 - The verified scheduling theory (Graham/PEFT bounds, TLA⁺ models, Lean
   theorems) transfers unchanged — none of that work is stranded.
 
@@ -360,6 +386,13 @@ with the exact unsatisfied require. Full derivation: HTC SAD §6.4.
   that pins certificates, and upstream fetch nondeterminism (mirrors,
   redirects) means re-recording can drift — loud fetch-set diffs by
   design, the same epistemics as a Nix FOD hash bump.
+- Host-probing configure scripts see exactly the toolchain composition
+  (hermeticity pins what they can find, so outputs stay stable per action
+  identity), but divergent feature auto-detection — a probe finding an
+  optional dependency present and silently enabling a feature — is real
+  and this model does not eliminate it. It becomes variant management,
+  expressible only via explicit action params, not a native guarantee the
+  substrate provides for free.
 
 ### Risks Accepted
 
@@ -390,13 +423,13 @@ with the exact unsatisfied require. Full derivation: HTC SAD §6.4.
   `composition.rs` (unrelated: service dependency-injection configuration).
   This substrate's composition object needs a distinct proto/package name
   before P3 implementation begins.
-- **Signed-metadata-append hardening** (survey D26): builder ≠ claim-owner
+- **Signed-metadata-append hardening**: builder ≠ claim-owner
   signer authorization, a fact-append vs. moved-tip-warning carve-out (the
   atom-sad §8.6 "warn + optional czd bump" path currently fires on every
   routine fact append), and a fact-kind convention. This is the substrate's
   fact-publication channel (build records, interface manifests) and has
   quietly become load-bearing; design campaign: **P1**.
-- **Lock fetch-plugin liveness and preservation semantics** (survey D27):
+- **Lock fetch-plugin liveness and preservation semantics**:
   `ion-resolution.md`'s `[no-stale-lock-entry]`/`[plugin-dep-sanitization]`
   would purge tool-recorded fetch entries with no manifest declaration
   unless given owner-derived liveness or a tool-authored-entry class; and
@@ -406,6 +439,12 @@ with the exact unsatisfied require. Full derivation: HTC SAD §6.4.
   **P2/P4**.
 - **GPL seam fork-vs-upstream, formally.** §10 resolves the posture
   (wire-first); the specific implementation choice is deferred to **P3**.
+- **Toolchain-composition provenance and lock pinning.** `action_id` (§2)
+  commits to `toolchain_composition_root` as an input, but no lock entry
+  type exists for pinning a toolchain composition — by this ADR's own
+  lock = intent rule (§7), a toolchain composition is exactly the kind of
+  before-the-build intent that belongs lock-side, and today it does not
+  have one. Design campaign: **P2/P5**.
 
 ## Alternatives Considered
 
@@ -461,30 +500,43 @@ associated-type trait) is **vindicated, not superseded** — the associated-
 type escape hatch (`type Plan`) is precisely what this substrate exercises
 by substituting a composition-shaped plan-equivalent.
 
+- ~~`AtomId → Version → Revision → Plan → Output` labeled `(czd)` under
+  `AtomId`~~ (§The cryptographic chain diagram) and ~~`AtomDigest` listed
+  in the `atom-id` crate's responsibility column~~ (§atom/ table) →
+  **CONTRADICTS** the keystone identity decision, the identical defect
+  struck in ADR-0004's supersession below: `AtomId` is the abstract pair
+  `(anchor, label)`, not a digest of it, and there is no `AtomDigest` of
+  identity (atom-sad §6.1, `[identity-content-addressed]`).
 - ~~"Each atom's lock entry carries a `requires` field listing
   content-addressed digests of its transitive dependencies, so the lock
-  file captures the full graph"~~ (line 41) → the decided 2-value lock
-  (`(set, label) → {version, publish_czd}`, 2026-06-28 keystone) carries no
-  `requires` field of this shape; the DAG is read directly off lock edges
-  per [htc-atom-dag-executor-trait] (§6), not carried inside a single
-  entry.
+  file captures the full graph"~~ (§The cryptographic chain, restated
+  verbatim and unannotated in §Consequences/Positive) → the decided
+  2-value lock (`(set, label) → {version, publish_czd}`, 2026-06-28
+  keystone) carries no `requires` field of this shape; the DAG is read
+  directly off lock edges per [htc-atom-dag-executor-trait] (§6), not
+  carried inside a single entry. (Both occurrences of this claim are
+  struck — the Decision-section instance already carried an inline note
+  before this pass; the Consequences-section restatement did not and now
+  does.)
 - ~~`"Plan" is the abstract term. For the snix engine, a plan is a
-  derivation (.drv)`~~ (lines 34–36) → the MVP plan-equivalent is the atom
-  **action**, identified by `action_id` ([htc-action-identity], §2). The
-  `BuildEngine::Plan` associated-type design is vindicated by this
-  substitution, not broken by it.
-- ~~`NeedsEvaluation { atom: AtomRef }` — nothing cached~~ (line 125) → the
-  three-variant `BuildPlan` cache ladder collapses to two rungs
-  (`Cached`/`NeedsBuild`) for the primary executor; `NeedsEvaluation`
-  survives only inside the optional passthrough-snix executor (§8).
+  derivation (.drv)`~~ (§Decision, the cryptographic-chain prose) → the
+  MVP plan-equivalent is the atom **action**, identified by `action_id`
+  ([htc-action-identity], §2). The `BuildEngine::Plan` associated-type
+  design is vindicated by this substitution, not broken by it.
+- ~~`NeedsEvaluation { atom: AtomRef }` — nothing cached~~ (§Decision, the
+  `BuildPlan` enum) → the three-variant `BuildPlan` cache ladder collapses
+  to two rungs (`Cached`/`NeedsBuild`) for the primary executor;
+  `NeedsEvaluation` survives only inside the optional passthrough-snix
+  executor (§8).
 - ~~`Cyphr (L0) → Atom (L1) → Eos (L2) → Ion (L3) → Plugins (L4)`~~
-  (line 57) → the full 6-layer stack per [htc-layer-designation] (§9).
+  (§Decision, the workspace-layer diagram) → the full 6-layer stack per
+  [htc-layer-designation] (§9).
 - ~~`eos-snix | Snix-specific store and evaluator implementations`~~ and
-  ~~"snix is the default backend"~~ (lines 105, 141–144) → "evaluator
-  implementations" is dead scope under this ADR; "snix is the default
-  backend" inverts to "an executor implementing the executor trait is one
-  of possibly several backends," entangled with the GPL-seam decision
-  (§10).
+  ~~"snix is the default backend"~~ (§eos/ table; §ArtifactStore prose) →
+  "evaluator implementations" is dead scope under this ADR; "snix is the
+  default backend" inverts to "an executor implementing the executor
+  trait is one of possibly several backends," entangled with the
+  GPL-seam decision (§10).
 
 ## Supersede ADR-0002 §Tier 3 (wholesale)
 
@@ -501,10 +553,10 @@ Cap'n Proto shim, compile-time-only type dependencies — are **not**
 superseded; they hold, scoped to the optional passthrough-snix executor,
 and this ADR's [htc-gpl-seam-wire-first] (§10) widens rather than reverses
 the seam they established. The backend-agnostic clause the ADR itself
-states — "\[the snix gRPC affordance\] is an affordance of snix's
-service-oriented architecture, not a design requirement of Eos" (line 143)
-— is carried forward as continuity evidence: this ADR is the seam ADR-0002
-already left room for.
+states, in §Backend-Agnostic Shim Topology — "\[the snix gRPC affordance\]
+is an affordance of snix's service-oriented architecture, not a design
+requirement of Eos" — is carried forward as continuity evidence: this ADR
+is the seam ADR-0002 already left room for.
 
 The `NeedsEvaluation`-adjacent scheduler-integration text (two worker
 pools, `ifdSystems` metadata, IFD topology) is superseded along with Tier 3;
@@ -521,44 +573,56 @@ to atom-DAG scheduling unchanged, exactly as [htc-atom-dag-executor-trait]
 are described through:
 
 - ~~`atom-id = digest(anchor, label) is cryptographically stable across
-  versions`~~ (lines 122–124, restated 1181–1183) → **CONTRADICTS** the
+  versions`~~ (§The Atom-Id Advantage, restated once more in §Why It Is
+  Highly Efficacious for This Domain, item 2 "Atom-id prediction oracle")
+  → **CONTRADICTS** the
   keystone identity decision: `AtomId` is the abstract pair `(anchor,
   label)`, not a digest of it (atom-sad §6.1, `[identity-content-
   addressed]`). The argument's substance — that atom identity is stable
   across builds and therefore a high-quality prediction key — survives
   unchanged over the pair; only the digest formula is wrong and is struck.
 - ~~terminology note casting "plan" as the `[derivation]`-equivalent unit
-  the scheduler operates on~~ (lines 19–27) → the scheduler's unit under
-  this ADR is the atom **action**, identified by `action_id`
-  ([htc-action-identity], §2), not a plan produced by evaluating a Nix
-  expression.
+  the scheduler operates on~~ (the ADR's opening terminology note) → the
+  scheduler's unit under this ADR is the atom **action**, identified by
+  `action_id` ([htc-action-identity], §2), not a plan produced by
+  evaluating a Nix expression.
 - ~~`Scheduling a plan for build automatically builds all its transitive
   dependencies. The builder resolves the full dependency chain
-  internally`~~ (lines 74–77) → under the executor trait, the executor
-  builds exactly one atom action; the entry-point/coarsening apparatus this
-  premise motivated is reclassified from a core scheduling mechanism to a
-  refinement path available *within* an atom action (upstream's own
-  `make -j`) and, separately, a mechanism the optional passthrough-snix
-  executor still needs for its own legacy DAG shape.
+  internally`~~ (§The Plan DAG Problem) → under the executor trait, the
+  executor builds exactly one atom action; the entry-point/coarsening
+  apparatus this premise motivated is reclassified from a core scheduling
+  mechanism to a refinement path available *within* an atom action
+  (upstream's own `make -j`) and, separately, a mechanism the optional
+  passthrough-snix executor still needs for its own legacy DAG shape.
 - ~~profiles keyed by the plan's `plan_name` (its `StorePath`-derived,
-  version-stable identifier)~~ (lines 191–200) → the natural profile key
-  under this ADR is the atom pair / `action_id`, not a `StorePath`-derived
-  name.
-- ~~FOD (fixed-output plan) locality note~~ (lines 1548–1581) → restated as
-  fetch-heavy atom actions; the `egress_bandwidth` resource-vector insight
-  transfers directly (an action whose scope contains many `[[deps.fetch]]`
-  entries has a duration dominated by fetch time, exactly as argued).
+  version-stable identifier)~~ (§1. Historical Build Profiles) → the
+  natural profile key under this ADR is the atom pair / `action_id`, not a
+  `StorePath`-derived name.
+- ~~FOD (fixed-output plan) locality note~~ (§Implementation Notes, the
+  "Fixed-output plan (FOD) locality" item) → restated as fetch-heavy atom actions; the
+  `egress_bandwidth` resource-vector insight transfers directly (an action
+  whose scope contains many `type = "fetch"` `[[deps]]` entries has a
+  duration dominated by fetch time, exactly as argued).
 - ~~`KnownPaths` DAG-visibility resolution, "the snix evaluator accumulates
-  the full plan DAG as a side-effect"~~ (lines 1763–1786) → the scheduler's
-  answer to "where does the DAG come from" changes from "introspect the
-  evaluator's `KnownPaths`" to "read the DAG directly off the locks" per
-  [htc-atom-dag-executor-trait] (§6); the two-level cache-filter mechanism
-  this resolution describes (in-memory completed-node index plus a store
-  shim) is unaffected and still applies against the atom-DAG.
+  the full plan DAG as a side-effect"~~ (§Open Questions, "DAG visibility")
+  → the scheduler's answer to "where does the DAG come from" changes from
+  "introspect the evaluator's `KnownPaths`" to "read the DAG directly off
+  the locks" per [htc-atom-dag-executor-trait] (§6); the two-level
+  cache-filter mechanism this resolution describes (in-memory
+  completed-node index plus a store shim) is unaffected and still applies
+  against the atom-DAG.
 
-This ADR adds a **Related** field to ADR-0004's header pointing here; no
-other text in ADR-0004 is touched, and the theory body (lines ~820–2008) is
-untouched in full.
+This ADR adds a **Related** field to ADR-0004's header and seven inline
+notes at exactly the loci this document's own IBC named — the note text is
+additive, appended alongside each cited claim, never replacing it. Three
+of those seven loci fall inside the ADR's nominal theory-body span (the
+atom-id restatement in the optimality discussion, the FOD-locality item,
+and the DAG-visibility resolution); the theorem statements, proofs, and
+algorithm descriptions themselves are not edited anywhere — only a note is
+appended beside each cited claim. Line numbers are deliberately omitted
+above: ADR-0004 is a 2000+ line document and any number cited here would
+drift out of sync with the next unrelated edit to that file. The quotes
+and section names above are what actually ground each strike.
 
 ## Related Documents
 

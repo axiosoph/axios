@@ -31,6 +31,13 @@ AtomId → Version → Revision → Plan → Output
  (czd)   (semver)   (commit)  (drv) (artifact)
 ```
 
+(Note: **CONTRADICTS** the keystone identity decision (2026-06-28) and
+[ADR-0005](0005-hermetic-transactional-composition.md) — `AtomId` is the
+abstract pair `(anchor, label)`, not a digest (`czd`) of it, and there is
+no `AtomDigest` of identity (atom-sad §6.1, `[identity-content-
+addressed]`). This is the identical contradiction ADR-0004 struck for its
+own atom-id-as-digest claim; it was left standing here until this pass.)
+
 "Plan" is the abstract term. For the snix engine, a plan is a derivation
 (`.drv`). `BuildEngine::Plan` is an associated type, so other engines can
 define their own format. (Note: Superseded in part by
@@ -79,6 +86,12 @@ and Eos, and the stack renumbers in full: Cyphr (L0) → Atom (L1) → HTC (L2)
 | `atom-uri`  | URI parsing, version trait abstraction                                         | atom-id, `nom`             |
 | `atom-core` | Traits: `AtomSource`, `AtomRegistry`, `AtomStore`, `Manifest`, `VersionScheme` | atom-id, atom-uri          |
 | `atom-git`  | Git backend: implements `AtomRegistry` + `AtomStore`                           | atom-core, `gix`, `snix-*` |
+
+(Note: **CONTRADICTS** the keystone identity decision and
+[ADR-0005](0005-hermetic-transactional-composition.md) — the `atom-id`
+row's `AtomDigest` above does not exist; there is no digest of identity.
+`AtomId` is the abstract pair `(anchor, label)` itself, per the
+chain-diagram note above.)
 
 **Store traits** — three-layer model with a read super-trait:
 
@@ -237,7 +250,7 @@ Both satisfy `BuildEngine`. Ion's code is generic: `fn run(engine: impl BuildEng
 
 ### Positive
 
-- The cryptographic chain maps directly to plan/apply cache-skipping. The DAG structure via `requires` captures the full dependency graph.
+- The cryptographic chain maps directly to plan/apply cache-skipping. The DAG structure via `requires` captures the full dependency graph. (Note: Superseded by the keystone lock decision (2026-06-28) and [ADR-0005](0005-hermetic-transactional-composition.md) — restated from §The cryptographic chain above; the decided 2-value lock entry carries no `requires` field of this shape, and the DAG is read directly off lock edges instead.)
 - BuildEngine + ArtifactStore are in place. Distributed eos slots in without touching ion.
 - Any ecosystem can publish atoms by implementing Manifest.
 - AtomSource as universal read interface enables mirrors, syndicated stores, and dev workspaces through one mechanism.

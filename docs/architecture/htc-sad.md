@@ -32,12 +32,17 @@ dependency pointers inside the artifacts themselves.
 
 HTC owns:
 
-- **The build function** — `build(atom closure, toolchain composition) →
-  output tree`, executed by upstream's own build process inside a
-  materialized FHS view. There is no evaluator; the function is total,
-  pure, and its only input is signed intent already resolved by L4 (ion).
-- **Interface analysis** — deriving provides/requires/observed facts from
-  a build's output tree, memoized per-blob in the CAS.
+- **The build function** — `build(atom closure, toolchain composition,
+  action params) → output tree`, executed by upstream's own build process
+  inside a materialized FHS view. There is no evaluator; the function is
+  deterministic and hermetic — the same three inputs always produce the
+  same result, success or failure — but it is **not total**: an
+  unmodified upstream build can and does fail for the same reasons it
+  would fail outside this substrate.
+- **Interface analysis** — deriving provides/requires facts from a
+  build's output tree, memoized per `(analyzer, blob)` pair in the CAS
+  (§2.2). Dynamically observed facts (§6.3) are a separate, run-scoped
+  record, not part of that memoization — see §2.2 for why.
 - **Composition** — the signed, content-addressed name→digest binding that
   is this layer's closure object, and the successor to a Nix derivation's
   output closure.
@@ -54,12 +59,24 @@ the scheduler itself); key management and signing primitives (Cyphr/Coz,
 below L1). HTC defines the build/composition contract those layers consume
 and is consumed by; it never resolves atoms or schedules itself.
 
+**[htc-declared-closure-enforced]**: the build sandbox is deny-by-default
+— the only bytes a build process can read are those materialized from the
+declared atom closure and toolchain composition, plus whatever the fetch
+proxy explicitly permits through its own separate channel (§4.2). The
+build's observed read set is checked against this declared closure —
+reads ⊆ declared — and that containment is *enforced by the sandbox*, not
+trusted from the build's own behavior. This is HTC's foundational
+guarantee, carried forward unchanged from Nix's own sandbox model; §6.3
+names the mechanism that observes it for the *build/check-phase* case,
+and §8.1 names the corresponding runtime-side failure mode for a *mounted
+view* that turns out to be missing something it needs.
+
 ### 1.2 External Actors
 
 ```mermaid
 graph TB
   subgraph L4["Ion (L4)"]
-    ION["Manifest / Lock author\n(declares [[deps.fetch]] entries)"]
+    ION["Manifest / Lock author\n(declares [[deps]] type=\"fetch\" entries)"]
   end
   subgraph L3["Eos (L3)"]
     EOS["Scheduler\n(atom-DAG; executor trait)"]
@@ -79,7 +96,7 @@ graph TB
   end
 
   ION -->|"lock: atom closure + fetch entries"| EOS
-  EOS -->|"dispatch: build(atom closure, toolchain)"| CAS
+  EOS -->|"dispatch: build(atom closure, toolchain, params)"| CAS
   CAS -->|"materialize FHS view"| MAT
   MAT -->|"upstream's own build"| CAS
   CAS -->|"output tree"| AN
@@ -94,10 +111,10 @@ graph TB
 
 | Boundary          | Inside HTC                                                                    | Outside HTC                                                                    |
 | :----------------- | :----------------------------------------------------------------------------- | :------------------------------------------------------------------------------ |
-| **Identity**       | Action identity (`action_id`, §6.6); composition/manifest/build-record digests | Atom identity, the `(anchor, label)` pair (L1)                                 |
+| **Identity**       | Action identity (`action_id`, §6.5); composition/manifest/build-record digests | Atom identity, the `(anchor, label)` pair (L1)                                 |
 | **Execution**      | `build`, sandboxing, FHS-view materialization, upstream's own process          | Scheduling policy, worker placement, DAG traversal (L3, eos)                   |
-| **Analysis**       | Interface manifest derivation (provides/requires/observed), satisfaction      | Manifest/lock authorship, resolution (L4, ion)                                 |
-| **Fetch**          | The record/replay proxy's *execution* of a fetch entry                        | Fetch entry *declaration* — the `[[deps.fetch]]` lock plugin type is L4's (ion) |
+| **Analysis**       | Interface manifest derivation (provides/requires), observation records, satisfaction | Manifest/lock authorship, resolution (L4, ion)                                 |
+| **Fetch**          | The record/replay proxy's *execution* of a fetch entry                        | Fetch entry *declaration* — a `[[deps]]` entry with `type = "fetch"`, dispatched via ion's `[lock-dep-type-dispatch]`, is L4's (ion) |
 | **Storage**        | CAS (blobs, trees), composition/manifest/build-record persistence            | Atom registry/store (L1); the lock file as a whole (L4)                       |
 | **Runtime**        | View mounting (composefs/fs-verity, FUSE), closure-fault handling             | System integration below the mount (units, users, kernel modules) — out of v0 |
 
@@ -109,10 +126,9 @@ dispatches through), and ion never depends on HTC directly — it only
 authors lock entries HTC's fetch proxy later executes. This mirrors
 `layer-boundaries.md`'s `[boundary-downward-only]` rule one layer up from
 where atom established it; the concrete ownership assignment this section
-makes (compositions/manifests/build-records are owned by L2/HTC) is the
-resolution survey finding D2 named as blocking — `layer-boundaries.md`'s
-own text has not yet been amended to reflect it (N21 work, out of this
-document's file scope).
+makes (compositions/manifests/build-records are owned by L2/HTC) closes a
+gap `layer-boundaries.md`'s own text has not yet been amended to reflect —
+that amendment is follow-up work outside this document's file scope.
 
 ### 1.5 Object Taxonomy
 
@@ -123,13 +139,13 @@ elaborates:
 | :--------------------- | :-------------------------------------------------------------- | :------------------------------------ |
 | **Atom**               | Signed intent (sources + lock) — defined at L1, consumed here  | Atom registry/store (L1)              |
 | **Tree**               | A castore Merkle output                                        | CAS                                    |
-| **Interface manifest** | A derived fact (provides/requires/observed) about one tree     | CAS, keyed by subject digest          |
+| **Interface manifest** | A derived, static fact (provides/requires) about one tree     | CAS, keyed `(ns, analyzer_czd, subject_digest)` — see §2.2 for why not by subject alone |
 | **Composition**        | A signed name→digest binding — the closure object              | CAS, keyed by its own Merkle root      |
 | **View**               | A composition mounted at runtime                                | Not persisted — a mount, materialized on demand |
 
 The **one function**, `build`, is not in this table because it is not a
 persisted noun; an **action** is one invocation of it, identified by
-`action_id` (§6.6). Compositions are pure data; the only function over
+`action_id` (§6.5). Compositions are pure data; the only function over
 them is `build`. There is no interpreted composition language.
 
 ## 2. Container View
@@ -209,7 +225,6 @@ InterfaceManifest {
   subject:  tree_digest                          // the output tree these facts describe
   provides: [ Provided{ns, name, iface_digest} ]
   requires: [ Required{ns, name, needs} ]
-  observed: [ Observed{ns, name, evidence} ]      // from traces, §6.3
 }
 ```
 
@@ -221,11 +236,40 @@ the provider's canonical interface description (e.g. a sorted exported
 `(symbol, version)` set for a shared object) — the ABI-granularity
 identity a plain drv hash skips over. One manifest can satisfy many
 compositions, each with its own independently-computed root; the manifest
-itself never names which composition will use it. Interface manifests are
-memoized in the CAS keyed by the digest of the analyzed blob — computed
-once per output ever, shareable, verifiable by recomputation. Storage
-home: appended signed atom metadata (§6.10; the mechanism atoms already
-have).
+itself never names which composition will use it.
+
+**Keying, precisely.** `provides`/`requires` are a pure function of
+*(which analyzer, which blob)*, not of the blob alone — a newer analyzer
+version can extract different (typically more precise) facts from
+identical bytes. The manifest is therefore memoized in the CAS keyed
+`(ns, analyzer_czd, subject_digest)` (§3.2), not by `subject` in
+isolation: exactly once per `(analyzer, subject)` pair ever, shareable,
+verifiable by recomputation (rerun that analyzer on that blob, get the
+same facts). A new analyzer version does not overwrite an old one's
+manifest — it occupies a different key.
+
+**`observed` facts are a different object, deliberately not this one.**
+Dynamic facts — what a check-phase run actually touched via
+`dlopen`-by-computed-string, Python's `importlib`, or similar (§6.3) —
+depend on which composition was mounted and what code path executed
+during *that specific run*. They are not a pure function of the subject
+blob, so they cannot share the manifest's memoize-once-per-pair guarantee
+without breaking it. They are tracked as a separate, run-scoped
+observation record —
+
+```
+ObservationRecord {
+  subject:     tree_digest        // the tree under test
+  composition: composition_root   // which mounted view produced this run
+  observed:    [ Observed{ns, name, evidence} ]
+}
+```
+
+— produced once per check-phase run, keyed `(subject, composition)`, and
+consumed directly by the closure computer's `augment` step (§6.4)
+alongside whatever `InterfaceManifest`s are already known, rather than
+folded into the manifest object itself. Storage home for both objects:
+appended signed atom metadata (§6.10; the mechanism atoms already have).
 
 ### 2.3 Build Record
 
@@ -255,7 +299,7 @@ own canonical-serialization digest.
 ```mermaid
 graph TB
   subgraph CORE["Executor trait (L3-facing contract)"]
-    EXECT["Executor\nbuild(atom_closure, toolchain) -> output tree"]
+    EXECT["Executor\nbuild(atom_closure, toolchain, params) -> output tree"]
   end
   COMPOSER["Composer\nroot computation, signing,\nmerge/conflict, mkcomposefs"]
   CLOSC["Closure Computer\nsatisfaction fixpoint,\nminimization, closure-fault"]
@@ -280,11 +324,12 @@ graph TB
 
 Owns the composition object's lifecycle: format, root computation
 (`H(canonical serialization)`), signing (a composition has a czd, per
-atom-sad's signing convention), merge/conflict resolution (conflict at
-compose time is an **explicit error**, never silent — this is where ABI
-reality actually lives, per [ref: `[set-anchor-bijection]`-style tamper
-guards at L1, applied here to composition entries), and `mkcomposefs`
-emission for the Fast materialization tier (§5.2).
+atom-sad's signing convention), merge/conflict resolution — conflict at
+compose time is an **explicit error**, never silent, this is where ABI
+reality actually lives, the same fail-loud posture atom-sad's tamper
+guards (e.g. `[set-anchor-bijection]`) take at L1, applied here to
+composition entries — and `mkcomposefs` emission for the Fast
+materialization tier (§5.2).
 
 ### 3.2 Interface Analyzers
 
@@ -300,11 +345,17 @@ satisfies        : (Required, Provided) → bool | proof
 Per [htc-analyzers-are-atoms] (ADR-0005 §5): an analyzer's execution is an
 ordinary eos action — the same `build`-shaped invocation as any other, not
 a privileged system stage — and its namespace + satisfaction relation
-register in an ion-style namespace registry. Facts are keyed `(ns,
-analyzer_czd, subject_digest)`: recomputable (rerun the analyzer atom, get
-the same facts), provenance-clean (the analyzer's own identity is part of
-the key), and versionable independent of what it analyzes. Two plugins
-prove the model:
+register in an ion-style namespace registry. `extract_provides`/
+`extract_requires` produce the static `InterfaceManifest` facts, keyed
+`(ns, analyzer_czd, subject_digest)` (§2.2): recomputable (rerun the
+analyzer atom, get the same facts), provenance-clean (the analyzer's own
+identity is part of the key), and correctly versioned as the analyzer
+evolves (a new version is a new key, not an overwrite). `observe` produces
+`Observed` facts for a specific check-phase run instead — these are
+**not** memoized against `(ns, analyzer_czd, subject_digest)`; they are
+tracked in the separate, run-scoped `ObservationRecord` (§2.2), because
+they depend on which composition was mounted for that run, not on the
+blob alone. Two plugins prove the model:
 
 - **ELF** (§6.2): `DT_SONAME`, exported dynamic symbols with version
   definitions, `DT_NEEDED`, undefined symbols + version needs,
@@ -436,10 +487,11 @@ bootc/OSTree/containers-storage. This is **O(1) layers by construction**,
 unlike the overlayfs-layer-stacking bottleneck a Nix-paths-as-Docker-layers
 approach hits (lookup cost and layer-count limits scale with lowerdir
 count there). fs-verity makes the *running* closure tamper-evident — the
-kernel refuses corrupted content at read time, which is a strictly
-stronger guarantee than Nix's NAR-verification-at-substitution-time-only
-model (a tampered Nix store file executes happily; a tampered composefs
-entry does not mount).
+kernel refuses to hand back corrupted content when it is read, which is a
+strictly stronger guarantee than Nix's NAR-verification-at-
+substitution-time-only model (a tampered Nix store file executes happily;
+a tampered composefs-backed file fails the read instead of executing —
+the mount itself, being metadata-only, still succeeds).
 
 ### 5.3 Export Tier
 
@@ -492,16 +544,19 @@ machine-checked and recorded.
 
 ### 6.3 The Trace Observer
 
-Builds already consume inputs through the castore FUSE daemon — the
-daemon is the *only* source of input bytes, making it a perfect,
-unbypassable observation point. Recording `(path, digest)` per read at the
-daemon gives the exact build-time read set with zero
+Builds already consume their *composed-view* inputs — the materialized
+atom closure and toolchain composition — through the castore FUSE daemon;
+the daemon is the *only* source of **those** bytes, making it a perfect,
+unbypassable observation point for the declared closure. (Fetch-set bytes
+are a separate channel — §4.2's record/replay proxy sees and logs those
+directly; they never pass through FUSE.) Recording `(path, digest)` per
+read at the daemon gives the exact build-time read set with zero
 ptrace/seccomp/eBPF machinery. The observed read set is a sound
 under-approximation feeding a proven over-approximation: reads ⊆ declared
-closure (enforced by the sandbox, per §1.1's purity guarantee); unread ∖
-declared = **prunable closure bloat**.
+closure, [htc-declared-closure-enforced] (§1.1) — enforced by the sandbox,
+not trusted; unread ∖ declared = **prunable closure bloat**.
 
-For *runtime* observation (populating a manifest's `observed` facts), the
+For *runtime* observation (producing an `ObservationRecord`, §2.2), the
 artifact's check phase / smoke tests run with the composed view mounted at
 Observe tier instead of Fast tier — same daemon, same log.
 `dlopen`-by-computed-string and Python dynamic imports are caught here, as
@@ -512,10 +567,10 @@ complementary by construction, not redundant.
 At Fast-tier production runtime there is no observation and no overhead; a
 missing dependency there is a **closure fault**: fail-closed, logged with
 the exact name that missed, one command away from a fix (add a provider to
-the composition, or record a new observed fact and recompute §6.4). Nix's
-equivalent failure is a silent wrong-library pickup or an inscrutable
-missing-store-path error; this substrate names the exact unsatisfied
-require.
+the composition, or record a new `ObservationRecord` and recompute §6.4).
+Nix's equivalent failure is a silent wrong-library pickup or an
+inscrutable missing-store-path error; this substrate names the exact
+unsatisfied require.
 
 ### 6.4 Computing the Runtime Closure
 
@@ -524,7 +579,7 @@ roots    = requires(requested artifacts)
 resolve  = fixpoint: bind each Required to a Provided within the candidate
            set (build composition ∪ declared runtime deps), pulling in each
            chosen provider's own requires
-augment  = ∪ observed facts (from check-phase traces, §6.3)
+augment  = ∪ observed facts (from ObservationRecords, §2.2, §6.3)
 minimize = drop candidate trees providing nothing bound
 ⇒ runtime composition (Merkle root, signed)
 ```
@@ -618,8 +673,9 @@ Known Gap (§9) and an ADR-0005 open item (P1), not resolved here.
 | :------------------------------------------------------ | :--------------------------------------------------------- |
 | Composition schema, root computation, signing         | §2.1, this document                                      |
 | Interface manifest schema                             | §2.2, this document                                      |
+| Observation record schema                             | §2.2, this document                                      |
 | Build record schema                                   | §2.3, this document                                      |
-| Fetch entry declaration (`[[deps.fetch]]`)             | `lock-file-schema.md`'s `[lock-type-extension-mechanism]` (L4, ion — not restated here) |
+| Fetch entry declaration (`[[deps]]`, `type = "fetch"`)  | `lock-file-schema.md`'s `[lock-type-extension-mechanism]` (L4, ion — not restated here) |
 | Fetch entry execution (record/replay)                  | §4.2, this document                                      |
 | CAS blob/tree encoding                                 | `snix-castore` (reused, unmodified at the wire level)     |
 | Runtime mount format                                   | composefs/EROFS + fs-verity (external kernel format, ≥ 6.5) |
@@ -638,8 +694,9 @@ normative record until then.
 | 8.4 | TLS interception friction (tooling pins certs, record mode)   | Bounded annoyance — needs a protocol-aware handler (git, crates, npm known shapes) |
 | 8.5 | Upstream fetch nondeterminism (mirrors/redirects drift)       | Loud fetch-set diff at re-record time — same epistemics as a Nix FOD hash bump |
 | 8.6 | ABI-satisfaction proof fails to verify                        | Composition rejected at compose time — the entry cannot bind             |
-| 8.7 | Tampered Fast-tier content (fs-verity mismatch)                | Kernel refuses the read at mount/access time — stronger than Nix's NAR-verify-at-substitution-only |
+| 8.7 | Tampered Fast-tier content (fs-verity mismatch)                | Mount succeeds (metadata-only); kernel refuses that file's read — stronger than Nix's NAR-verify-at-substitution-only |
 | 8.8 | Package violates the fetch-separable/staged-install convention | Requires the one conventional patch this model still allows (rare)      |
+| 8.9 | Host-probing configure script's feature auto-detection finds an optional dependency present in the toolchain composition and silently enables a feature | Not eliminated by hermeticity — the probe's output is stable per action identity, but divergent auto-detection is real; must be pinned via an explicit action param (variant), not detected automatically |
 
 ## 9. Known Gaps and Future Explorations
 
@@ -648,13 +705,14 @@ normative record until then.
 | 1   | **DWARF type-level ABI** (stage 2)                                                | Symbol/version satisfaction (§6.2) is necessary, not sufficient; `libabigail`-class analysis is the named hardening, same `satisfies` interface |
 | 2   | **System integration** (setuid, systemd units, kernel modules, users/groups)      | Real scope, bootc/OSTree territory — explicitly **out of v0**             |
 | 3   | **macOS/Windows executors**                                                       | The substrate is Linux-first (user namespaces, overlayfs, fs-verity); other platforms need different executors (sandbox-exec/VM), same objects, different P3 |
-| 4   | **The G2 seam consequence** — fork-vs-upstream snix, formally                     | ADR-0005 §10 resolves posture (wire-first); the specific implementation call is deferred to **P3** |
+| 4   | **The GPL-seam fork-vs-upstream call** (ADR-0005 §10's "G2" gate) — fork-and-simplify snix vs. speak upstream's protocol, formally | ADR-0005 §10 resolves the posture (wire-first); the specific implementation call is deferred to **P3** |
 | 5   | **Signed-metadata-append hardening**                                              | Builder≠owner signer authorization, fact-append vs. moved-tip-warning carve-out, fact-kind convention — consumed contract, design campaign **P1** |
 | 6   | **Lock fetch-plugin liveness + preservation semantics**                          | Owner-derived liveness vs. purge-on-reconcile; `deny_unknown_fields` vs. preserve-if-unknown — consumed contract, design campaign **P2/P4** |
-| 7   | **Successor `[compose]` semantics, spec re-derivation**                           | `lock-file-schema.md`'s NixTrivial `[compose]` variant remains valid only as the passthrough-snix executor's on-ramp (survey D16) — P2 debt, not resolved here |
+| 7   | **Successor `[compose]` semantics, spec re-derivation**                           | `lock-file-schema.md`'s NixTrivial `[compose]` variant remains valid only as the passthrough-snix executor's on-ramp — P2 debt, not resolved here |
 | 8   | **composefs mount privilege**                                                     | Kernel mount of EROFS/composefs needs elevated privilege or a user namespace — qualifies ADR-0003's zero-root claim; resolve at P3/P4 |
 | 9   | **`snix-castore` naming collision**                                               | `composition.rs` already exists there (unrelated: service DI config); this substrate needs a distinct proto/package name before P3 |
 | 10  | **Capability-runtime (WASI) execution tier**                                     | Post-MVP horizon; the composition object is designed to survive the transition intact, becoming the capability grant |
+| 11  | **Toolchain-composition provenance and lock pinning**                            | `action_id` (§6.5) commits to `toolchain_composition_root` as an input, but no lock entry type exists for pinning a toolchain composition; by the lock=intent rule (§4.2) this belongs lock-side. Design campaign: **P2/P5** |
 
 ## 10. Scope Boundaries
 
@@ -682,7 +740,8 @@ Out of scope for the HTC layer:
 | Atom                 | Signed intent (sources + lock) — defined at L1, consumed unchanged here |
 | Action               | One invocation of `build`; identified by `action_id` (§6.5)             |
 | Tree                 | A castore Merkle output                                                 |
-| Interface manifest   | A derived fact about one tree: provides/requires/observed (§2.2)        |
+| Interface manifest   | A derived, static fact about one tree: provides/requires, keyed `(ns, analyzer_czd, subject_digest)` (§2.2) |
+| Observation record   | A derived, run-scoped fact about a specific check-phase run, keyed `(subject, composition)` — not part of the interface manifest (§2.2, §6.3) |
 | Composition          | A signed, content-addressed name→digest binding — the closure object (§2.1) |
 | View                 | A composition mounted at runtime, at one of three tiers (§5)            |
 | Constraint           | A per-entry composition attribute: exact-digest or ABI-satisfaction (§6.6) |
@@ -728,7 +787,7 @@ build-contract neutrality).
 
 - `docs/specs/lock-file-schema.md`'s `[compose]` section bakes a
   `NixTrivial`/`use="nix"` variant into the **core** lock schema, not a
-  plugin (survey D16). It remains valid today as the passthrough-snix
+  plugin. It remains valid today as the passthrough-snix
   executor's on-ramp (§6.8); the successor compose semantics this layer's
   executor trait implies are designed in ADR-0005/this SAD, but the spec
   re-derivation itself is **not** performed here — it is P2 debt.
@@ -736,12 +795,12 @@ build-contract neutrality).
   are "fetched by snix from the lock-specified mirrors using normal Nix
   fetching semantics," which contradicts both its own
   `[fetch-verify-build]` and this layer's record/replay proxy model
-  (§4.2). This is a pre-existing internal contradiction in that spec
-  (survey D23), independent of this ADR's timing; it is **not** amended by
+  (§4.2). This is a pre-existing internal contradiction in that spec,
+  independent of this ADR's timing; it is **not** amended by
   this document (out of file scope — ion-eos-contract.md is a spec file,
-  not one of this node's two target files) and is tracked for a sibling
-  node (N21).
-- `docs/specs/layer-boundaries.md` has no L2/HTC slot yet (survey D2); this
+  not one of this node's two target files) and is tracked as follow-up
+  work outside this document's file scope.
+- `docs/specs/layer-boundaries.md` has no L2/HTC slot yet; this
   SAD's §1.4/§9 register the ownership assignment ADR-0005 §9 makes, but
   the spec file itself is unamended here.
 
@@ -752,4 +811,4 @@ version to have gone stale against. Documents elsewhere in the corpus that
 predate this layer's introduction (the 5-layer stack diagrams in
 `ADR-0001`, `layer-boundaries.md`, `AGENTS.md` glossaries, `README.md`) are
 tracked as stale against ADR-0005 §9's layer designation, but realigning
-them is N21/N24/N25 work outside this document's file scope.
+them is follow-up work outside this document's file scope.
