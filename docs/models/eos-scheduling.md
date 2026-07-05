@@ -1,17 +1,22 @@
 # MODEL: Eos Build Scheduling
 
-> **Terminology note**: This model uses "derivation" to refer to
-> the Nix-native build unit. In Axios's layered terminology, the
-> Eos engine abstraction is "Plan" (`BuildEngine::Plan`). See
+> **Terminology note**: This model's nodes are **atom actions** — the
+> substrate build unit (ADR-0005, htc-sad §1.5/§6.5), identified by
+> `action_id = H(atom_czd_closure_root, toolchain_composition_root,
+> action_params)`. Earlier revisions of this model used "derivation"
+> for the Nix-native build unit; that mapping is retired except where
+> a passage below is explicitly scoped to the legacy passthrough-snix
+> executor, which still binds `BuildEngine::Plan = Derivation`. See
 > ADR-0004 for the full scheduling design.
 
 ## Domain Classification
 
 **Problem Statement:** The Eos build scheduler constructs entry
-point DAGs from derivation graphs, dispatches them topologically
-across federated workers, relies on CAS-idempotent store semantics to
-deduplicate concurrent transitive builds, and uses historical
-predictions keyed by derivation name to improve placement. These
+point DAGs from atom-action DAGs read off locks, dispatches them
+topologically across federated workers, relies on CAS-idempotent
+store semantics to deduplicate concurrent transitive builds, and
+uses historical predictions keyed by atom label to improve
+placement. These
 mechanisms interact concurrently under nondeterministic request
 arrival and worker failure. Before implementation, the scheduling
 algorithm needs formal validation to confirm: (1) the dispatch
@@ -25,15 +30,15 @@ bounded performance relative to an optimal offline algorithm.
   state (entry point status, worker loads, artifact store)
   accessed by concurrent request handlers and completion
   callbacks. Correctness depends on interleaving behavior.
-- **DAG-structured workflow** — derivation dependencies form a
+- **DAG-structured workflow** — atom-action dependencies form a
   DAG. Entry point selection partitions this DAG into covering
   subgraphs. Dispatch order must respect the induced entry point
   dependency DAG.
-- **Content-addressed deduplication** — derivation hashes provide
+- **Content-addressed deduplication** — action ids provide
   globally unique identity. CAS-idempotent store semantics guarantee
-  at-most-one materialization per output path across all concurrent builds.
+  at-most-one materialization per output-tree digest across all concurrent builds.
 - **Prediction-augmented optimization** — historical build
-  profiles (keyed by derivation name) augment a baseline
+  profiles (keyed by atom label) augment a baseline
   scheduling algorithm. Quality guarantees must hold when
   predictions are accurate (consistency) and when they are
   arbitrarily wrong (robustness).
@@ -45,7 +50,7 @@ bounded performance relative to an optimal offline algorithm.
 
 | In Scope                                   | Out of Scope                              |
 | :----------------------------------------- | :---------------------------------------- |
-| Entry point DAG construction correctness   | Snix evaluation internals                 |
+| Entry point DAG construction correctness   | executor internals / within-atom parallelism (upstream make -j) |
 | Dispatch protocol ordering and liveness    | Builder-internal dependency resolution    |
 | CAS-idempotent store deduplication         | Artifact store implementation details     |
 | Coverage property (partition completeness) | Wire protocol (Cap'n Proto serialization) |
@@ -108,22 +113,27 @@ The following definitions are shared between Track A and
 Track B. They constitute the mathematical universe in which
 both the protocol and the optimization operate.
 
-#### Derivation DAG
+#### Atom Action DAG
 
 Let $G = (V, E)$ be a directed acyclic graph where:
 
-- $V$ is the set of **derivations** (nodes)
+- $V$ is the set of **atom actions** (nodes)
 - $E \subseteq V \times V$ is the dependency relation:
-  $(u, v) \in E$ means derivation $v$ depends on the
-  output of derivation $u$ (i.e., $u$ must be built before
+  $(u, v) \in E$ means action $v$ depends on the
+  output of action $u$ (i.e., $u$ must be built before
   $v$ can start)
 
-Each derivation $v \in V$ has:
+Each action $v \in V$ has (symbols unchanged from earlier
+revisions — only the gloss below is updated; see Theorems
+below, which depend on these same symbols):
 
-- $\text{hash}(v)$: content-addressed derivation hash
+- $\text{hash}(v)$: the action identity (`action_id`, ADR-0005
+  htc-sad §6.5: $H(\text{atom\_czd\_closure\_root},
+  \text{toolchain\_composition\_root}, \text{action\_params})$)
   (globally unique, deterministic)
-- $\text{name}(v)$: derivation name from `StorePath`
-  (human-readable, structurally stable across versions)
+- $\text{name}(v)$: the atom label, from the owning atom's
+  `(set, label)` pair (human-readable, structurally stable
+  across versions)
 - $\text{cached}(v) \in \{\text{true}, \text{false}\}$:
   whether $v$'s output exists in the artifact store at
   the time of DAG construction
@@ -133,14 +143,14 @@ Each derivation $v \in V$ has:
 $G' = (V', E')$ where $V' = \{v \in V : \neg\text{cached}(v)\}$
 and $E' = E \cap (V' \times V')$.
 
-This is the sub-DAG of derivations that must be built.
+This is the sub-DAG of actions that must be built.
 Cached nodes and their edges to other cached nodes are
 removed. Edges from uncached nodes to cached nodes are
 removed (the dependency is already satisfied).
 
 #### Multi-Request Union Graph and Clients
 
-When $R$ concurrent requests arrive, the scheduler merges their uncached sub-DAGs JIT into a single **unified global derivation graph** $G_\cup = (V_\cup, E_\cup)$ where:
+When $R$ concurrent requests arrive, the scheduler merges their uncached sub-DAGs JIT into a single **unified global atom-action graph** $G_\cup = (V_\cup, E_\cup)$ where:
 
 $$V_\cup = \bigcup_{i=1}^R V'_i \quad \text{and} \quad E_\cup = \bigcup_{i=1}^R E'_i$$
 
@@ -156,14 +166,14 @@ An **entry point selection** is a subset $S \subseteq V_\cup$
 and a **coverage relation** $\kappa \subseteq V_\cup \times S$ satisfying:
 
 1. **Total coverage**: $\forall v \in V_\cup,\; \exists s \in S:\; (v, s) \in \kappa$
-   (every uncached derivation is assigned to at least one entry point).
+   (every uncached action is assigned to at least one entry point).
 
 2. **Self-coverage**: $\forall s \in S,\; (s, s) \in \kappa$, and
    if $(s, s') \in \kappa$ then $s' = s$ (every entry point covers itself uniquely).
 
 3. **Transitive containment**: If $(v, s) \in \kappa$ and
    $v \neq s$, then $v$ is in the transitive dependency
-   closure of $s$ in $G_\cup$ (a derivation is only covered
+   closure of $s$ in $G_\cup$ (an action is only covered
    by an entry point that transitively depends on it).
 
 4. **Downward closure within coverage**: If $(v, s) \in \kappa$,
@@ -211,7 +221,7 @@ to a worker, subject to:
 
 #### Historical Profiles and Predictions
 
-$P: \text{Names} \to \text{Profiles}$ maps derivation names
+$P: \text{Names} \to \text{Profiles}$ maps atom labels
 to historical profiles:
 
 $$P[\text{name}(v)] = (\hat{d}(v),\; \hat{m}(v),\; \hat{c}(v),\; \hat{o}(v))$$
@@ -222,9 +232,10 @@ predicted CPU cores, and $\hat{o}(v)$ is predicted output
 size. These four fields populate the resource vector used
 by the scoring function's `resource_fit` term.
 
-For derivations with no history, $P[\text{name}(v)]$
-falls back to developer metadata (if the derivation is an
-atom) or system defaults.
+For actions with no history, $P[\text{name}(v)]$ falls
+back to developer-declared atom metadata (every node is
+now atom-scoped by construction, so this always applies)
+or system defaults.
 
 The **prediction error** for a specific execution is:
 $$\eta(v) = \frac{|\hat{d}(v) - d(v)|}{\hat{d}(v)}$$
@@ -250,7 +261,8 @@ from the Track A correctness model. In the absence of locks, correct
 build execution under overlapping entry point scopes relies entirely
 on the content-addressed, idempotent storage model (CAS). Simultaneous
 identical builds both write to the store safely, producing identical
-content at identical keys, ensuring consistency without blocking.
+content at identical output-tree digests, ensuring consistency without
+blocking.
 
 #### State Space
 
@@ -263,7 +275,7 @@ where:
 - $Q: S \to \{\text{pending}, \text{ready}, \text{dispatched},
   \text{complete}, \text{failed}\}$ — entry point status
 - $A \subseteq \text{Hashes}$ — the artifact store contents
-  (set of completed derivation hashes)
+  (set of completed action ids)
 - $L: W \to \text{LoadVectors}$ — per-worker load state
 
 #### Initial State
@@ -276,7 +288,7 @@ Q_0(s) = \begin{cases}
 \end{cases}
 $$
 
-$A_0$ = set of cached derivation hashes,
+$A_0$ = set of cached action ids,
 $L_0(w) = \mathbf{0}$ for all $w$.
 
 #### Transitions
@@ -326,9 +338,9 @@ $$
   \implies Q(s_i) = \text{complete}
 $$
 
-**P2. Coverage completeness**: Every uncached derivation is
+**P2. Coverage completeness**: Every uncached action is
 covered by at least one in-progress, completed, or failed
-entry point (no derivation is lost).
+entry point (no action is lost).
 
 $$
 \Box\; \forall v \in V':\;
@@ -487,6 +499,16 @@ on a _fixed_ entry point DAG $T$. The entry point _selection_ (graph coarsening)
 phase, which groups $G'$ into $T$, currently lacks a formal competitive bound.
 The gap is captured by $\alpha$ — heuristic quality on perfect predictions.
 
+**Atom-scale re-scoping**: Under the atom-DAG doctrine (ADR-0005), $G'$
+arrives pre-coarsened — every node is already an atom action, not a
+fine-grained, evaluation-expanded Nix derivation. The coarsening gap
+above still stands as an open formal question, but its *practical*
+weight shrinks: the degenerate identity witness of Theorem 1 ($S = V'$,
+every node its own entry point) was a worst-case corner when $V'$ ranged
+over thousands of derivations; at atom granularity it is closer to the
+typical case, since within-atom build parallelism is now the concern of
+the upstream build system (`make -j`), not this scheduler.
+
 **Proof approach**: Well-founded induction on DAG completion
 times. The inductive step uses $\varepsilon$-accuracy to
 bound predicted vs. actual completion, and non-negative
@@ -572,7 +594,10 @@ This bound is tight — there exist adversarial DAGs that
 achieve it (Graham 1966). However, it is rarely tight in
 practice for build dependency graphs. Empirical studies of
 HEFT on DAGs of comparable size ($|S| \leq 20$) typically
-show 1.1–1.3× optimal.
+show 1.1–1.3× optimal — and this regime is *more* representative
+at atom-DAG scale, where a request's entry-point DAG spans dozens
+of atom actions rather than the thousands of fine-grained
+derivations a full Nix evaluation could produce.
 
 For **heterogeneous machines** (varying worker capacities),
 the bound generalizes to:
@@ -601,10 +626,14 @@ $G_1, \ldots, G_R$ with shared uncached sub-DAGs. Total build work is
 $|\bigcup_{i=1}^{R} V'_i|$ instead of $\sum_{i=1}^{R} |V'_i|$ builds,
 preventing duplicate worker slot allocation._
 
-**Proof intuition**: Content-addressed hashing ensures
-$\text{hash}(v) = \text{hash}(u) \iff v = u$ (derivations
-are identical iff their hashes match, by deterministic
-evaluation). Identical derivations across requests coalesce in the global DAG. $\square$
+**Proof intuition**: $\text{hash}(v) = \text{hash}(u) \iff v = u$
+holds by construction of the action id — $\text{hash}(v)$ is
+`action_id`, a hash over signed inputs (the atom's czd closure root,
+the toolchain composition root, and the action params; ADR-0005
+htc-sad §6.5), not a byproduct of evaluating a Nix expression.
+Content-addressing guarantees uniqueness by construction over those
+signed inputs. Identical actions across requests coalesce in the
+global DAG. $\square$
 
 The savings ratio is:
 $$\rho = \frac{|\bigcup V'_i|}{\sum |V'_i|}$$
@@ -768,7 +797,7 @@ Complete, Failed }` with `tokio::sync::watch` for
 
 2. **Coverage relation as lookup table**: The `EosModel`
    coverage relation $\kappa$ is computed once during entry
-   point selection and stored as a `HashMap<DrvHash,
+   point selection and stored as a `HashMap<ActionId,
 Vec<EntryPointHash>>`. The `EosModel` properties (1-4)
    should be enforced as `debug_assert!` checks on the
    output of the selection algorithm.
@@ -793,7 +822,7 @@ Vec<EntryPointHash>>`. The `EosModel` properties (1-4)
    $\tau$. The implementation must not conflate transfer cost
    with cache benefit in the same variable.
 
-6. **Structural deduplication keyed by derivation hash**: Theorem 4
+6. **Structural deduplication keyed by action id**: Theorem 4
    operates on abstract set families. In implementation, the
    content-addressed global DAG merging is the concrete instantiation.
    The theorem guarantees deduplication savings exactly equal the overlap
