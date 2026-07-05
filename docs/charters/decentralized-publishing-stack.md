@@ -41,12 +41,12 @@ A consumer resolves and builds that package with cryptographic cache
 skipping at every stage of the chain:
 
 ```
-AtomId → Version → Revision → Plan → Output
+Publish CZD → Action ID → Build Record → Composition Root
 ```
 
-If the plan exists, skip evaluation. If the artifact exists, skip the
-build. The full dependency graph is content-addressed end to end, and
-every step is auditable by anyone with access to the source repository.
+If the action id exists in cache, skip the build. The full dependency
+graph is content-addressed end to end, and every step is auditable by
+anyone with access to the source repository.
 
 The runtime engine, manifest format, and version scheme are all
 pluggable — the only decisions baked in are the ones that _must_ be.
@@ -80,25 +80,32 @@ that subsequent workstreams populate.
    - Specification: `docs/specs/atom-transactions.md` (40 constraints, 13 machine-verified)
    - Status: **In Progress** — specification complete, implementation pending
 
-3. **Eos Runtime Engine** — Extract the evaluation/build/store layer: `BuildEngine` plan/apply, `ArtifactStore`, and snix integration. Decouples the build executor from the user frontend.
-   - Spawns: `.sketches/eos-runtime.md`
-   - Draws from: existing plan Phases 6–8, informed by the formal model
+3. **Hermetic Transactional Composition (HTC)** — Build the post-Nix substrate (ADR-0005): the hermetic FHS builder, interface analyzers, the composer, the fetch proxy, and the runtime closure computer. Replaces the input-addressed store path with a pure CAS, a signed composition object, and a mounted view.
+   - Spawns: `.sketches/htc-substrate.md`
+   - Draws from: ADR-0005, `docs/architecture/htc-sad.md`
    - Status: Not Started
 
-4. **Ion Frontend** — Build the user-facing layer: CLI, concrete `ion.toml` manifest, SAT resolver, and workspace coordination. Ion is the planner; it decides what to build and dispatches to eos.
+4. **Eos Scheduling Engine** — Schedule the atom-DAG (ADR-0005): read the DAG directly off atom locks, dispatch builds via the proven Graham/PEFT discipline, and treat the executor (snix or a successor) as a pluggable trait rather than the assumed backend. There is no evaluation stage.
+   - Spawns: `.sketches/eos-runtime.md`
+   - Draws from: existing plan Phases 6–8, informed by the formal model and ADR-0005
+   - Status: Specs, TLA⁺/Lean proofs, the simulator, and the trace corpus are strong. The Rust implementation is throwaway by doctrine; re-scoping it to the atom-DAG per ADR-0005 has not started.
+
+5. **Ion Frontend** — Build the user-facing layer: CLI, concrete `ion.toml` manifest, SAT resolver, and workspace coordination. Ion is the planner; it decides what to build and dispatches to eos.
    - Spawns: `.sketches/ion-frontend.md`
    - Draws from: existing plan Phases 9–11, informed by the formal model
    - Status: Not Started
 
-5. **Integration** — End-to-end validation across all three workspaces: the full data flow from manifest through resolution, ingestion, planning, building, to artifact. Cryptographic chain verification.
+6. **Integration** — End-to-end validation across all workspaces: the full data flow from manifest through resolution, ingestion, scheduling, building, to artifact. Cryptographic chain verification.
    - Spawns: `.sketches/stack-integration.md`
    - Draws from: existing plan Phase 12
    - Status: Not Started
 
-Implementation workstreams (2–4) draw their phase definitions from the
-existing plan. If the formal model (workstream 1) reveals issues with
-the plan's trait designs, those workstreams spawn new focused
-sketch→plan cycles rather than executing stale assumptions.
+Implementation workstreams 2, 4, and 5 draw their phase definitions from
+the existing plan. Workstream 3 (HTC) is new work with no analogue in
+that plan, specified instead by ADR-0005. If the formal model
+(workstream 1) reveals issues with the plan's trait designs, those
+workstreams spawn new focused sketch→plan cycles rather than executing
+stale assumptions.
 
 ## Non-Goals
 
@@ -112,13 +119,17 @@ sketch→plan cycles rather than executing stale assumptions.
 
 - **Dynamic plugin runtime.** Ion may someday support user-installable plugins for CLI extension. No concrete use case exists yet. Runtime backends (nix, snix) are architectural boundaries handled by `BuildEngine`, not plugins.
 
-- **Distributed eos.** `BuildEngine` and `ArtifactStore` are designed for a future `RemoteEngine`. But building the distributed engine — scheduling, multi-node coordination, binary cache negotiation — is a separate initiative. This stack ships with an embedded engine for single-user development.
+- **Distributed eos.** `BuildEngine` and `ArtifactStore` are designed for a future `RemoteEngine`. But building the distributed engine — scheduling, multi-node coordination, binary cache negotiation — is a separate initiative. This stack ships with the monolithic-ion deployment mode for single-user development (ADR-0003) — the same scheduling logic and traits as every other mode, wired in-process rather than as a separate engine implementation.
 
 - **Full eka feature parity.** This is a port of proven concepts, not a 1:1 reimplementation. Some eka features may not survive the restructuring.
 
 - **Backend-agnostic transport specification.** The atom transaction protocol is backend-agnostic by design — traits define the extension surface. Specifying abstract transport or storage semantics beyond the trait signatures is deferred until a non-git backend surfaces concrete requirements.
 
 - **Cross-ecosystem adapters.** Concrete adapters for Cargo, npm, or other ecosystems arrive when concrete ecosystems want atom. The `Manifest` and `VersionScheme` traits provide the extension surface.
+
+- **System integration for the HTC substrate.** Canonical, append-only OS-layer compositions and generation switching are bootc/OSTree territory. HTC (workstream 3) produces the composition object and the views built from it; owning host system integration on top of that is a separate initiative.
+
+- **Non-Linux executors.** The HTC substrate's v0 is Linux-first (user namespaces, overlayfs, fs-verity). macOS and Windows executors (sandbox-exec, VM-backed) are a real need but a distinct, post-MVP effort — ADR-0005 defers them explicitly rather than designing them now.
 
 ## Appetite
 
