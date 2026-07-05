@@ -747,10 +747,11 @@ Key validated properties:
   to `AtomContent` preserves bisimulation
 - **BuildPlan IS protocol structure**: `CacheSession ≅ BuildSession`
   — the cache-skipping model is isomorphic to the session type
-  protocol. The isomorphism itself survives the collapse from three
-  `BuildPlan` variants to two (§4.1); the model's own restatement over the
-  two-variant form is follow-up work in `publishing-stack-layers.md`, not
-  performed by this document.
+  protocol. The isomorphism is expected to survive the collapse from
+  three `BuildPlan` variants to two (§4.1), pending re-verification;
+  the model's own restatement over the two-variant form is performed
+  in `publishing-stack-layers.md`, not by this document — a formal
+  property is not this document's fact to assert.
 - **Deployment mode interchangeability**: Embedded and client-server
   modes are bisimilar (same `BuildEngine` observations)
 - **Ingest preserves identity**: `resolve(store, id) ⊇ resolve(source, id)`
