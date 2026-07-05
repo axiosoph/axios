@@ -568,7 +568,7 @@ an Eos architectural concern.
 
 ### 6.2 Executor Isolation
 
-**Invariant**: The Eos daemon and its scheduler perform **zero** sandboxing
+**Invariant `[eos-executor-isolation]`**: The Eos daemon and its scheduler perform **zero** sandboxing
 and hold **zero** opinion on how a build is isolated. Isolation is wholly
 delegated to the executor implementation a worker wraps:
 
@@ -588,7 +588,7 @@ uniformly the executor's contract to uphold, never the scheduler's
 
 ### 6.3 Fetch Execution
 
-**Invariant**: Fetch execution for non-atom dependencies is an internal
+**Invariant `[eos-fetch-execution-delegation]`**: Fetch execution for non-atom dependencies is an internal
 concern of HTC's record/replay proxy (`[htc-fetch-set-lock-plugin]`,
 ADR-0005 §7; htc-sad §4.2). The Eos scheduler does not orchestrate fetches
 — they occur inside the executor's sandboxed environment, routed through the
