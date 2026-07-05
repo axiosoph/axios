@@ -1,4 +1,4 @@
-# Ion Workspace (L3 - Frontend) Reference Guide
+# Ion Workspace (L4 - Frontend) Reference Guide
 
 The `ion` workspace contains the developer-facing command line interfaces, manifest schemas, and dependency resolvers for the Axios publishing stack.
 

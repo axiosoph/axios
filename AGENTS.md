@@ -137,7 +137,7 @@ Each workspace is independent — run commands from the workspace root:
 | `atom-core` | Protocol traits: `AtomSource`, `AtomRegistry`        |
 | `atom-git`  | Git bridge: legacy storage backend                   |
 
-### eos/ (L2 — Runtime)
+### eos/ (L3 — Runtime)
 
 | Crate       | Purpose                                       |
 | :---------- | :-------------------------------------------- |
@@ -145,7 +145,7 @@ Each workspace is independent — run commands from the workspace root:
 | `eos-store` | Store implementations and ingest pipeline     |
 | `eos`       | Orchestration: wires engine + store           |
 
-### ion/ (L3 — Frontend)
+### ion/ (L4 — Frontend)
 
 | Crate          | Purpose                                        |
 | :------------- | :--------------------------------------------- |

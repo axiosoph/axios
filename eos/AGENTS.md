@@ -1,4 +1,4 @@
-# Eos Workspace (L2 - Runtime) Reference Guide
+# Eos Workspace (L3 - Runtime) Reference Guide
 
 The `eos` workspace contains the execution engine, storage pipelines, and runtime components of the Axios publishing stack.
 
