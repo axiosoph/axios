@@ -46,8 +46,8 @@ the Ion–Eos boundary.
   contracts, `BuildPlan` lifecycle, cache-skipping model
 - [eos-scheduler.md](eos-scheduler.md) — job queue, deduplication,
   lease management, work-stealing
-- [eos-snix-backend.md](eos-snix-backend.md) — Snix backend: eval
-  threading, store mapping, sandbox dispatch
+- [eos-snix-backend.md](eos-snix-backend.md) — optional legacy executor:
+  build/store mapping, sandbox dispatch
 - [ion-manifest.md](ion-manifest.md) — manifest schema, plugin model
 - [ion-resolution.md](ion-resolution.md) — resolution pipeline, lock
   production
