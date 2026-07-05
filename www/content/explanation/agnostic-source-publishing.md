@@ -62,7 +62,7 @@ Instead, the protocol borrows only the ecosystem type identifiers from PURL (`"c
 
 A Cargo integration would work roughly like this:
 
-1. The resolution tool reads the dependency's Atom ID.
+1. The resolution tool reads the dependency's lock entry — a `(set, label)` pair pointing at a `publish_czd`.
 2. It fetches the publish transactions from the Git repository.
 3. The Cargo adapter extracts `Cargo.toml` from the deterministic content snapshot (`dig`).
 4. Cargo's native resolver handles the rest.
@@ -79,4 +79,4 @@ Adding Atom to an existing ecosystem doesn't mean rewriting Cargo or npm. A hypo
 > [!NOTE]
 > These commands are illustrative. No Cargo or npm plugins exist yet. The Ion CLI will provide this functionality once L3 is complete.
 
-This approach lets developers adopt decentralized publishing incrementally without abandoning their existing build tools.
+This approach lets developers adopt decentralized publishing incrementally without abandoning their existing build tools. The same incremental posture holds one layer down at build time: [HTC](hermetic-transactional-composition.md) can ingest existing ecosystem artifacts — distro packages, upstream tarballs, PyPI wheels — with zero rebuilds, so adopting the substrate doesn't require anyone to build natively on it first either.

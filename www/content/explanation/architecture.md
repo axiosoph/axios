@@ -12,8 +12,8 @@ A standalone utility crate, **alurl**, lives at the repository root. It handles 
 
 ## Workspace organization
 
-- **L1: Atom** (`atom/`) — The protocol layer. Defines package identity (`AtomId`), cryptographic signing (via [Coz](https://github.com/Cyphrme/Coz)), content-addressed digests (`AtomDigest`), and transport mapping. Has no knowledge of build environments or dependency resolution. Four crates: `atom-id`, `atom-uri`, `atom-core`, `atom-git`.
-- **L2: Eos** (`eos/`) — The runtime scheduler. Constructs build plans and coordinates cache-skipping, delegating sandboxed execution to backends like Snix. Five crates: `eos-core`, `eos`, `eos-snix`, `eos-daemon`, `eos-proto`.
+- **L1: Atom** (`atom/`) — The protocol layer. Defines package identity (`AtomId`, the abstract `(anchor, label)` pair — not a hash of it), cryptographic signing (via [Coz](https://github.com/Cyphrme/Coz)), content-addressed store references (`publish_czd`, with the store keyed `blake3(publish_czd)`), and transport mapping. Has no knowledge of build environments or dependency resolution. Four crates: `atom-id`, `atom-uri`, `atom-core`, `atom-git`.
+- **L2: Eos** (`eos/`) — The runtime scheduler. Constructs build plans and coordinates cache-skipping, dispatching sandboxed execution to workers behind an executor trait — `eos-snix` today, re-scoping toward [HTC](hermetic-transactional-composition.md)'s executor trait per ADR-0005. Five crates: `eos-core`, `eos`, `eos-snix`, `eos-daemon`, `eos-proto`.
 - **L3: Ion** (`ion/`) — CLI and dependency resolver. Parses manifests (`ion.toml`), resolves the dependency graph with a SAT solver, and writes lockfiles (`ion.lock`). Five crates: `ion-cli`, `ion-manifest`, `ion-lock`, `ion-resolve`, `ion-eos`.
 - **alurl** (`alurl/`) — URL alias detection and expansion. Resolves `+`-prefixed identifiers (e.g. `+gh/owner/repo`) through configurable alias maps.
 
@@ -109,4 +109,4 @@ The build scheduler separates evaluation from execution:
 
 - `ArtifactStore` — Cache and storage interface. Links build artifacts to source atom digests for cache-skipping.
 
-The default build engine is `eos-snix`, which delegates execution to Snix while Eos handles scheduling and caching.
+`eos-snix` is the current build engine. Per [ADR-0005](../architecture/0005-hermetic-transactional-composition.md), Eos is re-scoping around [HTC](hermetic-transactional-composition.md)'s executor trait: the `evaluate`/`plan`/`build` split above reflects `BuildEngine`'s pre-substrate design, and the associated `Plan` type is exactly the escape hatch that substitution exercises — `eos-snix` becomes one executor implementation behind that trait rather than the assumed default, and the evaluation step `evaluate` names is being deleted from the design, not deferred.

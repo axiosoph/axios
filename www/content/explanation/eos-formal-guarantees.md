@@ -69,4 +69,4 @@ We mathematically proved the scheduler can't deadlock, can't head-of-line-block,
 
 The correctness properties are exhaustively *checked on small configurations* — every interleaving, but bounded in size. The performance properties are *proven for all sizes*, but under explicit assumptions (bounded prediction error, work-conserving dispatch, and so on). This is dramatically stronger than benchmark-and-hope, but it is not "the entire production binary is proven correct." We'd rather you know exactly where the line is than discover it later.
 
-The proofs themselves live in the repository under `docs/models/tla` (the model-checked properties) and `docs/models/lean` (the machine-proven theorems), with the scheduler design written up in [the architecture overview](architecture.md).
+The proofs themselves live in the repository under `docs/models/tla` (the model-checked properties) and `docs/models/lean` (the machine-proven theorems), with the scheduler design written up in [the architecture overview](eos-architecture.md).
