@@ -164,10 +164,5 @@ if __name__ == "__main__":
         tags=["sad"],
     )
 
-    print("explanations:")
-    process_single(
-        "../docs/spec-audit.md", "content/explanation/spec-audit.md", "explanation",
-        "Completeness and coherence audit of the Axios specifications",
-        "Specification Audit Report",
-        tags=["audit"],
-    )
+    # spec-audit.md is superseded (see banner in the source doc) and is no
+    # longer published to the public site.
