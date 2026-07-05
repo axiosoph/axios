@@ -35,7 +35,7 @@ A collision-resistant hash has no accessible fixed point: an artifact cannot emb
 
 ## The concept-count argument
 
-What a newcomer has to hold in their head is four nouns and one function — no lazy functional language, no `stdenv`/`cc-wrapper`/patchelf lore, no fixed-output exceptions, no `nixpkgs`. Interface manifests are the only genuinely new concept HTC introduces, and they make *explicit* what Nix left as implicit lore — ABI compatibility via mass rebuilds, `outputs.dev` splitting conventions. Everything else this substrate needs already exists in production, separately: `snix-castore`'s Merkle trees, the OCI/bwrap sandbox in `snix-build`, composefs+fs-verity, and 25 years of distro-grade interface extraction (rpm `elfdeps`, `dpkg-shlibdeps`, `libabigail`). HTC is the composition of existing, production-proven parts, not a new million-line corpus.
+What a newcomer has to hold in their head, across the whole substrate, is five nouns and one function — atom (already familiar from L1) plus the four new ones above, and `build` — no lazy functional language, no `stdenv`/`cc-wrapper`/patchelf lore, no fixed-output exceptions, no `nixpkgs`. Interface manifests are the only genuinely new *concept* among the four HTC introduces, and they make *explicit* what Nix left as implicit lore — ABI compatibility via mass rebuilds, `outputs.dev` splitting conventions. Everything else this substrate needs already exists in production, separately: `snix-castore`'s Merkle trees, the OCI/bwrap sandbox in `snix-build`, composefs+fs-verity, and 25 years of distro-grade interface extraction (rpm `elfdeps`, `dpkg-shlibdeps`, `libabigail`). HTC is the composition of existing, production-proven parts, not a new million-line corpus.
 
 ## The ingestion wedge
 
