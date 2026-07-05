@@ -89,7 +89,7 @@ For architecture details, see:
 
 ### Naming Conventions in Code
 
-- Rust types use `PascalCase`: `AtomId`, `AtomDigest`, `AtomSet`
+- Rust types use `PascalCase`: `AtomId`, `AtomSet`, `StorePath`
 - Fields and variables use `snake_case`: `atom_id`, `anchor`, `label`
 - The glossary governs **concept names** — code identifiers follow Rust convention
 - When generics are needed, prefer descriptive bounds: `D: Digest`, not `H` or `T`
@@ -132,7 +132,7 @@ Each workspace is independent — run commands from the workspace root:
 
 | Crate       | Purpose                                              |
 | :---------- | :--------------------------------------------------- |
-| `atom-id`   | Identity primitives: labels, digests, verified names |
+| `atom-id`   | Identity primitives: labels, anchors, verified names |
 | `atom-uri`  | Atom URI parsing and construction                    |
 | `atom-core` | Protocol traits: `AtomSource`, `AtomRegistry`        |
 | `atom-git`  | Git bridge: legacy storage backend                   |
@@ -142,7 +142,9 @@ Each workspace is independent — run commands from the workspace root:
 | Crate       | Purpose                                       |
 | :---------- | :-------------------------------------------- |
 | `eos-core`  | Engine traits: `BuildEngine`, `ArtifactStore` |
-| `eos-store` | Store implementations and ingest pipeline     |
+| `eos-proto` | Cap'n Proto wire schema and generated bindings |
+| `eos-snix`  | Optional legacy executor: passthrough Nix-expression backend |
+| `eos-daemon`| Scheduler, executor worker pool, RPC server    |
 | `eos`       | Orchestration: wires engine + store           |
 
 ### ion/ (L4 — Frontend)
@@ -150,7 +152,9 @@ Each workspace is independent — run commands from the workspace root:
 | Crate          | Purpose                                        |
 | :------------- | :--------------------------------------------- |
 | `ion-manifest` | `ion.toml` manifest parsing                    |
-| `ion-resolve`  | Dependency resolution (SAT solver, lock files) |
+| `ion-resolve`  | Dependency resolution (SAT solver)             |
+| `ion-lock`     | Lock schema and (de)serialization              |
+| `ion-eos`      | Bridge: client interface to the eos daemon over Cap'n Proto |
 | `ion-cli`      | CLI binary                                     |
 
 ---
@@ -163,7 +167,7 @@ Each workspace is independent — run commands from the workspace root:
    backends are generic. Concrete types live in bridge crates (atom-git).
 3. **Dependency budget.** Protocol crates (atom-id, atom-core) target
    ≤ 5 non-std dependencies. Bridge crates have no such limit.
-4. **Layer discipline.** L2 never imports L3. L1 never imports L2.
+4. **Layer discipline.** L3 never imports L4. L2 never imports L3.
    Violations are architectural bugs.
 5. **Cache-skipping is the value proposition.** Every stage of the
    cryptographic chain must be independently verifiable and skippable.

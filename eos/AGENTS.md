@@ -7,19 +7,18 @@ The `eos` workspace contains the execution engine, storage pipelines, and runtim
 
 ## Architecture & Subcrates
 
-Dependencies flow: `ion` (L3) -> `eos` (L2) -> `atom` (L1).
-**Crates in `eos` must never import anything from `ion`.** They can only depend on L2 crates or L1 (`atom`) crates.
+Dependencies flow: `ion` (L4) -> `eos` (L3) -> `atom` (L1).
+**Crates in `eos` must never import anything from `ion`.** They can only depend on L3 crates or L1 (`atom`) crates.
 
 ### Subcrates
 
 - **[`eos-core`](eos-core)**: Domain traits and core types (`BuildEngine`, `ArtifactStore`, `AtomIndex`).
-- **[`eos-store`](eos-store)**: Local file layout, storage backend ingestion, and content verification.
 - **[`eos-proto`](eos-proto)**: Cap'n Proto RPC schema definitions (`eos.capnp`) and build-time code generation bindings.
 - **[`eos-snix`](eos-snix)**: The optional legacy executor — a passthrough Nix-expression backend retained for interoperating with pre-existing Nix-expression content. Not the default; see [htc-sad.md](../docs/architecture/htc-sad.md) §6.8.
 - **[`eos-daemon`](eos-daemon)**: Hosts the `eosd` RPC daemon binary: the scheduler, its executor worker pool, and the RPC server that dispatches build actions to executor workers inside containerized sandboxes.
 - **[`eos`](eos)**: Orchestrator integrating the store, build engine, and scheduling primitives.
 
-## Key Design Principles for L2
+## Key Design Principles for L3
 
 1. **Sandboxing and Hermeticity:** The build function executes an unmodified upstream build process inside a materialized FHS view (a composition mounted via composefs). The sandbox is deny-by-default: the only bytes a build process can read are those materialized from the declared atom closure and toolchain composition, plus whatever the fetch proxy explicitly permits. The build's observed read set is checked against the declared closure — reads ⊆ declared — and that containment is *enforced by the sandbox*, not trusted from the build's own behavior (`htc-sad.md` §1.1 `[htc-declared-closure-enforced]`).
 2. **Single-Tier Action-Id Cache:** There is no separate pre-build stage and no associated cache key ahead of it. `action_id = H(atom_czd_closure_root, toolchain_composition_root, action_params)` is the sole cache key: a matching `action_id` skips dispatch entirely and returns the cached output tree (`htc-sad.md` §6.5, ADR-0005 §2 `[htc-action-identity]`).
@@ -35,7 +34,7 @@ This workspace is strictly spec-driven. Before starting work, you must inspect t
 
 ## Local Commands
 
-All commands for L2 should be run from the `eos/` workspace directory:
+All commands for L3 should be run from the `eos/` workspace directory:
 
 - **Build/Check:** `cargo check` / `cargo build`
 - **Test:** `cargo test`
