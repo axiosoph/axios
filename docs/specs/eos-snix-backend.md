@@ -51,8 +51,11 @@ store-service mapping onto `snix-castore`'s gRPC clients — the parts of the
 pre-substrate `eos-snix` design that remain accurate facts about the
 underlying Snix build/store surface both executors' build-dispatch
 machinery is built atop (inputs arrive as content-addressed castore nodes;
-the `inputs_dir` sandbox-layout parameter; `refscan_needles` is empty for
-this substrate's usage — Non-Goal preserved verbatim). This document does
+the `inputs_dir` sandbox-layout parameter; `refscan_needles`, populated as
+usual — this legacy executor runs Nix's own builder unmodified, so its
+reference-scan-based closure discovery functions exactly as it does in
+classic Nix, unlike the primary executor's closure computer (htc-sad.md
+§6.4), which replaces it). This document does
 NOT specify how the legacy executor evaluates a Nix expression to produce
 the `Derivation` its build-dispatch bridge consumes as input; that
 capability is out of scope here (see the historical note above).
@@ -282,8 +285,7 @@ builder.
   snix builder executes the build in a sandboxed environment. On success,
   `BuildResult.outputs` contains `BuildOutput` entries with `Node`
   (content-addressed filesystem root) and `output_needles` (reference scan
-  indices — empty for this substrate's usage, per the Non-Goal preserved at
-  §Domain). The outputs are registered in `PathInfoService` by the snix
+  indices). The outputs are registered in `PathInfoService` by the snix
   builder. On failure, the error is propagated back through the shim to the
   scheduler.
   `VERIFIED: unverified`
@@ -416,8 +418,7 @@ performs the following non-trivial transformations:
    derivation environment and output type (fixed-output derivations get
    network access).
 7. **Reference scan needles**: Collects the nixbase32 hash portion of every
-   input and output store path for post-build reference scanning — empty
-   for this substrate's usage (§Domain).
+   input and output store path for post-build reference scanning.
 
 ### Strategy
 
@@ -514,7 +515,6 @@ Where `BuildRequest` and `BuildResponse` are defined in
 - `repeated AdditionalFile additional_files` — passAsFile / structured
   attrs
 - `repeated string refscan_needles` — post-build reference scan patterns
-  (empty for this substrate's usage)
 
 The `BuildResponse` returns `repeated Output outputs`, each containing an
 `Entry` (content-addressed output root) and `repeated uint64 needles`
