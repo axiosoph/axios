@@ -1,7 +1,7 @@
 # Eos Software Architecture Document (SAD)
 
 <!--
-  This document is the authoritative source of truth for the Eos (L2) layer
+  This document is the authoritative source of truth for the Eos (L3) layer
   architecture. Specifications derive from this document. ADRs record changes
   to the architecture described here. When a conflict exists between this
   document and a specification or ADR, this document takes precedence and the
@@ -10,33 +10,55 @@
   Maintained as Architecture-as-Code alongside the codebase. Diagrams are
   Mermaid.js, embedded inline. When an ADR changes the system's trajectory,
   this SAD is updated in the same commit to reflect the new state.
+
+  Settled design inputs: ADR-0005 (../adr/0005-hermetic-transactional-composition.md)
+  — the atom-DAG re-scope, the executor trait, and the L3 layer designation
+  ([htc-layer-designation], ADR-0005 §9); the HTC substrate SAD
+  (htc-sad.md), which owns the build/composition contract (executor trait,
+  action identity, the shared CAS) this document dispatches through and does
+  not restate. Eos schedules; HTC executes.
 -->
 
 ## 1. Context
 
 ### 1.1 System Purpose
 
-Eos is the evaluation and build engine layer (L2) of the Axios
-decentralized publishing stack. It receives evaluation requests from
-clients (typically Ion, the L3 CLI frontend), evaluates Nix expressions
-against atom source trees to produce build plans (derivations), executes
-those plans in sandboxed build environments, and populates a
-content-addressed artifact store with the results.
+Eos is the **atom-DAG scheduling layer** (L3) of the Axios decentralized
+publishing stack. It receives a pre-coarsened atom DAG from Ion at build
+submission — nodes are atoms identified by `publish_czd`, edges are the
+dependency relationships already resolved into the lock (ion-sad §6.6, the
+Eos Handoff) — and dispatches build **actions** to executor-trait workers,
+which populate a shared, content-addressed artifact store (HTC's CAS) with
+the results.
 
-Eos is designed to operate as a distributed cluster, scaling evaluation
-and build capacity independently across heterogeneous machines. It does
-not own atoms (L1 concern) or dependency resolution (L3 concern).
+There is no evaluation stage. The DAG is not produced by evaluating an
+expression against atom source trees; it is read directly off locks
+(`[htc-atom-dag-executor-trait]`, ADR-0005 §6). Eos schedules; it does not
+build. Building — the deterministic, hermetic function `build(atom closure,
+toolchain composition, action params) → output tree` — is HTC's (L2)
+contract, executed by workers implementing HTC's executor trait: the primary
+FHS executor (materializes a composed FHS view, runs upstream's own build
+under sandboxing), or, for legacy interop only, the optional passthrough-snix
+executor (links `snix-eval`/`snix-glue` in-process to run pre-existing Nix
+expressions unmodified — htc-sad §6.8). Eos dispatches through that trait
+without knowing or caring which implementation backs a given worker.
+
+Eos is designed to operate as a distributed cluster, scaling build capacity
+independently across heterogeneous machines. It does not own atoms (L1
+concern), dependency resolution or the atom-DAG's construction (L4/Ion
+concern), or the build/composition mechanism itself (L2/HTC concern — eos
+dispatches through the executor trait, it does not implement `build`).
 
 ### 1.2 External Actors
 
 ```mermaid
 graph TB
-    subgraph "L3 — Ion"
+    subgraph "L4 — Ion"
         CLI["ion-cli"]
         CI["CI/CD Pipeline"]
     end
 
-    subgraph "L2 — Eos"
+    subgraph "L3 — Eos"
         EOD["Eos Daemon"]
     end
 
@@ -45,40 +67,45 @@ graph TB
         AR["Atom Registries"]
     end
 
-    subgraph "Snix Ecosystem"
-        SSD["Snix Store Daemon"]
-        SB["Snix Builder"]
+    subgraph "L2 — HTC (executor backends)"
+        CAS["Shared CAS\n(snix-castore, reused)"]
+        FHS["FHS Executor\n(primary)"]
+        SNIXEXEC["Passthrough-Snix Executor\n(legacy, optional)"]
     end
 
-    CLI -->|"Cap'n Proto RPC"| EOD
-    CI -->|"Cap'n Proto RPC"| EOD
+    CLI -->|"Cap'n Proto RPC: atom-DAG + action params"| EOD
+    CI -->|"Cap'n Proto RPC: atom-DAG + action params"| EOD
     AR -->|"Atom Protocol"| EOD
     EOD --> AS
-    EOD -..->|"gRPC (via workers)"| SSD
-    EOD -..->|"gRPC (via workers)"| SB
-    SB --> SSD
+    EOD -..->|"executor trait (gRPC via workers)"| FHS
+    EOD -..->|"executor trait (gRPC via workers), legacy"| SNIXEXEC
+    FHS --> CAS
+    SNIXEXEC --> CAS
 ```
 
 ### 1.3 System Boundaries
 
-| Boundary                  | Inside Eos                                                                | Outside Eos                                                |
-| :------------------------ | :------------------------------------------------------------------------ | :--------------------------------------------------------- |
-| **Evaluation**            | Dispatching eval requests to workers, caching plans                       | Nix language semantics (snix's concern)                    |
-| **Building**              | Dispatching derivations to builders, tracking progress                    | Sandbox implementation (snix builder's concern)            |
-| **Atom Fetching**         | Fetching top-level atoms into local store (registries → local → ion peer) | Atom identity, signing, verification (L1 concern)          |
-| **Dependency Resolution** | Not an Eos concern                                                        | Lock file resolution, SAT solving (L3/Ion concern)         |
-| **Artifact Storage**      | All workers use the global shared store                                   | Store implementation, GC, replication (snix store concern) |
-| **IFD**                   | Scheduler receives `ifdSystems` metadata from eval workers to route eval requests to IFD-capable workers; schedules and tracks zero IFD work | IFD execution and dedicated builder placement are internal to snix evaluator |
+| Boundary                  | Inside Eos                                                                | Outside Eos                                                     |
+| :------------------------ | :------------------------------------------------------------------------ | :---------------------------------------------------------------- |
+| **Scheduling**            | Dispatching build actions to executor workers, action-id cache, DAG traversal ordering | The `build` function itself, sandboxing, FHS-view materialization (L2/HTC concern) |
+| **Atom Fetching**         | Fetching top-level atoms into local store (registries → local → ion peer) | Atom identity, signing, verification (L1 concern)                |
+| **Dependency Resolution** | Not an Eos concern                                                        | Lock file resolution, atom-DAG construction, SAT solving (L4/Ion concern) |
+| **Artifact Storage**      | All workers use the global shared store (HTC's CAS)                       | Store implementation, GC, replication (L2/HTC concern)            |
 
 ### 1.4 Layer Discipline
 
-Dependencies flow strictly downward: Ion (L3) → Eos (L2) → Atom (L1).
+Dependencies flow strictly downward: Ion (L4) → Eos (L3) → HTC (L2) → Atom
+(L1).
 
 - Eos MUST NOT import Ion types or depend on Ion crates.
 - Atom MUST NOT import Eos types or depend on Eos crates.
-- The Eos daemon crate (`eos-daemon`) has zero snix dependencies.
-  All snix interaction occurs through eval workers and build workers
-  via gRPC/Cap'n Proto.
+- The Eos daemon crate (`eos-daemon`) has **zero executor-implementation
+  dependencies** — no FHS-specific code, no snix code. All build execution
+  occurs through workers implementing HTC's executor trait
+  (`build(atom_closure, toolchain_composition, action params) → output
+  tree`, htc-sad §3.5) via gRPC/Cap'n Proto. This mirrors `layer-
+  boundaries.md`'s `[boundary-downward-only]` rule; eos depends on HTC only
+  through the executor trait it dispatches through (htc-sad §1.4).
 
 ### 1.5 Deployment Modes
 
@@ -87,11 +114,11 @@ and dependency injection. All modes share identical codepaths —
 the mode determines wiring, not logic. See
 [ADR-0003](../adr/0003-composable-deployment-modes.md).
 
-| Mode                | Description                                                                                                              |
-| :------------------ | :----------------------------------------------------------------------------------------------------------------------- |
-| **Monolithic Ion**  | BuildEngine compiled into `ion-cli`. Zero daemons, zero sockets. Snix services wired in-process (e.g., redb store).      |
-| **Monolithic Eos**  | Single `eosd` daemon with snix services compiled in. Ion connects as a thin client. Simplifies multi-client single-host. |
-| **Distributed Eos** | Ion → `eosd` → eval/build worker pools → snix services. Each component independently scalable.                           |
+| Mode                | Description                                                                                                                          |
+| :------------------ | :-------------------------------------------------------------------------------------------------------------------------------------- |
+| **Monolithic Ion**  | `BuildEngine` compiled into `ion-cli`. Zero daemons, zero sockets. The executor trait is wired in-process (FHS executor, or legacy passthrough-snix). |
+| **Monolithic Eos**  | Single `eosd` daemon with an executor implementation compiled in. Ion connects as a thin client. Simplifies multi-client single-host. |
+| **Distributed Eos** | Ion → `eosd` → executor worker pool → executor backends (HTC's shared CAS + FHS executor, or legacy passthrough-snix). Each component independently scalable. |
 
 All modes produce identical outputs (mode bisimilarity). The
 monolithic modes are compiler features (Cargo feature flags),
@@ -99,13 +126,14 @@ not architectural modes — they MUST NOT modify codepaths.
 
 ### 1.6 Store Taxonomy
 
-The system uses three functionally distinct store types:
+The system uses two functionally distinct store types (a third, `ArtifactStore`,
+is owned one layer down):
 
-| Store             | Layer | Semantics                                          | Interface                                  |
-| :---------------- | :---- | :------------------------------------------------- | :----------------------------------------- |
-| **AtomRegistry**  | L1    | Append-only, signed, distributed publishing        | `claim()`, `publish()`                     |
-| **AtomStore**     | L1    | Mutable working store, collects atoms from sources | `ingest()`, `import_path()`                |
-| **ArtifactStore** | L2    | Content-addressed build output blobs (snix store)  | `store()`, `fetch()`, `check_substitute()` |
+| Store             | Layer      | Semantics                                          | Interface                                  |
+| :---------------- | :--------- | :--------------------------------------------------- | :------------------------------------------- |
+| **AtomRegistry**  | L1         | Append-only, signed, distributed publishing        | `claim()`, `publish()`                     |
+| **AtomStore**     | L1         | Mutable working store, collects atoms from sources | `ingest()`, `import_path()`                |
+| **ArtifactStore** | L2 (HTC)   | Content-addressed build output blobs (HTC's shared CAS — `snix-castore` `BlobService`/`DirectoryService`, reused, htc-sad §2.4) | `store()`, `fetch()`, `check_substitute()` |
 
 Eos consumes atoms via `AtomContent` — the forgetful functor
 that drops mutation observers (`ingest`, `contains`) from
@@ -120,52 +148,49 @@ The **AtomStore** and **ArtifactStore** are distinct and
 MUST NOT be conflated:
 
 - **AtomStore**: Contains source trees (atom content). Used
-  during atom fetching and evaluation.
-- **ArtifactStore**: Contains build outputs (derivation
-  results). Backed by snix's BlobService/DirectoryService/
-  PathInfoService. Eos reads from it (cache checks); snix
-  builders write to it. Eos MUST NOT write directly to the
-  artifact store — artifact production is the builder's
-  responsibility.
+  during atom fetching and action dispatch.
+- **ArtifactStore**: Contains build outputs (executor action
+  results — output trees, HTC's CAS, htc-sad §2.4). Eos reads
+  from it (cache checks); executor workers write to it. Eos MUST
+  NOT write directly to the artifact store — artifact production
+  is the executor's responsibility.
 
 ---
 
 ## 2. Container View
 
-The Eos system involves three Eos-owned process types (daemon,
-eval workers, build workers) and two infrastructure dependencies
-(snix store daemons, snix builders) that communicate via two
-transport protocols:
+The Eos system involves two Eos-owned process types (daemon, executor
+workers) and HTC's executor backends (the shared CAS, and the executor
+implementations workers wrap) that communicate via two transport protocols:
 
 ```mermaid
 graph TB
     subgraph "Client Processes"
-        ION["Ion Client"]
+        ION["Ion Client (L4)"]
     end
 
-    subgraph "Eos Cluster"
+    subgraph "Eos Cluster (L3)"
         DAEMON["Eos Daemon"]
-        EWP["Eval Worker Pool"]
-        BWP["Build Worker Pool"]
+        EWP["Executor Worker Pool"]
     end
 
-    subgraph "Snix Infrastructure"
-        STORE["Snix Store Daemon"]
-        BUILDER["Snix Builder"]
+    subgraph "HTC Executor Backends (L2)"
+        FHS["FHS Executor\n(primary)"]
+        SNIXEXEC["Passthrough-Snix Executor\n(legacy, optional)"]
+        STORE["Shared CAS"]
     end
 
-    subgraph "Atom Infrastructure"
+    subgraph "Atom Infrastructure (L1)"
         ASTORE["Local Atom Store"]
         AREG["Atom Registries"]
     end
 
-    ION <-->|"Cap'n Proto"| DAEMON
+    ION <-->|"Cap'n Proto: atom-DAG handoff"| DAEMON
     DAEMON <-->|"Cap'n Proto"| EWP
-    DAEMON <-->|"Cap'n Proto"| BWP
-    EWP -->|"gRPC"| STORE
-    BWP -->|"gRPC"| BUILDER
-    BUILDER -->|"gRPC"| STORE
-    EWP -.->|"gRPC (IFD)"| BUILDER
+    EWP -->|"executor trait (gRPC)"| FHS
+    EWP -.->|"executor trait (gRPC), legacy"| SNIXEXEC
+    FHS --> STORE
+    SNIXEXEC --> STORE
     AREG -->|"Atom Protocol"| DAEMON
     DAEMON -->|"ingest"| ASTORE
     EWP -->|"read content"| ASTORE
@@ -174,15 +199,17 @@ graph TB
 ### 2.1 Eos Daemon (Scheduler)
 
 The central coordination process. Stateless except for ephemeral
-in-flight job state. Manages two worker pools, dispatches evaluation
-and build jobs, maintains the eval cache, and orchestrates atom
-fetching.
+in-flight job state. Manages one worker pool (executor workers), dispatches
+build actions read off the atom DAG, maintains the action-id cache, and
+orchestrates atom fetching.
 
-**Key constraint (target state, per [ADR-0002](../adr/0002-decoupling-snix-backend.md))**:
-The daemon will have **zero snix dependencies**. It will not link
-against snix-eval, snix-store, snix-build, or any snix crate. All
-snix interaction will be mediated by workers via gRPC. The current
-codebase has coupling violations being migrated (see Appendix D).
+**Key constraint (target state, per [ADR-0002](../adr/0002-decoupling-snix-backend.md)
+Tiers 1/2/4, carried forward by ADR-0005 §10)**: The daemon has **zero
+executor-implementation dependencies**. It will not link against `snix-eval`,
+`snix-castore`, `snix-build`, or any executor-specific crate. All executor
+interaction is mediated by workers via gRPC, through the executor trait HTC
+owns (htc-sad §3.5). The current codebase has coupling violations being
+migrated (see Appendix D).
 
 **Transports**:
 
@@ -191,91 +218,71 @@ codebase has coupling violations being migrated (see Appendix D).
 
 **State**:
 
-- `eval_workers: Map<WorkerId, WorkerStatus>` — registered eval workers
-- `build_workers: Map<WorkerId, WorkerStatus>` — registered build workers
-- `eval_queue: Map<JobId, Job>` — pending/in-flight eval jobs
-- `build_queue: Map<JobId, Job>` — pending/in-flight build jobs
-- `eval_cache: Map<EvalCacheKey, CachedPlan>` — memoized evaluation results
+- `workers: Map<WorkerId, WorkerStatus>` — registered executor workers
+- `queue: Map<JobId, Job>` — pending/in-flight build jobs
+- `action_cache: Map<ActionId, BuildRecord>` — memoized action results (§6.5)
 
-### 2.2 Eval Workers
+### 2.2 Executor Workers
 
-Long-lived external processes that run snix evaluation. Each eval
-worker:
+Long-lived external processes implementing HTC's executor trait:
+`build(atom_closure, toolchain_composition, action_params) → output tree`
+(htc-sad §3.5). There is exactly one worker kind. Each executor worker:
 
-- Runs `snix-eval` in **pure evaluation mode** on a dedicated OS thread
-- Connects to snix store daemons via gRPC for store access
-- Communicates with the scheduler via Cap'n Proto (`EvalWorker` interface)
-- Returns computed derivations (ATerm bytes) to the scheduler
-- MAY have IFD builders configured (via gRPC `BuildService` handle)
+- Wraps exactly one executor implementation — the **primary** FHS executor
+  (materializes a composed FHS view, runs upstream's own build under
+  OCI/bwrap sandboxing, htc-sad §4) or, for legacy interop, the **optional**
+  passthrough-snix executor (links `snix-eval`/`snix-glue` in-process to run
+  pre-existing Nix expressions unmodified, htc-sad §6.8)
+- Connects to the shared CAS via gRPC for store access
+- Communicates with the scheduler via Cap'n Proto (`ExecutorWorker`
+  interface, §8.3)
+- Returns a `BuildRecord` (htc-sad §2.3: `action_id`, `output_tree_digest`,
+  `build_composition_root`, `observed_read_set_digest`, builder signature)
+  and any derived interface manifests (htc-sad §2.2) to the scheduler
 
-**Pure evaluation confinement**: The evaluator is confined to the
-atom's encapsulation boundary. It MUST NOT import code or data
-external to the atom being evaluated. Content-addressed fetches
-(where a hash is pre-declared) are permitted — they are safe by
-construction. This language-level confinement eliminates the need
-for OS-level process sandboxing (Bubblewrap, Birdcage) during
-evaluation.
-
-**IFD handling**: If the eval worker has IFD builders configured,
-IFD builds are dispatched internally via `SnixStoreIO`'s
-`BuildService` gRPC handle. The scheduler does not orchestrate
-IFD — it only knows which eval workers have IFD capability (and
-for which systems) so it can route appropriately.
+**Isolation**: Sandboxing and network containment are wholly the executor
+implementation's concern (§6.2, §6.4) — the daemon and its scheduler
+perform none of it and hold no opinion on how a given executor achieves it.
 
 **Lifecycle**: Started by external orchestrators (systemd,
 process-compose, Kubernetes). The scheduler does NOT manage worker
-lifecycles. Workers register via Cap'n Proto capability passing.
+lifecycles. Workers register via Cap'n Proto capability passing (§4.2).
 
-### 2.3 Build Workers
+### 2.3 Shared Artifact Store
 
-Long-lived external processes that wrap snix's gRPC
-`BuildService.DoBuild()` in a Cap'n Proto shim. Each build worker:
-
-- Receives derivations from the scheduler via Cap'n Proto
-- Forwards to snix builders via gRPC `BuildService`
-- Adds cancellation, progress streaming, and lease management
-- Reports results back to the scheduler
-
-**Sandboxing**: Build sandboxing is the snix builder's concern.
-The build worker shim does not implement sandboxing — it delegates
-to the snix builder which applies platform-appropriate isolation
-(OCI runtime, Bubblewrap, or future alternatives).
-
-**Lifecycle**: Same as eval workers — externally managed, registers
-via Cap'n Proto capability passing.
-
-### 2.4 Snix Store Daemon (Global Shared Artifact Store)
-
-The snix store daemon provides three independent gRPC services:
+HTC's CAS provides the network-shared artifact store (htc-sad §2.4, reusing
+`snix-castore`'s `BlobService`/`DirectoryService`):
 
 - `BlobService` — content-addressed blob storage
 - `DirectoryService` — Merkle tree directory structure
-- `PathInfoService` — store path metadata and root nodes
 
-**Critical invariant**: All eval workers, build workers, and snix
-builder instances in the cluster MUST be configured to use the
-**same** network store daemon. Artifacts accumulated anywhere in
-the cluster — whether produced by a top-level build, an IFD build,
-or an ingestion — are instantly available to all other workers via
-the shared store. This eliminates redundant builds and enables the
-cluster to function as a unified build cache.
+**Critical invariant** (`[eos-shared-artifact-store]`, §6.1): All executor
+workers in the cluster MUST be configured to use the **same** shared CAS.
+Artifacts accumulated anywhere in the cluster — whether produced by a
+top-level build or an ingestion — are instantly available to all other
+workers via the shared store, regardless of which executor implementation
+produced them. This eliminates redundant builds and enables the cluster to
+function as a unified build cache.
 
 Latency of store access is an operational concern managed by
-network topology (e.g., co-locating workers and store daemons in
+network topology (e.g., co-locating workers and the store in
 the same availability zone).
 
-### 2.5 Snix Builders
+### 2.4 Executor Backends
 
-Separate processes that execute derivation builds in sandboxed
-environments. They:
+Separate processes that implement HTC's `build` function in sandboxed
+environments (htc-sad §3–§4). They:
 
-- Expose gRPC `BuildService` for build dispatch
-- Mount castore inputs via FUSE
+- Expose the executor trait for build dispatch (via gRPC, wrapped by the
+  worker's Cap'n Proto shim)
+- Mount the composed FHS view via castore FUSE (primary executor) or wrap
+  legacy Nix-expression evaluation in-process (passthrough-snix executor)
 - Apply platform-appropriate sandboxing (OCI/bwrap on Linux)
 - Write build outputs to the global shared store
 
-Builders are NOT managed by the Eos scheduler. They are
-infrastructure managed by cluster operators.
+Executor backends are NOT managed by the Eos scheduler. They are
+infrastructure managed by cluster operators, owned architecturally by HTC
+(L2), not eos.
 
 ---
 
@@ -290,19 +297,19 @@ graph TB
         SCHED["Scheduler"]
         WPOOL["Worker Pool Manager"]
         ARES["Atom Fetching"]
-        ECACHE["Eval Cache"]
+        ACACHE["Action Cache"]
     end
 
     RPC --> SCHED
     SCHED --> WPOOL
     SCHED --> ARES
-    SCHED --> ECACHE
+    SCHED --> ACACHE
 ```
 
-**Scheduler**: The core dispatch loop. Receives eval/build requests,
-consults the eval cache, dispatches to available workers via
-Rendezvous hashing, tracks job lifecycle, handles cancellation and
-progress streaming.
+**Scheduler**: The core dispatch loop. Receives the atom-DAG at submission,
+consults the action cache, dispatches ready actions to available workers via
+Rendezvous hashing, tracks job lifecycle, handles cancellation and progress
+streaming.
 
 **Worker Pool Manager**: Maintains the set of registered workers
 and their capabilities. Handles registration (via capability
@@ -311,89 +318,79 @@ health monitoring (heartbeat + lease expiry).
 
 **Atom Fetching**: Implements the layered `FindMissing` pattern for top-level atoms. Checks local atom store, then registry mirrors, then falls back to ion peer for dev-only atoms.
 
-**Eval Cache**: Memoizes evaluation results by plan digest. The
-cache is consulted before dispatching to an eval worker. Cache
-hits skip evaluation entirely.
+**Action Cache**: Memoizes build results by `action_id` (htc-sad §6.5). The
+cache is consulted before dispatching an action to a worker. Cache hits skip
+dispatch entirely.
 
-### 3.2 Eval Worker — Internal Components
+### 3.2 Executor Worker — Internal Components
 
 ```mermaid
 graph TB
-    subgraph "Eval Worker Process"
+    subgraph "Executor Worker Process"
         EWRPC["Cap'n Proto RPC"]
-        EVAL["snix-eval engine"]
-        GLUE["snix-glue layer"]
-        STOREIO["SnixStoreIO"]
+        EXECT["Executor trait impl\n(FHS primary / passthrough-snix legacy)"]
+        GRPC["gRPC Client (shared CAS)"]
     end
 
-    EWRPC --> EVAL
-    EVAL --> GLUE
-    EVAL --> STOREIO
+    EWRPC --> EXECT
+    EXECT --> GRPC
 ```
 
-**snix-eval**: The Nix evaluator. Runs on a dedicated OS thread
-(not a Tokio task) because evaluator types (`Value`, `NixString`,
-`Evaluation`) are `!Send`/`!Sync` due to `Rc<Closure>`.
+**Executor trait impl**: The single contract this process wraps —
+`build(atom_closure, toolchain_composition, action_params) → output tree`
+(htc-sad §3.5). The **primary** implementation is the FHS executor: it
+materializes the composed atom closure and toolchain composition as an FHS
+view (castore FUSE), runs upstream's own, unmodified build under an
+OCI/bwrap sandbox, and ingests the result (htc-sad §4). The **optional
+legacy** implementation is the passthrough-snix executor, which links
+`snix-eval`/`snix-glue`/`nix-compat` in-process to run pre-existing Nix
+expressions unmodified (htc-sad §6.8) — it exists for interoperating with
+legacy Nix-expression content, is not the default, and is not required for
+the MVP path. Which implementation a given worker process runs is a
+deployment choice, opaque to the scheduler beyond what capability metadata
+the worker advertises at registration (§7.2).
 
-**snix-glue**: Converts between Nix `Derivation` types and snix's
-internal representation. Provides `derive_derivation()` for
-Nix-to-snix conversion.
-
-**SnixStoreIO**: Implements the `EvalIO` trait, bridging
-synchronous eval callbacks to async gRPC store operations via
-`handle.block_on()`. Also holds the optional `BuildService` gRPC
-handle for IFD.
-
-### 3.3 Build Worker — Internal Components
-
-```mermaid
-graph TB
-    subgraph "Build Worker Process"
-        BWRPC["Cap'n Proto RPC"]
-        SHIM["Build Shim"]
-        GRPC["gRPC Client"]
-    end
-
-    BWRPC --> SHIM
-    SHIM --> GRPC
-```
+**gRPC Client**: Bridges the executor implementation to the shared CAS
+(htc-sad §2.4) for store access — reads of the atom closure and toolchain
+composition, and writes of the resulting output tree.
 
 ---
 
 ## 4. Core Lifecycles
 
-### 4.1 Evaluation and Build Lifecycle
+### 4.1 Build Lifecycle
 
-The end-to-end lifecycle follows the `BuildPlan` coproduct —
-each atom ref resolves to one of three variants:
+The end-to-end lifecycle follows the `BuildPlan` coproduct — each requested
+action resolves to one of two variants:
 
-| Variant                     | Meaning                   | Action                   |
-| :-------------------------- | :------------------------ | :----------------------- |
-| `Cached(outputs)`           | Artifact exists in store  | Return immediately       |
-| `NeedsBuild(plan)`          | Plan cached, build needed | Dispatch to build worker |
-| `NeedsEvaluation(atom_ref)` | Nothing cached            | Eval then build          |
+| Variant              | Meaning                    | Action                    |
+| :-------------------- | :--------------------------- | :--------------------------- |
+| `Cached(output_tree)` | Output exists in the CAS     | Return immediately         |
+| `NeedsBuild(action)`  | Nothing cached                | Dispatch to executor worker |
 
-This three-variant cache-skipping model is the system's core
-value proposition — each stage of the cryptographic chain is
-independently verifiable and skippable.
+This two-variant cache-skipping model is the system's core value
+proposition: the `action_id` cache (§6.5) plus the shared CAS (§2.3, §6.1)
+let an entire subtree of an atom-DAG skip dispatch whenever its action has
+already been built anywhere in the cluster. A third variant belongs only to
+the optional passthrough-snix executor's own internals (its legacy
+Nix-expression evaluation step, htc-sad §6.8) — it is never part of eos's
+own scheduling contract, which sees exactly the two variants above.
 
 The end-to-end lifecycle of a build request from Ion to artifact:
 
 ```mermaid
 sequenceDiagram
-    participant Ion as Ion CLI
+    participant Ion as Ion CLI (L4)
     participant Daemon as Eos Daemon
-    participant AtomStore as Atom Store
-    participant EvalWorker as Eval Worker
-    participant SnixStore as Snix Store Daemon
-    participant BuildWorker as Build Worker
-    participant SnixBuilder as Snix Builder
+    participant AtomStore as Atom Store (L1)
+    participant Worker as Executor Worker
+    participant CAS as Shared CAS (HTC, L2)
 
-    Note over Ion,SnixBuilder: Phase 1: Request Submission
-    Ion->>Daemon: submitBuild(BuildRequest)
+    Note over Ion,CAS: Phase 1: Request Submission (atom-DAG handoff)
+    Ion->>Daemon: submitBuild(atom DAG: nodes by publish_czd, edges from locks)
     Daemon-->>Ion: BuildJob capability
 
-    Note over Ion,SnixBuilder: Phase 2: Atom Fetching
+    Note over Ion,CAS: Phase 2: Atom Fetching
     Daemon->>AtomStore: fetch top-level atoms
     AtomStore-->>Daemon: found / missing
     opt Missing atoms
@@ -401,34 +398,21 @@ sequenceDiagram
         Ion->>Daemon: peer-assisted transfer (atom protocol)
     end
 
-    Note over Ion,SnixBuilder: Phase 3: Evaluation
-    Daemon->>Daemon: check eval cache (snapshot digest + eval_args)
+    Note over Ion,CAS: Phase 3: Action Dispatch
+    Daemon->>Daemon: check action cache (action_id, §6.5)
     alt Cache hit
-        Daemon->>Daemon: skip evaluation, use cached plan
+        Daemon->>Daemon: skip dispatch, use cached output tree
     else Cache miss
-        Daemon->>EvalWorker: evaluate(EvalRequest)
-        EvalWorker->>SnixStore: read atom source (gRPC)
-        EvalWorker->>EvalWorker: snix-eval (pure eval, dedicated thread)
-        opt IFD encountered
-            EvalWorker->>SnixBuilder: DoBuild (gRPC, internal)
-            SnixBuilder->>SnixStore: write IFD output
-            SnixStore-->>EvalWorker: IFD output available
-        end
-        EvalWorker-->>Daemon: EvalResult (Derivation)
-        Daemon->>Daemon: cache plan
+        Daemon->>Worker: build(atom_closure, toolchain_composition, action_params)
+        Worker->>CAS: materialize FHS view / mount inputs
+        Worker->>Worker: upstream's own build (sandboxed, htc-sad §4)
+        Worker->>CAS: write output tree + interface manifest
+        Worker-->>Daemon: BuildRecord (action_id, output_tree_digest, ...)
+        Daemon->>Daemon: cache result
     end
 
-    Note over Ion,SnixBuilder: Phase 4: Build Execution
-    Daemon->>BuildWorker: build(derivation)
-    BuildWorker->>SnixBuilder: DoBuild (gRPC)
-    SnixBuilder->>SnixStore: mount inputs (FUSE)
-    SnixBuilder->>SnixBuilder: sandboxed execution
-    SnixBuilder->>SnixStore: write outputs to global store
-    SnixBuilder-->>BuildWorker: BuildResult
-    BuildWorker-->>Daemon: WorkerBuildResult
-
-    Note over Ion,SnixBuilder: Phase 5: Result Delivery
-    Daemon-->>Ion: BuildStatus (completed, output paths)
+    Note over Ion,CAS: Phase 4: Result Delivery
+    Daemon-->>Ion: BuildStatus (completed, output tree digests)
 ```
 
 ### 4.2 Worker Registration Lifecycle
@@ -444,9 +428,9 @@ sequenceDiagram
     Note over Worker,Registry: Registration
     Worker->>Daemon: connect (Cap'n Proto)
     Daemon-->>Worker: WorkerRegistry capability
-    Worker->>Registry: registerEval(EvalWorker, EvalWorkerCapabilities)
+    Worker->>Registry: registerWorker(ExecutorWorker, WorkerCapabilities)
     Registry-->>Worker: Registration capability
-    Note over Daemon: Scheduler holds EvalWorker capability
+    Note over Daemon: Scheduler holds ExecutorWorker capability
     Note over Worker: Worker holds Registration capability
 
     Note over Worker,Registry: Operational Phase
@@ -455,8 +439,8 @@ sequenceDiagram
         Daemon-->>Worker: ok
     end
     loop Job Dispatch
-        Daemon->>Worker: evaluate(EvalRequest)
-        Worker-->>Daemon: EvalResult
+        Daemon->>Worker: build(BuildRequest)
+        Worker-->>Daemon: BuildResult
     end
 
     Note over Worker,Registry: Deregistration (implicit)
@@ -496,15 +480,19 @@ sequenceDiagram
         Peer-->>Daemon: atoms transferred
     end
 
-    Daemon->>Daemon: all top-level atoms fetched, dispatch eval
+    Daemon->>Daemon: all top-level atoms fetched, dispatch actions
 ```
 
-**Atom access during evaluation**: Once top-level atoms are in the
-atom store, the eval worker executes the top-level atom from the
-atom store (e.g., via a git URI). The atom's _dependencies_ (locked
-in the atom's lock file) are fetched by snix from lock-specified
-mirrors using normal Nix fetching semantics. Eos does not resolve
-transitive dependencies — this is internal to snix's evaluation model.
+**Atom access and the DAG**: Once top-level atoms are in the atom store, an
+executor worker materializes them (and the rest of an action's atom
+closure) into the build's FHS view (htc-sad §2, §4). An atom's dependencies
+are not fetched separately or resolved internally by an executor — they are
+already explicit nodes and edges in the atom-DAG Ion hands off at submission
+(§1.1, §4.1): dependency resolution is complete before the DAG reaches eos.
+Non-atom fetch dependencies (source tarballs, crates, npm packages) are
+lock-side `[[deps]]` entries of `type = "fetch"`, executed by HTC's
+record/replay proxy (htc-sad §4.2) — not fetched by eos, and not resolved by
+an evaluator, because there is no evaluator.
 
 ---
 
@@ -516,19 +504,15 @@ transitive dependencies — this is internal to snix's evaluation model.
 stateDiagram-v2
     [*] --> Queued: submitBuild()
     Queued --> FetchingAtoms: atoms need fetching
-    Queued --> Evaluating: atoms already local
+    Queued --> Building: atoms already local
     FetchingAtoms --> WaitingPeer: missing atoms, getMissing()
-    FetchingAtoms --> Evaluating: all atoms fetched
-    WaitingPeer --> Evaluating: peer transfer complete
-    Evaluating --> Building: eval returns plan
-    Evaluating --> Completed: artifact already in store
-    Building --> Completed: build succeeds
+    FetchingAtoms --> Building: all atoms fetched
+    WaitingPeer --> Building: peer transfer complete
+    Building --> Completed: build succeeds (or action-cache hit)
     Building --> Failed: build fails
-    Evaluating --> Failed: eval fails
     FetchingAtoms --> Failed: atom fetch fails
     Queued --> Cancelled: user cancel()
     FetchingAtoms --> Cancelled: user cancel()
-    Evaluating --> Cancelled: user cancel()
     Building --> Cancelled: user cancel()
     Failed --> Queued: retry (retries remain)
     Failed --> [*]: retries exhausted
@@ -536,12 +520,17 @@ stateDiagram-v2
     Cancelled --> [*]
 ```
 
+Once all atoms for an action are local, the job moves directly to
+`Building`, where the action-cache check (§6.5) is the first thing that
+happens — a cache hit resolves to `Completed` without ever contacting a
+worker.
+
 ### 5.2 Worker Lifecycle
 
 ```mermaid
 stateDiagram-v2
     [*] --> Connecting: worker process starts
-    Connecting --> Registered: registerEval/registerBuild
+    Connecting --> Registered: registerWorker
     Registered --> Idle: no active jobs
     Idle --> Active: job dispatched
     Active --> Idle: job completes
@@ -560,143 +549,159 @@ stateDiagram-v2
 
 ## 6. Cross-Cutting Concerns and System Invariants
 
-### 6.1 Global Shared Artifact Store
+### 6.1 Shared Artifact Store
 
-**Invariant `[snix-global-artifact-store]`**: All eval workers,
-build workers, and snix builder instances in the cluster MUST be
-configured to use the same network artifact store (snix store
-daemon). Artifacts accumulated anywhere in the cluster — whether
-produced by a top-level build, an IFD build, or an ingestion —
-MUST be instantly available to all other workers.
+**Invariant `[eos-shared-artifact-store]`**: All executor workers in the
+cluster MUST be configured to use the same shared artifact store (HTC's CAS,
+§1.6, §2.3). Artifacts accumulated anywhere in the cluster — whether
+produced by a top-level build or an ingestion — MUST be instantly available
+to all other workers, regardless of which executor implementation produced
+them.
 
 This is the critical efficiency invariant that makes the cluster
-function as a unified build cache. It is also the primary advantage
-of snix's store model over legacy Nix: snix's network-native store
-eliminates the need for store-to-store copying between machines.
+function as a unified build cache.
 
 **Operational concern**: Store access latency is managed by
-network topology (co-locating workers and store daemons in the
+network topology (co-locating workers and the store in the
 same availability zone). This is an operator responsibility, not
 an Eos architectural concern.
 
-### 6.2 Pure Evaluation Confinement
+### 6.2 Executor Isolation
 
-**Invariant `[eos-eval-pure-eval]`**: Eval workers MUST run snix
-in pure evaluation mode. Pure eval confines the evaluator to the
-atom's encapsulation boundary:
+**Invariant**: The Eos daemon and its scheduler perform **zero** sandboxing
+and hold **zero** opinion on how a build is isolated. Isolation is wholly
+delegated to the executor implementation a worker wraps:
 
-- The evaluator MUST NOT import code or data external to the atom
-- Content-addressed fetches (with pre-declared hash) are permitted
-  — they are safe by construction (fail if content doesn't match)
-- This language-level confinement eliminates the need for OS-level
-  process sandboxing during evaluation
+- The **primary FHS executor** runs upstream's own build inside an
+  OCI/bwrap sandbox against a materialized FHS view; the only bytes a build
+  process can read are those declared in the atom closure and toolchain
+  composition (`[htc-declared-closure-enforced]`, htc-sad §1.1) — enforced
+  by the sandbox, not trusted from the build's own behavior.
+- The **optional legacy passthrough-snix executor** confines its
+  in-process Nix-expression evaluation to whatever isolation `snix-eval`
+  itself provides; this is legacy-executor-internal detail, not a scheduler
+  concern.
 
-**Consequence**: No Bubblewrap, Birdcage, or namespace management
-is required for eval workers. This significantly reduces
-operational complexity.
+Every action is dispatched to an executor identically; isolation is
+uniformly the executor's contract to uphold, never the scheduler's
+(htc-sad §6.2, §6.8).
 
-### 6.3 Import-from-Derivation (IFD)
+### 6.3 Fetch Execution
 
-**Invariant `[snix-ifd-store-population]`**: IFD is an internal
-concern of the snix evaluator and builder. The Eos scheduler does
-not orchestrate IFD builds — they occur inside the eval worker's
-`SnixStoreIO` wiring.
+**Invariant**: Fetch execution for non-atom dependencies is an internal
+concern of HTC's record/replay proxy (`[htc-fetch-set-lock-plugin]`,
+ADR-0005 §7; htc-sad §4.2). The Eos scheduler does not orchestrate fetches
+— they occur inside the executor's sandboxed environment, routed through the
+proxy the executor implementation wires in.
 
-**Scheduler awareness**: The scheduler knows which eval workers
-have IFD capability and for which systems (via tags such as `ifd:x86_64-linux` in
-the worker's registration). This allows the scheduler to route
-eval requests for atoms that may trigger IFD to workers whose IFD
-builders match the derivation's target system.
+**Scheduler awareness**: The scheduler is not aware of individual fetch-set
+entries; it dispatches an action, and the executor's own sandbox network
+policy (record/replay proxy or no network at all) governs what that action's
+build process can reach. The scheduler routes only the top-level action —
+the sub-execution this proxy performs is wholly worker-internal.
 
-**Operator topology**: IFD builders are configured by operators.
-Options include:
-
-- Using existing cluster builders (simple, may obscure workload)
-- Dedicated IFD-only builders (isolates IFD load)
-
-Regardless of topology, the invariant is: **IFD build outputs
-MUST populate the global cluster artifact store**.
-
-**Snix's async advantage**: Unlike the Nix C++ implementation
-which blocks entirely during IFD, snix handles IFD asynchronously
-— it can continue evaluating other derivations while waiting for
-an IFD build. This makes IFD less severe in the snix model.
+**Operator topology**: Whether an action's fetch-set entries are served in
+record mode (first build, explicitly impure, writing back to the lock) or
+replay mode (every subsequent build, pure `request → pinned bytes`) is
+determined by the lock state HTC's proxy reads, not by eos.
 
 ### 6.4 Build Sandboxing
 
-Build sandboxing is delegated to the snix builder process:
+Build sandboxing is delegated to the executor implementation:
 
-- **Linux**: OCI runtime (`crun`/`runc`) or Bubblewrap (`bwrap`)
-- **macOS**: No native sandbox (only `DummyBuildService` upstream)
-- **Remote**: Delegation to remote builder endpoints
+- **FHS executor (primary)**: OCI runtime (`crun`/`runc`) or Bubblewrap
+  (`bwrap`) on Linux, reusing `snix-build`'s sandbox (htc-sad §2).
+- **Passthrough-snix executor (legacy)**: Whatever sandbox `snix-build`
+  provides upstream, unchanged by this substrate.
+- **macOS**: No native sandbox (only `DummyBuildService` upstream).
+- **Remote**: Delegation to remote executor endpoints.
 
-The Eos daemon and build worker shims perform zero sandboxing.
-Network containment is enforced by the builder — builds MUST NOT
-access the network unless the derivation is a fixed-output
-derivation with a pre-computed hash.
+The Eos daemon and executor worker shims perform zero sandboxing.
+Network containment is enforced by the executor: a build's only network
+route, if any, is HTC's content-addressing record/replay proxy
+(§6.3, htc-sad §4.2). Outside of a fetch-set entry served through the
+proxy, builds MUST NOT access the network.
 
-### 6.5 Eval Cache
+### 6.5 Action-Id Cache
 
-The scheduler maintains an eval cache keyed by `EvalCacheKey`:
+The scheduler maintains an action cache keyed by `action_id`
+(htc-sad §6.5, ADR-0005 §2):
 
-```rust
-EvalCacheKey = (snapshot_digest: Digest, eval_args: Vec<(String, String)>)
+```text
+action_id = H( atom_czd_closure_root       // what to build (signed intent)
+             , toolchain_composition_root  // what to build WITH
+             , action_params )             // target system, variant flags
 ```
 
-Before dispatching an evaluation to a worker, the scheduler
-computes the `EvalCacheKey` from the request and checks the
-cache. If the key has been previously evaluated, the cached
-derivation is returned without worker dispatch.
+Before dispatching an action to a worker, the scheduler computes
+`action_id` from the request and checks the cache. If the key has
+been previously built, the cached `BuildRecord` (and its output tree
+in the shared CAS) is returned without worker dispatch. There is exactly
+one cache, at the action granularity.
 
-`eval_args` (from `[compose.args]`) is opaque to the daemon —
-it is included in the cache key because different args produce
-different derivations, but the daemon does not interpret the
-values.
+`action_params` (the successor of `[compose.args]`'s composer arguments) is
+opaque to the daemon — it is included in `action_id` because different
+params produce different output trees, but the daemon does not interpret
+the values.
 
-The eval cache is ephemeral in-flight state — it is not persisted
-across daemon restarts. The artifact store is the durable source
-of truth.
+The action cache is ephemeral in-flight state — it is not persisted
+across daemon restarts. The shared CAS and its appended `BuildRecord`s are
+the durable source of truth (§9.5).
 
 ### 6.6 Content Addressing and Verification
 
 All data in the system is content-addressed:
 
-- **Atoms**: `atom-id = digest(anchor, label)` — globally unique
-- **Plans**: Identified by plan digest (`Digest` trait, currently Blake3)
-- **Artifacts**: Content-addressed blobs in the snix store
-- **Store paths**: Computed from plan inputs and outputs
+- **Atoms**: identified by the abstract pair `(anchor, label)` — **not** a
+  digest of it (atom-sad §6.1, `[identity-content-addressed]`). The atom's
+  signed publish (`publish_czd`) is the content identity the lock carries
+  (atom-sad §6.5) and eos consumes.
+- **Actions**: identified by `action_id` (`Digest` trait, currently Blake3
+  over the H formula in §6.5) — the one drv/plan-hash-shaped identity in
+  the system.
+- **Artifacts**: content-addressed output trees in HTC's shared CAS
+  (htc-sad §2.4), each action producing exactly one `BuildRecord`
+  (htc-sad §2.3).
 
 The atom protocol verifies integrity on ingestion — the store
 does not accept unverified atoms regardless of their source.
-Content-addressed fetches during evaluation are safe by
-construction.
+Fetch-set entries executed by HTC's record/replay proxy are content-
+addressed the same way (htc-sad §4.2).
 
-Developer-signed atom metadata tags MAY include expected derivation and artifact hashes. When present, these enable accelerated cache-skipping: if the signed artifact hash exists in the store, both evaluation and build are skipped entirely. If the signed derivation hash exists, only evaluation is skipped. The trust level of these metadata tags is a client (Ion) decision — Eos uses them as optimization hints, not as authoritative guarantees.
+Developer-signed atom metadata tags MAY include an expected `action_id`
+and/or output-tree digest. When present, these enable accelerated
+cache-skipping: if the signed output-tree digest exists in the CAS, the
+build is skipped entirely; if the signed `action_id` has a cached
+`BuildRecord`, only dispatch is skipped. The trust level of these metadata
+tags is a client (Ion) decision — Eos uses them as optimization hints, not
+as authoritative guarantees.
 
 The cryptographic chain:
 
 ```text
-AtomId          → Version  → Revision     → Plan      → Artifact
-digest(a,l)      semver     commit sha     drv hash    store path
-(identity)       (human)    (content hash) (eval out)  (build out)
+Atom identity   → publish_czd    → action_id            → Output Tree + BuildRecord
+(anchor, label)   (signed content) H(atom_czd_closure,     (htc-sad §2.3, §2.4)
+                                    toolchain_composition,
+                                    action_params)
 ```
 
-Each step is independently verifiable and cacheable. If a plan
-exists → skip evaluation. If an artifact exists → skip build.
-This enables cache-skipping at every stage.
+Each step is independently verifiable and cacheable. If a `BuildRecord`
+exists for an `action_id` → skip dispatch. This enables cache-skipping at
+every stage, via the single action-level cache-or-build decision described
+in §4.1 and §6.5.
 
 ### 6.7 Trust and Attestation Model
 
 Trust authority flows from developers to operators to clients:
 
 1. **Developer attestation** (primary): Developers sign atom
-   metadata tags containing expected derivation and artifact
-   hashes. This is the authoritative source of truth for what
+   metadata tags containing expected `action_id` and/or output-tree
+   digests. This is the authoritative source of truth for what
    a correct build of a given atom version should produce.
 
-2. **Builder attestation** (supplementary): Eos builders sign
-   build outputs — `builderId`, `planHash`, `outputDigest`,
-   `signature`, and `timestamp`. This attests "I built plan X
+2. **Builder attestation** (supplementary): Eos executor workers sign
+   build outputs — `builderId`, `action_id`, `outputDigest`,
+   `signature`, and `timestamp`. This attests "I built action X
    and got artifact Y" but does not establish authority over
    what the correct output should be.
 
@@ -715,7 +720,7 @@ substituted from untrusted peers. Before accepting a
 substituted artifact, the system:
 
 1. Verifies the content digest matches the expected digest
-   from the verified plan
+   from the verified action
 2. Validates builder attestations against the configured
    trust policy
 
@@ -728,7 +733,7 @@ substituted artifact, the system:
   output identity for reproducibility auditing)
 
 **Invariant `[eos-trustless-substitution]`**: Content digest of
-fetched artifact MUST match expected digest from verified plan.
+fetched artifact MUST match expected digest from a verified action.
 Reject on mismatch regardless of trust policy.
 
 ### 6.8 Formal Model Backing
@@ -741,8 +746,11 @@ Key validated properties:
 - **Trait hierarchy soundness**: Forgetful functor from `AtomStore`
   to `AtomContent` preserves bisimulation
 - **BuildPlan IS protocol structure**: `CacheSession ≅ BuildSession`
-  — the three-variant cache-skipping model is isomorphic to the
-  session type protocol
+  — the cache-skipping model is isomorphic to the session type
+  protocol. The isomorphism itself survives the collapse from three
+  `BuildPlan` variants to two (§4.1); the model's own restatement over the
+  two-variant form is follow-up work in `publishing-stack-layers.md`, not
+  performed by this document.
 - **Deployment mode interchangeability**: Embedded and client-server
   modes are bisimilar (same `BuildEngine` observations)
 - **Ingest preserves identity**: `resolve(store, id) ⊇ resolve(source, id)`
@@ -755,7 +763,7 @@ Key validated properties:
 The following cross-cutting scheduler invariants apply globally:
 
 **Job deduplication `[eos-scheduler-deduplication]`**: At most one
-active job per `JobId`. `JobId = plan_digest(plan)`. Duplicate
+active job per `JobId`. `JobId = action_id` (§6.5, htc-sad §6.5). Duplicate
 submissions append the client to the existing job's subscriber
 set rather than creating a new job. This means multiple Ion
 instances submitting the same lock file get the same build.
@@ -772,7 +780,7 @@ scheduler revokes the lease, dissociates the job from the worker,
 and re-queues it to QUEUED state for reassignment.
 
 **State isolation `[eos-scheduler-state-isolation]`**: The scheduler
-MUST NOT depend on L3 (Ion) internal state. It is a pure consumer
+MUST NOT depend on L4 (Ion) internal state. It is a pure consumer
 of structured `eos-core` types. No manifest parsing, no lock file
 interpretation.
 
@@ -787,7 +795,7 @@ jobs on a worker MUST NOT exceed the worker's configured capacity.
 
 Worker registration follows Cap'n Proto's capability-passing model:
 the worker connects to the daemon, obtains a `WorkerRegistry`
-capability, and passes _itself_ as an `EvalWorker` or `BuildWorker`
+capability, and passes _itself_ as an `ExecutorWorker`
 capability along with its metadata. The scheduler holding the
 capability reference IS the registration. Capability drop (worker
 disconnect) IS deregistration.
@@ -798,7 +806,7 @@ Workers advertise capabilities at registration via a generic
 tag model — flat key-value properties that express scheduling
 predicates without hardcoding engine-specific concerns.
 
-**Tag model** (both worker kinds):
+**Tag model**:
 
 Workers register with `tags: Map<Text, Text>` — arbitrary
 key-value metadata. The scheduler matches job requirements
@@ -807,13 +815,17 @@ required tags must be a subset of the worker's tags.
 
 Common tag conventions (not hardcoded in the protocol):
 
-| Tag Key                | Example Value  | Worker Kind | Semantics                        |
-| :--------------------- | :------------- | :---------- | :------------------------------- |
-| `system`               | `x86_64-linux` | Build       | Nix system identifier            |
-| `feature:kvm`          | `true`         | Build       | `requiredSystemFeatures` match   |
-| `feature:big-parallel` | `true`         | Build       | `requiredSystemFeatures` match   |
-| `ifd:x86_64-linux`     | `true`         | Eval        | IFD builder capability           |
-| `tier`                 | `large`        | Both        | Hardware tier for weight scoring |
+| Tag Key                | Example Value  | Semantics                        |
+| :--------------------- | :------------- | :-------------------------------- |
+| `system`               | `x86_64-linux` | Target system triple             |
+| `feature:kvm`          | `true`         | `requiredSystemFeatures` match   |
+| `feature:big-parallel` | `true`         | `requiredSystemFeatures` match   |
+| `tier`                 | `large`        | Hardware tier for weight scoring |
+
+Whether and how a scheduler should route legacy-only actions (e.g. a
+`compose.use = "nix"` atom, htc-sad Appendix D) specifically toward
+passthrough-snix-capable workers is not resolved by this document or by
+the substrate SAD; it is tracked as a known gap (§10), not invented here.
 
 **Scheduling weight** (optional):
 
@@ -832,7 +844,7 @@ predicates):
 
 ### 7.3 Scheduling Algorithm
 
-**Build dispatch**:
+**Action dispatch**:
 
 1. Filter by tags: job's required tags ⊆ worker's tags
 2. Filter by capacity: worker has available job slots
@@ -840,13 +852,8 @@ predicates):
 4. Rank by Rendezvous hash (input affinity for cache hits)
 5. Tie-break by scheduling weight (sum of matched tag weights)
 
-**Eval dispatch**:
-
-1. Filter by capacity and health (same as build)
-2. Filter by tags: if job declares eval-specific tags (e.g.,
-   `ifd:x86_64-linux`), only workers with those tags qualify
-3. Rank by Rendezvous hash
-4. Tie-break by scheduling weight
+There is exactly one dispatch algorithm, serving the single executor
+worker pool (§2.2).
 
 ### 7.4 Health Monitoring
 
@@ -886,11 +893,11 @@ over ping (scheduler→worker) because:
 Two independent transport layers:
 
 | Surface                | Protocol        | Transport              | Auth                                                    |
-| :--------------------- | :-------------- | :--------------------- | :------------------------------------------------------ |
+| :--------------------- | :-------------- | :---------------------- | :--------------------------------------------------------- |
 | Client → Daemon        | Cap'n Proto RPC | UDS (dev) / TCP (prod) | Pluggable (NullAuth / CyphrAuth / MtlsAuth / TokenAuth) |
 | Daemon → Workers       | Cap'n Proto RPC | UDS or TCP             | Internal cluster trust                                  |
-| Workers → Snix Store   | gRPC            | TCP                    | Store daemon config                                     |
-| Workers → Snix Builder | gRPC            | TCP                    | Builder config                                          |
+| Workers → Shared CAS   | gRPC            | TCP                    | Store config                                            |
+| Workers → Executor Backend | gRPC       | TCP                    | Executor config                                         |
 
 ### 8.2 Authentication
 
@@ -936,15 +943,15 @@ interface BuildJob {
 }
 ```
 
-**Worker-facing** (to be added):
+**Worker-facing** (to be added). There is one worker kind — the pre-
+substrate `EvalWorker`/`BuildWorker` split collapses to a single
+`ExecutorWorker` interface, since every worker dispatches through the same
+executor trait (§2.2, §3.2) regardless of which implementation backs it:
 
 ```typescript
 interface WorkerRegistry {
-  registerEval(worker :EvalWorker,
-    caps :EvalWorkerCapabilities)
-    -> (registration :Registration);
-  registerBuild(worker :BuildWorker,
-    caps :BuildWorkerCapabilities)
+  registerWorker(worker :ExecutorWorker,
+    caps :WorkerCapabilities)
     -> (registration :Registration);
 }
 
@@ -957,14 +964,9 @@ interface Registration {
 }
 
 # Held by the scheduler. Methods invoked by scheduler.
-interface EvalWorker {
-  evaluate(request :EvalRequest) -> (result :EvalResult);
-}
-
-# Held by the scheduler. Methods invoked by scheduler.
-interface BuildWorker {
-  build(request :WorkerBuildRequest)
-    -> (result :WorkerBuildResult);
+interface ExecutorWorker {
+  build(request :BuildRequest)
+    -> (result :BuildResult);
   cancel(jobId :Data) -> ();
   attachProgress(jobId :Data,
     callback :ProgressStream) -> ();
@@ -973,7 +975,7 @@ interface BuildWorker {
 
 The bidirectional capability exchange:
 
-- Worker passes `EvalWorker`/`BuildWorker` → scheduler holds it
+- Worker passes `ExecutorWorker` → scheduler holds it
 - Scheduler returns `Registration` → worker holds it
 - Both sides hold references to each other
 - Connection break invalidates both (level 1 detection)
@@ -991,12 +993,17 @@ capability drop. The job is re-queued for dispatch to another
 worker. Build outputs in the global store from partial execution
 are orphaned (eligible for GC).
 
-### 9.2 Eval Worker IFD Failure
+### 9.2 Fetch Execution Failure
 
-If an eval worker encounters IFD but its configured IFD builder
-cannot handle the derivation's system, the eval fails with a
-recoverable error. The scheduler MAY retry on a different eval
-worker whose IFD tags include the required system.
+If an action's build process requires a fetch-set entry that HTC's
+record/replay proxy has no recorded map for (replay mode) or that the
+proxy cannot record (TLS interception friction, upstream fetch
+nondeterminism — htc-sad §8.3, §8.5), the executor fails the action with a
+recoverable error. The scheduler MAY retry on a different worker; if the
+failure is deterministic (e.g. a permanently unrecorded fetch), retrying
+elsewhere does not help and the job surfaces the fetch error to the client.
+The scheduler observes only this recoverable-or-not verdict — the fetch
+proxy's own record/replay mechanics are wholly worker-internal (§6.3).
 
 ### 9.3 Atom Fetching Failure
 
@@ -1018,7 +1025,7 @@ The daemon holds only ephemeral in-flight state. On restart:
 
 - All in-flight jobs are lost (clients must re-submit)
 - Workers must re-register (capabilities are connection-scoped)
-- The eval cache is cleared (cold start)
+- The action cache is cleared (cold start)
 - The artifact store is unaffected (durable, external)
 
 ---
@@ -1030,26 +1037,28 @@ in a future ADR or specification amendment.
 
 | #   | Gap                       | Notes                                                                                                                               |
 | :-- | :------------------------ | :---------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **Caching strategy**      | Where does the eval cache live? How is it distributed? How do developer-signed metadata tags interact with cache-skipping?          |
+| 1   | **Caching strategy**      | How is the action cache distributed across a cluster? How do developer-signed metadata tags interact with cache-skipping (§6.6)?    |
 | 2   | **Scheduling depth**      | Priority, preemption, work-stealing trade-offs, and fairness require rigorous analysis against scheduling literature. Proposed ADR. |
-| 3   | **Store topology**        | How do artifact stores relate in multi-site deployments? Store-to-store substitution and trust policy interaction.                  |
+| 3   | **Store topology**        | How do HTC's shared CAS instances relate in multi-site deployments? Store-to-store substitution and trust policy interaction.       |
 | 4   | **Observability**         | Metrics, tracing, structured logging for operator debugging.                                                                        |
 | 5   | **Graceful degradation**  | Behavior under partial availability (fewer workers, store unreachable).                                                             |
 | 6   | **Pluggable auth design** | Auth trait interface, initial implementations, transport vs application layer boundary.                                             |
+| 7   | **Legacy-executor routing** | No capability tag or routing rule yet determines how the scheduler should prefer a passthrough-snix-capable worker for a `compose.use = "nix"` legacy atom (§7.2); tied to the P2 `[compose]` successor-semantics debt (htc-sad Appendix D). |
+| 8   | **Toolchain-composition lock pinning** | `action_id` (§6.5) commits to `toolchain_composition_root`, but no lock entry type yet pins a toolchain composition (ADR-0005 Open Items; htc-sad §9 item 11) — a P2/P5 dependency of this document's own identity chain. |
 
 ---
 
 ## 11. Scope Boundaries
 
-Eos is a build evaluation and execution engine. The following
-concerns are explicitly outside its scope:
+Eos is a build scheduling engine. The following concerns are
+explicitly outside its scope:
 
 - **Cluster orchestration**: Worker deployment, scaling, and
   lifecycle management are operator concerns (systemd, Nomad,
   Kubernetes). Eos discovers workers via registration, not
   deployment.
 - **Package publishing**: Atom registration and publishing are
-  developer concerns (Ion/L3). Eos reads from registries,
+  developer concerns (Ion/L4). Eos reads from registries,
   never writes.
 - **Trust authority**: Developer-signed metadata is the source
   of truth. Eos signs build outputs as supplementary
@@ -1060,51 +1069,68 @@ concerns are explicitly outside its scope:
 - **Multi-tenancy**: The scaling model is federated sharing
   between clusters, not shared tenancy within a cluster.
   Intra-cluster fairness is not a current concern.
+- **The build function itself**: `build(atom closure, toolchain
+  composition, action params) → output tree` — sandboxing, FHS-view
+  materialization, interface analysis, and composition are HTC's (L2)
+  contract, not eos's. Eos dispatches through the executor trait; it does
+  not implement it.
 
 ---
 
 ## Appendix A: Terminology
 
 | Term         | Definition                                                           |
-| :----------- | :------------------------------------------------------------------- |
+| :----------- | :--------------------------------------------------------------------- |
 | **Anchor**   | Cryptographic commitment establishing atom-set identity              |
-| **Atom-id**  | Content-addressed digest: `digest(anchor, label)`                    |
+| **Atom-id**  | The abstract pair `(anchor, label)` — identity is the pair itself, not a digest of it (atom-sad §6.1, `[identity-content-addressed]`) |
 | **Atom-set** | Collection of atoms sharing a common anchor                          |
 | **Label**    | Human-readable name for an atom within an atom-set                   |
 | **Digest**   | Abstract content-addressed hash (algorithm not hardcoded)            |
-| **Plan**     | Engine-specific build recipe (`BuildEngine::Plan` associated type)   |
-| **Output**   | Engine-specific build result (`BuildEngine::Output` associated type) |
-| **Artifact** | Content-addressed blob in an artifact store                          |
+| **Action**   | One invocation of HTC's `build` function; identified by `action_id` (htc-sad §6.5) |
+| **Action-id**| `H(atom_czd_closure_root, toolchain_composition_root, action_params)` — the scheduler's cache key (ADR-0005 §2) |
+| **Plan**     | Engine-specific build recipe (`BuildEngine::Plan` associated type); the MVP realization is the atom action, identified by `action_id` (ADR-0005 Supersede-ADR-0001) |
+| **Output**   | Engine-specific build result (`BuildEngine::Output` associated type); the MVP realization is an output tree in HTC's CAS |
+| **Artifact** | Content-addressed blob/tree in HTC's shared CAS                       |
 | **Revision** | A specific commit in source history                                  |
+
+Composition, interface manifest, and `BuildRecord` are HTC-owned objects
+consumed, not redefined, here — see htc-sad Appendix A.
 
 ## Appendix B: Crate Map
 
 | Layer | Crate        | Kind            | Purpose                                                     |
-| :---- | :----------- | :-------------- | :---------------------------------------------------------- |
-| L2    | `eos-core`   | Contract        | Engine traits: `BuildEngine`, `ArtifactStore`, `AtomIndex`  |
-| L2    | `eos-daemon` | Implementation  | Scheduler, worker pools, RPC server (zero snix deps target) |
-| L2    | `eos-proto`  | Contract (wire) | Cap'n Proto schema and generated code                       |
-| L2    | `eos-snix`   | Implementation  | Snix backend: eval threading, store mapping, glue           |
-| L2    | `eos`        | Implementation  | Orchestration: wires engine + store                         |
-| L3    | `ion-eos`    | Bridge          | Client interface: Ion → Eos daemon via Cap'n Proto          |
+| :---- | :----------- | :-------------- | :------------------------------------------------------------ |
+| L3    | `eos-core`   | Contract        | Engine traits: `BuildEngine`, `ArtifactStore`, `AtomIndex` — binds HTC's executor trait via the `BuildEngine::Plan` associated type |
+| L3    | `eos-daemon` | Implementation  | Scheduler, executor worker pool, RPC server (zero executor-implementation deps target) |
+| L3    | `eos-proto`  | Contract (wire) | Cap'n Proto schema and generated code                       |
+| L3    | `eos-snix`   | Implementation  | Legacy executor binding: wraps HTC's optional passthrough-snix executor (htc-sad §6.8) for `compose.use = "nix"` atoms |
+| L3    | `eos`        | Implementation  | Orchestration: wires engine + store                         |
+| L4    | `ion-eos`    | Bridge          | Client interface: Ion → Eos daemon via Cap'n Proto          |
+
+The primary FHS executor is HTC-owned (L2, htc-sad Appendix B); this map
+does not restate its crate surface.
 
 ## Appendix C: Specification Cross-Reference
 
 | SAD Section          | Governing Specification                                                                                    |
-| :------------------- | :--------------------------------------------------------------------------------------------------------- |
+| :------------------- | :-------------------------------------------------------------------------------------------------------------- |
 | §2.1 Daemon          | [eos-scheduler.md](../specs/eos-scheduler.md)                                                              |
-| §2.2 Eval Workers    | [eos-snix-backend.md](../specs/eos-snix-backend.md)                                                        |
-| §2.3 Build Workers   | [eos-build-engine.md](../specs/eos-build-engine.md)                                                        |
+| §2.2 Executor Workers | [htc-sad.md](htc-sad.md) §3.5 (executor trait); [eos-build-engine.md](../specs/eos-build-engine.md) (re-scoped) |
+| §2.3–2.4 Executor Backends | [htc-sad.md](htc-sad.md) §2.4, §4, §6.8                                                              |
 | §4.1 Build Lifecycle | [ion-eos-contract.md](../specs/ion-eos-contract.md)                                                        |
-| §4.3 Atom Fetching   | [ion-eos-contract.md](../specs/ion-eos-contract.md) §Content Delivery                                      |
-| §6.1 Global Store    | [eos-snix-backend.md](../specs/eos-snix-backend.md) §Store Mapping                                         |
-| §6.2 Pure Eval       | [eos-sandboxing.md](../specs/eos-sandboxing.md)                                                            |
-| §6.4 Build Sandbox   | [eos-sandboxing.md](../specs/eos-sandboxing.md), [eos-snix-backend.md](../specs/eos-snix-backend.md)       |
+| §4.3 Atom Fetching   | [ion-eos-contract.md](../specs/ion-eos-contract.md) §Content Delivery; [ion-sad.md](ion-sad.md) §6.6 (Eos Handoff) |
+| §6.1 Shared Store    | [htc-sad.md](htc-sad.md) §2.4                                                                                |
+| §6.2 Executor Isolation | [htc-sad.md](htc-sad.md) §1.1, §6.8; [eos-sandboxing.md](../specs/eos-sandboxing.md) (re-scoped)          |
+| §6.3 Fetch Execution | [htc-sad.md](htc-sad.md) §4.2                                                                                |
+| §6.4 Build Sandbox   | [htc-sad.md](htc-sad.md) §4; [eos-sandboxing.md](../specs/eos-sandboxing.md) (re-scoped)                    |
+| §6.5 Action-Id Cache | [htc-sad.md](htc-sad.md) §6.5; [ADR-0005](../adr/0005-hermetic-transactional-composition.md) §2             |
+| §6.6 Content Addressing | [htc-sad.md](htc-sad.md) §6.5; [atom-sad.md](atom-sad.md) §6.5–§6.7                                       |
 | §6.7 Substitution    | [eos-network-protocol.md](../specs/eos-network-protocol.md) §Substitution                                  |
 | §6.8 Formal Model    | [publishing-stack-layers.md](../models/publishing-stack-layers.md)                                         |
 | §7 Worker Model      | [eos-scheduler.md](../specs/eos-scheduler.md), [eos-network-protocol.md](../specs/eos-network-protocol.md) |
 | §8 Transport         | [eos-network-protocol.md](../specs/eos-network-protocol.md)                                                |
-| Layer Discipline     | [layer-boundaries.md](../specs/layer-boundaries.md)                                                        |
+| Layer Discipline     | [layer-boundaries.md](../specs/layer-boundaries.md); [ADR-0005](../adr/0005-hermetic-transactional-composition.md) §9 (`[htc-layer-designation]`) |
+| DAG Intake           | [ion-sad.md](ion-sad.md) §6.6 (Eos Handoff, minimal pointer); [ADR-0005](../adr/0005-hermetic-transactional-composition.md) §6 |
 
 ## Appendix D: Known Layer Violations
 
@@ -1112,7 +1138,7 @@ The following are documented violations of the layer boundaries
 that require migration work:
 
 | #   | Violation                            | Location                    | Migration                          |
-| :-- | :----------------------------------- | :-------------------------- | :--------------------------------- |
+| :-- | :----------------------------------- | :--------------------------- | :----------------------------------- |
 | 1   | Lock types in `eos` instead of `ion` | `eos/eos/src/lock.rs`       | Migrate to `ion/ion-lock/`         |
 | 2   | `ion-eos` ad-hoc TOML parsing        | `ion-eos/src/lib.rs:78-92`  | Use lock types                     |
 | 3   | Eos receives raw lock content        | `run_orchestrated_build()`  | Accept structured `eos-core` types |
@@ -1124,6 +1150,9 @@ These are tracked in [layer-boundaries.md](../specs/layer-boundaries.md) §6.
 ## Appendix E: Stale Documentation
 
 | Document        | Issue                                                 | Corrected In                                  |
-| :-------------- | :---------------------------------------------------- | :-------------------------------------------- |
-| `eos/AGENTS.md` | References bwrap/Birdcage for eval sandboxing         | SAD §6.2 (pure eval eliminates OS sandboxing) |
-| `eos/AGENTS.md` | Lists "containerized sandbox subprocesses" for daemon | SAD §2.1 (daemon has zero snix deps)          |
+| :-------------- | :------------------------------------------------------ | :------------------------------------------------ |
+| `eos/AGENTS.md` | References bwrap/Birdcage for **evaluation** sandboxing — the evaluation stage this note describes no longer exists at all (ADR-0005 §6, `[htc-atom-dag-executor-trait]`), not merely "pure eval eliminates OS sandboxing" | SAD §6.2 (executor isolation is wholly HTC's contract; eos has no evaluation stage to sandbox) |
+| `eos/AGENTS.md` | Lists "containerized sandbox subprocesses" wrapping **evaluation logic** for the daemon | SAD §2.1 (daemon has zero executor-implementation deps; there is no evaluation logic to wrap) |
+
+Both corrections in `eos/AGENTS.md` are out of this document's file scope
+(Non-Goal); fixing them is follow-up work.
