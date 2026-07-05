@@ -236,6 +236,16 @@ NOT contain entries for dependencies that are no longer declared in
 the manifest (directly or transitively). Stale entries MUST be purged.
 `VERIFIED: unverified`
 
+> **Note (2026-07-05, P4 flag):** A literal reading purges
+> tool-recorded fetch entries (the substrate's record-mode fetch proxy
+> writes discovered `type = "fetch"` entries back into the lock, HTC/L2,
+> `htc-sad.md` §4.2) that carry no manifest declaration. This needs
+> either owner-derived liveness (the entry lives while its owning atom
+> lives) or a tool-authored-entry class exempt from this purge; tracked
+> as design campaign **P4**, per
+> [ADR-0005](../adr/0005-hermetic-transactional-composition.md) §Open
+> Items. No semantic change to this invariant in this pass.
+
 **[no-constraint-violation]**: The lock file MUST NOT contain a
 version that violates a declared constraint. If the manifest says
 `foo = "^1.0"` and the lock contains `foo` at version `2.0.0`, the
@@ -271,6 +281,13 @@ in the manifest MUST be purged from the lock.
 
 - **Type**: Safety
   `VERIFIED: unverified`
+
+> **Note (2026-07-05, P4 flag):** Same tension as `[no-stale-lock-
+> entry]` above: this would purge tool-recorded fetch entries the
+> substrate's record-mode fetch proxy writes back with no manifest
+> declaration. Design campaign **P4** resolves both together, per
+> [ADR-0005](../adr/0005-hermetic-transactional-composition.md) §Open
+> Items. No semantic change to this invariant in this pass.
 
 **[git-tag-version-inference]**: For direct dependencies referencing
 git repositories (via plugins), implementations MAY infer version

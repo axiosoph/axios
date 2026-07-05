@@ -107,7 +107,16 @@ TYPE  Compose     = With(AtomComposer)        -- another atom provides import lo
 
 TYPE  TrivialAtom = Nix(PathBuf)              -- nix expression at given path
               | Static(Config)                -- static configuration atom
+```
 
+> **Note (2026-07-05, no semantic change):** `TrivialAtom::Nix` remains
+> valid today only as the optional passthrough-snix legacy executor's
+> on-ramp; the substrate's successor compose semantics are designed in
+> [ADR-0005](../adr/0005-hermetic-transactional-composition.md) /
+> [htc-sad.md](../architecture/htc-sad.md) — spec re-derivation against
+> that model is **P2** debt, not performed here.
+
+```
 TYPE  Manifest = {
         package:     Atom,                    -- REQUIRED
         compose:     Compose,                 -- REQUIRED
@@ -207,6 +216,16 @@ within ion (or the plugin itself). Eos MUST NOT be required to
 understand the plugin's resolution logic. Eos consumes only the lock
 output: type tag, name, URL, and hash.
 `VERIFIED: unverified`
+
+> **Note (2026-07-05, P4 flag):** The substrate's record-mode fetch
+> proxy (HTC/L2, `htc-sad.md` §4.2) performs fetch *discovery* during
+> an explicitly-impure first build and writes results back into the
+> lock — in tension with this invariant's "resolution executes within
+> ion" framing. A carve-out or reframing (the proxy as ion-driven
+> tooling around an impure build, not an independent resolver) is
+> needed; tracked as design campaign **P4**, per
+> [ADR-0005](../adr/0005-hermetic-transactional-composition.md) §Open
+> Items. No semantic change to this invariant in this pass.
 
 ### Transitions
 
@@ -320,6 +339,14 @@ openssl.url = "https://www.openssl.org/source/openssl-3.1.0.tar.gz"
 nixpkgs.git = "https://github.com/NixOS/nixpkgs"
 nixpkgs.version = ">=24.05"
 ```
+
+> **Note (2026-07-05, no semantic change):** The `compose.with.atom-nix`
+> and `deps.direct.nix` shapes above remain valid today only as the
+> optional passthrough-snix legacy executor's on-ramp; the substrate's
+> successor compose/fetch-plugin semantics are designed in
+> [ADR-0005](../adr/0005-hermetic-transactional-composition.md) /
+> [htc-sad.md](../architecture/htc-sad.md) — spec re-derivation against
+> that model is **P2** debt, not performed here.
 
 ## Verification
 

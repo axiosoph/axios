@@ -16,8 +16,8 @@
 
 ## Domain
 
-**Problem Domain:** Ion (L3 — the atom-native frontend) communicates
-with eos (L2 — the network-first build daemon) to evaluate and build
+**Problem Domain:** Ion (L4 — the atom-native frontend) communicates
+with eos (L3 — the network-first build daemon) to evaluate and build
 resolved atoms. Ion connects to a running eos daemon via Cap'n Proto
 RPC, submits a structured build request derived from the lock file,
 monitors build progress through capability-based streaming, and
@@ -87,16 +87,30 @@ instances submitting build requests derived from identical lock
 content receive capabilities referencing the same underlying job
 (deduplication via `JobId`).
 
-**Backend**: A specific build system that eos delegates to. The
-initial and primary backend is Snix (see
-[eos-snix-backend.md](eos-snix-backend.md)), with the architecture
-designed for extensibility to future backends. Under the gRPC-first
-architecture ([ADR-0002](../adr/0002-decoupling-snix-backend.md)),
-the backend is implemented as a composition of eval workers (using
-`snix-eval`/`snix-glue`) and build workers (forwarding to snix
-builders via gRPC). The daemon itself has no backend dependencies.
-Each backend has its own evaluation semantics, store format, and
-dependency model.
+**Backend / Executor**: The concrete implementation eos's scheduler
+dispatches a `build` invocation to, through the executor trait
+([ADR-0005](../adr/0005-hermetic-transactional-composition.md) §6,
+[htc-sad.md](../architecture/htc-sad.md) §3.5). The primary executor
+is the FHS executor (L2, HTC) — no evaluator, no eval workers; it
+executes upstream's own, unmodified build process inside a
+materialized FHS view. An **optional legacy** passthrough-snix
+executor (linking `snix-eval`/`snix-glue` in-process) MAY exist to
+interoperate with pre-existing Nix-expression content; it is not the
+default and is not required for the MVP path
+([eos-snix-backend.md](eos-snix-backend.md) covers the legacy path).
+The daemon itself has no backend dependencies beyond the executor
+trait. Each executor has its own build mechanism, but all share one
+contract: `build(atom closure, toolchain composition, action
+params) → output tree`.
+
+> **Terminology note (no semantic change):** Elsewhere in this
+> document, "the backend evaluator" denotes whichever executor is
+> active performing its own internal evaluation step — today, that
+> is only the optional passthrough-snix legacy executor, which does
+> run `snix-eval`/`snix-glue`. The primary FHS executor has no
+> evaluation step at all; "evaluator" language attached to composer/
+> compose-args handling below is executor-conditional, not a claim
+> that every executor evaluates.
 
 **Capability Negotiation**: On connection, ion queries the daemon's
 capabilities via `EosDaemon.getCapabilities()` to discover supported
@@ -119,10 +133,12 @@ storage systems that MUST NOT be conflated:
   (primary). This is NOT an eos concern — eos reads from it but does
   not define it.
 
-- **Artifact Store** (L2, eos): Content-addressed storage for build
-  outputs (derivations, compiled artifacts). Accessed via the
-  `ArtifactStore` trait in `eos-core`. Backend: snix store (primary).
-  This IS an eos concern.
+- **Artifact Store** (L3, eos): Content-addressed storage for build
+  outputs. Accessed via the `ArtifactStore` trait in `eos-core`.
+  Backend: the CAS (L2, HTC) — see
+  [layer-boundaries.md §4.4](layer-boundaries.md). This IS an eos
+  concern architecturally (the trait); the storage backend itself
+  lives one layer down.
 
 These stores hold fundamentally different data types (source code vs
 build artifacts), use different addressing schemes, and are managed by
@@ -140,7 +156,7 @@ execution. Eos MUST NOT require access to ion’s manifest, plugin
 state, resolution history, or any external state beyond what the lock
 file encodes. The lock file is the information-complete contract.
 
-The lock file format is owned by ion (L3) — see
+The lock file format is owned by ion (L4) — see
 [layer-boundaries.md §4.2](layer-boundaries.md). Ion parses the lock
 file and translates its contents into structured `eos-core` types
 before RPC submission. Eos receives the translated types, not the raw
@@ -259,8 +275,12 @@ the `BuildJob` capability. Ion retrieves the current state via
 `BuildJob.getJobId()` for identification and attaches a
 `ProgressStream` callback via `BuildJob.attachProgress()` for
 real-time updates. Upon build completion, the `BuildStatus.completed`
-variant MUST include per-output `ArtifactInfo`: digest (content hash),
-store path, and size. Upon build failure, the `BuildStatus.failed`
+variant MUST include per-output `ArtifactInfo`: output tree digest
+(content hash — the primary, executor-agnostic artifact identity)
+and size. A store path is an executor-specific detail, not primary
+identity; it MAY be included when the active executor produces one
+(e.g. the passthrough-snix legacy executor), but ion MUST NOT depend
+on its presence. Upon build failure, the `BuildStatus.failed`
 variant MUST include structured error diagnostics (see
 `[error-reporting-format]`).
 `VERIFIED: unverified`
@@ -485,13 +505,19 @@ composer.
   composer atom (if `[compose].use` references one) is available.
 - **POST**: Eos constructs an `EvalRequest` containing:
   - The evaluation entrypoint from `[compose].entry`
-  - Pre-resolved inputs (all fetched, verified deps mapped to store
-    paths)
+  - Pre-resolved inputs, as an atom closure (all fetched, verified
+    deps) — not store paths; a store path is an executor-specific
+    detail, see `[result-reporting]`
   - The `ComposerConfig` derived from `[compose]`
   - The `eval_args` from `[compose.args]` (passed verbatim)
-    The backend evaluator produces a `Plan` (e.g., Nix derivation).
-    Eos then executes the plan via `BuildEngine.build()`, producing
-    outputs reported via the `BuildJob` capability.
+    Eos dispatches `build(atom closure, toolchain composition,
+    action params)` through the executor trait
+    ([ADR-0005](../adr/0005-hermetic-transactional-composition.md)
+    §6, [htc-sad.md](../architecture/htc-sad.md) §3.5), producing an
+    output tree — the primary FHS executor has
+    no evaluator or `Plan` concept; the optional passthrough-snix
+    legacy executor still produces a Nix derivation internally.
+    Outputs are reported via the `BuildJob` capability.
     `VERIFIED: unverified`
 
 **[query-discovery]**: Ion obtains the discovery capability and
@@ -555,13 +581,18 @@ atoms were resolvable without ion's assistance. This is the common
 case for CI/CD and warm-cache deployments.
 
 **Atom access during evaluation:** Once the top-level atoms are
-in the atom store, the eval worker executes the top-level atom
+in the atom store, the executor operates on the top-level atom
 from the atom store (e.g., via a git URI pointing to the store).
-The atom's _dependencies_ (locked in the atom's own lock file)
-are fetched by snix from the lock-specified mirrors using normal
-Nix fetching semantics. Eos is NOT concerned with resolving
-transitive dependencies — this is internal to snix's evaluation
-model.
+The atom's _transitive dependencies_ (locked in the atom's own
+lock file) are resolved and verified by eos itself, from its
+configured `AtomSource` composite, per `[fetch-verify-build]` —
+the identical priority chain (local store → registry mirrors →
+ion peer fallback) used for top-level atoms. Nothing is fetched by
+backend-internal "Nix fetching semantics"; no executor performs its
+own atom resolution. (This corrects a prior internal contradiction
+against `[eos-verification-obligation]`/`[no-unverified-execution]`:
+a transitive atom dependency fetched outside `AtomSource` would
+never pass `AtomStore` ingestion verification.)
 
 All ingestion invariants apply to peer-assisted transfers. The
 atom protocol verifies integrity on ingestion — eos's store does
@@ -771,13 +802,14 @@ Upon successful completion, eos reports results via the
 `BuildStatus.completed` variant, which MUST include:
 
 | Field          | Type         | Description                                |
-| :------------- | :----------- | :----------------------------------------- |
-| `outputPaths`  | `List(Text)` | Store paths of produced artifacts          |
-| `outputDigest` | `Data`       | BLAKE3 digest of the combined build output |
+| :------------- | :----------- | :------------------------------------------ |
+| `outputDigest` | `Data`       | BLAKE3 digest of the combined build output — the primary, executor-agnostic artifact identity |
+| `outputPaths`  | `List(Text)` | Executor-specific store paths, when the active executor produces them (e.g. the passthrough-snix legacy executor); OPTIONAL, not primary identity |
 
 Ion receives these via the attached `ProgressStream` callback. The
-`ArtifactInfo` for each output — digest, store path, and size — is
-available through the daemon's store query interface (see
+`ArtifactInfo` for each output — output tree digest and size, plus an
+optional executor-specific store path — is available through the
+daemon's store query interface (see
 [eos-build-engine.md §ArtifactStore](eos-build-engine.md)).
 
 ### Build Errors

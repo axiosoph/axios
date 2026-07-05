@@ -1,5 +1,6 @@
 <!--
-  Ion Software Architecture Document (SAD) — L3.
+  Ion Software Architecture Document (SAD) — L4 (renumbered 2026-07-05 per
+  ADR-0005 §9, [htc-layer-designation]; was L3 before HTC/L2 was inserted).
 
   Authoritative source of truth for the Ion layer. The specs under docs/specs/
   (ion-manifest.md, ion-resolution.md, lock-file-schema.md, ion-eos-contract.md)
@@ -19,10 +20,10 @@
 
 ### 1.1 System Purpose
 
-Ion is the **dependency resolution and lock** layer (L3) of the Axios stack. It
+Ion is the **dependency resolution and lock** layer (L4) of the Axios stack. It
 takes a project's **manifest** (what it depends on, as ranges), resolves a
 **single coherent version per atom** across the transitive graph, and writes a
-**lock** that is the sole, reproducible input handed to eos (L2) for building.
+**lock** that is the sole, reproducible input handed to eos (L3) for building.
 
 Ion owns:
 
@@ -35,7 +36,7 @@ Ion owns:
 - **The eos handoff** — turning the lock into a build request eos can execute.
 
 Ion does **not** own: atom identity, publishing, or storage (L1, atom); build
-execution or scheduling (L2, eos). It **consumes** atom's identity contract and
+execution or scheduling (L3, eos). It **consumes** atom's identity contract and
 **produces** eos's build input. By layer discipline, ion depends on atom and eos
 contracts; nothing depends on ion.
 
@@ -44,7 +45,7 @@ contracts; nothing depends on ion.
 ```mermaid
 graph TB
   DEV["Developer (ion-cli)"]
-  subgraph L3["Ion (L3)"]
+  subgraph L4["Ion (L4)"]
     MAN["Manifest"]
     RES["Resolver"]
     LOCK["Lock"]
@@ -53,7 +54,7 @@ graph TB
   subgraph L1["Atom (L1)"]
     SRC["AtomSource / AtomContent\n(discovery + self-describing objects)"]
   end
-  subgraph L2["Eos (L2)"]
+  subgraph L3["Eos (L3)"]
     EOS["Scheduler"]
   end
 
@@ -73,7 +74,7 @@ graph TB
 | **Manifest**   | direct-dep declaration, ranges, plugin-extended types        | atom identity, version _semantics_ (L1 `VersionScheme`)              |
 | **Resolution** | the constraint solver, single-version selection, diagnostics | atom discovery/fetch primitives (L1 `AtomSource`)                    |
 | **Lock**       | the lock schema, ion graph extensions, cross-references      | the atom-core entry fields (defined by L1 `[lock-entry-sufficient]`) |
-| **Handoff**    | lock→build-request serialization, the eos contract           | build execution, scheduling, the artifact store (L2)                 |
+| **Handoff**    | lock→build-request serialization, the eos contract           | build execution, scheduling, the artifact store (L3)                 |
 
 ### 1.4 Layer Discipline
 
@@ -93,7 +94,7 @@ graph TB
   LOCK["ion-lock\n(schema + (de)serialize)"]
   EOS["ion-eos\n(build-request bridge)"]
   ATOM["atom (L1)\nAtomSource/AtomContent"]
-  SCHED["eos daemon (L2)"]
+  SCHED["eos daemon (L3)"]
 
   CLI --> MAN
   MAN --> RES
@@ -118,19 +119,19 @@ version per `(anchor, label)`. Output is the resolved graph.
 ### 2.3 Lock
 
 `ion-lock` serializes the resolved graph deterministically. It is the **only**
-artifact that crosses the L3→L2 boundary, and the sole input eos needs to fetch,
+artifact that crosses the L4→L3 boundary, and the sole input eos needs to fetch,
 verify, and build the closure.
 
 ### 2.4 Eos Bridge
 
 `ion-eos` translates the lock into an eos `BuildRequest` (atom pointers +
-`compose.args` → `eval_args`) and connects to the eos daemon over the wire (§6.9).
+`compose.args` → `action_params`) and connects to the eos daemon over the wire (§6.9).
 It is the only ion container that speaks the eos protocol.
 
-### 2.5 Atom (L1) / Eos Daemon (L2)
+### 2.5 Atom (L1) / Eos Daemon (L3)
 
 External to ion: the L1 `AtomSource`/`AtomContent` that resolution discovers and
-fetches from, and the L2 daemon that executes the build request. Ion depends on
+fetches from, and the L3 daemon that executes the build request. Ion depends on
 both contracts; neither depends on ion.
 
 ## 3. Component View
@@ -144,7 +145,7 @@ graph TB
   RES --> LK["ion-lock"]
   EOSB --> LK
   RES -. discover/fetch .-> ATOM["atom (L1)\nAtomSource/AtomContent"]
-  EOSB -. Cap'n Proto .-> DAEMON["eos daemon (L2)"]
+  EOSB -. Cap'n Proto .-> DAEMON["eos daemon (L3)"]
 ```
 
 | Crate          | Role                                                                             |
@@ -152,7 +153,7 @@ graph TB
 | `ion-manifest` | Parse the manifest; dispatch direct-dep types (atom + plugin-registered)         |
 | `ion-resolve`  | The constraint solver; transitive resolution to one version per `(anchor,label)` |
 | `ion-lock`     | The lock schema and (de)serialization; the `DepMap` keyed by `AtomId`            |
-| `ion-eos`      | Translate the lock into an eos `BuildRequest`; the L2 handoff                    |
+| `ion-eos`      | Translate the lock into an eos `BuildRequest`; the L3 handoff                    |
 | `ion-cli`      | Developer entry point (resolve, lock, build orchestration)                       |
 
 ## 4. Core Lifecycles
@@ -182,7 +183,7 @@ sequenceDiagram
 sequenceDiagram
   participant CLI as ion-cli
   participant Eos as ion-eos
-  participant Sched as eos daemon (L2)
+  participant Sched as eos daemon (L3)
   CLI->>Eos: build(lock)
   Eos->>Eos: serialize lock → BuildRequest (atom pointers: set,label,version,publish_czd)
   Eos->>Sched: BuildRequest
@@ -289,20 +290,31 @@ leaks (§6.1).
 
 ### 6.8 Composition
 
-The `[compose]` section determines how the root atom is **evaluated** — which atom
-(or trivial nix expression, or static config) provides the import/composition logic
-that wires the dependency graph into an evaluable expression. It is the third pillar
-of the lock alongside `[sets]` and `[[deps]]`, and it flows the full length of the
+The `[compose]` section determines how the root atom's build is **composed** —
+which atom (or trivial nix expression, or static config) provides the
+import/composition logic that wires the dependency graph into the
+inputs eos's executor builds from. It is the third pillar of the lock
+alongside `[sets]` and `[[deps]]`, and it flows the full length of the
 pipeline:
 
 - **`compose.use`** selects the composer. For the atom variant it names the composer
   atom by its **`publish_czd`** (§6.4) — the composer is itself a locked dependency,
-  pinned like any other. `at` + `entry` give its version and evaluation entrypoint.
+  pinned like any other. `at` + `entry` give its version and composition entrypoint.
   The non-atom variants are `"nix"` (trivial import) and `"static"` (config).
-- **`compose.args`** are evaluation arguments (e.g. `system`) that flow
-  manifest → lock → `ion-eos` → the eos `BuildRequest`'s `eval_args`
+- **`compose.args`** are action parameters (e.g. `system`) that flow
+  manifest → lock → `ion-eos` → the eos `BuildRequest`'s `action_params`
   (`ion-eos-contract.md §Compose.args Flow`). Ion captures them in the lock; eos's
-  evaluator consumes them. This is the L3 side of eos-sad §6.5's `eval_args`.
+  executor consumes them. This is the L4 side of eos-sad §6.5's `action_params`.
+
+> **Note (2026-07-05):** This section's terminology now matches the
+> substrate model — no evaluation stage; `action_params`, not
+> `eval_args` (eos-sad.md §6.5). What remains **P2** debt, not
+> performed here, is re-deriving the compose *object model* itself:
+> `compose.use`/`compose.as.nix` still describe a Nix-shaped
+> evaluable-expression composer rather than the substrate's signed
+> composition object. See
+> [ADR-0005](../adr/0005-hermetic-transactional-composition.md) and
+> [htc-sad.md](htc-sad.md).
 
 ### 6.9 Transport and Security
 
@@ -369,7 +381,7 @@ direct      = true              # ion extension — declared vs transitive
 Out of scope for ion:
 
 - **Atom identity, publishing, storage** (L1) — ion consumes the contract.
-- **Build execution, scheduling, the artifact store** (L2).
+- **Build execution, scheduling, the artifact store** (L3).
 - **Version semantics** — `VersionScheme` is an L1 trait; concrete ecosystem
   adapters live above ion.
 - **The atom-core lock fields** — defined by L1; ion inherits, never redefines.
@@ -391,11 +403,11 @@ Out of scope for ion:
 
 | Layer | Crate          | Kind           | Purpose                                                     |
 | :---- | :------------- | :------------- | :---------------------------------------------------------- |
-| L3    | `ion-manifest` | Implementation | Parse manifest; direct-dep type dispatch (atom + plugins)   |
-| L3    | `ion-resolve`  | Implementation | Constraint solver; transitive single-version resolution     |
-| L3    | `ion-lock`     | Implementation | Lock schema + (de)serialization; `DepMap` keyed by `AtomId` |
-| L3    | `ion-eos`      | Bridge         | Lock → eos `BuildRequest` handoff                           |
-| L3    | `ion-cli`      | Implementation | Developer entry point                                       |
+| L4    | `ion-manifest` | Implementation | Parse manifest; direct-dep type dispatch (atom + plugins)   |
+| L4    | `ion-resolve`  | Implementation | Constraint solver; transitive single-version resolution     |
+| L4    | `ion-lock`     | Implementation | Lock schema + (de)serialization; `DepMap` keyed by `AtomId` |
+| L4    | `ion-eos`      | Bridge         | Lock → eos `BuildRequest` handoff                           |
+| L4    | `ion-cli`      | Implementation | Developer entry point                                       |
 
 ## Appendix C: Specification Cross-Reference
 
@@ -422,6 +434,7 @@ field is named `set`, consistently across the lock and resolution specs.
 
 ## Appendix E: Stale Documentation
 
-| Document                                            | Issue                                 | Corrected In                                           |
-| :-------------------------------------------------- | :------------------------------------ | :----------------------------------------------------- |
-| `ion-resolution.md` §Lock File Schema (informative) | shows `cad`/`AtomDigest` lock example | SAD §7 (atom-core + ion extensions; `(set,label)` key) |
+None outstanding. (The row previously here — claiming `ion-resolution.md`
+§Lock File Schema still showed a `cad`/`AtomDigest` example — was itself
+stale: `ion-resolution.md`'s informative schema already shows `publish_czd`,
+no `cad`, consistent with SAD §7. Removed 2026-07-05.)
