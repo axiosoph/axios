@@ -1154,10 +1154,24 @@ These are tracked in [layer-boundaries.md](../specs/layer-boundaries.md) §6.
 
 ## Appendix E: Stale Documentation
 
-| Document        | Issue                                                 | Corrected In                                  |
-| :-------------- | :------------------------------------------------------ | :------------------------------------------------ |
-| `eos/AGENTS.md` | References bwrap/Birdcage for **evaluation** sandboxing — the evaluation stage this note describes no longer exists at all (ADR-0005 §6, `[htc-atom-dag-executor-trait]`), not merely "pure eval eliminates OS sandboxing" | SAD §6.2 (executor isolation is wholly HTC's contract; eos has no evaluation stage to sandbox) |
-| `eos/AGENTS.md` | Lists "containerized sandbox subprocesses" wrapping **evaluation logic** for the daemon | SAD §2.1 (daemon has zero executor-implementation deps; there is no evaluation logic to wrap) |
-
-Both corrections in `eos/AGENTS.md` are out of this document's file scope
-(Non-Goal); fixing them is follow-up work.
+- **RESOLVED** — `eos/AGENTS.md` previously referenced bwrap/Birdcage for
+  **evaluation** sandboxing — the evaluation stage that note described no
+  longer exists at all (ADR-0005 §6, `[htc-atom-dag-executor-trait]`), not
+  merely "pure eval eliminates OS sandboxing." `eos/AGENTS.md` now reads
+  (Key Design Principles for L3, item 1): "The build function executes an
+  unmodified upstream build process inside a materialized FHS view (a
+  composition mounted via composefs)" — bwrap/Birdcage no longer appear
+  anywhere in the file (they remain, correctly, in `eos/README.md`'s
+  description of the executor's actual sandbox mechanism). This matches
+  SAD §6.2: executor isolation is wholly HTC's contract; eos has no
+  evaluation stage to sandbox. The contradiction is closed; no further
+  action outstanding.
+- **RESOLVED** — `eos/AGENTS.md` previously listed "containerized sandbox
+  subprocesses" wrapping **evaluation logic** for the daemon.
+  `eos/AGENTS.md`'s `eos-daemon` subcrate entry now reads: "Hosts the
+  `eosd` RPC daemon binary: the scheduler, its executor worker pool, and
+  the RPC server that dispatches build actions to executor workers inside
+  containerized sandboxes" — action-based, HTC-aligned language. This
+  matches SAD §2.1: the daemon has zero executor-implementation deps;
+  there is no evaluation logic to wrap. The contradiction is closed; no
+  further action outstanding.
