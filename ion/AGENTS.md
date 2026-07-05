@@ -20,7 +20,7 @@ Dependencies flow: `ion` (L3) -> `eos` (L2) -> `atom` (L1).
 ## Key Design Principles for L3
 
 1. **Manifest Rigidity:** Manifest parsing rules must strictly respect schema bounds. Never implement unverified schema deviations without explicit instruction.
-2. **Client-Server Boundaries:** Delegate all actual evaluation and build executions to the `eos` daemon via `ion-eos` RPC. Do not perform evaluations or sandboxing directly inside the L3 CLI.
+2. **Client-Server Boundaries:** Delegate all actual build executions to the `eos` daemon via `ion-eos` RPC. Do not perform builds or sandboxing directly inside the L3 CLI.
 
 ## Specifications
 
