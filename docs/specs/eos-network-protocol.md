@@ -661,13 +661,13 @@ build.
 
 **[cancel-build]**: Cancel a running build.
 
-- **PRE**: A client holds a `BuildJob` capability for a job in `Queued`,
-  `Evaluating`, or `Building` state.
+- **PRE**: A client holds a `BuildJob` capability for a job in `Queued` or
+  `Building` state.
 - **POST**: The client invokes `cancel()` on the `BuildJob`. The daemon
   transitions the job to `Cancelled` state and notifies all attached
-  `ProgressStream` callbacks. In-flight evaluation or build work is
-  terminated. The `BuildJob` capability remains valid but subsequent
-  operations return the `Cancelled` status.
+  `ProgressStream` callbacks. In-flight build work is terminated. The
+  `BuildJob` capability remains valid but subsequent operations return the
+  `Cancelled` status.
   `VERIFIED: unverified`
 
 **[request-substitute]**: Query remote caches for pre-built artifacts.
@@ -928,10 +928,7 @@ The daemon accommodates this via a dedicated threading model:
     │  ┌───────────────────────┐     │
     │  │  Scheduler (Send)     │     │
     │  │  ┌─────────────────┐  │     │
-    │  │  │ Eval Worker Pool│  │     │
-    │  │  │ (Cap'n Proto)   │  │     │
-    │  │  ├─────────────────┤  │     │
-    │  │  │ Build Worker    │  │     │
+    │  │  │ Executor Worker │  │     │
     │  │  │ Pool (Cap'n     │  │     │
     │  │  │ Proto)          │  │     │
     │  │  └─────────────────┘  │     │
