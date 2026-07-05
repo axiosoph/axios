@@ -1,4 +1,4 @@
-# Ion Workspace (L3 - Frontend) Reference Guide
+# Ion Workspace (L4 - Frontend) Reference Guide
 
 The `ion` workspace contains the developer-facing command line interfaces, manifest schemas, and dependency resolvers for the Axios publishing stack.
 
@@ -7,20 +7,21 @@ The `ion` workspace contains the developer-facing command line interfaces, manif
 
 ## Architecture & Subcrates
 
-Dependencies flow: `ion` (L3) -> `eos` (L2) -> `atom` (L1).
-`ion` is the top layer. It interacts with the local system, parses manifests, solves dependencies, and invokes the L2 `eosd` daemon via RPC.
+Dependencies flow: `ion` (L4) -> `eos` (L3) -> `atom` (L1).
+`ion` is the top layer. It interacts with the local system, parses manifests, solves dependencies, and invokes the L3 `eosd` daemon via RPC.
 
 ### Subcrates
 
 - **[`ion-manifest`](ion-manifest)**: Parses user-defined manifests (`ion.toml`).
-- **[`ion-resolve`](ion-resolve)**: Solves dependency graphs and computes lockfiles.
-- **[`ion-eos`](ion-eos)**: Client interface to communicate with the L2 `eosd` daemon over Unix Domain Sockets using Cap'n Proto.
+- **[`ion-resolve`](ion-resolve)**: Solves dependency graphs.
+- **[`ion-lock`](ion-lock)**: Lock schema and (de)serialization; the `DepMap` keyed by `AtomId`.
+- **[`ion-eos`](ion-eos)**: Client interface to communicate with the L3 `eosd` daemon over Unix Domain Sockets using Cap'n Proto.
 - **[`ion-cli`](ion-cli)**: Entry point CLI binary (`ion` executable).
 
-## Key Design Principles for L3
+## Key Design Principles for L4
 
 1. **Manifest Rigidity:** Manifest parsing rules must strictly respect schema bounds. Never implement unverified schema deviations without explicit instruction.
-2. **Client-Server Boundaries:** Delegate all actual evaluation and build executions to the `eos` daemon via `ion-eos` RPC. Do not perform evaluations or sandboxing directly inside the L3 CLI.
+2. **Client-Server Boundaries:** Delegate all actual build executions to the `eos` daemon via `ion-eos` RPC. Do not perform builds or sandboxing directly inside the L4 CLI.
 
 ## Specifications
 
@@ -32,7 +33,7 @@ This workspace is strictly spec-driven. Before starting work, you must inspect t
 
 ## Local Commands
 
-All commands for L3 should be run from the `ion/` workspace directory:
+All commands for L4 should be run from the `ion/` workspace directory:
 
 - **Build/Check:** `cargo check` / `cargo build`
 - **Test:** `cargo test`
