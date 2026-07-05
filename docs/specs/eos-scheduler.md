@@ -165,7 +165,7 @@ Workers register dynamically via Cap'n Proto handshake. The scheduler does NOT m
 **[eos-scheduler-concurrency-limits]**: The number of concurrently RUNNING jobs assigned to any worker node MUST NOT exceed that worker's declared capacity. The dispatch guard is: `current_load(w) + predicted_load(ep) ≤ capacity(w)`.
 `VERIFIED: TLA+ CapacitySafety — docs/models/tla/MultiRequestModel.tla:257-258`
 
-**[eos-scheduler-state-isolation]**: The scheduler's internal scheduling queue and state transitions MUST NOT depend on the internal evaluation states of L3 (Ion). The scheduler is a pure consumer of L2-native plan digests and DAG structures; lock file parsing MUST NOT occur in the daemon.
+**[eos-scheduler-state-isolation]**: The scheduler's internal scheduling queue and state transitions MUST NOT depend on the internal evaluation states of L4 (Ion). The scheduler is a pure consumer of L3-native plan digests and DAG structures; lock file parsing MUST NOT occur in the daemon.
 `VERIFIED: unverified`
 
 **[eos-scheduler-dag-intake]**: The scheduler MUST receive the atom DAG at build submission as a structured `eos-core` type handed off from Ion (the Eos Handoff, ion-sad §6.6) — nodes are atoms identified by `publish_czd`, edges are the dependency relationships already resolved into the lock. Dependency resolution, lock parsing, and DAG construction MUST occur entirely upstream of the submission boundary, never inside the daemon. This is the concrete, submission-time form `[eos-scheduler-state-isolation]` takes for atom-DAG intake specifically.
