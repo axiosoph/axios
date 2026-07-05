@@ -200,7 +200,7 @@ The `ArtifactStore` trait surface (`has`, `get_info`, `import`, `list`) is inten
 
 #### `AtomIndex` — Discovery Seam
 
-Every eos instance that processes atoms accumulates knowledge about their existence, versions, dependencies, and build status. The `AtomIndex` trait captures this accumulated knowledge as a queryable surface. It is an **eos-layer trait** (L2) that builds atop `AtomSource` reads — it is NOT a reimplementation of atom-core's `AtomStore`.
+Every eos instance that processes atoms accumulates knowledge about their existence, versions, dependencies, and build status. The `AtomIndex` trait captures this accumulated knowledge as a queryable surface. It is an **eos-layer trait** (L3) that builds atop `AtomSource` reads — it is NOT a reimplementation of atom-core's `AtomStore`.
 
 This trait uses native async fn in traits (edition 2024, toolchain 1.90.0) with `trait_variant::make` for Send-bound variants — no `#[async_trait]` or `Box<dyn Future>` overhead.
 

@@ -768,11 +768,15 @@ Validation failures MUST abort the build with structured errors per
 
 ## Compose.args Flow
 
-> **Note:** this section's field names (`eval_args`/`evalArgs`) are
-> the current wire schema, pending N15's rename to `action_params`
-> for the network-protocol layer — see
-> [ion-sad.md](../architecture/ion-sad.md) §6.8, which already uses
-> the renamed term.
+> **Note:** this section's field names (`eval_args`/`evalArgs`) name
+> the legacy wire schema, superseded at two distinct levels: the
+> conceptual build-arg name used across the doc corpus (ion-sad.md
+> §6.8, eos-sad.md §6.5, and others) is `action_params`; the
+> corresponding wire field in the Cap'n Proto schema is
+> `ActionParams.variantFlags` (`docs/specs/eos-network-protocol.md:255`).
+> These are the same concept named at two levels, not a rename in
+> progress — see [ion-sad.md](../architecture/ion-sad.md) §6.8, which
+> already uses the successor (conceptual) term.
 
 The `[compose.args]` table flows from the manifest through the lock
 file and protocol to the backend evaluator:
