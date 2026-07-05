@@ -16,7 +16,7 @@
 
 ## Domain
 
-**Problem Domain:** The Eos Build Scheduler coordinates the distribution of build and evaluation jobs across worker nodes — both local threads and remote Eos daemon instances. It is embedded within the Eos daemon process (see [eos-network-protocol.md](eos-network-protocol.md) §Daemon Architecture), not deployed as a standalone service. The scheduler receives job submissions over the daemon's Cap'n Proto RPC surface, deduplicates identical execution plans to prevent redundant work, coarsens uncached plan subgraphs into **entry points** (EPs), and assigns EPs to workers by minimizing predicted locality-adjusted completion time (see `[eos-scheduler-placement]`). It manages worker health through lease-based ownership and periodic heartbeats and enforces a bounded dispatch window (P9′) that permits prediction-gated scheduling holds.
+**Problem Domain:** The Eos Build Scheduler coordinates the distribution of build jobs across worker nodes — both local threads and remote Eos daemon instances. It is embedded within the Eos daemon process (see [eos-network-protocol.md](eos-network-protocol.md) §Daemon Architecture), not deployed as a standalone service. The scheduler receives job submissions — each carrying an atom DAG already handed off from Ion at submission (`[eos-scheduler-dag-intake]`) — over the daemon's Cap'n Proto RPC surface, deduplicates identical execution plans to prevent redundant work, and further coarsens the DAG into **entry points** (EPs). Coarsening is no longer the primary win it was over an uncoarsened plan graph — the DAG now arrives pre-coarsened at package (atom) scale — but it still serves multi-request unification across concurrent submissions (Thm 5) and optional finer-than-atom refinement. The scheduler assigns EPs to workers by minimizing predicted locality-adjusted completion time (see `[eos-scheduler-placement]`). It manages worker health through lease-based ownership and periodic heartbeats and enforces a bounded dispatch window (P9′) that permits prediction-gated scheduling holds.
 
 To maximize network and storage efficiency, the scheduler operates under a lazy-fetching model: worker nodes do not download source code snapshots or build inputs until an EP is explicitly dispatched to them.
 
@@ -65,8 +65,6 @@ TYPE Job = {
     lease: Maybe<Lease>
 }
 
-TYPE WorkerKind = EVAL | BUILD
-
 TYPE ResourceVector = Map<ResourceDimension, u64>       -- Abstract capacity/load vector
                                                         -- Dimensions: CPU, memory, disk, optionally egress_bandwidth
                                                         -- Worker reports physical or virtual capacity;
@@ -74,19 +72,17 @@ TYPE ResourceVector = Map<ResourceDimension, u64>       -- Abstract capacity/loa
 
 TYPE WorkerStatus = {
     id: WorkerId,
-    kind: WorkerKind,
     capacity: ResourceVector,                           -- Reported capacity (physical or virtual)
     active_jobs: Set<JobId>,
-    cached_paths: Set<StorePath>,                       -- Build workers only; eval workers: empty
+    cached_paths: Set<Digest>,                          -- Output-tree digests this worker's shared CAS
+                                                        -- view holds (abstract `Digest`, eos-sad App. A)
     last_heartbeat: Timestamp,
     healthy: Bool
 }
 
 TYPE SchedulerState = {
-    eval_workers: Map<WorkerId, WorkerStatus>,
-    build_workers: Map<WorkerId, WorkerStatus>,
-    eval_queue: Map<JobId, Job>,
-    build_queue: Map<JobId, Job>,
+    workers: Map<WorkerId, WorkerStatus>,               -- registered executor workers (eos-sad §2.1)
+    queue: Map<JobId, Job>,                             -- pending/in-flight build jobs
     lease_duration: Duration,
     heartbeat_deadline: Duration,
     scheduling_table: SchedulingTable,                  -- EP-level dispatch model (see below)
@@ -116,9 +112,14 @@ TYPE SchedulingTable = {
     eps: Map<EpId, EpRecord>                            -- Active EP records; |S| entries (typically tens)
 }
 
--- Profile store: persistent per-plan historical observations with in-memory hot cache.
--- Profiles are keyed by plan_name (human-readable, version-stable from StorePath).
+-- Profile store: persistent per-atom historical observations with in-memory hot cache.
+-- Profiles are keyed by AtomId — the atom's `(set, label)` pair itself (atom-sad §6.1,
+-- `[identity-content-addressed]`), not a hash of it. Since every DAG node is now an atom
+-- (eos-sad §1.1), this key IS the version-stable identity that was previously only a
+-- secondary cross-version index (ADR-0004 §1); there is no separate plan-name tier.
 -- See ADR-0004 §1 for the full schema and prediction resolution order.
+
+TYPE AtomId = { set: Text, label: Text }                -- atom-sad §6.1 identity pair itself, not a hash
 
 TYPE ProfileRecord = {
     build_duration:  ExponentialMovingAverage,
@@ -126,27 +127,22 @@ TYPE ProfileRecord = {
     build_cpu_cores: ExponentialMovingAverage,
     output_size:     ExponentialMovingAverage,
     confidence:      f64,                               -- 1 - EMA(|η|) from prediction error history
-    atom-id:         Maybe<atom-id>,                     -- secondary index for cross-version aggregation
     atom_metadata:   Maybe<SchedulingMetadata>          -- developer-provided scheduling hints
 }
 
 TYPE ProfileStore = {
-    persistent: KVStore<PlanName, ProfileRecord>,       -- Persistent database; grows unboundedly with
-                                                        -- distinct plan names seen over daemon lifetime
-    hot_cache:  Map<PlanName, ProfileRecord>            -- In-memory cache for plans in active G∪;
+    persistent: KVStore<AtomId, ProfileRecord>,         -- Persistent database; grows unboundedly with
+                                                        -- distinct atoms seen over daemon lifetime
+    hot_cache:  Map<AtomId, ProfileRecord>              -- In-memory cache for atoms in active G∪;
                                                         -- loaded on RequestArrival, evicted on terminal GC
 }
 ```
 
-### Worker Pools
+### Worker Pool
 
-The scheduler manages two functionally distinct worker pools, each accessed exclusively over Cap'n Proto RPC:
+The scheduler manages a single worker pool — **executor workers** — accessed exclusively over Cap'n Proto RPC via the `ExecutorWorker` interface (see [eos-network-protocol.md](eos-network-protocol.md)). Each worker wraps exactly one implementation of HTC's executor trait (`build(atom_closure, toolchain_composition, action_params) → output tree`, htc-sad §3.5): the primary FHS executor (materializes a composed FHS view, runs upstream's own build under sandboxing), or, for legacy interop only, the optional passthrough-snix executor (wraps `snix-eval`/`snix-glue`/`snix-build`'s `DoBuild()` in-process to run pre-existing Nix expressions unmodified, htc-sad §6.8). Which implementation a given worker runs is opaque to the scheduler beyond the capability tags it advertises at registration (eos-sad §7.2).
 
-- **Eval workers** (`WorkerKind = EVAL`): Separate processes (local or remote) that run `snix-eval` + `snix-glue` in-process on a dedicated OS thread. They connect to snix store daemons via gRPC for store access. Communication between the scheduler and eval workers occurs over Cap'n Proto via the `EvalWorker` interface (see [eos-network-protocol.md](eos-network-protocol.md)). Eval workers are memory-bound with low I/O variance.
-
-- **Build workers** (`WorkerKind = BUILD`): Separate processes (local or remote) that wrap snix's gRPC `BuildService.DoBuild()` in a Cap'n Proto shim adding cancellation, progress streaming, and lease management. Communication between the scheduler and build workers occurs over Cap'n Proto via the `BuildWorker` interface. Build workers are CPU/disk-bound with high I/O variance.
-
-Both pools use the same lease-based health monitoring, heartbeat liveness, and PEFT-based EP dispatch. Local Rendezvous Hash (LRH) affinity enters worker selection exclusively through the per-worker predicted duration `d(ep, w)` — it is not an independent scoring term (see `[eos-scheduler-placement]`). Neither pool supports mid-execution EP reassignment; re-dispatch of a failed EP occurs exclusively through the transient-failure path (`[fail-job]`, P10). Eval workers have low duration variance, making prediction-gated dispatch holds less valuable; the bounded dispatch window Δ is expected to be smaller for eval EPs than for build EPs.
+The pool uses lease-based health monitoring, heartbeat liveness, and PEFT-based EP dispatch uniformly across every worker. Local Rendezvous Hash (LRH) affinity enters worker selection exclusively through the per-worker predicted duration `d(ep, w)` — it is not an independent scoring term (see `[eos-scheduler-placement]`). The pool does not support mid-execution EP reassignment; re-dispatch of a failed EP occurs exclusively through the transient-failure path (`[fail-job]`, P10).
 
 Workers register dynamically via Cap'n Proto handshake. The scheduler does NOT manage worker lifecycles — starting, stopping, and scaling workers is delegated to an external orchestrator (process-compose, systemd, k8s).
 
@@ -163,13 +159,16 @@ Workers register dynamically via Cap'n Proto handshake. The scheduler does NOT m
 **[eos-scheduler-placement]**: The scheduler MUST assign each ready EP to the worker minimizing predicted locality-adjusted completion time. The placement contract is: for each feasible worker `w` and ready EP `ep`, the scheduler selects the worker minimizing `EFT(ep, w) + OCT(ep, w)`, where `EFT` is the estimated finish time and `OCT` is the per-worker Optimistic Cost Table value from `EpRecord.oct`. Local Rendezvous Hash (LRH) affinity and multi-resource fit enter placement exclusively through the per-worker predicted duration `d(ep, w)` — they are not independent scoring terms and do not bypass the EFT+OCT objective. For the duration model (Option C) and PEFT worker-selection algorithm, see [docs/adr/0004-learning-augmented-scheduling.md](../adr/0004-learning-augmented-scheduling.md) §2b and §3. This invariant supersedes the prior standard HRW invariant, which did not account for downstream DAG cost (OCT) or predicted duration.
 `VERIFIED: unverified`
 
-**[eos-scheduler-profile-store]**: The scheduler MUST maintain a persistent profile store of historical build observations keyed by `plan_name`. The persistent store is the authoritative source of truth; the in-memory hot cache holds profiles for plans in the current active G∪ and is written through to the persistent store on every EP completion. When no historical observation exists for a `plan_name`, the scheduler MUST fall back to developer-provided scheduling metadata (`atom_metadata`), then to system defaults. See [docs/adr/0004-learning-augmented-scheduling.md](../adr/0004-learning-augmented-scheduling.md) §1 for the full prediction resolution order.
+**[eos-scheduler-profile-store]**: The scheduler MUST maintain a persistent profile store of historical build observations keyed by `AtomId` (the atom's `(set, label)` pair, not a hash of it). The persistent store is the authoritative source of truth; the in-memory hot cache holds profiles for atoms in the current active G∪ and is written through to the persistent store on every EP completion. When no historical observation exists for an atom, the scheduler MUST fall back to developer-provided scheduling metadata (`atom_metadata`), then to system defaults. See [docs/adr/0004-learning-augmented-scheduling.md](../adr/0004-learning-augmented-scheduling.md) §1 for the full prediction resolution order.
 `VERIFIED: unverified`
 
 **[eos-scheduler-concurrency-limits]**: The number of concurrently RUNNING jobs assigned to any worker node MUST NOT exceed that worker's declared capacity. The dispatch guard is: `current_load(w) + predicted_load(ep) ≤ capacity(w)`.
 `VERIFIED: TLA+ CapacitySafety — docs/models/tla/MultiRequestModel.tla:257-258`
 
-**[eos-scheduler-state-isolation]**: The scheduler's internal scheduling queue and state transitions MUST NOT depend on the internal evaluation states of L3 (Ion). The scheduler is a pure consumer of L2-native plan digests and DAG structures; lock file parsing MUST NOT occur in the daemon.
+**[eos-scheduler-state-isolation]**: The scheduler's internal scheduling queue and state transitions MUST NOT depend on the internal evaluation states of L4 (Ion). The scheduler is a pure consumer of L3-native plan digests and DAG structures; lock file parsing MUST NOT occur in the daemon.
+`VERIFIED: unverified`
+
+**[eos-scheduler-dag-intake]**: The scheduler MUST receive the atom DAG at build submission as a structured `eos-core` type handed off from Ion (the Eos Handoff, ion-sad §6.6) — nodes are atoms identified by `publish_czd`, edges are the dependency relationships already resolved into the lock. Dependency resolution, lock parsing, and DAG construction MUST occur entirely upstream of the submission boundary, never inside the daemon. This is the concrete, submission-time form `[eos-scheduler-state-isolation]` takes for atom-DAG intake specifically.
 `VERIFIED: unverified`
 
 **[eos-scheduler-lease-expiry]**: Every job in the `RUNNING` state MUST be covered by a valid `Lease`. If a lease expires without renewal (i.e., `now > lease.expires_at`), the scheduler MUST revoke the lease, dissociate the job from its assigned worker, and transition the job back to the `QUEUED` state for reassignment. This prevents zombie jobs from crashed or unresponsive workers.
@@ -200,7 +199,7 @@ The bounded window is what makes PEFT's OCT look-ahead actionable; strict work c
 
 **[submit-job]**: Add a new build task to the queue.
 
-- **PRE**: A client submits a build request containing a `BuildEngine::Plan`. The request arrives via `EosDaemon.submitBuild()` over the Cap'n Proto RPC surface (see [eos-network-protocol.md](eos-network-protocol.md) §submit-build).
+- **PRE**: A client submits a build request containing a `BuildEngine::Plan` — carrying the atom DAG handed off at submission (`[eos-scheduler-dag-intake]`). The request arrives via `EosDaemon.submitBuild()` over the Cap'n Proto RPC surface (see [eos-network-protocol.md](eos-network-protocol.md) §submit-build).
 - **POST**: If a job with `JobId == plan_digest(plan)` already exists, the client is added to `subscribers`. Otherwise, a new `Job` is created with state `QUEUED`, its `id` is set to `plan_digest(plan)`, and it is added to the scheduler's queue.
   `VERIFIED: unverified`
 
@@ -278,6 +277,7 @@ The bounded window is what makes PEFT's OCT look-ahead actionable; strict work c
 | `eos-scheduler-profile-store`          | Integration test                 | UNVERIFIED                | Profile write-through, hot-cache eviction, fallback resolution order                            |
 | `eos-scheduler-concurrency-limits`     | TLA+ model check                 | ✅ VERIFIED               | `CapacitySafety` (P4) — `docs/models/tla/MultiRequestModel.tla:257-258`                         |
 | `eos-scheduler-state-isolation`        | Dependency audit                 | UNVERIFIED                | Check module boundaries; confirm no lock parsing in daemon                                      |
+| `eos-scheduler-dag-intake`              | Integration test                 | UNVERIFIED                | Submit a build request, confirm DAG nodes/edges arrive pre-resolved; no lock parsing in daemon  |
 | `eos-scheduler-lease-expiry`           | Timeout injection                | UNVERIFIED                | Withhold lease renewal, verify job returns to QUEUED                                            |
 | `eos-scheduler-heartbeat-liveness`     | Failure injection                | UNVERIFIED                | Suppress heartbeats from worker, verify health demotion and lease revocation                    |
 | `eos-scheduler-frozen-stability`       | TLA+ model check                 | ✅ VERIFIED               | `FrozenStability` (P8) — `docs/models/tla/MultiRequestModel.tla:284-290`                        |
@@ -314,7 +314,7 @@ The bounded window is what makes PEFT's OCT look-ahead actionable; strict work c
    Local Rendezvous Hash (LRH) affinity supersedes the prior single-criterion Rendezvous-hash placement approach. LRH restricts candidate selection to a cache-local window on a virtual ring, achieving near-optimal load balance with ~6.8× higher throughput by exploiting CPU cache locality. In this scheduler, LRH affinity enters worker selection exclusively through the per-worker predicted duration `d(ep, w)` (Option C folding, ADR-0004 §3) — it is not an independent score competing with EFT+OCT. Adding or removing workers redistributes only the affected `1/N` fraction of assignments. See ADR-0004 §4 for the LRH algorithm.
 
 5. **Cap'n Proto as Universal Internal Protocol and the Zero-Snix Implication:**
-   All scheduler-to-worker communication uses Cap'n Proto RPC. The scheduler speaks Cap'n Proto to both `EvalWorker` and `BuildWorker` interfaces — it carries zero snix dependencies and no gRPC client code. This zero-snix/zero-gRPC invariant (`[eos-scheduler-state-isolation]`) is preserved even for artifact existence checks: the scheduler queries artifact existence exclusively through the Cap'n Proto `SubstitutionService.query` interface ([eos-network-protocol.md](eos-network-protocol.md):282-300). The `SubstitutionService` shim absorbs per-digest fan-out to the snix `PathInfoService` internally — the scheduler sees one logical existence query per batch and holds no knowledge of the underlying store wire protocol. Worker shims translate between Cap'n Proto (Eos protocol) and gRPC (snix protocol) where needed. Scheduler state is internal to the daemon and is not directly exposed over the protocol.
+   All scheduler-to-worker communication uses Cap'n Proto RPC. The scheduler speaks Cap'n Proto to the single `ExecutorWorker` interface (§Worker Pool) — it carries zero snix dependencies and no gRPC client code. This zero-snix/zero-gRPC invariant (`[eos-scheduler-state-isolation]`) is preserved even for artifact existence checks: the scheduler queries artifact existence exclusively through the Cap'n Proto `SubstitutionService.query` interface ([eos-network-protocol.md](eos-network-protocol.md):282-300). The `SubstitutionService` shim absorbs per-digest fan-out to the underlying store internally — the scheduler sees one logical existence query per batch and holds no knowledge of the underlying store wire protocol. Worker shims translate between Cap'n Proto (Eos protocol) and gRPC (the shared CAS, and — for the optional legacy passthrough-snix executor only — snix's own protocol) where needed. Scheduler state is internal to the daemon and is not directly exposed over the protocol.
 
 6. **Daemon-Embedded Scheduler, Service-External Workers:**
-   The scheduler runs as a component within the Eos daemon's event loop, sharing the daemon's `NodeId` for identity. However, all workers (eval and build) are external processes accessed exclusively via Cap'n Proto RPC — even when co-located on the same machine. The scheduler does not access the snix store directly; store operations are performed by workers. This uniform access pattern means there is no architectural distinction between "local" and "remote" workers — co-located workers simply have lower network latency.
+   The scheduler runs as a component within the Eos daemon's event loop, sharing the daemon's `NodeId` for identity. However, all workers are external processes accessed exclusively via Cap'n Proto RPC — even when co-located on the same machine. The scheduler does not access the shared CAS directly; store operations are performed by workers. This uniform access pattern means there is no architectural distinction between "local" and "remote" workers — co-located workers simply have lower network latency.
