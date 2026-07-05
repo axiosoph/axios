@@ -1,15 +1,24 @@
-# Eos: Axios Build Engine, Store, and Runtime (L2)
+# Eos: Axios Build-Scheduling Engine (L3)
 
-Eos is the intermediate execution and orchestration layer (L2) of the Axios decentralized publishing stack. It serves as the bridge reconciling the developer-facing declarations in **Ion** (L3) with the content-addressed cryptographic primitives in **Atom** (L1).
+Eos is the atom-DAG scheduling layer (L3) of the Axios decentralized
+publishing stack. It serves as the bridge reconciling the developer-facing
+declarations in **Ion** (L4) with the build-execution contract owned by
+**HTC** (L2) and the content-addressed cryptographic primitives in **Atom**
+(L1).
 
 ```
           ┌────────────────────────────────────────┐
-          │               L3  ion                  │ (CLI, manifests, resolution)
+          │               L4  ion                  │ (CLI, manifests, resolution)
           └──────────────────┬─────────────────────┘
                              │ Cap'n Proto RPC (UDS)
                              ▼
           ┌────────────────────────────────────────┐
-          │               L2  eos                  │ (Build engine, stores, runtime)
+          │               L3  eos                  │ (Atom-DAG scheduling)
+          └──────────────────┬─────────────────────┘
+                             │ dispatch: build(...) via HTC's executor trait
+                             ▼
+          ┌────────────────────────────────────────┐
+          │               L2  HTC                  │ (Build execution, CAS, composition)
           └──────────────────┬─────────────────────┘
                              │ Local path dependency
                              ▼
@@ -18,27 +27,58 @@ Eos is the intermediate execution and orchestration layer (L2) of the Axios dece
           └────────────────────────────────────────┘
 ```
 
+> [!NOTE]
+> **Re-scope in progress.** This crate's implementation predates the
+> atom-DAG re-scope decided in [ADR-0005](../docs/adr/0005-hermetic-transactional-composition.md).
+> Ground truth for build execution and composition now lives in
+> [htc-sad.md](../docs/architecture/htc-sad.md) (L2/HTC) and
+> [eos-sad.md](../docs/architecture/eos-sad.md) (L3/Eos) — spec-first
+> doctrine treats this codebase as throwaway relative to those documents,
+> and it is being realigned incrementally. Where this README and those SADs
+> disagree, the SADs win.
+
 ---
 
 ## Role in the Axios Stack
 
-Eos coordinates the conversion of static source snapshots into verified, built artifacts. It mediates the boundary between:
+Eos coordinates the conversion of a resolved atom-DAG into verified, built
+artifacts. It mediates the boundary between:
 
-- **L3 (Ion)**: The planning layer. Ion parses manifests, computes dependency graphs, writes lock files, and transmits evaluation and execution requests to the Eos daemon.
-- **L1 (Atom)**: The identity layer. Atom verifies sovereign signatures, maps human-readable labels to content-addressed digests, and manages Git-based snapshot retrieval.
+- **L4 (Ion)**: The planning layer. Ion parses manifests, resolves a
+  dependency graph, and hands eos a pre-coarsened atom-DAG read directly off
+  the lock — nodes are atoms identified by `publish_czd`, edges are the
+  dependency relationships already resolved into the lock.
+- **L1 (Atom)**: The identity layer. Atom verifies sovereign signatures, maps
+  human-readable labels to the `(anchor, label)` identity pair, and manages
+  Git-based snapshot retrieval.
 
-Eos ingests resolved target requests, fetches the necessary source snapshots from Atom, and evaluates or executes them inside strictly containerized sandboxes to materialize hermetic outputs.
+Eos does not build; building is HTC's (L2) contract. Eos dispatches build
+actions to executor workers implementing HTC's executor trait — the primary
+executor materializes the declared atom closure and toolchain composition
+into a sandboxed FHS view and runs upstream's own, unmodified build process
+against it; the optional legacy passthrough-snix executor exists only for
+interoperating with pre-existing Nix-expression content. Workers write their
+output tree and its derived interface manifest into HTC's shared,
+content-addressed artifact store and return a `BuildRecord` to the daemon.
 
-To maximize throughput and minimize redundant work, Eos deploys a two-tier caching architecture:
+To avoid redundant work, Eos maintains a single **action-id cache**:
 
-1. **Evaluation Caching**: Maps the input source snapshot's cryptographic digest combined with the evaluation arguments (`EvalCacheKey`) to a pre-computed build recipe (**Plan**). If the inputs match, the evaluation phase is bypassed.
-2. **Build Caching**: Maps the content-addressed digest of the computed **Plan** to registered, read-only outputs (**Artifacts**) in the store. If the plan already corresponds to an existing artifact, build execution is skipped.
+```text
+action_id = H( atom_czd_closure_root        // what to build (signed intent)
+             , toolchain_composition_root   // what to build WITH
+             , action_params )              // target system, variant flags
+```
+
+Before dispatching an action to a worker, the scheduler computes `action_id`
+and checks the cache. If the key has already been built, the cached
+`BuildRecord` — and its output tree in the shared store — is returned
+without ever contacting a worker.
 
 ---
 
 ## Crate Architecture and Layer Discipline
 
-The Eos workspace is decomposed into six crates. Dependencies flow strictly downward, preserving strict layer discipline:
+The Eos workspace is decomposed into five crates. Dependencies flow strictly downward, preserving strict layer discipline:
 
 ```
            ┌──────────────┐
@@ -48,16 +88,12 @@ The Eos workspace is decomposed into six crates. Dependencies flow strictly down
         ┌─────────┴─────────┐
         ▼                   ▼
   ┌──────────┐        ┌──────────┐
-  │eos-daemon│        │ eos-snix │ (Concrete Nix backend)
+  │eos-daemon│        │ eos-snix │ (Legacy Nix-compat executor)
   └─────┬────┘        └─────┬────┘
         │   ┌───────────────┘
         ▼   ▼
   ┌──────────┐
   │eos-proto │ (Cap'n Proto schemas & codegen)
-  └─────┬────┘
-        ▼
-  ┌──────────┐
-  │eos-store │ (Store ingestion pipelines)
   └─────┬────┘
         ▼
   ┌──────────┐
@@ -67,54 +103,78 @@ The Eos workspace is decomposed into six crates. Dependencies flow strictly down
 
 ### 1. `eos-core`
 
-The foundational layer defining the L2 interface boundaries. It contains no backend-specific code. It declares:
+The foundational layer defining the L3 interface boundaries. It contains no backend-specific code. It declares:
 
 - Primary domain traits: `BuildEngine`, `ArtifactStore`, and `AtomIndex`.
 - Fundamental types: `Digest` (abstract trait implemented concretely by `Blake3Digest`), `StorePath` (strongly typed path references), `AtomRef`, `JobStatus`, and `ProgressEvent`.
 - Async ergonomics: Employs native `async fn` in traits (Rust edition 2024) via `trait_variant::make` to generate thread-safe (`Send`) signatures without heap allocation overhead.
 
-### 2. `eos-store`
-
-Implements the storage interface, handling the binary ingestion pipeline, content verification, and file layout mechanics.
-
-### 3. `eos-proto`
+### 2. `eos-proto`
 
 Defines the wire format protocol schemas (`eos.capnp`) and handles the compilation of Cap'n Proto schemas into Rust bindings at build time.
 
-### 4. `eos-snix`
+### 3. `eos-snix` (optional legacy executor)
 
-The concrete implementation of `BuildEngine` and `ArtifactStore` backed by the Snix suite. It integrates `nix-compat`, `snix-castore`, `snix-store`, `snix-eval`, and `snix-build`. It encapsulates the thread-locality constraint of the Nix language evaluator (`snix-eval` types contain `Rc<Closure>` and are `!Send`) by executing evaluations inside isolated worker threads.
+Wraps HTC's optional passthrough-snix executor for interoperating with pre-existing Nix-expression content — not the default backend (see [htc-sad.md](../docs/architecture/htc-sad.md) §6.8). It integrates `nix-compat`, `snix-castore`, `snix-store`, `snix-eval`, and `snix-build`, encapsulating the thread-locality constraint of the Nix language evaluator (`snix-eval` types contain `Rc<Closure>` and are `!Send`) by running its evaluation in isolated worker threads. Full detail: [eos-snix-backend.md](../docs/specs/eos-snix-backend.md).
 
-### 5. `eos-daemon`
+### 4. `eos-daemon`
 
-Hosts the `eosd` server executable. It parses CLI configurations, binds to the Unix Domain Socket (UDS) transport, runs the `!Send` Cap'n Proto RPC server loop inside a `LocalSet` thread, and dispatches long-running build tasks to a thread pool managed by the `Scheduler`. It also exposes the hidden `--eval-worker` subcommand used for evaluation isolation.
+Hosts the `eosd` server executable: the scheduler, its executor worker pool, and the Cap'n Proto RPC server that dispatches build actions read off the atom-DAG to executor workers, and maintains the action-id cache (`action_id → BuildRecord`, §Role in the Axios Stack above) so dispatch is skipped for previously-built actions.
 
-### 6. `eos`
+### 5. `eos`
 
 The top-level coordination crate. It ties the scheduler, index, and backend services together, materializing the complete orchestrator for the local node.
 
 ---
 
-## Evaluation Sandboxing
+## Build Sandboxing
 
-Evaluating expressions (such as Nix/Snix code) is a dangerous operation because evaluation can trigger arbitrary local file reads (`builtins.readFile`) or shell execution. To guarantee hermeticity and prevent leakage of host system impurities, Eos isolates the evaluator using platform-native containerization.
+Building is delegated entirely to executor workers implementing HTC's
+executor trait: `build(atom_closure, toolchain_composition, action_params)
+→ output tree` (htc-sad.md §3.5). The daemon and its scheduler perform
+**zero** sandboxing and hold no opinion on how a given executor isolates
+its work — isolation is wholly the executor implementation's concern
+(htc-sad.md §6.2).
 
-### The Subprocess Worker Model
+### The Primary FHS Executor
 
-Sandboxed evaluation is enabled by providing a `SandboxedEvalConfig` to `SnixEngine`. When present, the engine dispatches evaluations to an isolated subprocess instead of evaluating in-process:
+The primary executor materializes a composed FHS view from
+content-addressed trees (the atom closure plus the toolchain composition)
+and runs upstream's own, unmodified build process against it, under
+OCI/bwrap sandboxing. The sandbox is deny-by-default: the only bytes a
+build process can read are those declared in the atom closure and
+toolchain composition, plus whatever the fetch proxy explicitly permits.
+The build's observed read set is checked against the declared closure —
+reads ⊆ declared — and that containment is enforced by the sandbox, not
+trusted from the build's own behavior (`[htc-declared-closure-enforced]`,
+htc-sad.md §1.1). On success, the executor writes the output tree and its
+derived interface manifest to the shared CAS and returns a `BuildRecord`
+(`action_id`, `output_tree_digest`, `build_composition_root`,
+`observed_read_set_digest`, builder signature) to the daemon.
 
-1. The engine resolves the worker binary path in precedence order: `EOS_EVAL_WORKER_BIN` environment variable → configured `worker_bin` path → `std::env::current_exe()`.
-2. It spawns the binary as a child subprocess, passing the hidden subcommand `--eval-worker` along with service connection parameters.
-3. The engine serializes the evaluation parameters (`EvalRequestDto`) as a JSON payload over the child's standard input (`stdin`), then closes the pipe to signal EOF.
-4. The worker executes the evaluation within a sandbox and prints the computed **Plan** (serialized as Nix-compatible ATerm derivation bytes) to standard output (`stdout`).
-5. The engine reads stdout, parses the ATerm into a `Derivation`, and terminates the worker.
+### Legacy: the Passthrough-Snix Executor
 
-When no `SandboxedEvalConfig` is present, evaluations run in-process on a dedicated OS thread (the `!Send` snix-eval types prevent evaluation on tokio worker threads).
+For interoperating with pre-existing Nix-expression content only, the
+optional legacy passthrough-snix executor links `snix-eval`/`snix-glue`
+in-process to run a Nix expression's own build process unmodified,
+confined to whatever isolation `snix-eval` itself provides upstream. This
+is legacy-executor-internal detail, not part of the scheduler's contract —
+see [eos-snix-backend.md](../docs/specs/eos-snix-backend.md).
 
 ### Platform Isolation Dispatch
 
-- **Linux (Bubblewrap)**: Spawns the worker wrapped in `bwrap`. The sandbox disables network access (`--unshare-net`), unshares namespaces (user, PID, UTS, IPC), maps the Axios workspace directory and the evaluated files as read-only mounts (`--ro-bind`), and restricts write access to the temporary workspace and the local database directories (`--bind`). Host configuration directories like `/etc` are deliberately excluded to prevent impurity.
-- **macOS (Birdcage)**: Spawns the worker within a `tokio::task::spawn_blocking` pool using the `birdcage` library. It applies macOS Seatbelt sandbox policies, whitelisting read-only access to the daemon binary and workspace directories, permitting read/write access to database paths, and denying network connections and other filesystem modifications.
+- **Linux (Bubblewrap)**: The sandbox disables network access
+  (`--unshare-net`) except through HTC's record/replay fetch proxy,
+  unshares namespaces (user, PID, UTS, IPC), maps the composed FHS view
+  and toolchain trees as read-only mounts (`--ro-bind`), and restricts
+  write access to the build's temporary workspace and local database
+  directories (`--bind`). Host configuration directories like `/etc` are
+  deliberately excluded to prevent impurity.
+- **macOS (Birdcage)**: Applies macOS Seatbelt sandbox policies via the
+  `birdcage` library, whitelisting read-only access to the composed view
+  and workspace directories, permitting read/write access to database
+  paths, and denying network connections and other filesystem
+  modifications outside the sandbox.
 
 ---
 
@@ -133,7 +193,7 @@ Eos communicates with client frontends (Ion) using Cap'n Proto RPC over a Unix D
   - `attachProgress(callback)`: Attaches a `ProgressStream` callback to receive real-time updates.
   - `cancel()`: Aborts the active build task.
   - `getJobId()`: Retrieves the cryptographic identifier of the job.
-- **`ProgressStream`**: A callback interface implemented by the client. The daemon streams status transitions (`queued`, `evaluating`, `building`, `completed`, `failed`, `cancelled`) through the `update` method.
+- **`ProgressStream`**: A callback interface implemented by the client. The daemon streams status transitions (`queued`, `fetching`, `building`, `completed`, `failed`, `cancelled`) through the `update` method.
 - **`AtomDiscovery`**: A read-only interface to query Eos's accumulated knowledge of observed atoms:
   - `resolve(id)`: Resolves metadata for a specific atom.
   - `contains(id)`: Fast membership check.
