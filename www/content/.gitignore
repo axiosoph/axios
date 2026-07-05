@@ -6,7 +6,3 @@ reference/*.md
 # Dynamically copied Architecture Decision Records and Software Architecture Documents
 architecture/*.md
 !architecture/_index.md
-
-# Dynamically copied spec audits and decoupling explanations
-explanation/spec-audit.md
-explanation/decoupling-snix.md

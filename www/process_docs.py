@@ -96,39 +96,6 @@ def process_section(src_dir, dst_dir, section, description_tpl, default_title="D
         print(f"  {filename} -> {title}")
 
 
-def process_single(src_path, dst_path, section, description, default_title="Document", tags=None):
-    """Process a single .md file with frontmatter."""
-    os.makedirs(os.path.dirname(dst_path), exist_ok=True)
-
-    with open(src_path, "r", encoding="utf-8") as f:
-        lines = f.readlines()
-
-    title = default_title
-    body_start = 0
-    for i, line in enumerate(lines):
-        stripped = line.strip()
-        if stripped.startswith("#"):
-            title_match = re.match(r"^#+\s*(.*)$", stripped)
-            if title_match:
-                title = title_match.group(1).strip()
-            body_start = i + 1
-            break
-
-    body_content = "".join(lines[body_start:])
-    body_content = rewrite_links(body_content, section)
-
-    tags_str = ""
-    if tags:
-        tags_json = "[" + ", ".join(f'"{t}"' for t in tags) + "]"
-        tags_str = f"tags = {tags_json}\n"
-
-    frontmatter = f'+++\ntitle = "{title}"\ndescription = "{description}"\nquadrant = "Explanation"\n{tags_str}audience = "Developers and architects of the Axios stack"\n+++\n\n'
-
-    with open(dst_path, "w", encoding="utf-8") as f:
-        f.write(frontmatter + body_content)
-    print(f"  {os.path.basename(src_path)} -> {title}")
-
-
 if __name__ == "__main__":
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
