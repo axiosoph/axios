@@ -28,3 +28,4 @@ states/
 .agents
 .prior_art_cache
 
+.grepai/
