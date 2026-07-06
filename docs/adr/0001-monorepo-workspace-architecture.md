@@ -48,12 +48,9 @@ by it.)
 
 Each step is verifiable and cacheable independently, which makes cache-skipping
 possible at every stage. The chain is a DAG: each atom's lock entry carries a
-`requires` field listing content-addressed digests of its transitive
-dependencies, so the lock file captures the full graph. (Note: Superseded by
-the keystone lock decision (2026-06-28) and
-[ADR-0005](0005-hermetic-transactional-composition.md) — the decided 2-value
-lock entry `(set, label) → {version, publish_czd}` carries no `requires`
-field of this shape; the DAG is read directly off lock edges.)
+`requires` field listing the direct dep atoms' content-addressed digests, and
+the full transitive graph is reconstructed by walking those edges across every
+entry — the lock file captures the full graph.
 
 ### Forces
 
@@ -250,7 +247,7 @@ Both satisfy `BuildEngine`. Ion's code is generic: `fn run(engine: impl BuildEng
 
 ### Positive
 
-- The cryptographic chain maps directly to plan/apply cache-skipping. The DAG structure via `requires` captures the full dependency graph. (Note: Superseded by the keystone lock decision (2026-06-28) and [ADR-0005](0005-hermetic-transactional-composition.md) — restated from §The cryptographic chain above; the decided 2-value lock entry carries no `requires` field of this shape, and the DAG is read directly off lock edges instead.)
+- The cryptographic chain maps directly to plan/apply cache-skipping. The DAG structure via `requires` captures the full dependency graph.
 - BuildEngine + ArtifactStore are in place. Distributed eos slots in without touching ion.
 - Any ecosystem can publish atoms by implementing Manifest.
 - AtomSource as universal read interface enables mirrors, syndicated stores, and dev workspaces through one mechanism.

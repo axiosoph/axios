@@ -9,8 +9,8 @@
   | [HTC SAD](../architecture/htc-sad.md)
 - **Supersedes**: [ADR-0002](0002-decoupling-snix-backend.md) §Tier 3
   (Evaluation via Remote Eval Workers), wholesale, including the eval worker
-  pool | [ADR-0001](0001-monorepo-workspace-architecture.md) §Decision
-  `requires`-field claim and the `NeedsEvaluation` `BuildPlan` variant
+  pool | [ADR-0001](0001-monorepo-workspace-architecture.md) §Decision's
+  `NeedsEvaluation` `BuildPlan` variant
   (partial) | [ADR-0004](0004-learning-augmented-scheduling.md) plan/drv-DAG
   framing (partial — the verified scheduling theory carries a
   theory-transfers carve-out, see below)
@@ -86,13 +86,11 @@ construction rather than by patching.
   what a DAG node *was*, only that nodes are pure actions forming a DAG. The
   re-scope this ADR makes (atom-level nodes instead of derivation-level
   nodes) is a substitution the theory was already agnostic to.
-- **The doctrine currently contradicts the direction in four places.**
+- **The doctrine currently contradicts the direction in three places.**
   ADR-0002 §Tier 3 calls remote-evaluation scheduling "the key architectural
   differentiator from the Nix ecosystem" — the roadmap deletes
   the evaluation scheduler and any MVP dependency on `snix-eval`/the Nix
-  language outright. ADR-0001's cryptographic chain claims the lock's
-  `requires` field captures "the full graph" — the decided
-  2-value lock carries no such field. ADR-0004's atom-id-as-prediction-oracle
+  language outright. ADR-0004's atom-id-as-prediction-oracle
   argument states `atom-id = digest(anchor, label)` — the
   keystone identity decision made `AtomId` the abstract pair, not a digest of
   it. `layer-boundaries.md` has no slot for compositions, manifests, or
@@ -507,17 +505,6 @@ by substituting a composition-shaped plan-equivalent.
   struck in ADR-0004's supersession below: `AtomId` is the abstract pair
   `(anchor, label)`, not a digest of it, and there is no `AtomDigest` of
   identity (atom-sad §6.1, `[identity-content-addressed]`).
-- ~~"Each atom's lock entry carries a `requires` field listing
-  content-addressed digests of its transitive dependencies, so the lock
-  file captures the full graph"~~ (§The cryptographic chain, restated
-  verbatim and unannotated in §Consequences/Positive) → the decided
-  2-value lock (`(set, label) → {version, publish_czd}`, 2026-06-28
-  keystone) carries no `requires` field of this shape; the DAG is read
-  directly off lock edges per [htc-atom-dag-executor-trait] (§6), not
-  carried inside a single entry. (Both occurrences of this claim are
-  struck — the Decision-section instance already carried an inline note
-  before this pass; the Consequences-section restatement did not and now
-  does.)
 - ~~`"Plan" is the abstract term. For the snix engine, a plan is a
   derivation (.drv)`~~ (§Decision, the cryptographic-chain prose) → the
   MVP plan-equivalent is the atom **action**, identified by `action_id`
