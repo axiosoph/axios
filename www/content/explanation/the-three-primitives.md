@@ -54,9 +54,9 @@ That signature requirement is the system's most important door. Nix's import-fro
 
 ## Why there is no evaluator
 
-Nix gets its purity from a functional language that generates the build graph — which means trusting the graph requires trusting (or re-running) the generator. Axios inverts this: **purity is a property of the objects, not of whatever produced them**. Compositions carry checkable laws, certificates carry recheckable wiring, records carry signatures. Any tool — a CLI, a script, eventually a DSL if someone wants one — may emit compositions, because nothing about the system's soundness depends on how they were made.
+Nix gets its purity from a functional language that generates the build graph — which means trusting the graph requires trusting (or re-running) the generator, and it's where Nix's costs concentrate: evaluation runs before any real work can start and scales with the size of the world rather than the size of your change; artifacts bake their dependencies' paths inside themselves, so storage grows explosively as near-identical closures pile up; and any change re-materializes and rebuilds everything downstream, whether or not anything meaningful changed. Axios inverts the premise: **purity is a property of the objects, not of whatever produced them**. Compositions carry checkable laws, certificates carry recheckable wiring, records carry signatures. Any tool — a CLI, a script, eventually a DSL if someone wants one — may emit compositions, because nothing about the system's soundness depends on how they were made.
 
-That is why the substrate's trusted core contains **no interpreted language at all**, and why the design retires the evaluator outright rather than keeping one as a compatibility path.
+The payoff is the flexible, checkable composition described above — rebind instead of rebuild, dedupe instead of duplicate — and it is why the substrate's trusted core contains **no interpreted language at all**: the evaluator is not deprecated or wrapped, it is gone from the design.
 
 ## Many answers, honestly
 

@@ -12,7 +12,7 @@ This page explains how each piece of that works, and why it's designed the way i
 
 ## The stack Eos sits in
 
-Eos is the L3 layer of the Axios stack. Requests arrive from **Ion** (L4), the atom-centric frontend that resolves your atom declarations into a lock file and dispatches the resulting atom-DAG to Eos for building. Eos schedules and coordinates the actual builds, dispatching each build action to a worker through **HTC**'s (L2) executor trait — the boundary that separates scheduling policy from build-execution mechanism, whether the executor behind it is the primary FHS builder or the legacy passthrough-snix implementation. The **Atom** protocol (L1) provides the identity and signing layer underneath everything.
+Eos is the L3 layer of the Axios stack. Requests arrive from **Ion** (L4), the atom-centric frontend that resolves your atom declarations into a lock file and dispatches the resulting atom-DAG to Eos for building. Eos schedules and coordinates the actual builds, dispatching each build action to a worker through **HTC**'s (L2) executor trait — the boundary that separates scheduling policy from build-execution mechanism. The **Atom** protocol (L1) provides the identity and signing layer underneath everything.
 
 Eos's specific job is everything between "here is a dependency graph" and "here are the build outputs": cache checking, deduplication across requests, parallelism decisions, worker assignment, failure recovery, and re-planning as new requests arrive or builds complete.
 
