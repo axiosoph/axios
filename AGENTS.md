@@ -182,6 +182,11 @@ Each workspace is independent — run commands from the workspace root:
 - **Commit Boundaries:** Pause and justify before every commit point.
 - **Commit Hygiene:** Automated commits are permitted _only_ when adhering precisely to the instructions of an installed commit hygiene agent skill. If no such skill is installed or available in your toolset, automated commits are strictly prohibited and you must default to manual commits or consult the user. Additionally, you must run `treefmt` before committing.
 - **Terminology Compliance:** Use only canonical terms from the glossary above.
+- **Self-Contained Documentation:** Committed docs must NEVER reference
+  uncommitted paths (`.scratch/`, `.sketches/`) or acknowledge their
+  existence — scratch is process-internal. If a committed doc needs
+  context from a scratch file, inline that context. A reference the
+  reader cannot follow is a broken contract.
 
 ## Design-Readiness Discipline (the standing refinement loop)
 
