@@ -45,7 +45,7 @@ L4  ion/       Frontend: CLI, manifests, resolution
 L3  eos/       Engine: builds, stores, scheduling
 L2  HTC        Build-execution & composition substrate: CAS, compositions,
                 interface manifests, build records, fetch-proxy execution,
-                closure computation, materialization (no crate workspace yet)
+                closure computation, materialization (skeleton workspace: htc/)
 L1  atom/      Protocol: identity, addressing, publishing
 L0  Cyphr      Cryptographic substrate (external; future)
 ```

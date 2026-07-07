@@ -28,7 +28,7 @@ L4  ion/       Frontend: CLI, manifests, resolution
 L3  eos/       Engine: builds, stores, scheduling
 L2  HTC        Build-execution & composition substrate: CAS, compositions,
                 interface manifests, build records, fetch-proxy execution,
-                closure computation, materialization (no crate workspace yet)
+                closure computation, materialization (skeleton workspace: htc/)
 L1  atom/      Protocol: identity, addressing, publishing
 L0  Cyphr      Cryptographic substrate (external; future)
 ```
@@ -71,10 +71,13 @@ the concrete `ion.toml` manifest, and dev workspace management.
 | `ion-resolve`  | ion          | SAT resolver, dependency graph                                          |
 | `ion-lock`     | ion          | Lock schema and (de)serialization; `DepMap` keyed by `AtomId`           |
 | `ion-eos`      | ion          | Bridge: client interface to the eos daemon over Cap'n Proto             |
+| `htc-comp`     | htc          | Composition primitive types + law-tested merge monoid (skeleton)        |
+| `htc-exec`     | htc          | Execution primitive types + executor trait (skeleton)                   |
 | `ion-cli`      | ion          | CLI, build dispatch, dev workspace management                           |
 | `alurl`        | (standalone) | Structure-preserving URL alias detection and expansion                  |
 
-L2/HTC has a landed ADR and SAD but no crate workspace yet (see the layer
+L2/HTC has a landed ADR, SAD, and formal models, plus a skeleton
+workspace (`htc/`) carrying the model-derived types (see the layer
 model above); its build-execution contract is implemented by `eos`'s
 executor trait today.
 
