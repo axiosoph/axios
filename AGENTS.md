@@ -70,22 +70,22 @@ For architecture details, see:
 > codebase must **never** appear in new code, documentation, or conversation.
 > If you catch yourself using a deprecated term, stop and correct it.
 
-| Canonical Term | Definition                                                                         | Deprecated Aliases (NEVER use) |
-| :------------- | :--------------------------------------------------------------------------------- | :----------------------------- |
-| **Anchor**     | Cryptographic commitment (e.g. genesis commit hash) establishing atom-set identity | genesis, root, Root            |
-| **AtomId**     | The abstract pair `(anchor, label)` — the identity, not a hash of it. Atoms are referenced by `publish_czd`; lock entries are `(set, label) → {version, publish_czd}`. There is no hashed atom id. | hashed atom id, atom_id-as-digest |
-| **Atom-set**   | Collection of atoms sharing a common anchor (a single repository)                  | (none)                         |
-| **Label**      | Human-readable name for an atom within an atom-set                                 | Name                           |
-| **Digest**     | Abstract content-addressed hash. Algorithm is not hardcoded.                       | AtomDigest, Blake3Hash         |
-| **Plan**       | Engine-specific build recipe (`BuildEngine::Plan` associated type); for the primary executor this is the atom action — `(atom_czd_closure_root, toolchain_composition_root, action_params)`, identified by `action_id` | derivation, drv                |
-| **Output**     | Engine-specific build result (`BuildEngine::Output` associated type)               | build result                   |
-| **Artifact**   | Content-addressed blob in an artifact store                                        | (none)                         |
-| **Revision**   | A specific commit in source history                                                | (none)                         |
-| **Atom**       | Signed, content-addressed snapshot of sources + manifest + lock — build intent (L1; unchanged by the HTC substrate) | (none) |
-| **Action**     | One invocation of `build`; not a persistent noun on its own — its identity is `action_id` | (none) |
-| **Composition** | Signed, content-addressed binding of names → digests (L2/HTC); the closure object, successor to a derivation's output closure | (none) |
-| **View**       | A composition mounted at runtime via composefs                                     | (none)                         |
-| **Interface Manifest** | Derived, static provides/requires facts about a build's output tree, keyed by `(analyzer, subject)` | (none) |
+| Canonical Term         | Definition                                                                                                                                                                                                             | Deprecated Aliases (NEVER use)    |
+| :--------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :-------------------------------- |
+| **Anchor**             | Cryptographic commitment (e.g. genesis commit hash) establishing atom-set identity                                                                                                                                     | genesis, root, Root               |
+| **AtomId**             | The abstract pair `(anchor, label)` — the identity, not a hash of it. Atoms are referenced by `publish_czd`; lock entries are `(set, label) → {version, publish_czd}`. There is no hashed atom id.                     | hashed atom id, atom_id-as-digest |
+| **Atom-set**           | Collection of atoms sharing a common anchor (a single repository)                                                                                                                                                      | (none)                            |
+| **Label**              | Human-readable name for an atom within an atom-set                                                                                                                                                                     | Name                              |
+| **Digest**             | Abstract content-addressed hash. Algorithm is not hardcoded.                                                                                                                                                           | AtomDigest, Blake3Hash            |
+| **Plan**               | Engine-specific build recipe (`BuildEngine::Plan` associated type); for the primary executor this is the atom action — `(atom_czd_closure_root, toolchain_composition_root, action_params)`, identified by `action_id` | derivation, drv                   |
+| **Output**             | Engine-specific build result (`BuildEngine::Output` associated type)                                                                                                                                                   | build result                      |
+| **Artifact**           | Content-addressed blob in an artifact store                                                                                                                                                                            | (none)                            |
+| **Revision**           | A specific commit in source history                                                                                                                                                                                    | (none)                            |
+| **Atom**               | Signed, content-addressed snapshot of sources + manifest + lock — build intent (L1; unchanged by the HTC substrate)                                                                                                    | (none)                            |
+| **Action**             | One invocation of `build`; not a persistent noun on its own — its identity is `action_id`                                                                                                                              | (none)                            |
+| **Composition**        | Signed, content-addressed binding of names → digests (L2/HTC); the closure object, successor to a derivation's output closure                                                                                          | (none)                            |
+| **View**               | A composition mounted at runtime via composefs                                                                                                                                                                         | (none)                            |
+| **Interface Manifest** | Derived, static provides/requires facts about a build's output tree, keyed by `(analyzer, subject)`                                                                                                                    | (none)                            |
 
 ### Naming Conventions in Code
 
@@ -139,23 +139,23 @@ Each workspace is independent — run commands from the workspace root:
 
 ### eos/ (L3 — Runtime)
 
-| Crate       | Purpose                                       |
-| :---------- | :-------------------------------------------- |
-| `eos-core`  | Engine traits: `BuildEngine`, `ArtifactStore` |
-| `eos-proto` | Cap'n Proto wire schema and generated bindings |
-| `eos-snix`  | Optional legacy executor: passthrough Nix-expression backend |
-| `eos-daemon`| Scheduler, executor worker pool, RPC server    |
-| `eos`       | Orchestration: wires engine + store           |
+| Crate        | Purpose                                                      |
+| :----------- | :----------------------------------------------------------- |
+| `eos-core`   | Engine traits: `BuildEngine`, `ArtifactStore`                |
+| `eos-proto`  | Cap'n Proto wire schema and generated bindings               |
+| `eos-snix`   | Optional legacy executor: passthrough Nix-expression backend |
+| `eos-daemon` | Scheduler, executor worker pool, RPC server                  |
+| `eos`        | Orchestration: wires engine + store                          |
 
 ### ion/ (L4 — Frontend)
 
-| Crate          | Purpose                                        |
-| :------------- | :--------------------------------------------- |
-| `ion-manifest` | `ion.toml` manifest parsing                    |
-| `ion-resolve`  | Dependency resolution (SAT solver)             |
-| `ion-lock`     | Lock schema and (de)serialization              |
+| Crate          | Purpose                                                     |
+| :------------- | :---------------------------------------------------------- |
+| `ion-manifest` | `ion.toml` manifest parsing                                 |
+| `ion-resolve`  | Dependency resolution (SAT solver)                          |
+| `ion-lock`     | Lock schema and (de)serialization                           |
 | `ion-eos`      | Bridge: client interface to the eos daemon over Cap'n Proto |
-| `ion-cli`      | CLI binary                                     |
+| `ion-cli`      | CLI binary                                                  |
 
 ---
 
@@ -182,6 +182,39 @@ Each workspace is independent — run commands from the workspace root:
 - **Commit Boundaries:** Pause and justify before every commit point.
 - **Commit Hygiene:** Automated commits are permitted _only_ when adhering precisely to the instructions of an installed commit hygiene agent skill. If no such skill is installed or available in your toolset, automated commits are strictly prohibited and you must default to manual commits or consult the user. Additionally, you must run `treefmt` before committing.
 - **Terminology Compliance:** Use only canonical terms from the glossary above.
+
+## Design-Readiness Discipline (the standing refinement loop)
+
+This project is spec-first: designs are verified by a _loop_, not a
+one-shot review, because exhaustiveness against reality is undecidable.
+Three evidence classes catch three disjoint error classes — never
+substitute one for another:
+
+1. **Decorrelated review** (a zero-context reviewer reading primary
+   sources from first principles) catches contradictions _within_ the
+   written corpus.
+2. **Whole-system / intent review** (the intent-holder, or a reviewer
+   armed with the full system picture) catches misfit between the corpus
+   and unwritten intent or sibling-layer reality — the class formal
+   review structurally cannot see (e.g., importing a centralized-cache
+   invariant a decentralized trust design never needed).
+3. **Empirical spikes** catch misfit with reality itself (measured costs,
+   kernel behavior, privilege walls). Reality is the only oracle for
+   "does it work."
+
+**Readiness criterion:** proceed to implementation when the next-cheapest
+error-discovery method _is building_ — never when "no errors remain"
+(unprovable). Checkable proxies: (a) the seam map has no _unmapped_ seams
+(known-thin is acceptable if the implementation path doesn't cross it
+yet); (b) every layer-boundary has a named invariant, owner, and
+evaluator; (c) proof obligations gating the first steps are discharged or
+carry explicit tripwires; (d) load-bearing intent is _written down_ —
+unwritten vision cannot be caught contradicting anything.
+
+**The amendment loop:** contradictions discovered while building are
+treated like closure faults — fail closed, amend the model with a
+versioned changelog entry, never silently absorb. Formal docs carry
+correction history as evidence the loop runs.
 
 ---
 
