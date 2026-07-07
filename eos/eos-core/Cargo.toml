@@ -8,6 +8,7 @@ atom-core     = { path = "../../atom/atom-core" }
 atom-id       = { path = "../../atom/atom-id" }
 bytes         = "1"
 futures-core  = "0.3"
+htc-exec      = { path = "../../htc/htc-exec" }
 thiserror     = "2"
 trait-variant = "0.1"
 
