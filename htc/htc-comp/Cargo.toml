@@ -1,0 +1,9 @@
+[package]
+description          = "The composition primitive: values, merge monoid, interfaces (skeleton of docs/models/composition-model.md)"
+edition.workspace    = true
+license.workspace    = true
+name                 = "htc-comp"
+repository.workspace = true
+version.workspace    = true
+
+[dependencies]

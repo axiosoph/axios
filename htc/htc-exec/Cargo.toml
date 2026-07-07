@@ -1,0 +1,10 @@
+[package]
+description          = "The execution primitive: requests, policies, records, the executor trait (skeleton of docs/models/execution-model.md)"
+edition.workspace    = true
+license.workspace    = true
+name                 = "htc-exec"
+repository.workspace = true
+version.workspace    = true
+
+[dependencies]
+htc-comp = { path = "../htc-comp" }
