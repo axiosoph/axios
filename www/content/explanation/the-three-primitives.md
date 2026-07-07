@@ -24,7 +24,7 @@ A composition is a **description of a filesystem as a value** — a map from pat
 
 Compositions behave like modules in a programming language. Each piece declares what it **provides** and what it **requires**; an _environment_ is a composition where every requirement has been wired to a provider and the wiring is recorded in a **certificate** — a receipt anyone can recheck without running anything. That receipt is what makes two things possible that package managers historically can't do:
 
-- **Fix without rebuilding.** If an application is missing a runtime dependency, you compose the missing piece into its environment, re-check the certificate, and re-sign. No package is rebuilt, because no package changed.
+- **Fix without rebuilding.** If a package turns out to need a runtime dependency no detector found, the fix is a one-line _declaration_ added to that package's contract — and every environment containing it relinks automatically on re-formation. Nothing is rebuilt, because no package's content changed. (Environments themselves are never patched: they're for composing packages, not fixing them, so a repair never gets stranded in one environment while others stay broken.)
 - **Swap with a bounded blast radius.** Replacing a library (say, a patched OpenSSL) is a checked edit: anything whose declared interface still matches is simply relinked; only the consumers the check _fails_ for actually rebuild. Nix, by contrast, must rebuild everything downstream, because it has no way to check that anything survived.
 
 Crucially, composition is **not a programming language**. It is a small algebra of data operations that always terminates. Anything that needs real computation is, by definition, the third primitive's job.

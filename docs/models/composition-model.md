@@ -238,14 +238,23 @@ ion's version-resolution algebra, one layer down. Bindings all the way
 down, again: this is the third instantiation (lock, composition, and now
 environment linkage) of the same name→signed-pointer discipline.
 
-**Repair happens at the environment, not the package.** A closure fault
+**Repair happens at the package contract, not the environment.** The
+environment is the unit of _linking and choice_ — assembling packages,
+selecting providers — never a dumping ground for fixes. A closure fault
 (execution model §4.4) — a missing runtime dep that every detector
-missed — is repaired by _composing_ the missing provider into the
-environment (or declaring a binding, execution model §4.2),
-re-certifying, re-signing. New composition root, zero rebuilds, the
-package untouched. The environment is the unit of repair; this is where
-nrd's "missing deps are simply composable into environments of additional
-packages" becomes a law rather than a hope.
+missed — is evidence about the _package_: its requires-set was
+incomplete. The durable repair is therefore a **declared require in the
+package's interface contract** (execution model §4.2's `Declared` kind —
+an author- or third-party-asserted fact, keyed by declarer exactly as
+analyzer facts are keyed by analyzer, so it works even for atoms the
+repairer does not own). Every environment containing the package then
+picks up the binding automatically at re-formation: new composition
+root, zero rebuilds, the package's _content_ untouched. Patching a
+single environment instead would strand the repair in one place while
+every other environment with the same package stays broken — and the
+formalism agrees: the evidence sets of the justified closure
+(`R_declared(a)`, execution model §4.3) are indexed by the artifact,
+not by any environment.
 
 **Versioning.** An environment's _identity_ is its composition root; its
 _contract_ is its interface (Prov/residual Req and their digests). A
