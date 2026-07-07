@@ -260,9 +260,14 @@ software-level performance optimization (Track B) and is omitted
 from the Track A correctness model. In the absence of locks, correct
 build execution under overlapping entry point scopes relies entirely
 on the content-addressed, idempotent storage model (CAS). Simultaneous
-identical builds both write to the store safely, producing identical
-content at identical output-tree digests, ensuring consistency without
-blocking.
+identical builds both write to the store safely — builds are NOT
+assumed bit-deterministic (execution-model.md §2.2): records
+(witnesses) accumulate per request, each downstream branch coheres by
+binding the concrete output digests it consumed, and witness selection
+at request formation is a recorded choice. Safety rests on commutative
+witness accumulation plus per-branch content-addressed coherence, not
+on output determinism (ADR-0006 §4) — consistency without blocking
+either way.
 
 #### State Space
 

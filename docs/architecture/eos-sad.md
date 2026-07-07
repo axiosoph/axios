@@ -219,7 +219,7 @@ migrated (see Appendix D).
 
 - `workers: Map<WorkerId, WorkerStatus>` — registered executor workers
 - `queue: Map<JobId, Job>` — pending/in-flight build jobs
-- `action_cache: Map<ActionId, BuildRecord>` — memoized action results (§6.5)
+- `action_cache: Map<ActionId, Set<BuildRecord>>` — accumulated action witnesses (§6.5; ADR-0006 §4)
 
 ### 2.2 Executor Workers
 
@@ -649,8 +649,10 @@ All data in the system is content-addressed:
   over the H formula in §6.5) — the one drv/plan-hash-shaped identity in
   the system.
 - **Artifacts**: content-addressed output trees in HTC's shared CAS
-  (htc-sad §2.4), each action producing exactly one `BuildRecord`
-  (htc-sad §2.3).
+  (htc-sad §2.4), each *build event* producing one `BuildRecord` —
+  records accumulate per action (multiple builders may legitimately
+  contribute distinct witnesses, useful as reproducibility evidence;
+  execution-model.md §2.2, ADR-0006 §4) (htc-sad §2.3).
 
 The atom protocol verifies integrity on ingestion — the store
 does not accept unverified atoms regardless of their source.
@@ -685,8 +687,9 @@ Trust authority flows from developers to operators to clients:
 
 1. **Developer attestation** (primary): Developers sign atom
    metadata tags containing expected `action_id` and/or output-tree
-   digests. This is the authoritative source of truth for what
-   a correct build of a given atom version should produce.
+   digests. These are trust evidence — one acceptable witness class
+   under the consumer's anchors (execution-model.md §3.4) — not an
+   assertion that a single canonical output exists (ADR-0006 §4).
 
 2. **Builder attestation** (supplementary): Eos executor workers sign
    build outputs — `builderId`, `action_id`, `outputDigest`,
