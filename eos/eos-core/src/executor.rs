@@ -21,6 +21,7 @@
 //!   consumer's trust anchors", and the pick is a recorded choice. There is no canonical witness
 //!   and this trait must never grow API that implies one (no `the_record_for`, no reconcile).
 
+pub use htc_exec::facts::{FactChannel, MemFacts, RecordId};
 pub use htc_exec::{
     Digest, ExecuteReply, ExecutionRecord, ExecutionRequest, PolicyError, ReqDigest, Stratum,
 };
