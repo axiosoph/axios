@@ -232,6 +232,24 @@ system       a composition of environments, cross-environment
              convention.
 ```
 
+**Flat is the normal form; a scope boundary must earn its existence.**
+The default composition is a single scope: everything merged by `⊕`, one
+provider chosen per (ns, name), coherence certified across the whole.
+Scope boundaries — layers — are introduced only when meaning demands
+them: a genuine conflict (one member requiring a divergent provider —
+the co-installation escape hatch above), or a genuine intent boundary
+(an OS scope vs. a project dev shell whose choice function is a
+recorded _delta_ over its parent's, inheriting every choice it does not
+override; vs. a single package's quirk view inside that). Because a
+scope is itself just a composition with its own choice function, a
+layer is expressible **inside the algebra** — never an external
+packaging artifact — which is the precise difference from OCI layering:
+there a layer is an accident of build-script ordering; here it is a
+certified linking boundary with a reason. Pragmatics align with the
+semantics: every scope boundary buys indirection overhead, so the
+preference for flatness is a performance norm and a coherence norm at
+once.
+
 **Environment formation IS resolution.** The coherence certificate is the
 recorded output of a fixpoint + choice function over interface bindings —
 ion's version-resolution algebra, one layer down. Bindings all the way
