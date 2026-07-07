@@ -3,7 +3,9 @@
 - **Status**: ACCEPTED
 - **Date**: 2026-07-07
 - **Deciders**: nrd
-- **Normative elaboration**: [Execution Model](../models/execution-model.md)
+- **Normative elaboration**: [Execution Model](../models/execution-model.md);
+  companion primitives: [Composition Model](../models/composition-model.md),
+  [Storage Model](../models/storage-model.md)
 - **Supersedes**: [ADR-0005](0005-hermetic-transactional-composition.md) §8
   (the optional passthrough-snix executor allowance) and §11 (the three
   materialization tiers, re-cut as orthogonal axes) |
@@ -48,7 +50,13 @@ consequences of that stratification, not features to engineer separately.
 
 ### 1. Execution is the primitive; build and test are policy strata [exec-primitive]
 
-The substrate's single operation is
+Precisely: execution is the **dynamic** primitive of the substrate's
+founding trichotomy — content-addressed storage (identity), composition
+(structure), execution (dynamics) — each of which has its own formal
+model. "The primitive" below is asserted against build/test/fetch/trace
+as competing dynamic operations, not against the two static primitives.
+
+The substrate's dynamic layer has a single operation,
 `execute(request, world) → record`, where a request is
 `(view: composition, command: opaque argv, outputs, policy)` and the
 policy assigns each ambient channel (network, clock, entropy, …) one of
