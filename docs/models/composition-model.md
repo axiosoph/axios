@@ -405,7 +405,7 @@ Its validity is _checked, per consumer_: for each require previously bound
 to the old provider, `satisfies(needs, provides(p′))` must hold (§4;
 under Strict policy only digest-equality passes; under Compat, an
 interface-satisfying swap passes with a recorded proof — the
-`SubstitutionRecord` htc-sad §2.1/§6.5 already anticipated). This one
+`SubstitutionRecord` htc-sad §2.1/§6.2 already anticipated). This one
 operator splits every override into its two true strata:
 
 - **Rebinding (runtime stratum, cheap).** Consumers whose interface
