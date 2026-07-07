@@ -16,6 +16,7 @@ Axios is a set of independent projects for decentralized source publishing, herm
 3. **L3: Eos** (`eos/`) — The atom-DAG build scheduler. Scheduler traits (`eos-core`) exist; the current `eos-snix` build engine is pre-substrate code being re-scoped around HTC's executor trait, not a finished capability. The daemon (`eos-daemon`) and Cap'n Proto RPC protocol (`eos-proto`) are under development.
 4. **L4: Ion** (`ion/`) — User-facing CLI, manifest schema, and dependency resolver. Manifest parsing (`ion-manifest`), lockfile schema (`ion-lock`), and the Eos bridge (`ion-eos`) are prototyped with fuzz harnesses. The resolver (`ion-resolve`) and CLI (`ion-cli`) are under construction.
 5. **L5: Plugins** — Ecosystem adapters (Cargo, npm, PyPI, …) using Atom and Ion as a publishing overlay; not yet built.
+
 - **alurl** — URL alias resolution, used by `atom-uri` to expand shorthand source identifiers like `+gh/owner/repo`.
 
 ## Sections
