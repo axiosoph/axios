@@ -3,10 +3,10 @@
 - **Status**: PROPOSED (DRAFT)
 - **Date**: 2026-07-05
 - **Deciders**: nrd
-- **Source**: [The Post-Store Substrate](../../.scratch/2026-07-03-post-store-substrate.md)
-  | [Composition Substrate Architecture](../../.scratch/2026-07-04-composition-substrate-architecture.md)
-  | [Substrate Roadmap](../../.scratch/2026-07-04-substrate-roadmap.md)
-  | [HTC SAD](../architecture/htc-sad.md)
+- **Source**: the 2026-07-03/04 composition-substrate design analyses
+  (store-path role decomposition, substrate architecture, and staged
+  roadmap; their load-bearing content is carried by this ADR and the
+  [HTC SAD](../architecture/htc-sad.md))
 - **Supersedes**: [ADR-0002](0002-decoupling-snix-backend.md) §Tier 3
   (Evaluation via Remote Eval Workers), wholesale, including the eval worker
   pool | [ADR-0001](0001-monorepo-workspace-architecture.md) §Decision's
@@ -228,19 +228,21 @@ normalization): HTC SAD §4.
 
 ### 8. No Nix language, no nixpkgs in the MVP [htc-no-nix-mvp]
 
+> **SUPERSEDED IN PART by [ADR-0006](0006-execution-as-the-primitive.md)
+> §3 (2026-07-07):** the "optional legacy passthrough-snix executor"
+> allowance below is withdrawn. The executor was never implemented, the
+> system has no users, and the evaluator is asserted unnecessary — there
+> is no legacy escape hatch. The `[compose]` lock surface and
+> `TrivialAtom=Nix` manifest surface died with it; the successor intent
+> schema is the manifest/lock redesign (ADR-0006 §Consequences). The
+> first sentence below stands unchanged and stronger.
+
 The composition substrate ships with no interpreted composition/expression
-language and no dependency on `nixpkgs` as a package corpus. A
+language and no dependency on `nixpkgs` as a package corpus. ~~A
 passthrough-snix executor (linking `snix-eval` to run legacy Nix
-expressions) MAY exist as an **optional legacy escape hatch** for
-interoperating with existing Nix-expression content — it is explicitly not
-the plan, not the default, and not required for the MVP's `eka
-add → resolve → lock → build → analyze → compose → run` path. Any
-`compose`/lock-schema surface that still bakes in a Nix-shaped assumption
-(the `[compose]` NixTrivial variant, `ion-manifest.md`'s `TrivialAtom=Nix`)
-remains valid **only** as the passthrough-snix executor's on-ramp, pending
-the P2 re-derivation of successor compose semantics (recorded as a P2 debt
-— not resolved by this ADR; the spec re-derivation is out of
-this ADR's non-goals).
+expressions) MAY exist as an **optional legacy escape hatch**~~ — withdrawn
+per the supersession note above; no evaluator exists in this design at any
+tier.
 
 ### 9. Layer designation: L2, "Hermetic Transactional Composition" (HTC) [htc-layer-designation]
 
@@ -274,8 +276,10 @@ does not itself edit `layer-boundaries.md` or any spec file).
 **independent processes**, spoken to over gRPC — never linked in-process
 into this substrate's own binaries going forward. The current `eos-snix`
 posture (linking `snix-eval`/`snix-glue`/`nix-compat` in-process, per
-ADR-0002 §Tier 3's "coupling budget") is **explicitly not directional**; it
-survives only as part of the optional passthrough-snix executor (§8). What
+ADR-0002 §Tier 3's "coupling budget") is **explicitly not directional**; ~~it
+survives only as part of the optional passthrough-snix executor (§8)~~ (the
+passthrough executor is removed by [ADR-0006](0006-execution-as-the-primitive.md)
+§3; the `eos-snix` crate is slated for removal). What
 remains genuinely open, and is **deferred to P3** rather than decided here,
 is *which* wire-first implementation: speaking gRPC to unmodified upstream
 snix binaries, or forking-and-simplifying snix (castore + build only, with
@@ -512,9 +516,10 @@ by substituting a composition-shaped plan-equivalent.
   design is vindicated by this substitution, not broken by it.
 - ~~`NeedsEvaluation { atom: AtomRef }` — nothing cached~~ (§Decision, the
   `BuildPlan` enum) → the three-variant `BuildPlan` cache ladder collapses
-  to two rungs (`Cached`/`NeedsBuild`) for the primary executor;
-  `NeedsEvaluation` survives only inside the optional passthrough-snix
-  executor (§8).
+  to two rungs (`Cached`/`NeedsBuild`); ~~`NeedsEvaluation` survives only
+  inside the optional passthrough-snix executor (§8)~~ — the executor is
+  removed by [ADR-0006](0006-execution-as-the-primitive.md) §3, so the
+  two-variant coproduct stands alone.
 - ~~`Cyphr (L0) → Atom (L1) → Eos (L2) → Ion (L3) → Plugins (L4)`~~
   (§Decision, the workspace-layer diagram) → the full 6-layer stack per
   [htc-layer-designation] (§9).
@@ -536,10 +541,12 @@ superseded wholesale by [htc-atom-dag-executor-trait] (§6) and
 workers for.
 
 Tiers 1, 2, and 4 — store access via gRPC, build dispatch via gRPC with a
-Cap'n Proto shim, compile-time-only type dependencies — are **not**
-superseded; they hold, scoped to the optional passthrough-snix executor,
-and this ADR's [htc-gpl-seam-wire-first] (§10) widens rather than reverses
-the seam they established. The backend-agnostic clause the ADR itself
+Cap'n Proto shim, compile-time-only type dependencies — ~~are **not**
+superseded; they hold, scoped to the optional passthrough-snix executor~~
+were superseded wholesale with the rest of ADR-0002 by
+[ADR-0006](0006-execution-as-the-primitive.md) §3 when the passthrough
+executor was removed; this ADR's [htc-gpl-seam-wire-first] (§10) remains
+the live wire-first posture. The backend-agnostic clause the ADR itself
 states, in §Backend-Agnostic Shim Topology — "\[the snix gRPC affordance\]
 is an affordance of snix's service-oriented architecture, not a design
 requirement of Eos" — is carried forward as continuity evidence: this ADR
@@ -579,8 +586,9 @@ are described through:
   executor builds exactly one atom action; the entry-point/coarsening
   apparatus this premise motivated is reclassified from a core scheduling
   mechanism to a refinement path available *within* an atom action
-  (upstream's own `make -j`) and, separately, a mechanism the optional
-  passthrough-snix executor still needs for its own legacy DAG shape.
+  (upstream's own `make -j`). ~~And, separately, a mechanism the optional
+  passthrough-snix executor still needs~~ — executor removed,
+  [ADR-0006](0006-execution-as-the-primitive.md) §3.
 - ~~profiles keyed by the plan's `plan_name` (its `StorePath`-derived,
   version-stable identifier)~~ (§1. Historical Build Profiles) → the
   natural profile key under this ADR is the atom pair / `action_id`, not a
