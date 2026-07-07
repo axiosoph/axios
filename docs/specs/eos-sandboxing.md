@@ -63,9 +63,8 @@ Under the atom-DAG/executor-trait architecture
 
 The Eos daemon (scheduler) has zero executor-implementation dependencies and
 performs no sandboxing itself (eos-sad.md §2.1, §6.2). It dispatches build
-actions to executor workers; which executor a given worker wraps — the
-primary FHS executor (this document) or the optional legacy passthrough-snix
-executor ([eos-snix-backend.md](eos-snix-backend.md)) — is opaque to the
+actions to executor workers; which executor implementation a given worker
+wraps (the primary FHS executor, this document) is opaque to the
 scheduler.
 
 **Model Reference:**
@@ -176,7 +175,7 @@ redefine the `BuildRecord` schema itself.
 implementation's responsibility, never the Eos daemon's or its scheduler's.
 The Eos scheduler dispatches build actions to executor workers via Cap'n
 Proto; the worker's executor-trait implementation (the primary FHS
-executor, or the optional legacy passthrough-snix executor) applies
+executor) applies
 platform-appropriate sandboxing (OCI runtime or Bubblewrap, reusing
 `snix-build`, htc-sad.md §2, §3.5). The daemon holds no opinion on how a
 given executor achieves isolation (eos-sad.md §6.2).

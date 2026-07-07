@@ -29,7 +29,6 @@ By leveraging the cryptographic nature of atoms and the action-identity formula 
 - [publishing-stack-layers.md](../models/publishing-stack-layers.md) — §2.4 (BuildEngine), §2.5 (ArtifactStore), §3.2 (BuildSession)
 - [ion-eos-contract.md](ion-eos-contract.md) — Handoff boundaries and capability advertisement
 - [eos-network-protocol.md](eos-network-protocol.md) — Cap'n Proto wire protocol, capability model, daemon architecture
-- [eos-snix-backend.md](eos-snix-backend.md) — Legacy passthrough-snix executor binding (store mapping, sandbox dispatch, htc-sad §6.8)
 - [htc-sad.md](../architecture/htc-sad.md) — §2 (core object taxonomy), §3.5 (executor trait), §6.5 (action identity)
 - [eos-sad.md](../architecture/eos-sad.md) — §4.1 (build lifecycle, two-variant `BuildPlan`), §6.5 (action-id cache)
 
@@ -69,7 +68,7 @@ TYPE Blake3Digest = #[repr(transparent)] [u8; 32]  -- Fixed-size BLAKE3 content 
 -- associated type binding `type Digest = Blake3Digest` becomes
 -- `type Digest = CozDigest`.
 
-TYPE StorePath = opaque String                     -- Legacy-executor (passthrough-snix) artifact
+TYPE StorePath = opaque String                     -- Retired legacy artifact identifier (ADR-0006 §3)
                                                    -- path. The primary FHS executor addresses
                                                    -- outputs by output-tree digest (BuildEngine::
                                                    -- Output), not StorePath (htc-sad §2.4).
@@ -90,15 +89,12 @@ TYPE BuildEngine::Plan                             -- Backend-specific build rec
                                                    -- action itself — atom_czd_closure_root +
                                                    -- toolchain_composition_root + ActionParams
                                                    -- (ADR-0005 §2, htc-sad §6.5; Supersede-
-                                                   -- ADR-0001). Legacy passthrough-snix:
                                                    -- nix_compat::derivation::Derivation
                                                    -- (htc-sad §6.8).
 TYPE BuildEngine::Output                           -- Backend-specific build result (FHS
                                                    -- executor: output-tree digest in HTC's
                                                    -- shared CAS, htc-sad §2.4; legacy
-                                                   -- passthrough-snix: PathInfo + Node)
 TYPE BuildEngine::Error                            -- Structured error type
-                                                   -- (backend-specific; legacy passthrough-
                                                    -- snix: SnixError)
 
 -- Build engine methods (beyond plan/apply)
@@ -248,7 +244,7 @@ See the Cap'n Proto projection of this trait as the `AtomDiscovery` capability i
 **[eos-no-unverified-execution]**: Eos MUST NOT execute or reference any unverified snapshot or plugin dependency in a build sandbox.
 `VERIFIED: unverified`
 
-**[eos-sandbox-network-containment]**: Build execution MUST be executed in a restricted sandboxed environment. The sandbox MUST NOT have network access except through HTC's content-addressing record/replay proxy (htc-sad §4.2, ADR-0005 §7 `[htc-fetch-set-lock-plugin]`). Normative record/replay proxy semantics (record vs. replay mode, TLS CA injection, protocol-aware handlers) are specified in [eos-sandboxing.md](eos-sandboxing.md), not restated here. Platform-specific sandbox selection is wholly the executor implementation's concern (htc-sad §6.2, §6.4) — the primary FHS executor reuses `snix-build`'s OCI/bwrap sandbox; the optional legacy passthrough-snix executor uses whatever sandbox `snix-build` provides upstream (see [eos-snix-backend.md](eos-snix-backend.md) §Platform Sandbox Dispatch).
+**[eos-sandbox-network-containment]**: Build execution MUST be executed in a restricted sandboxed environment. The sandbox MUST NOT have network access except through HTC's content-addressing record/replay proxy (htc-sad §4.2, ADR-0005 §7 `[htc-fetch-set-lock-plugin]`). Normative record/replay proxy semantics (record vs. replay mode, TLS CA injection, protocol-aware handlers) are specified in [eos-sandboxing.md](eos-sandboxing.md), not restated here. Platform-specific sandbox selection is wholly the executor implementation's concern (htc-sad §6.2, §6.4) — the FHS executor reuses `snix-build`'s OCI/bwrap sandbox.
 `VERIFIED: unverified`
 
 **[eos-sandbox-host-isolation]**: The sandbox MUST NOT have write access to any part of the host filesystem outside the designated temporary sandbox build directory.
@@ -349,7 +345,7 @@ See the Cap'n Proto projection of this trait as the `AtomDiscovery` capability i
    The `BuildEngine`, `ArtifactStore`, and `AtomIndex` traits in `eos-core` are behavioral contracts — they specify what operations the system supports, what invariants hold, and what state transitions are permitted. Under the executor-trait architecture (ADR-0005 §6, htc-sad §3.5), `BuildEngine` is implemented inside executor worker processes, not in the daemon. The daemon orchestrates the `engine-plan` → `engine-apply` transition chain by dispatching to workers via Cap'n Proto. The Cap'n Proto protocol (see [eos-network-protocol.md](eos-network-protocol.md)) projects these contracts onto the wire as the `EosDaemon`, `BuildJob`, and `AtomDiscovery` capabilities for client interaction.
 
 2. **Backend Abstraction via Associated Types**:
-   `BuildEngine::Digest`, `BuildEngine::Plan`, `BuildEngine::Output`, and `BuildEngine::Error` are associated types, not concrete types. `eos-core` carries zero dependency on any backend crate. The primary FHS executor binds `Digest = Blake3Digest`, `Plan` to the atom action (atom_czd_closure_root + toolchain_composition_root + `ActionParams`), and `Output` to an output-tree digest in HTC's shared CAS. The optional legacy passthrough-snix executor binds `Plan = Derivation`, `Output = PathInfo + Node`, and `Error = SnixError` (see [eos-snix-backend.md](eos-snix-backend.md) §Type Declarations). Future backends bind different concrete types while preserving the same behavioral invariants. The `Digest` associated type is bounded by `crate::Digest`, ensuring all backends produce values that satisfy the trait's comparison and serialization requirements.
+   `BuildEngine::Digest`, `BuildEngine::Plan`, `BuildEngine::Output`, and `BuildEngine::Error` are associated types, not concrete types. `eos-core` carries zero dependency on any backend crate. The primary FHS executor binds `Digest = Blake3Digest`, `Plan` to the atom action (atom_czd_closure_root + toolchain_composition_root + `ActionParams`), and `Output` to an output-tree digest in HTC's shared CAS. Future backends bind different concrete types while preserving the same behavioral invariants. The `Digest` associated type is bounded by `crate::Digest`, ensuring all backends produce values that satisfy the trait's comparison and serialization requirements.
 
 3. **`ActionParams` Carries `[compose.args]`**:
    `ActionParams` is the conduit through which frontend-specified configuration (target system, feature flags) reaches the executor. This type maps directly to the lock file's `[compose.args]` section. The daemon treats `ActionParams.variant_flags` as opaque — it includes them in `action_id` (htc-sad §6.5) for deterministic caching but does not interpret their contents. Executor implementations determine how the params influence the build (e.g., as build-system configure flags or toolchain-composition selectors).

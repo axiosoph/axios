@@ -36,11 +36,10 @@ expression against atom source trees; it is read directly off locks
 (`[htc-atom-dag-executor-trait]`, ADR-0005 §6). Eos schedules; it does not
 build. Building — the deterministic, hermetic function `build(atom closure,
 toolchain composition, action params) → output tree` — is HTC's (L2)
-contract, executed by workers implementing HTC's executor trait: the primary
+contract, executed by workers implementing HTC's executor trait — the
 FHS executor (materializes a composed FHS view, runs upstream's own build
-under sandboxing), or, for legacy interop only, the optional passthrough-snix
-executor (links `snix-eval`/`snix-glue` in-process to run pre-existing Nix
-expressions unmodified — htc-sad §6.8). Eos dispatches through that trait
+under sandboxing; a formerly-named "optional passthrough-snix executor"
+was removed by [ADR-0006](../adr/0006-execution-as-the-primitive.md) §3). Eos dispatches through that trait
 without knowing or caring which implementation backs a given worker.
 
 Eos is designed to operate as a distributed cluster, scaling build capacity
@@ -116,9 +115,9 @@ the mode determines wiring, not logic. See
 
 | Mode                | Description                                                                                                                          |
 | :------------------ | :-------------------------------------------------------------------------------------------------------------------------------------- |
-| **Monolithic Ion**  | `BuildEngine` compiled into `ion-cli`. Zero daemons, zero sockets. The executor trait is wired in-process (FHS executor, or legacy passthrough-snix). |
+| **Monolithic Ion**  | `BuildEngine` compiled into `ion-cli`. Zero daemons, zero sockets. The executor trait is wired in-process (FHS executor). |
 | **Monolithic Eos**  | Single `eosd` daemon with an executor implementation compiled in. Ion connects as a thin client. Simplifies multi-client single-host. |
-| **Distributed Eos** | Ion → `eosd` → executor worker pool → executor backends (HTC's shared CAS + FHS executor, or legacy passthrough-snix). Each component independently scalable. |
+| **Distributed Eos** | Ion → `eosd` → executor worker pool → executor backends (HTC's shared CAS + FHS executor). Each component independently scalable. |
 
 All modes produce identical outputs (mode bisimilarity). The
 monolithic modes are compiler features (Cargo feature flags),
@@ -230,9 +229,7 @@ Long-lived external processes implementing HTC's executor trait:
 
 - Wraps exactly one executor implementation — the **primary** FHS executor
   (materializes a composed FHS view, runs upstream's own build under
-  OCI/bwrap sandboxing, htc-sad §4) or, for legacy interop, the **optional**
-  passthrough-snix executor (links `snix-eval`/`snix-glue` in-process to run
-  pre-existing Nix expressions unmodified, htc-sad §6.8)
+  OCI/bwrap sandboxing, htc-sad §4)
 - Connects to the shared CAS via gRPC for store access
 - Communicates with the scheduler via Cap'n Proto (`ExecutorWorker`
   interface, §8.3)
@@ -275,8 +272,8 @@ environments (htc-sad §3–§4). They:
 
 - Expose the executor trait for build dispatch (via gRPC, wrapped by the
   worker's Cap'n Proto shim)
-- Mount the composed FHS view via castore FUSE (primary executor) or wrap
-  legacy Nix-expression evaluation in-process (passthrough-snix executor)
+- Mount the composed FHS view (castore-backed; materialization per
+  execution-model.md §6.3–6.4)
 - Apply platform-appropriate sandboxing (OCI/bwrap on Linux)
 - Write build outputs to the global shared store
 
@@ -328,7 +325,7 @@ dispatch entirely.
 graph TB
     subgraph "Executor Worker Process"
         EWRPC["Cap'n Proto RPC"]
-        EXECT["Executor trait impl\n(FHS primary / passthrough-snix legacy)"]
+        EXECT["Executor trait impl\n(FHS executor)"]
         GRPC["gRPC Client (shared CAS)"]
     end
 
@@ -341,12 +338,9 @@ graph TB
 (htc-sad §3.5). The **primary** implementation is the FHS executor: it
 materializes the composed atom closure and toolchain composition as an FHS
 view (castore FUSE), runs upstream's own, unmodified build under an
-OCI/bwrap sandbox, and ingests the result (htc-sad §4). The **optional
-legacy** implementation is the passthrough-snix executor, which links
-`snix-eval`/`snix-glue`/`nix-compat` in-process to run pre-existing Nix
-expressions unmodified (htc-sad §6.8) — it exists for interoperating with
-legacy Nix-expression content, is not the default, and is not required for
-the MVP path. Which implementation a given worker process runs is a
+OCI/bwrap sandbox, and ingests the result (htc-sad §4). (A passthrough-snix
+implementation was formerly named here; removed by [ADR-0006](../adr/0006-execution-as-the-primitive.md) §3.)
+Which implementation a given worker process runs is a
 deployment choice, opaque to the scheduler beyond what capability metadata
 the worker advertises at registration (§7.2).
 
@@ -371,10 +365,9 @@ action resolves to one of two variants:
 This two-variant cache-skipping model is the system's core value
 proposition: the `action_id` cache (§6.5) plus the shared CAS (§2.3, §6.1)
 let an entire subtree of an atom-DAG skip dispatch whenever its action has
-already been built anywhere in the cluster. A third variant belongs only to
-the optional passthrough-snix executor's own internals (its legacy
-Nix-expression evaluation step, htc-sad §6.8) — it is never part of eos's
-own scheduling contract, which sees exactly the two variants above.
+already been built anywhere in the cluster. (A third variant formerly
+belonged to the removed passthrough executor, [ADR-0006](../adr/0006-execution-as-the-primitive.md) §3;
+eos's scheduling contract sees exactly the two variants above.)
 
 The end-to-end lifecycle of a build request from Ion to artifact:
 
@@ -577,10 +570,6 @@ delegated to the executor implementation a worker wraps:
   process can read are those declared in the atom closure and toolchain
   composition (`[htc-declared-closure-enforced]`, htc-sad §1.1) — enforced
   by the sandbox, not trusted from the build's own behavior.
-- The **optional legacy passthrough-snix executor** confines its
-  in-process Nix-expression evaluation to whatever isolation `snix-eval`
-  itself provides; this is legacy-executor-internal detail, not a scheduler
-  concern.
 
 Every action is dispatched to an executor identically; isolation is
 uniformly the executor's contract to uphold, never the scheduler's
@@ -751,11 +740,10 @@ Key validated properties:
   `BuildPlan` variants to two (§4.1) is confirmed as a **Finding** in
   `publishing-stack-layers.md` (around lines 394–401): the two
   cache-skipping levels at the primary executor are isomorphic to the
-  two-variant `BuildSession` (Cached, NeedsBuild), and the legacy
-  passthrough-snix executor's three-level form survives unchanged,
-  one level down, as its own three-variant isomorphism — a formal
+  two-variant `BuildSession` (Cached, NeedsBuild) — a formal
   property is not this document's fact to assert, so re-verification
-  lands there, not here.
+  lands there, not here. (A legacy three-variant form was formerly
+  scoped to the removed passthrough executor; ADR-0006 §3.)
 - **Deployment mode interchangeability**: Embedded and client-server
   modes are bisimilar (same `BuildEngine` observations)
 - **Ingest preserves identity**: `resolve(store, id) ⊇ resolve(source, id)`
@@ -827,10 +815,6 @@ Common tag conventions (not hardcoded in the protocol):
 | `feature:big-parallel` | `true`         | `requiredSystemFeatures` match   |
 | `tier`                 | `large`        | Hardware tier for weight scoring |
 
-Whether and how a scheduler should route legacy-only actions (e.g. a
-`compose.use = "nix"` atom, htc-sad Appendix D) specifically toward
-passthrough-snix-capable workers is not resolved by this document or by
-the substrate SAD; it is tracked as a known gap (§10), not invented here.
 
 **Scheduling weight** (optional):
 
@@ -1048,7 +1032,6 @@ in a future ADR or specification amendment.
 | 4   | **Observability**         | Metrics, tracing, structured logging for operator debugging.                                                                        |
 | 5   | **Graceful degradation**  | Behavior under partial availability (fewer workers, store unreachable).                                                             |
 | 6   | **Pluggable auth design** | Auth trait interface, initial implementations, transport vs application layer boundary.                                             |
-| 7   | **Legacy-executor routing** | No capability tag or routing rule yet determines how the scheduler should prefer a passthrough-snix-capable worker for a `compose.use = "nix"` legacy atom (§7.2); tied to the P2 `[compose]` successor-semantics debt (htc-sad Appendix D). |
 | 8   | **Toolchain-composition lock pinning** | `action_id` (§6.5) commits to `toolchain_composition_root`, but no lock entry type yet pins a toolchain composition (ADR-0005 Open Items; htc-sad §9 item 11) — a P2/P5 dependency of this document's own identity chain. |
 
 ---
@@ -1108,7 +1091,7 @@ consumed, not redefined, here — see htc-sad Appendix A.
 | L3    | `eos-core`   | Contract        | Engine traits: `BuildEngine`, `ArtifactStore`, `AtomIndex` — binds HTC's executor trait via the `BuildEngine::Plan` associated type |
 | L3    | `eos-daemon` | Implementation  | Scheduler, executor worker pool, RPC server (zero executor-implementation deps target) |
 | L3    | `eos-proto`  | Contract (wire) | Cap'n Proto schema and generated code                       |
-| L3    | `eos-snix`   | Implementation  | Legacy executor binding: wraps HTC's optional passthrough-snix executor (htc-sad §6.8) for `compose.use = "nix"` atoms |
+| L3    | `eos-snix`   | Implementation  | Slated for removal (evaluator eradicated, ADR-0006 §3) |
 | L3    | `eos`        | Implementation  | Orchestration: wires engine + store                         |
 | L4    | `ion-eos`    | Bridge          | Client interface: Ion → Eos daemon via Cap'n Proto          |
 

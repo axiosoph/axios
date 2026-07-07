@@ -1,9 +1,13 @@
 # ADR-0002: Snix Integration via Service Boundaries
 
-- **Status**: PROPOSED (REVISED DRAFT) (SUPERSEDED IN PART by ADR-0005)
+- **Status**: SUPERSEDED — wholesale by
+  [ADR-0006](0006-execution-as-the-primitive.md) §3 (2026-07-07): §Tier 3
+  was superseded by ADR-0005; the remaining tiers existed as the optional
+  passthrough-snix executor's spec, and that executor is removed. Retained
+  as historical record only.
 - **Date**: 2026-06-05
 - **Deciders**: nrd
-- **Source**: [Eos Build Scheduler Specification](../specs/eos-scheduler.md) | [Eos Snix Backend Specification](../specs/eos-snix-backend.md) | [Eos Network Protocol](../specs/eos-network-protocol.md)
+- **Source**: [Eos Build Scheduler Specification](../specs/eos-scheduler.md) | [Eos Network Protocol](../specs/eos-network-protocol.md)
 - **Supersedes**: ADR-0002 (2026-06-03 draft, "Decoupling Snix Backend from Eos Core and Scheduler")
 - **Related**: [ADR-0003](0003-composable-deployment-modes.md), [ADR-0004](0004-learning-augmented-scheduling.md), [ADR-0005](0005-hermetic-transactional-composition.md)
 
@@ -310,7 +314,6 @@ Two interrelated concerns deferred from this ADR:
 
 - [Eos Software Architecture Document](../architecture/eos-sad.md) — the comprehensive architecture blueprint that this ADR supports
 - [Eos Scheduler Specification](../specs/eos-scheduler.md)
-- [Eos Snix Backend Specification](../specs/eos-snix-backend.md)
 - [Eos Network Protocol Specification](../specs/eos-network-protocol.md)
 - [Ion–Eos Contract](../specs/ion-eos-contract.md)
 - [ADR-0003: Composable Deployment Modes](0003-composable-deployment-modes.md) — supersedes the monolithic binary alternative deferred by this ADR

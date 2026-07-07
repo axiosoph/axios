@@ -306,13 +306,14 @@ pipeline:
   (`ion-eos-contract.md §Compose.args Flow`). Ion captures them in the lock; eos's
   executor consumes them. This is the L4 side of eos-sad §6.5's `action_params`.
 
-> **Note (2026-07-05):** This section's terminology now matches the
-> substrate model — no evaluation stage; `action_params`, not
-> `eval_args` (eos-sad.md §6.5). What remains **P2** debt, not
-> performed here, is re-deriving the compose *object model* itself:
-> `compose.use`/`compose.as.nix` still describe a Nix-shaped
-> evaluable-expression composer rather than the substrate's signed
-> composition object. See
+> **Note (2026-07-05; amended 2026-07-07):** This section's terminology
+> matches the substrate model — no evaluation stage; `action_params`,
+> not `eval_args` (eos-sad.md §6.5). The compose *object model*
+> (`compose.use`/`compose.as.nix`) described an evaluator-shaped
+> composer and is **dead** per
+> [ADR-0006](../adr/0006-execution-as-the-primitive.md) §3 (the
+> evaluator is removed, no legacy path); its successor is the
+> manifest/lock redesign. See
 > [ADR-0005](../adr/0005-hermetic-transactional-composition.md) and
 > [htc-sad.md](htc-sad.md).
 

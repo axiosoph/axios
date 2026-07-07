@@ -312,7 +312,6 @@ graph TB
   FHSD["FHS-view delta\n(mount composed tree as rootfs,\non snix-build's OCI executor)"]
 
   EXECT -. implements (primary) .-> FHSD
-  EXECT -. implements (optional legacy) .-> SNIXEVAL["passthrough-snix executor\n(snix-eval + snix-glue, §6.8)"]
   FHSD --> FUSEL
   FHSD --> FETCHP
   FHSD -->|"output tree"| ANALYZERS
@@ -390,11 +389,14 @@ capture).
 ### 3.5 Executor Trait
 
 The single contract eos's scheduler (L3) dispatches through:
-`build(atom_closure, toolchain_composition, params) → output tree`. Two
-implementations are named in this SAD: the **primary** FHS executor (§4,
-this document's main subject) and the **optional legacy** passthrough-snix
-executor (§6.8), which links `snix-eval`/`snix-glue` in-process to run
-legacy Nix expressions. The trait boundary is exactly where sandboxing
+`build(atom_closure, toolchain_composition, params) → output tree` — the
+deterministic (action-stratum) instance of the general `execute` operation
+(execution-model.md §2; ADR-0006 §1). One implementation is named in this
+SAD: the **primary** FHS executor (§4, this document's main subject).
+(An "optional legacy passthrough-snix executor" was formerly named here;
+it was removed by [ADR-0006](../adr/0006-execution-as-the-primitive.md)
+§3 — no evaluator exists at any tier.) The trait boundary is exactly
+where sandboxing
 technology's volatility is isolated from the scheduling theory it serves
 (ADR-0005 §Hickey/Lowy Audits, Temporal Volatility).
 
@@ -631,16 +633,14 @@ ADR-0004 (theory body untouched, ADR-0005's supersession note) for that.
 
 ### 6.8 The GPL Seam and the Executor Boundary
 
-Per [htc-gpl-seam-wire-first] (ADR-0005 §10): the primary FHS executor
-speaks to snix's castore and build components over gRPC as independent
-processes — never linked in-process. The **optional legacy** executor
-(passthrough-snix) links `snix-eval`/`snix-glue`/`nix-compat` in-process to
-run pre-existing Nix expressions unmodified; it exists for interoperating
-with legacy content, is not the default, and is not required for the MVP
-path. Which wire-first implementation the primary executor ultimately uses
-— unmodified upstream snix binaries, or a fork-and-simplified castore+build
-subset — is **not decided by this SAD**; it is an open item deferred to
-P3 (ADR-0005 §Open Items).
+Per [htc-gpl-seam-wire-first] (ADR-0005 §10, resolved): the FHS executor
+speaks to the snix fork's castore and build components over gRPC as
+independent processes — never linked in-process. (A passthrough-snix
+executor that linked `snix-eval`/`snix-glue`/`nix-compat` in-process was
+formerly allowed here as a legacy escape hatch; it was removed by
+[ADR-0006](../adr/0006-execution-as-the-primitive.md) §3.) The fork
+decision itself — castore + build only, stripped of the evaluator, run as
+an independent GPL-3 service — is recorded in ADR-0005 §10.
 
 ### 6.9 The Lock↔Composition Isomorphism
 
@@ -708,7 +708,7 @@ normative record until then.
 | 4   | **The GPL-seam fork-vs-upstream call** (ADR-0005 §10's "G2" gate) — fork-and-simplify snix vs. speak upstream's protocol, formally | ADR-0005 §10 resolves the posture (wire-first); the specific implementation call is deferred to **P3** |
 | 5   | **Signed-metadata-append hardening**                                              | Builder≠owner signer authorization, fact-append vs. moved-tip-warning carve-out, fact-kind convention — consumed contract, design campaign **P1** |
 | 6   | **Lock fetch-plugin liveness + preservation semantics**                          | Owner-derived liveness vs. purge-on-reconcile; `deny_unknown_fields` vs. preserve-if-unknown — consumed contract, design campaign **P2/P4** |
-| 7   | **Successor `[compose]` semantics, spec re-derivation**                           | `lock-file-schema.md`'s NixTrivial `[compose]` variant remains valid only as the passthrough-snix executor's on-ramp — P2 debt, not resolved here |
+| 7   | **Successor `[compose]` semantics, spec re-derivation**                           | `[compose]` removed with the evaluator (ADR-0006 §3); the successor intent schema is the manifest/lock redesign |
 | 8   | **composefs mount privilege**                                                     | Kernel mount of EROFS/composefs needs elevated privilege or a user namespace — qualifies ADR-0003's zero-root claim; resolve at P3/P4 |
 | 9   | **`snix-castore` naming collision**                                               | `composition.rs` already exists there (unrelated: service DI config); this substrate needs a distinct proto/package name before P3 |
 | 10  | **Capability-runtime (WASI) execution tier**                                     | Post-MVP horizon; the composition object is designed to survive the transition intact, becoming the capability grant |
@@ -761,7 +761,6 @@ Out of scope for the HTC layer:
 | L2    | `htc-fuse-log`         | Component      | FUSE read-set logging (wraps `snix-castore`'s FUSE daemon)         |
 | L2    | Executor trait         | Contract        | `build(atom_closure, toolchain, params) → output tree` (§3.5)      |
 | L2    | FHS executor (primary) | Implementation  | Reuses `snix-castore` + `snix-build` (OCI/bwrap) over gRPC, per §6.8 |
-| L2    | Passthrough-snix executor (optional) | Implementation | Links `snix-eval`/`snix-glue` in-process; legacy escape hatch only |
 
 None of these components exist in the codebase yet; this table is the
 planned crate/component surface P3/P4 implementation targets, not an
@@ -785,12 +784,12 @@ build-contract neutrality).
 
 ## Appendix D: Known Specification Drift
 
-- `docs/specs/lock-file-schema.md`'s `[compose]` section bakes a
-  `NixTrivial`/`use="nix"` variant into the **core** lock schema, not a
-  plugin. It remains valid today as the passthrough-snix
-  executor's on-ramp (§6.8); the successor compose semantics this layer's
-  executor trait implies are designed in ADR-0005/this SAD, but the spec
-  re-derivation itself is **not** performed here — it is P2 debt.
+- **RESOLVED (2026-07-07)** — `docs/specs/lock-file-schema.md`'s
+  `[compose]` section baked a `NixTrivial`/`use="nix"` variant into the
+  core lock schema as the passthrough executor's on-ramp; the executor
+  was removed by [ADR-0006](../adr/0006-execution-as-the-primitive.md)
+  §3 and the `[compose]` section removed with it. The successor intent
+  schema is the manifest/lock redesign (ADR-0006 §Consequences).
 - **RESOLVED** — `docs/specs/ion-eos-contract.md` previously stated
   (at its old §lines 557–564) that dependencies are "fetched by snix
   from the lock-specified mirrors using normal Nix fetching

@@ -344,7 +344,7 @@ present in the implemented schema. **Status: PROPOSED**. There is exactly
 one worker kind — the executor
 worker (eos-sad §2.2, §8.3) — dispatching through HTC's executor trait
 regardless of which implementation (primary FHS, or optional legacy
-passthrough-snix) backs a given worker process.
+the removed passthrough executor's shape is retired, ADR-0006 §3) backs a given worker process.
 
 ```capnp
 # Worker-facing types and interfaces — PROPOSED (Post-ADR-0005)
@@ -392,7 +392,7 @@ interface Registration {
 
 # Held by the scheduler. Methods invoked by scheduler. Wraps whichever
 # executor implementation (primary FHS, or optional legacy
-# passthrough-snix) the worker process runs — opaque to the scheduler
+# retired shapes) the worker process runs — opaque to the scheduler
 # beyond the capability metadata advertised at registration (eos-sad §7.2).
 interface ExecutorWorker {
   build @0 (request :WorkerBuildRequest) -> (result :WorkerBuildResult);
@@ -946,7 +946,7 @@ scheduler manages one Cap'n Proto worker pool (executor workers). All
 worker communication is via Cap'n Proto RPC — the scheduler has no
 executor-implementation dependencies and no in-process build state. Any
 `!Send` constraint specific to a given executor implementation (e.g. the
-optional legacy passthrough-snix executor's `snix-eval` state) is handled
+retired executor state) is handled
 internally within that worker's own process.
 
 **Communication:** The RPC thread dispatches job requests to the scheduler
@@ -1120,7 +1120,7 @@ Artifact transfer (for substitution and cache distribution) uses the
    scheduler dispatch pattern is the canonical design for Cap'n Proto
    daemons. Under the executor-trait architecture, all executor-
    implementation state (including any `!Send` constraints specific to a
-   given executor, e.g. the optional legacy passthrough-snix executor) is
+   given executor) is
    fully encapsulated within executor worker processes — the daemon itself
    holds no executor-implementation state at all.
 

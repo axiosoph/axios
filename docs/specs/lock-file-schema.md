@@ -64,10 +64,6 @@ publish event.
 **Label**: A human-readable name for an atom within an atom-set. Used
 by the `label` field on `type = "atom"` entries.
 
-**Composer**: The atom (or trivial Nix expression, or static config)
-that provides the evaluation/import logic for the root atom. Described
-by the `[compose]` section.
-
 ---
 
 ## Constraints
@@ -81,7 +77,6 @@ the following top-level keys:
 TYPE LockFile = {
     version : Nat,                          -- Schema version
     sets    : Map<Anchor, SetDetails>,      -- Atom-set declarations
-    compose : Using,                        -- Composer configuration
     deps    : Array<Dep>,                   -- Unified dependency array
 }
 ```
@@ -106,8 +101,6 @@ A lock file with no dependencies is valid:
 # It is not intended for manual editing.
 version = 0
 
-[compose]
-use = "static"
 ```
 
 ---
@@ -170,107 +163,16 @@ mirrors = ["::"]
 
 ---
 
-### `[compose]` Section
+### `[compose]` Section — REMOVED
 
-The compose section declares how the root atom is evaluated. It
-controls which atom provides the import/composition logic that wires
-the dependency graph into an evaluable expression.
-
-> **Note (2026-07-05, no semantic change):** The `NixTrivial` variant
-> below bakes a Nix-shaped evaluation assumption into the **core** lock
-> schema (not a plugin); it remains valid today only as the optional
-> passthrough-snix legacy executor's on-ramp. The substrate's successor
-> compose semantics — a signed composition object, not an evaluated
-> expression — are designed in
-> [ADR-0005](../adr/0005-hermetic-transactional-composition.md) /
-> [htc-sad.md](../architecture/htc-sad.md); re-deriving this section's
-> schema against that model is **P2** debt, not performed here.
-
-```
-TYPE Using =
-    Atom { at: SemVer, entry: Path, use: Czd }      -- Full composer (use = publish_czd of composer atom)
-  | NixTrivial { entry: Path }                       -- Trivial nix import
-  | Config                                           -- Static configuration
-```
-
-The `Using` enum is discriminated by the `use` field:
-
-- **`use = <Czd>`** (untagged; value is a Czd that matches the `publish_czd` of exactly one `type = "atom"` entry) → `Atom` variant
-- **`use = "nix"`** → `NixTrivial` variant
-- **`use = "static"`** (or absent, as default) → `Config` variant
-
-**[lock-compose-atom-variant]**: When `use` holds a `Czd` value, the
-`Atom` variant is selected. The `at` and `entry` fields MUST also be
-present. `at` is the semver version of the composer atom. `entry` is the
-relative filesystem path within the composer atom that serves as the
-evaluation entrypoint. The `Czd` in `use` is the `publish_czd` of the
-composer atom and MUST equal the `publish_czd` field of exactly one
-`type = "atom"` entry in `[[deps]]`. The `Atom` variant is discriminated
-from `"nix"` and `"static"` by the value being a Czd (matching an entry's
-`publish_czd`) rather than one of those literal strings.
-`VERIFIED: unverified`
-
-**[lock-compose-nix-variant]**: When `use = "nix"`, only the `entry`
-field is REQUIRED. The root atom is evaluated by directly importing the
-file at `entry` — no composer atom is involved. The `at` field MUST NOT
-be present.
-`VERIFIED: unverified`
-
-**[lock-compose-config-variant]**: When `use = "static"` (or when the
-`[compose]` section contains only `use = "static"`), the atom is treated
-as static configuration. No evaluation occurs. The `at` and `entry`
-fields MUST NOT be present.
-`VERIFIED: unverified`
-
-**[lock-compose-default]**: If the `[compose]` section is absent or
-empty, the `Config` variant is assumed. Producers SHOULD serialize the
-default explicitly for clarity.
-`VERIFIED: unverified`
-
-#### `[compose.args]` — Evaluation Arguments
-
-**[lock-compose-args]**: The `[compose.args]` table is OPTIONAL. When
-present, it contains arbitrary key-value string pairs passed to the
-evaluator as evaluation arguments. These map to `EvalRequest.eval_args`
-in the eos `BuildEngine` trait.
-`VERIFIED: unverified`
-
-**[lock-compose-args-scope]**: The `[compose.args]` table is only
-meaningful for the `Atom` and `NixTrivial` variants. Producers MUST NOT
-emit `[compose.args]` for the `Config` variant. Consumers SHOULD ignore
-`[compose.args]` on the `Config` variant if encountered.
-`VERIFIED: unverified`
-
-#### Examples
-
-**Full composer:**
-
-```toml
-[compose]
-at = "0.4.5"
-entry = "mod/default.nix"
-use = "12207a5c47bd2e1f8093ccdb0dbd49b6e79e12c6e48e35bb18f3e0cd527a5d34729"
-
-[compose.args]
-system = "x86_64-linux"
-```
-
-**Trivial Nix import:**
-
-```toml
-[compose]
-use = "nix"
-entry = "default.nix"
-```
-
-**Static configuration (explicit):**
-
-```toml
-[compose]
-use = "static"
-```
-
----
+> **REMOVED (2026-07-07, [ADR-0006](../adr/0006-execution-as-the-primitive.md)
+> §3):** the `[compose]` section (composer selection, the `Using` enum's
+> `Atom`/`NixTrivial`/`Config` variants, `[compose.args]`, and the
+> `[lock-compose-*]` constraints) described an evaluator-shaped composer.
+> The evaluator is removed from the design entirely — no composer exists.
+> The successor intent schema (action params, test params, intent kinds)
+> is the manifest/lock redesign (ADR-0006 §Consequences), deliberately not
+> designed here.
 
 ### `[[deps]]` — Unified Dependency Array
 
@@ -606,8 +508,9 @@ determines which eos backend handles the entry:
 > the executor-trait framing: dispatch is no longer to a whole-package
 > Nix/Snix/Guix *backend* but to a fetch-type-specific handler behind
 > the executor's fetch proxy (HTC/L2, `htc-sad.md` §4.2) or, for the
-> `nix`/`nix+*` rows specifically, the optional passthrough-snix legacy
-> executor. Re-deriving this row's dispatch model is **P4** debt (a
+> `nix`/`nix+*` rows specifically — retired with the evaluator
+> ([ADR-0006](../adr/0006-execution-as-the-primitive.md) §3); these rows
+> are slated for redesign into generic fetch entries. Re-deriving this row's dispatch model is **P4** debt (a
 > compiled-in fetch-type registry vs. a preservation mode — see
 > `[lock-dep-no-unknown-fields]`/ion-sad §6.5), not performed here; see
 > [ADR-0005](../adr/0005-hermetic-transactional-composition.md) §Open
@@ -696,11 +599,6 @@ Matching is by `publish_czd` — not by `(set, label)`. Dangling owner
 references MUST be rejected.
 `VERIFIED: unverified`
 
-**[lock-compose-closure]**: If `[compose].use` holds a `Czd` value, it
-MUST equal the `publish_czd` of exactly one `type = "atom"` entry in
-`[[deps]]`. Matching is by `publish_czd` — not by `(set, label)`.
-`VERIFIED: unverified`
-
 **[lock-version-compatibility]**: Consumers MUST reject lock files whose
 `version` field is greater than the highest version they support.
 Consumers MAY accept lock files with a lower version if the schema is
@@ -721,12 +619,6 @@ spec.
 | `lock-set-mirrors`                 | Deserialization tests   | UNVERIFIED | Empty array rejection, URL validation    |
 | `lock-set-mirror-local-sentinel`   | Unit tests              | UNVERIFIED | `"::"` as sole entry semantics           |
 | `lock-set-referenced`              | Cross-reference check   | UNVERIFIED | Ensure all `set` fields resolve          |
-| `lock-compose-atom-variant`        | Deserialization tests   | UNVERIFIED | Required field enforcement               |
-| `lock-compose-nix-variant`         | Deserialization tests   | UNVERIFIED | Field presence constraints               |
-| `lock-compose-config-variant`      | Deserialization tests   | UNVERIFIED | Field absence constraints                |
-| `lock-compose-default`             | Default value tests     | UNVERIFIED | Absent `[compose]` → `Config`            |
-| `lock-compose-args`                | Deserialization tests   | UNVERIFIED | Arbitrary key-value parsing              |
-| `lock-compose-args-scope`          | Validation logic        | UNVERIFIED | Reject args on Config variant            |
 | `lock-dep-type-dispatch`           | Tagged enum tests       | UNVERIFIED | All five type values parse correctly     |
 | `lock-dep-no-unknown-fields`       | `deny_unknown_fields`   | UNVERIFIED | Unrecognized field rejection             |
 | `lock-dep-ordering`                | Serialization roundtrip | UNVERIFIED | Deterministic output comparison          |
@@ -752,7 +644,6 @@ spec.
 | `lock-dag-acyclicity`              | Graph validation        | UNVERIFIED | Cycle detection algorithm                |
 | `lock-requires-closure`            | Cross-reference check   | UNVERIFIED | Dangling atom-id rejection               |
 | `lock-owner-closure`               | Cross-reference check   | UNVERIFIED | Dangling owner rejection                 |
-| `lock-compose-closure`             | Cross-reference check   | UNVERIFIED | Dangling compose ref rejection           |
 | `lock-version-compatibility`       | Version gate tests      | UNVERIFIED | Unknown version rejection                |
 
 ---
@@ -778,14 +669,6 @@ mirrors = ["https://git.example.com/my-repo.git"]
 [sets.47478f45ed0de99d42495a0842b1fa41eac1ce14]
 tag = "local-atoms"
 mirrors = ["::"]
-
-[compose]
-at = "0.1.0"
-entry = "mod/default.nix"
-use = "12207a5c47bd2e1f8093ccdb0dbd49b6e79e12c6e48e35bb18f3e0cd527a5d34729"
-
-[compose.args]
-system = "x86_64-linux"
 
 [[deps]]
 type = "atom"
@@ -865,7 +748,6 @@ pub struct Lockfile {
     pub version: u16,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub sets: BTreeMap<GitDigest, SetDetails>,
-    pub compose: Using,
     #[serde(default, skip_serializing_if = "DepMap::is_empty")]
     pub deps: DepMap,
 }
@@ -876,22 +758,6 @@ pub struct Lockfile {
 pub struct SetDetails {
     pub tag: String,
     pub mirrors: BTreeSet<String>,
-}
-
-/// Composer configuration — enum dispatched by `use` field.
-#[derive(Serialize, Deserialize, Default)]
-#[serde(tag = "use")]
-pub enum Using {
-    /// Full composer: atom with entry point and version.
-    #[serde(untagged)]
-    Atom { at: Version, entry: PathBuf, r#use: Czd },     // publish_czd reference to the composer atom entry
-    /// Trivial Nix import.
-    #[serde(rename = "nix")]
-    NixTrivial { entry: PathBuf },
-    /// Static configuration (default).
-    #[serde(rename = "static")]
-    #[default]
-    Config,
 }
 
 /// Dependency entry — enum dispatched by `type` field.
@@ -930,11 +796,6 @@ pub struct DepMap(BTreeMap<Either<AtomId, Name>, Dep>);
    They SHOULD reside in a shared crate (`ion-lock` or equivalent) with
    public visibility, not buried in atom internals as `pub(crate)`.
    This is a refinement of the PoC architecture.
-
-3. **`[compose.args]` and Determinism**: Because `[compose.args]`
-   values influence evaluation, they MUST be included in the evaluation
-   cache key (`EvalCacheKey = (Blake3Digest, EvalArgs)`). Changing args
-   invalidates cached evaluations.
 
 4. **`owner` Graph Traversal**: To compute the complete fetch closure
    for a given atom, consumers must:

@@ -371,9 +371,9 @@ VERIFIED: _pending_
   dispatched by `type` (e.g. `type = "fetch"`), per
   `[lock-type-extension-mechanism]` (lock-file-schema.md) — ion
   declares, never executes, a fetch (ADR-0005 §7). "Nix expressions"
-  as a dependency class is removed from the MVP taxonomy; it
-  survives only within the optional passthrough-snix legacy
-  executor's scope (htc-sad.md §6.8).
+  as a dependency class is removed from the taxonomy entirely (the
+  passthrough executor allowance was withdrawn by
+  [ADR-0006](../adr/0006-execution-as-the-primitive.md) §3).
 - Lock file → eos contract translation: converting lock file
   content into `eos-core` types (`EvalRequest`, `ResolvedInput`)
 - CLI interface: commands, user-facing output, dev workspace
