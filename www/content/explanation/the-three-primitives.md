@@ -2,7 +2,7 @@
 title = "The three primitives: store, compose, execute"
 description = "A plain-language companion to the formal substrate models — why the whole build system reduces to three operations, and what that buys you"
 quadrant = "Explanation"
-tags = ["htc", "architecture"]
+tags = ["htc"]
 audience = "Developers who want to understand how the Axios substrate works without reading the formal models"
 +++
 
