@@ -181,8 +181,9 @@ Det = { p ∈ P | no channel is open under p }
 
 _Re-homed: [Composition Model §4](composition-model.md#4-interfaces-the-typing-of-compositions).
 What execution borrows: `satisfies`/`iface_digest` as the checkable
-contract proxy (htc-sad §6.1–6.2), and the environment — not the
-package — as the unit of repair for closure faults (§4.4)._
+contract proxy (htc-sad §6.1–6.2), and the package contract — not
+per-environment patching — as the durable home of closure-fault
+repairs (§4.4; the environment is the unit of linking and choice)._
 
 ### 1.5 The two strata of intent
 
@@ -538,7 +539,7 @@ Dep_v(a)                    ⊆   dom(⟦v⟧)         (structure: per view)
   execution ever touches) are _real_ in this model. Nix never had to say
   this because hash-scanning made runtime references a subset of
   build-time presence by construction; this model deliberately does not
-  inherit that coincidence, and the environment-level repair of
+  inherit that coincidence, and the package-contract repair discipline of
   [Composition Model §4](composition-model.md#4-interfaces-the-typing-of-compositions) exists
   precisely because of it.
 - **Lower bound — evidential.** `R_static`: name references extracted
@@ -881,8 +882,9 @@ Worth proving (small, load-bearing, mechanical):
   v0.6–v0.7 additionally demanded a concurrent lock-merge operator —
   an overcorrection: the system's write topology is _phased by design_
   (resolution pre-build; fetch pins once at trial end; runtime-dep
-  discovery post-build; environment-level repairs land in certificates,
-  not package locks), so no two writers race one file. Whole-file atomic
+  discovery post-build; repairs land as declared contract facts and
+  re-formed certificates, not package locks), so no two writers race
+  one file. Whole-file atomic
   write stands. Testable directly against the lock tooling; the one
   genuine residual spec gap is `[lock-dep-ordering]`'s undefined
   `Either<AtomId, Name>` sort order.
