@@ -219,7 +219,7 @@ output: type tag, name, URL, and hash.
 `VERIFIED: unverified`
 
 > **Note (2026-07-05, P4 flag):** The substrate's record-mode fetch
-> proxy (HTC/L2, `htc-sad.md` §4.2) performs fetch *discovery* during
+> proxy (HTC/L2, `htc-sad.md` §4.2) performs fetch _discovery_ during
 > an explicitly-impure first build and writes results back into the
 > lock — in tension with this invariant's "resolution executes within
 > ion" framing. A carve-out or reframing (the proxy as ion-driven

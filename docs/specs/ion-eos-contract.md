@@ -46,8 +46,6 @@ the Ion–Eos boundary.
   contracts, `BuildPlan` lifecycle, cache-skipping model
 - [eos-scheduler.md](eos-scheduler.md) — job queue, deduplication,
   lease management, work-stealing
-- [eos-snix-backend.md](eos-snix-backend.md) — optional legacy executor:
-  build/store mapping, sandbox dispatch
 - [ion-manifest.md](ion-manifest.md) — manifest schema, plugin model
 - [ion-resolution.md](ion-resolution.md) — resolution pipeline, lock
   production
@@ -97,7 +95,7 @@ materialized FHS view. An **optional legacy** passthrough-snix
 executor (linking `snix-eval`/`snix-glue` in-process) MAY exist to
 interoperate with pre-existing Nix-expression content; it is not the
 default and is not required for the MVP path
-([eos-snix-backend.md](eos-snix-backend.md) covers the legacy path).
+(the legacy path was removed by ADR-0006 §3).
 The daemon itself has no backend dependencies beyond the executor
 trait. Each executor has its own build mechanism, but all share one
 contract: `build(atom closure, toolchain composition, action
@@ -511,7 +509,7 @@ composer.
   - The `ComposerConfig` derived from `[compose]`
   - The `eval_args` from `[compose.args]` (passed verbatim)
     Eos dispatches `build(atom closure, toolchain composition,
-    action params)` through the executor trait
+action params)` through the executor trait
     ([ADR-0005](../adr/0005-hermetic-transactional-composition.md)
     §6, [htc-sad.md](../architecture/htc-sad.md) §3.5), producing an
     output tree — the primary FHS executor has
@@ -811,9 +809,9 @@ values. They are opaque to the protocol layer.
 Upon successful completion, eos reports results via the
 `BuildStatus.completed` variant, which MUST include:
 
-| Field          | Type         | Description                                |
-| :------------- | :----------- | :------------------------------------------ |
-| `outputDigest` | `Data`       | BLAKE3 digest of the combined build output — the primary, executor-agnostic artifact identity |
+| Field          | Type         | Description                                                                                                                                       |
+| :------------- | :----------- | :------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `outputDigest` | `Data`       | BLAKE3 digest of the combined build output — the primary, executor-agnostic artifact identity                                                     |
 | `outputPaths`  | `List(Text)` | Executor-specific store paths, when the active executor produces them (e.g. the passthrough-snix legacy executor); OPTIONAL, not primary identity |
 
 Ion receives these via the attached `ProgressStream` callback. The

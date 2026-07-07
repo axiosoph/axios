@@ -2,7 +2,7 @@
 
 Axios builds software the way upstream already builds it — upstream's own
 build, inside a cryptographic closure. An **atom** is a signed,
-content-addressed snapshot of sources, manifest, and lock: build *intent*.
+content-addressed snapshot of sources, manifest, and lock: build _intent_.
 A **composition** binds conventional names to content digests, Merkle-rooted
 and signed — the closure object, and the successor to a derivation's output
 closure. A **view** is a composition mounted at runtime. The one function is
@@ -57,22 +57,22 @@ the concrete `ion.toml` manifest, and dev workspace management.
 ## Crates
 
 | Crate          | Workspace    | Responsibility                                                          |
-| :------------- | :----------- | :----------------------------------------------------------------------- |
+| :------------- | :----------- | :---------------------------------------------------------------------- |
 | `atom-id`      | atom         | Identity primitives: Anchor, Label, AtomId (the `(anchor, label)` pair) |
 | `atom-uri`     | atom         | URI parsing, alias-aware resolution                                     |
 | `atom-core`    | atom         | Protocol traits: AtomSource, AtomStore, Manifest, etc.                  |
 | `atom-git`     | atom         | Git backend: implements AtomRegistry + AtomStore                        |
 | `eos-core`     | eos          | BuildEngine trait with plan/apply + associated types                    |
 | `eos-proto`    | eos          | Cap'n Proto wire schema and generated bindings                          |
-| `eos-snix`     | eos          | Optional legacy executor: passthrough Nix-expression backend            |
+| `eos-snix`     | eos          | Slated for removal (evaluator eradicated, ADR-0006 §3)                  |
 | `eos-daemon`   | eos          | Scheduler, executor worker pool, RPC server                             |
 | `eos`          | eos          | Orchestration: scheduling, action-id cache, artifact store              |
-| `ion-manifest` | ion          | Concrete ion.toml format, Compose system                               |
+| `ion-manifest` | ion          | Concrete ion.toml format, Compose system                                |
 | `ion-resolve`  | ion          | SAT resolver, dependency graph                                          |
 | `ion-lock`     | ion          | Lock schema and (de)serialization; `DepMap` keyed by `AtomId`           |
 | `ion-eos`      | ion          | Bridge: client interface to the eos daemon over Cap'n Proto             |
-| `ion-cli`      | ion          | CLI, build dispatch, dev workspace management                          |
-| `alurl`        | (standalone) | Structure-preserving URL alias detection and expansion                 |
+| `ion-cli`      | ion          | CLI, build dispatch, dev workspace management                           |
+| `alurl`        | (standalone) | Structure-preserving URL alias detection and expansion                  |
 
 L2/HTC has a landed ADR and SAD but no crate workspace yet (see the layer
 model above); its build-execution contract is implemented by `eos`'s

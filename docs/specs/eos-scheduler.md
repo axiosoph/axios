@@ -181,13 +181,15 @@ Workers register dynamically via Cap'n Proto handshake. The scheduler does NOT m
 `VERIFIED: TLA+ FrozenStability (P8) — docs/models/tla/MultiRequestModel.tla:284-290`
 
 **[eos-scheduler-bounded-window]** (P9′): When a ready EP has a feasible worker, the EP MUST be dispatched, reach `COMPLETE`, or reach `FAILED` within a bounded window of Δ ticks of entering the `READY` state. The window is confidence-gated: when prediction confidence is low, Δ = 0, degenerating to strict immediate dispatch (the original P9). Under high confidence, the scheduler MAY hold a ready EP for up to Δ to wait for a higher-affinity worker predicted to free up soon. Formally:
+
 ```
 P9': □( Q(s) = ready ∧ ∃w: feasible(s, w) ) ⟹ ◇≤Δ Q(s) ∈ {dispatched, complete, failed}
 ```
+
 The bounded window is what makes PEFT's OCT look-ahead actionable; strict work conservation (Δ = 0 always) forces immediate dispatch and renders OCT inert.
 `VERIFIED: TLA+ WorkConservation (P9′) — docs/models/tla/MultiRequestModel.tla:339-344`
 
-**[eos-scheduler-bounded-fair-dispatch]** (P12): No ready EP is starved. Under continuous higher-priority arrival, a ready EP with a feasible worker MUST still reach a terminal/dispatched state within a finite bound — generalizing P9′ from the top-priority ready EP (within Δ) to *every* ready EP. The mechanism is a delay credit `γ · age(ep)` folded into the EP priority ordering (`prio(ep) = avg_OCT(ep) + γ·age(ep)`; see ADR-0004 §2b for the formula and the bounded-wait derivation): a waiting EP's effective priority rises without bound, so it overtakes any stream of higher-priority arrivals within ≈ (OCT spread)/γ ticks. At γ = 0 the credit vanishes and starvation reappears. Head-of-line freedom (the no-contention facet) and starvation-freedom (this contention facet) together constitute *bounded-fair-dispatch* (P5′+P12). The delay credit is the greedy tier's reading of the same cost the federated MCMF tier places on a task's unscheduled edge — one shared cost model.
+**[eos-scheduler-bounded-fair-dispatch]** (P12): No ready EP is starved. Under continuous higher-priority arrival, a ready EP with a feasible worker MUST still reach a terminal/dispatched state within a finite bound — generalizing P9′ from the top-priority ready EP (within Δ) to _every_ ready EP. The mechanism is a delay credit `γ · age(ep)` folded into the EP priority ordering (`prio(ep) = avg_OCT(ep) + γ·age(ep)`; see ADR-0004 §2b for the formula and the bounded-wait derivation): a waiting EP's effective priority rises without bound, so it overtakes any stream of higher-priority arrivals within ≈ (OCT spread)/γ ticks. At γ = 0 the credit vanishes and starvation reappears. Head-of-line freedom (the no-contention facet) and starvation-freedom (this contention facet) together constitute _bounded-fair-dispatch_ (P5′+P12). The delay credit is the greedy tier's reading of the same cost the federated MCMF tier places on a task's unscheduled edge — one shared cost model.
 `VERIFIED: TLA+ StarvationFreedom (P12) — docs/models/tla/StarvationModel.tla; non-vacuous (γ=0 counterexample)`
 
 **[eos-scheduler-cache-filter-seam]**: The scheduler MUST query artifact existence ONLY through the `eos-core` `ArtifactStore` abstraction or the Cap'n Proto `SubstitutionService.query` surface (see [eos-network-protocol.md](eos-network-protocol.md):282-300). The scheduler MUST NOT import snix types, hold gRPC client code, or call `PathInfoService` directly. The `SubstitutionService` shim (deployable inside a worker or standalone) absorbs per-digest fan-out to the underlying store internally, presenting the scheduler with a single logical existence query per batch. This preserves `[eos-scheduler-state-isolation]` even when artifact existence checks are required.
@@ -269,33 +271,33 @@ The bounded window is what makes PEFT's OCT look-ahead actionable; strict work c
 
 ## Verification
 
-| Constraint                              | Method                           | Result                    | Detail                                                                                           |
-| :-------------------------------------- | :------------------------------- | :------------------------ | :----------------------------------------------------------------------------------------------- |
-| `eos-scheduler-lazy-fetching`           | Simulation test                  | UNVERIFIED                | Verify worker network logs during build                                                          |
-| `eos-scheduler-deduplication`           | Integration test                 | UNVERIFIED                | Concurrent build submissions test                                                                |
-| `eos-scheduler-placement`              | Metrics audit                    | UNVERIFIED                | EFT+OCT minimization and LRH cache hit rates across mock schedules                              |
-| `eos-scheduler-profile-store`          | Integration test                 | UNVERIFIED                | Profile write-through, hot-cache eviction, fallback resolution order                            |
-| `eos-scheduler-concurrency-limits`     | TLA+ model check                 | ✅ VERIFIED               | `CapacitySafety` (P4) — `docs/models/tla/MultiRequestModel.tla:257-258`                         |
-| `eos-scheduler-state-isolation`        | Dependency audit                 | UNVERIFIED                | Check module boundaries; confirm no lock parsing in daemon                                      |
-| `eos-scheduler-dag-intake`              | Integration test                 | UNVERIFIED                | Submit a build request, confirm DAG nodes/edges arrive pre-resolved; no lock parsing in daemon  |
-| `eos-scheduler-lease-expiry`           | Timeout injection                | UNVERIFIED                | Withhold lease renewal, verify job returns to QUEUED                                            |
-| `eos-scheduler-heartbeat-liveness`     | Failure injection                | UNVERIFIED                | Suppress heartbeats from worker, verify health demotion and lease revocation                    |
-| `eos-scheduler-frozen-stability`       | TLA+ model check                 | ✅ VERIFIED               | `FrozenStability` (P8) — `docs/models/tla/MultiRequestModel.tla:284-290`                        |
-| `eos-scheduler-bounded-window` (P9′)   | TLA+ model check                 | ✅ VERIFIED               | `WorkConservation` (P9′) — `docs/models/tla/MultiRequestModel.tla:339-344`                      |
-| `eos-scheduler-cache-filter-seam`      | Dependency audit + integration   | UNVERIFIED                | Confirm no snix imports or gRPC client code in scheduler crate                                  |
-| `submit-job`                            | Unit test                        | UNVERIFIED                | Submit transitions audit                                                                         |
-| `assign-job`                            | TLA+ model check + unit test     | ✅ VERIFIED (ordering)    | `OrderingSoundness` (P1) — `docs/models/tla/MultiRequestModel.tla:253-255`; placement: unit test |
-| `renew-lease`                           | Unit test                        | UNVERIFIED                | Lease extension and expiry boundary test                                                         |
-| `complete-job`                          | TLA+ model check + unit test     | ✅ VERIFIED (artifacts)   | `ArtifactSafety` (P3) — `docs/models/tla/MultiRequestModel.tla:261-263`                         |
-| `fail-job` (deterministic)              | TLA+ model check + unit test     | ✅ VERIFIED (isolation)   | `FailureIsolation` (P11) — `docs/models/tla/MultiRequestModel.tla:269-275`                       |
-| `fail-job` (transient)                  | TLA+ model check + unit test     | ✅ VERIFIED (recovery)    | `TransientRecovery` (P10) — `docs/models/tla/MultiRequestModel.tla:349-353`                     |
-| `no-dangling-jobs`                      | Timeout audit                    | UNVERIFIED                | Heartbeat + lease expiry failure injection test                                                  |
-| `no-duplicate-execution`               | Mutual exclusion check           | UNVERIFIED                | Multi-worker execution logs audit                                                                |
-| `no-dispatched-ep-reassignment`        | TLA+ model check                 | ✅ VERIFIED               | `FrozenStability` (P8) — `docs/models/tla/MultiRequestModel.tla:284-290`                        |
-| `eventual-progress`                     | TLA+ model check                 | ✅ VERIFIED               | `Progress` (P5) — `docs/models/tla/MultiRequestModel.tla:307-311`; `CompletionPropagation` (P6/P6′) — `:302-305` |
-| `parallel-scheduling-non-interference` | Parity check                     | UNVERIFIED                | Parallel vs sequential schedule output audit                                                     |
-| `head-of-line-immunity` (P5′)          | TLA+ model check                 | ✅ VERIFIED               | `HoLImmunity` (P5′) — `docs/models/tla/MultiRequestModel.tla:319-328`                           |
-| `bounded-window-dispatch` (P9′)        | TLA+ model check                 | ✅ VERIFIED               | `WorkConservation` (P9′) — `docs/models/tla/MultiRequestModel.tla:339-344`                      |
+| Constraint                             | Method                         | Result                  | Detail                                                                                                           |
+| :------------------------------------- | :----------------------------- | :---------------------- | :--------------------------------------------------------------------------------------------------------------- |
+| `eos-scheduler-lazy-fetching`          | Simulation test                | UNVERIFIED              | Verify worker network logs during build                                                                          |
+| `eos-scheduler-deduplication`          | Integration test               | UNVERIFIED              | Concurrent build submissions test                                                                                |
+| `eos-scheduler-placement`              | Metrics audit                  | UNVERIFIED              | EFT+OCT minimization and LRH cache hit rates across mock schedules                                               |
+| `eos-scheduler-profile-store`          | Integration test               | UNVERIFIED              | Profile write-through, hot-cache eviction, fallback resolution order                                             |
+| `eos-scheduler-concurrency-limits`     | TLA+ model check               | ✅ VERIFIED             | `CapacitySafety` (P4) — `docs/models/tla/MultiRequestModel.tla:257-258`                                          |
+| `eos-scheduler-state-isolation`        | Dependency audit               | UNVERIFIED              | Check module boundaries; confirm no lock parsing in daemon                                                       |
+| `eos-scheduler-dag-intake`             | Integration test               | UNVERIFIED              | Submit a build request, confirm DAG nodes/edges arrive pre-resolved; no lock parsing in daemon                   |
+| `eos-scheduler-lease-expiry`           | Timeout injection              | UNVERIFIED              | Withhold lease renewal, verify job returns to QUEUED                                                             |
+| `eos-scheduler-heartbeat-liveness`     | Failure injection              | UNVERIFIED              | Suppress heartbeats from worker, verify health demotion and lease revocation                                     |
+| `eos-scheduler-frozen-stability`       | TLA+ model check               | ✅ VERIFIED             | `FrozenStability` (P8) — `docs/models/tla/MultiRequestModel.tla:284-290`                                         |
+| `eos-scheduler-bounded-window` (P9′)   | TLA+ model check               | ✅ VERIFIED             | `WorkConservation` (P9′) — `docs/models/tla/MultiRequestModel.tla:339-344`                                       |
+| `eos-scheduler-cache-filter-seam`      | Dependency audit + integration | UNVERIFIED              | Confirm no snix imports or gRPC client code in scheduler crate                                                   |
+| `submit-job`                           | Unit test                      | UNVERIFIED              | Submit transitions audit                                                                                         |
+| `assign-job`                           | TLA+ model check + unit test   | ✅ VERIFIED (ordering)  | `OrderingSoundness` (P1) — `docs/models/tla/MultiRequestModel.tla:253-255`; placement: unit test                 |
+| `renew-lease`                          | Unit test                      | UNVERIFIED              | Lease extension and expiry boundary test                                                                         |
+| `complete-job`                         | TLA+ model check + unit test   | ✅ VERIFIED (artifacts) | `ArtifactSafety` (P3) — `docs/models/tla/MultiRequestModel.tla:261-263`                                          |
+| `fail-job` (deterministic)             | TLA+ model check + unit test   | ✅ VERIFIED (isolation) | `FailureIsolation` (P11) — `docs/models/tla/MultiRequestModel.tla:269-275`                                       |
+| `fail-job` (transient)                 | TLA+ model check + unit test   | ✅ VERIFIED (recovery)  | `TransientRecovery` (P10) — `docs/models/tla/MultiRequestModel.tla:349-353`                                      |
+| `no-dangling-jobs`                     | Timeout audit                  | UNVERIFIED              | Heartbeat + lease expiry failure injection test                                                                  |
+| `no-duplicate-execution`               | Mutual exclusion check         | UNVERIFIED              | Multi-worker execution logs audit                                                                                |
+| `no-dispatched-ep-reassignment`        | TLA+ model check               | ✅ VERIFIED             | `FrozenStability` (P8) — `docs/models/tla/MultiRequestModel.tla:284-290`                                         |
+| `eventual-progress`                    | TLA+ model check               | ✅ VERIFIED             | `Progress` (P5) — `docs/models/tla/MultiRequestModel.tla:307-311`; `CompletionPropagation` (P6/P6′) — `:302-305` |
+| `parallel-scheduling-non-interference` | Parity check                   | UNVERIFIED              | Parallel vs sequential schedule output audit                                                                     |
+| `head-of-line-immunity` (P5′)          | TLA+ model check               | ✅ VERIFIED             | `HoLImmunity` (P5′) — `docs/models/tla/MultiRequestModel.tla:319-328`                                            |
+| `bounded-window-dispatch` (P9′)        | TLA+ model check               | ✅ VERIFIED             | `WorkConservation` (P9′) — `docs/models/tla/MultiRequestModel.tla:339-344`                                       |
 
 ---
 

@@ -506,7 +506,7 @@ determines which eos backend handles the entry:
 
 > **Note (2026-07-05, no semantic change):** "Backend" here predates
 > the executor-trait framing: dispatch is no longer to a whole-package
-> Nix/Snix/Guix *backend* but to a fetch-type-specific handler behind
+> Nix/Snix/Guix _backend_ but to a fetch-type-specific handler behind
 > the executor's fetch proxy (HTC/L2, `htc-sad.md` §4.2) or, for the
 > `nix`/`nix+*` rows specifically — retired with the evaluator
 > ([ADR-0006](../adr/0006-execution-as-the-primitive.md) §3); these rows
@@ -797,7 +797,7 @@ pub struct DepMap(BTreeMap<Either<AtomId, Name>, Dep>);
    public visibility, not buried in atom internals as `pub(crate)`.
    This is a refinement of the PoC architecture.
 
-4. **`owner` Graph Traversal**: To compute the complete fetch closure
+3. **`owner` Graph Traversal**: To compute the complete fetch closure
    for a given atom, consumers must:
    (a) Follow the `requires` adjacency list for atom-level deps.
    (b) Collect all non-atom deps whose `owner` matches the atom's `publish_czd`.
@@ -805,7 +805,7 @@ pub struct DepMap(BTreeMap<Either<AtomId, Name>, Dep>);
    This two-path traversal is implicit in the schema design; consumers
    are responsible for implementing it correctly.
 
-5. **Version Evolution**: When the lock schema changes in a
+4. **Version Evolution**: When the lock schema changes in a
    backward-incompatible manner, the `version` field MUST be
    incremented. Consumers gate on `version` to select the appropriate
    parser. Additive changes (new optional fields, new `type` values)

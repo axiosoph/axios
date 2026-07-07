@@ -139,13 +139,13 @@ Each workspace is independent — run commands from the workspace root:
 
 ### eos/ (L3 — Runtime)
 
-| Crate        | Purpose                                                      |
-| :----------- | :----------------------------------------------------------- |
-| `eos-core`   | Engine traits: `BuildEngine`, `ArtifactStore`                |
-| `eos-proto`  | Cap'n Proto wire schema and generated bindings               |
-| `eos-snix`   | Optional legacy executor: passthrough Nix-expression backend |
-| `eos-daemon` | Scheduler, executor worker pool, RPC server                  |
-| `eos`        | Orchestration: wires engine + store                          |
+| Crate        | Purpose                                                |
+| :----------- | :----------------------------------------------------- |
+| `eos-core`   | Engine traits: `BuildEngine`, `ArtifactStore`          |
+| `eos-proto`  | Cap'n Proto wire schema and generated bindings         |
+| `eos-snix`   | Slated for removal (evaluator eradicated, ADR-0006 §3) |
+| `eos-daemon` | Scheduler, executor worker pool, RPC server            |
+| `eos`        | Orchestration: wires engine + store                    |
 
 ### ion/ (L4 — Frontend)
 

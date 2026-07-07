@@ -52,8 +52,8 @@ mode. Architecturally, the system is closer to Cargo or Go
 than to Nix: a tool that can operate as a single process.
 
 (Note: Qualified by [ADR-0005](0005-hermetic-transactional-composition.md)
-— this argument is about store *writes*, which is unaffected. It does not
-extend to the Fast-tier composefs/EROFS runtime *mount* ADR-0005
+— this argument is about store _writes_, which is unaffected. It does not
+extend to the Fast-tier composefs/EROFS runtime _mount_ ADR-0005
 introduces: mounting a kernel filesystem needs either elevated privilege
 or a user namespace, a consideration that did not exist when this ADR was
 written. Registered as an open item in ADR-0005; not resolved here or

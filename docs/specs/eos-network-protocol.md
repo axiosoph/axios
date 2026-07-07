@@ -233,7 +233,7 @@ The Implemented Schema above is quoted verbatim from ground truth and is
 **not** edited by this pass (spec text only; the actual `eos.capnp` migration
 is separate implementation work). ADR-0005's atom-DAG re-scope
 (`[htc-atom-dag-executor-trait]`, §6) and the deletion of the evaluation
-stage retire the following implemented-schema fields/structs in *meaning*,
+stage retire the following implemented-schema fields/structs in _meaning_,
 not on the wire — per Cap'n Proto's append-only evolution model (§Wire
 Format, item 5, ~line 73), they remain present for backward compatibility
 with historical job records until an actual schema-evolution commit appends
@@ -273,7 +273,7 @@ is no evaluation stage. The atom-DAG derives entirely from the lock (the
 ion → eos handoff, ion-sad §6.6); no evaluation-derived information is
 needed or accepted on this surface — the exact inversion of the
 pre-ADR-0005 `EvalResult`/`PlanDag` design this section replaces (that
-PROPOSED surface, where an eval worker reported a plan sub-DAG *back* to
+PROPOSED surface, where an eval worker reported a plan sub-DAG _back_ to
 the scheduler after evaluation, is retired wholesale along with the
 evaluation stage itself).
 
@@ -413,22 +413,22 @@ types define the behavioral contract. Both MUST remain synchronized.
 
 **Implemented** (`eos/eos-proto/schema/eos.capnp` ↔ `eos/eos-core/src/request.rs`):
 
-| Cap'n Proto Type     | `eos-core` Rust Type              | Role                                                            |
-| :------------------- | :-------------------------------- | :-------------------------------------------------------------- |
-| `PlanDigest`         | `Digest`                          | Content-addressed plan identifier                               |
-| `BuildStatus`        | `JobStatus`                       | Job lifecycle state                                             |
-| `ProgressStream`     | `ProgressEvent`                   | Streaming status callback                                       |
-| `AtomSetEntry`       | `AtomSetInfo`                     | Atom-set declaration (anchor → tag + mirrors)                   |
-| `DepDescriptor`      | `FetchDescriptor`                 | Pre-fetch dependency descriptor (union of atom/nix variants; `nix`/`nixGit`/`nixTar`/`nixSrc` deprecated — now HTC fetch-set entries, see §Deprecated Fields) |
-| `ComposerSpec`       | `ComposerSpec`                    | **Deprecated** — superseded by `ActionParams` (see §Atom-DAG Intake Surface) |
-| `BuildRequest`       | `BuildRequest<D: Digest>`         | Structured build request (plan digest + sets + deps + composer; `composer`/`evalArgs` deprecated, see §Atom-DAG Intake Surface for the PROPOSED successor fields) |
-| `VersionInfo`        | `(version, rev, set)` fields      | Per-version atom metadata                                       |
-| `EosDaemon`          | Daemon entry point                | Top-level client-facing RPC surface                             |
-| `BuildJob`           | Job handle                        | Per-build capability (client-facing)                             |
-| `AtomDiscovery`      | `AtomSource` (read-only)          | Atom resolution and search                                      |
-| `AtomMeta`           | Atom metadata                     | Per-atom identity and version info                               |
-| `AtomQuery`          | Search parameters                 | Discovery query constraints                                     |
-| `KeyValue`           | `(String, String)`                | Generic key-value pair (deprecated `evalArgs`/`ComposerSpec.args` role; reused by PROPOSED `ActionParams.variantFlags`) |
+| Cap'n Proto Type | `eos-core` Rust Type         | Role                                                                                                                                                              |
+| :--------------- | :--------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PlanDigest`     | `Digest`                     | Content-addressed plan identifier                                                                                                                                 |
+| `BuildStatus`    | `JobStatus`                  | Job lifecycle state                                                                                                                                               |
+| `ProgressStream` | `ProgressEvent`              | Streaming status callback                                                                                                                                         |
+| `AtomSetEntry`   | `AtomSetInfo`                | Atom-set declaration (anchor → tag + mirrors)                                                                                                                     |
+| `DepDescriptor`  | `FetchDescriptor`            | Pre-fetch dependency descriptor (union of atom/nix variants; `nix`/`nixGit`/`nixTar`/`nixSrc` deprecated — now HTC fetch-set entries, see §Deprecated Fields)     |
+| `ComposerSpec`   | `ComposerSpec`               | **Deprecated** — superseded by `ActionParams` (see §Atom-DAG Intake Surface)                                                                                      |
+| `BuildRequest`   | `BuildRequest<D: Digest>`    | Structured build request (plan digest + sets + deps + composer; `composer`/`evalArgs` deprecated, see §Atom-DAG Intake Surface for the PROPOSED successor fields) |
+| `VersionInfo`    | `(version, rev, set)` fields | Per-version atom metadata                                                                                                                                         |
+| `EosDaemon`      | Daemon entry point           | Top-level client-facing RPC surface                                                                                                                               |
+| `BuildJob`       | Job handle                   | Per-build capability (client-facing)                                                                                                                              |
+| `AtomDiscovery`  | `AtomSource` (read-only)     | Atom resolution and search                                                                                                                                        |
+| `AtomMeta`       | Atom metadata                | Per-atom identity and version info                                                                                                                                |
+| `AtomQuery`      | Search parameters            | Discovery query constraints                                                                                                                                       |
+| `KeyValue`       | `(String, String)`           | Generic key-value pair (deprecated `evalArgs`/`ComposerSpec.args` role; reused by PROPOSED `ActionParams.variantFlags`)                                           |
 
 The atom identifier struct (`atom-id` crate) appears throughout the schema
 as the canonical atom reference type. It is an L1 contract type — not an
@@ -436,14 +436,14 @@ as the canonical atom reference type. It is an L1 contract type — not an
 
 **PROPOSED** (Post-ADR-0005 — not yet in implemented schema):
 
-| Cap'n Proto Type      | `eos-core` Rust Type       | Role                                                            |
-| :--------------------- | :--------------------------- | :------------------------------------------------------------------ |
-| `ActionParams`        | `ActionParams`              | Target system + variant flags (defined once, eos-build-engine.md) |
-| `AtomDagNode`         | `AtomRef` + advisory weights | Atom-DAG submission node (re-scoped `PlanNode`)                  |
-| `AtomDagEdge`         | DAG edge                    | Atom-DAG submission edge, read off the lock                     |
-| `ExecutorWorker`      | Executor worker interface   | Scheduler-to-executor-worker RPC (internal)                      |
-| `WorkerBuildRequest`  | Build job specification     | Atom closure root + toolchain composition root + action params + lease |
-| `WorkerBuildResult`   | Build result                | `BuildRecord` fields (htc-sad §2.3) or error, from executor worker |
+| Cap'n Proto Type     | `eos-core` Rust Type         | Role                                                                   |
+| :------------------- | :--------------------------- | :--------------------------------------------------------------------- |
+| `ActionParams`       | `ActionParams`               | Target system + variant flags (defined once, eos-build-engine.md)      |
+| `AtomDagNode`        | `AtomRef` + advisory weights | Atom-DAG submission node (re-scoped `PlanNode`)                        |
+| `AtomDagEdge`        | DAG edge                     | Atom-DAG submission edge, read off the lock                            |
+| `ExecutorWorker`     | Executor worker interface    | Scheduler-to-executor-worker RPC (internal)                            |
+| `WorkerBuildRequest` | Build job specification      | Atom closure root + toolchain composition root + action params + lease |
+| `WorkerBuildResult`  | Build result                 | `BuildRecord` fields (htc-sad §2.3) or error, from executor worker     |
 
 ---
 
@@ -1049,14 +1049,14 @@ fast enough.
 
 The `BuildStatus` union covers the complete job lifecycle:
 
-| Variant      | Semantics                                                                |
-| :----------- | :----------------------------------------------------------------------- |
-| `queued`     | Job is waiting in the scheduler queue                                    |
+| Variant                   | Semantics                                                                                                                                         |
+| :------------------------ | :------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `queued`                  | Job is waiting in the scheduler queue                                                                                                             |
 | `evaluating` (deprecated) | No eos build past ADR-0005 produces this status; retained on the wire per append-only evolution (§Wire Format, item 5) for historical job records |
-| `building`   | The action is being built; `phase` and `progress` carry build phase info |
-| `completed`  | Build succeeded; `outputPaths` and `outputDigest` carry results          |
-| `failed`     | Build failed; `error` and `exitCode` carry diagnostics                   |
-| `cancelled`  | Build was explicitly cancelled via `BuildJob.cancel()`                   |
+| `building`                | The action is being built; `phase` and `progress` carry build phase info                                                                          |
+| `completed`               | Build succeeded; `outputPaths` and `outputDigest` carry results                                                                                   |
+| `failed`                  | Build failed; `error` and `exitCode` carry diagnostics                                                                                            |
+| `cancelled`               | Build was explicitly cancelled via `BuildJob.cancel()`                                                                                            |
 
 ### Artifact Streaming
 

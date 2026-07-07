@@ -18,7 +18,7 @@
 
 **Problem Domain:** Eos is a network-first daemon that serves as the atom-DAG scheduling and build-dispatch runtime (L3) for the Axios publishing stack. It bridges L4 (Ion frontend resolution) and L2 (HTC build execution) by accepting a pre-coarsened atom DAG from Ion at build submission — nodes are atoms identified by `publish_czd`, edges are the dependency relationships already resolved into the lock — dispatching build actions to executor-trait workers, caching results at the action-id granularity, and registering hermetic build outputs in HTC's shared, content-addressed artifact store. There is no evaluation stage: the DAG is read directly off locks, not produced by evaluating an expression against atom source trees (eos-sad §1.1; ADR-0005 §6, `[htc-atom-dag-executor-trait]`).
 
-Eos is **not** an embedded library that callers link against. The `BuildEngine` and `ArtifactStore` traits defined in `eos-core` specify the _behavioral contract_ — what the daemon does, what invariants it upholds, and what state transitions it permits. The Cap'n Proto protocol defined in [eos-network-protocol.md](eos-network-protocol.md) is the _wire projection_ of these traits — how clients invoke them over the wire. The **primary** FHS-executor implementation is the primary concrete backend fulfilling the `BuildEngine` and `ArtifactStore` contracts (htc-sad §3.5, §6.8); the Snix implementation defined in [eos-snix-backend.md](eos-snix-backend.md) is the **optional legacy** backend, retained for interoperating with pre-existing Nix-expression content.
+Eos is **not** an embedded library that callers link against. The `BuildEngine` and `ArtifactStore` traits defined in `eos-core` specify the _behavioral contract_ — what the daemon does, what invariants it upholds, and what state transitions it permits. The Cap'n Proto protocol defined in [eos-network-protocol.md](eos-network-protocol.md) is the _wire projection_ of these traits — how clients invoke them over the wire. The FHS-executor implementation is the concrete backend fulfilling the `BuildEngine` and `ArtifactStore` contracts (htc-sad §3.5, §6.8). (A snix passthrough backend was formerly named here; removed by [ADR-0006](../adr/0006-execution-as-the-primitive.md) §3.)
 
 By leveraging the cryptographic nature of atoms and the action-identity formula (htc-sad §6.5, ADR-0005 §2), Eos implements one level of cache-skipping:
 
@@ -40,7 +40,7 @@ By leveraging the cryptographic nature of atoms and the action-identity formula 
 
 ### Type Declarations
 
-The following types model the Eos behavioral contract at the `eos-core` layer. These are backend-agnostic — concrete type mappings (e.g., to Snix's `Derivation`, `B3Digest`, `PathInfo`) live in backend-specific crates (see [eos-snix-backend.md](eos-snix-backend.md) §Type Declarations).
+The following types model the Eos behavioral contract at the `eos-core` layer. These are backend-agnostic — concrete type mappings live in backend-specific crates.
 
 ```
 -- Core identity types (eos-core)
@@ -315,27 +315,27 @@ See the Cap'n Proto projection of this trait as the `AtomDiscovery` capability i
 
 ## Verification
 
-| Constraint                        | Method                         | Result     | Detail                                                                      |
-| :-------------------------------- | :----------------------------- | :--------- | :-------------------------------------------------------------------------- |
-| `eos-verification-obligation`     | Unit tests                     | UNVERIFIED | Pending implementation of atom snapshot fetcher                             |
-| `eos-verify-ownership`            | Cryptographic sign check       | UNVERIFIED | Pending integration of Coz verification                                     |
-| `eos-verify-plugin-deps`          | Hash verification tests        | UNVERIFIED | Pending lock-reader implementation                                          |
-| `eos-no-unverified-execution`     | Sandbox integration tests      | UNVERIFIED | Verification deferred until sandbox integration                             |
-| `eos-sandbox-network-containment` | Sandbox profile check          | UNVERIFIED | Backend-specific sandbox restriction verification (see eos-sandboxing.md)   |
-| `eos-sandbox-host-isolation`      | Directory permission checks    | UNVERIFIED | Verification of filesystem write blocks                                     |
-| `eos-sandbox-reproducibility`     | Binary hash equivalence        | UNVERIFIED | Double-build hash check verification                                        |
-| `eos-bisimulation-equivalence`    | Equivalence tests              | UNVERIFIED | Parity checks between mock and concrete backends                            |
-| `eos-immutable-store`             | Host filesystem audit          | UNVERIFIED | Verification of read-only enforcement via delegated store                   |
-| `eos-cache-determinism`           | Cache hits test                | UNVERIFIED | Property-based tests for build cache                                        |
-| `eos-transitive-closure`          | Reference scanner test         | UNVERIFIED | Store scanner reference tracing validation                                  |
-| `eos-atom-index-ingest`           | Integration tests              | UNVERIFIED | Verify atoms are ingested into AtomIndex after processing                   |
-| `engine-plan`                     | State transition audit         | UNVERIFIED | Unit tests for plan transitions via daemon protocol                         |
-| `engine-apply`                    | Sandbox execute tests          | UNVERIFIED | Integration tests for builder execution via backend                         |
-| `no-undeclared-inputs`            | Environment sanitization check | UNVERIFIED | Env whitelist enforcement audit                                             |
-| `no-speculative-writes`           | Aborted commit audit           | UNVERIFIED | Verify store cleanup after failure                                          |
-| `no-dirty-store-paths`            | Integrity validation           | UNVERIFIED | Store post-hash checks audit                                                |
-| `action-cache-idempotency`        | Concurrent tests               | UNVERIFIED | Concurrency validation with `action_id`                                     |
-| `apply-cleanup-on-abort`          | Temporary leak check           | UNVERIFIED | Temporary path leakage validation                                           |
+| Constraint                        | Method                         | Result     | Detail                                                                    |
+| :-------------------------------- | :----------------------------- | :--------- | :------------------------------------------------------------------------ |
+| `eos-verification-obligation`     | Unit tests                     | UNVERIFIED | Pending implementation of atom snapshot fetcher                           |
+| `eos-verify-ownership`            | Cryptographic sign check       | UNVERIFIED | Pending integration of Coz verification                                   |
+| `eos-verify-plugin-deps`          | Hash verification tests        | UNVERIFIED | Pending lock-reader implementation                                        |
+| `eos-no-unverified-execution`     | Sandbox integration tests      | UNVERIFIED | Verification deferred until sandbox integration                           |
+| `eos-sandbox-network-containment` | Sandbox profile check          | UNVERIFIED | Backend-specific sandbox restriction verification (see eos-sandboxing.md) |
+| `eos-sandbox-host-isolation`      | Directory permission checks    | UNVERIFIED | Verification of filesystem write blocks                                   |
+| `eos-sandbox-reproducibility`     | Binary hash equivalence        | UNVERIFIED | Double-build hash check verification                                      |
+| `eos-bisimulation-equivalence`    | Equivalence tests              | UNVERIFIED | Parity checks between mock and concrete backends                          |
+| `eos-immutable-store`             | Host filesystem audit          | UNVERIFIED | Verification of read-only enforcement via delegated store                 |
+| `eos-cache-determinism`           | Cache hits test                | UNVERIFIED | Property-based tests for build cache                                      |
+| `eos-transitive-closure`          | Reference scanner test         | UNVERIFIED | Store scanner reference tracing validation                                |
+| `eos-atom-index-ingest`           | Integration tests              | UNVERIFIED | Verify atoms are ingested into AtomIndex after processing                 |
+| `engine-plan`                     | State transition audit         | UNVERIFIED | Unit tests for plan transitions via daemon protocol                       |
+| `engine-apply`                    | Sandbox execute tests          | UNVERIFIED | Integration tests for builder execution via backend                       |
+| `no-undeclared-inputs`            | Environment sanitization check | UNVERIFIED | Env whitelist enforcement audit                                           |
+| `no-speculative-writes`           | Aborted commit audit           | UNVERIFIED | Verify store cleanup after failure                                        |
+| `no-dirty-store-paths`            | Integrity validation           | UNVERIFIED | Store post-hash checks audit                                              |
+| `action-cache-idempotency`        | Concurrent tests               | UNVERIFIED | Concurrency validation with `action_id`                                   |
+| `apply-cleanup-on-abort`          | Temporary leak check           | UNVERIFIED | Temporary path leakage validation                                         |
 
 ---
 

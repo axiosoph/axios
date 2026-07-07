@@ -29,16 +29,16 @@ the behavioral contracts between workspaces as if callers invoke trait
 methods directly. This is sufficient for validating interface design,
 protocol ordering, and implementation interchangeability.
 
-| In Scope                                  | Out of Scope                              |
-| :---------------------------------------- | :---------------------------------------- |
-| Trait behavioral contracts (coalgebras)   | Transport mechanism (IPC, network, gRPC)  |
-| Protocol ordering (session types)         | Serialization / wire format               |
-| Store relationships (ingest homomorphism) | Authentication / authorization            |
-| Concurrency model (parallel builds)       | Git object internals (atom-git impl)      |
+| In Scope                                  | Out of Scope                                                         |
+| :---------------------------------------- | :------------------------------------------------------------------- |
+| Trait behavioral contracts (coalgebras)   | Transport mechanism (IPC, network, gRPC)                             |
+| Protocol ordering (session types)         | Serialization / wire format                                          |
+| Store relationships (ingest homomorphism) | Authentication / authorization                                       |
+| Concurrency model (parallel builds)       | Git object internals (atom-git impl)                                 |
 | Error recovery asymmetry (plan vs apply)  | Nix/snix evaluation internals (removed with the evaluator, ADR-0006) |
-| Static ontology (olog)                    | Dependency resolution (SAT solver, locks) |
-| Scheduling correctness (bisimulation)     | Manifest format (ion.toml parsing)        |
-|                                           | Network topology (distributed eos, peers) |
+| Static ontology (olog)                    | Dependency resolution (SAT solver, locks)                            |
+| Scheduling correctness (bisimulation)     | Manifest format (ion.toml parsing)                                   |
+|                                           | Network topology (distributed eos, peers)                            |
 
 The model's coalgebras treat trait invocations as abstract observations
 regardless of whether the call is local, crosses a process boundary via
@@ -117,13 +117,13 @@ realigning those numbers stack-wide is explicit follow-up work outside
 this ADR's (and this node's) file scope — see htc-sad §1.5's "five
 nouns, one function."
 
-| Object              | Description                                                  | Layer |
-| :------------------- | :------------------------------------------------------------ | :---- |
-| Composition          | Signed name→digest binding — the closure object (htc-sad §2.1) | HTC   |
-| Interface Manifest   | Derived, static (provides/requires) fact about one tree; binding-free by construction (htc-sad §2.2) | HTC   |
-| Action               | One invocation of `build`, identified by `action_id`; for the primary executor, `Plan` binds to `Action` (htc-sad §1.5, §6.5) | HTC   |
-| View                 | A composition mounted at runtime — not persisted (htc-sad §1.5) | HTC   |
-| Build Record         | SLSA-shaped provenance for one action (htc-sad §2.3)          | HTC   |
+| Object             | Description                                                                                                                   | Layer |
+| :----------------- | :---------------------------------------------------------------------------------------------------------------------------- | :---- |
+| Composition        | Signed name→digest binding — the closure object (htc-sad §2.1)                                                                | HTC   |
+| Interface Manifest | Derived, static (provides/requires) fact about one tree; binding-free by construction (htc-sad §2.2)                          | HTC   |
+| Action             | One invocation of `build`, identified by `action_id`; for the primary executor, `Plan` binds to `Action` (htc-sad §1.5, §6.5) | HTC   |
+| View               | A composition mounted at runtime — not persisted (htc-sad §1.5)                                                               | HTC   |
+| Build Record       | SLSA-shaped provenance for one action (htc-sad §2.3)                                                                          | HTC   |
 
 **Key morphisms:**
 
@@ -567,33 +567,33 @@ domain-relevant quantities. Implementation-specific constants
 
 ### Coalgebra Observers
 
-| Observer                       | Complexity  | Parameters               | Notes                                        |
-| :----------------------------- | :---------- | :----------------------- | :------------------------------------------- |
-| AtomSource.resolve             | O(1)        | —                        | Hash-based lookup by atom-id                 |
-| AtomSource.discover            | O(n)        | n = atoms in store       | Scan; O(k) with index (k = result count)     |
-| AtomContent.content            | O(\|T\|)    | \|T\| = tree entry count | Walks content tree; I/O-bound for remote     |
-| AtomRegistry.claim             | O(1)        | —                        | czd computation + Ed25519 sign               |
-| AtomRegistry.publish           | O(1)        | —                        | Sign version transaction                     |
-| AtomStore.ingest               | O(\|S\|)    | \|S\| = atoms in source  | Iterates source; O(\|S∖W\|) with dedup check |
-| AtomStore.contains             | O(1)        | —                        | Hash-based membership test                   |
-| BuildEngine.plan (primary executor)        | O(1)–O(\|lock\|) | Lock size (atom + toolchain refs) | Cached: O(1). NeedsBuild: O(\|lock\|) — `action_id` hashes already-resolved lock data (htc-sad §6.5), not an evaluation |
-| BuildEngine.apply              | O(build)    | Plan-specific            | Dominated by actual build execution          |
-| ArtifactStore.fetch            | O(1)        | —                        | Content-addressed lookup; +latency if remote |
-| ArtifactStore.store            | O(\|blob\|) | \|blob\| = artifact size | Must hash entire blob                        |
-| ArtifactStore.exists           | O(1)        | —                        | Digest lookup                                |
-| ArtifactStore.check_substitute | O(k)        | k = number of digests    | Batch existence check                        |
-| Scheduler.schedule             | O(n log n)  | n = atoms in batch       | Priority-based; O(n) for round-robin         |
-| Scheduler.delegate             | O(1)        | —                        | Channel transfer                             |
+| Observer                            | Complexity       | Parameters                        | Notes                                                                                                                   |
+| :---------------------------------- | :--------------- | :-------------------------------- | :---------------------------------------------------------------------------------------------------------------------- |
+| AtomSource.resolve                  | O(1)             | —                                 | Hash-based lookup by atom-id                                                                                            |
+| AtomSource.discover                 | O(n)             | n = atoms in store                | Scan; O(k) with index (k = result count)                                                                                |
+| AtomContent.content                 | O(\|T\|)         | \|T\| = tree entry count          | Walks content tree; I/O-bound for remote                                                                                |
+| AtomRegistry.claim                  | O(1)             | —                                 | czd computation + Ed25519 sign                                                                                          |
+| AtomRegistry.publish                | O(1)             | —                                 | Sign version transaction                                                                                                |
+| AtomStore.ingest                    | O(\|S\|)         | \|S\| = atoms in source           | Iterates source; O(\|S∖W\|) with dedup check                                                                            |
+| AtomStore.contains                  | O(1)             | —                                 | Hash-based membership test                                                                                              |
+| BuildEngine.plan (primary executor) | O(1)–O(\|lock\|) | Lock size (atom + toolchain refs) | Cached: O(1). NeedsBuild: O(\|lock\|) — `action_id` hashes already-resolved lock data (htc-sad §6.5), not an evaluation |
+| BuildEngine.apply                   | O(build)         | Plan-specific                     | Dominated by actual build execution                                                                                     |
+| ArtifactStore.fetch                 | O(1)             | —                                 | Content-addressed lookup; +latency if remote                                                                            |
+| ArtifactStore.store                 | O(\|blob\|)      | \|blob\| = artifact size          | Must hash entire blob                                                                                                   |
+| ArtifactStore.exists                | O(1)             | —                                 | Digest lookup                                                                                                           |
+| ArtifactStore.check_substitute      | O(k)             | k = number of digests             | Batch existence check                                                                                                   |
+| Scheduler.schedule                  | O(n log n)       | n = atoms in batch                | Priority-based; O(n) for round-robin                                                                                    |
+| Scheduler.delegate                  | O(1)             | —                                 | Channel transfer                                                                                                        |
 
 ### Session Costs (End-to-End)
 
-| Session         | Best Case       | Typical Case               | Worst Case                       |
-| :-------------- | :-------------- | :------------------------- | :------------------------------- |
-| PublishSession  | O(1)            | O(1)                       | O(1) — bounded by crypto ops     |
+| Session         | Best Case       | Typical Case               | Worst Case                                                                                 |
+| :-------------- | :-------------- | :------------------------- | :----------------------------------------------------------------------------------------- |
+| PublishSession  | O(1)            | O(1)                       | O(1) — bounded by crypto ops                                                               |
 | BuildSession    | O(1) (Cached)   | O(build) (NeedsBuild)      | O(build) (NeedsBuild) — executor has only two variants, so worst case equals typical case. |
-| BatchBuild      | O(1) (all hit)  | O(max(build_i)) wall-clock | O(Σ build_i) total work          |
-| PopulateSession | O(1) (one atom) | O(\|S\|) (full ingest)     | O(\|S\|) — linear in source size |
-| Delegation      | O(1)            | O(1)                       | O(1) — channel transfer          |
+| BatchBuild      | O(1) (all hit)  | O(max(build_i)) wall-clock | O(Σ build_i) total work                                                                    |
+| PopulateSession | O(1) (one atom) | O(\|S\|) (full ingest)     | O(\|S\|) — linear in source size                                                           |
+| Delegation      | O(1)            | O(1)                       | O(1) — channel transfer                                                                    |
 
 ### Performance Implications
 

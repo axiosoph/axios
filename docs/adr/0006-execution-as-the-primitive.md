@@ -27,7 +27,7 @@
 ## Context
 
 ADR-0005 established the Hermetic Transactional Composition substrate and
-deleted the evaluation *stage* from the primary path, but it left two
+deleted the evaluation _stage_ from the primary path, but it left two
 things unfinished. First, it treated **build** as the substrate's
 primitive operation, with observation (read-set capture) welded into the
 build's materialization mechanism (a FUSE tier) — early implementation
@@ -40,7 +40,7 @@ a `[compose]` lock section, an entire executor spec) alive in the corpus.
 
 Meanwhile the formal work surfaced a deeper factorization: build, test,
 fetch-discovery, and runtime-closure capture are not four mechanisms but
-one operation under four *policies* — and the differences between them
+one operation under four _policies_ — and the differences between them
 (cacheable vs. not, gating vs. gated, rebuild-triggering vs. not) are
 consequences of that stratification, not features to engineer separately.
 
@@ -71,7 +71,7 @@ the [Execution Model](../models/execution-model.md).
 Consequences that are theorems of the stratification rather than
 features: test parameters occur only in test requests, so **editing test
 configuration can never trigger a rebuild**; a failed trial gates a build
-fact's *advertisement*, never its existence, so **a sandbox-hostile test
+fact's _advertisement_, never its existence, so **a sandbox-hostile test
 never forces a rebuild of a good build**; fetch discovery re-enters the
 deterministic stratum only through **promotion into signed intent**
 (lock entries) — or is bypassed entirely for ecosystems whose own
@@ -82,8 +82,8 @@ adapter.
 ### 2. Materialization and observation are orthogonal axes, not tiers [exec-axes-not-tiers]
 
 ADR-0005 §11's Observe/Fast/Export "materialization tiers" conflated two
-independent choices: *how a view is mounted* (bind mounts, composefs/
-EROFS+fs-verity, export copies) and *whether file access is observed*.
+independent choices: _how a view is mounted_ (bind mounts, composefs/
+EROFS+fs-verity, export copies) and _whether file access is observed_.
 "Observe" as a mount tier dissolves. Observation is an execution-policy
 axis (`observe: none | trace`), applied to whichever materialization is
 in use.
@@ -128,8 +128,8 @@ without a compatibility hedge, that **the evaluator is unnecessary**:
 Build records are signed facts accumulating in atom metadata — several
 distinct output digests for one action, from several builders, is a
 legitimate and useful state ("a trusted key has seen this action produce
-these three hashes"). A cache hit is *∃ a witness acceptable under the
-consumer's trust anchors*; the executor neither knows nor cares that
+these three hashes"). A cache hit is _∃ a witness acceptable under the
+consumer's trust anchors_; the executor neither knows nor cares that
 other witnesses exist. Downstream coherence requires no tie-break:
 consumers bind the concrete output digests of whichever witness they
 consumed, and witness selection at request formation is a recorded
@@ -180,11 +180,11 @@ feeding monotone refinement.
   reconciliation.
 - The execution model's proof obligations (P1–P7) stand as the
   verification queue; P7 (resolve determinism + materializer versioning
-  + totality) gates the two-level cache-coherence claims.
+  - totality) gates the two-level cache-coherence claims.
 
 ### Neutral
 
 - The scheduler's verified theory is unaffected: the Lean bounds are
   node-agnostic and transfer; the scheduling-model scope note's
-  *justification* wording is amended (witnesses accumulate), not its
+  _justification_ wording is amended (witnesses accumulate), not its
   design.

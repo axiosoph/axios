@@ -92,7 +92,7 @@ Nix/snix's execution model is:
 executor trait, the executor builds exactly one atom action. The
 entry-point/coarsening apparatus this premise motivates below is
 reclassified from a core scheduling mechanism to a refinement path
-available *within* an atom action (upstream's own `make -j`), and,
+available _within_ an atom action (upstream's own `make -j`), and,
 separately, a mechanism the optional passthrough-snix executor still needs
 for its own legacy DAG shape.)
 
@@ -289,11 +289,11 @@ the consistency/robustness/smoothness framework.
 
 To prevent redundant computation across concurrent requests and minimize myopic scheduling, all requests contribute to a **unified global plan graph** $G_\cup = (V_\cup, E_\cup)$ keyed by plan hash (N1). When a new build request arrives, its plan sub-graph is merged JIT into the global DAG in $O(|V_{\text{new}}| + |E_{\text{new}}|)$ time. Plans whose outputs are already cached in the artifact store are immediately filtered out.
 
-The scheduler partitions the mutable portion of $G_\cup$ into coarsened **entry points** ($S$) with a greedy top-down walk that covers the uncached sub-DAG. *Which* nodes become entry points is governed by promotion criteria. The criteria below are the **leading hypothesis (H1)** — they are **not settled**. A trace-driven simulation compares H1 against the alternatives H2–H4 on real nixpkgs DAGs, and that simulation, not this ADR, selects the production heuristic.
+The scheduler partitions the mutable portion of $G_\cup$ into coarsened **entry points** ($S$) with a greedy top-down walk that covers the uncached sub-DAG. _Which_ nodes become entry points is governed by promotion criteria. The criteria below are the **leading hypothesis (H1)** — they are **not settled**. A trace-driven simulation compares H1 against the alternatives H2–H4 on real nixpkgs DAGs, and that simulation, not this ADR, selects the production heuristic.
 
 **Hypothesis H1 (leading) — priority-ordered promotion.** Derived from the formal objective (minimize $\text{makespan} + \lambda \cdot \text{concurrent\_redundant\_work}$, makespan primary, redundancy avoidance secondary). A node $v$ is promoted to a standalone entry point if any criterion fires, evaluated in priority order:
 
-1. **Critical-path cut (PRIMARY — parallelism)**: $\operatorname{critical_path}(v) > \theta_{\text{critical}}$. A long serial chain below $v$ blocks everything above it; promoting $v$ lets that chain start on a dedicated worker immediately while other EPs handle parallel work. This **replaces** $\operatorname{subgraph_cost}(v)$, which summed *all* transitive cost (much of it parallelizable inside the builder); critical path measures only the serial portion that actually constrains makespan.
+1. **Critical-path cut (PRIMARY — parallelism)**: $\operatorname{critical_path}(v) > \theta_{\text{critical}}$. A long serial chain below $v$ blocks everything above it; promoting $v$ lets that chain start on a dedicated worker immediately while other EPs handle parallel work. This **replaces** $\operatorname{subgraph_cost}(v)$, which summed _all_ transitive cost (much of it parallelizable inside the builder); critical path measures only the serial portion that actually constrains makespan.
 2. **Cost-gated convergence (SECONDARY — avoid expensive redundancy)**: $(\operatorname{fan_in}(v) - 1) \cdot d(v) > \theta_{\text{redundancy}}$. High-fan-in nodes appear in multiple concurrent EP scopes; promotion converts concurrent overlap into a sequential dependency built once. The cost gate refuses to promote trivial shared nodes, where the synchronization barrier costs more than simply rebuilding. This **replaces** the bare $\operatorname{fan_in}(v) > \theta_{\text{fanin}}$ criterion, which ignored whether the redundancy was worth preventing.
 3. **Troublesome node (TERTIARY — resource isolation)**: $d(v) > \theta_{\text{cost}}$. A single heavyweight plan (e.g. a 30-minute compile) becomes its own EP so it can be routed to the most capable worker.
 
@@ -301,7 +301,7 @@ Where $d(v)$ is the predicted isolated build duration of plan $v$ (from `P[plan_
 
 **Confidence gating.** Every threshold is gated on prediction confidence so unreliable estimates do not over-partition:
 $$\theta_{\text{eff}} = \frac{\theta}{1 + \operatorname{conf}(v) \cdot \theta_{\text{scale}}}, \qquad \operatorname{conf}(v) = 1 - \operatorname{EMA}(|\eta_v|)$$
-Low confidence raises the effective threshold (conservative coarsening — fewer EPs, fewer scheduling decisions); high confidence lowers it (finer-grained promotion for PEFT to optimize). For the critical-path criterion, $\operatorname{conf}$ is the *minimum* confidence of any node on the path (weakest-link model — the chain is only as reliable as its least-predicted node).
+Low confidence raises the effective threshold (conservative coarsening — fewer EPs, fewer scheduling decisions); high confidence lowers it (finer-grained promotion for PEFT to optimize). For the critical-path criterion, $\operatorname{conf}$ is the _minimum_ confidence of any node on the path (weakest-link model — the chain is only as reliable as its least-predicted node).
 
 **Alternative hypotheses (simulation candidates).** The simulation evaluates H1 against:
 
@@ -309,9 +309,9 @@ Low confidence raises the effective threshold (conservative coarsening — fewer
 - **H3 — redundancy-aware critical path**: the critical-path and troublesome-node criteria only, with **no** explicit fan-in term — relying on the cache-skip scan (§2b) to absorb convergence points organically (simplest; risks missing off-critical-path convergence that causes expensive redundancy).
 - **H4 — ADR-0004 original (baseline)**: the prior formulation $$\operatorname{predicted_cost}(v) > \theta_{\text{eff,cost}} \;\lor\; \operatorname{fan_in}(v) > \theta_{\text{fanin}} \;\lor\; \operatorname{subgraph_cost}(v) > \theta_{\text{eff,subgraph}}$$ retained as the comparison baseline against which H1–H3 are judged.
 
-The simulator sweeps thresholds per variant against the nixpkgs trace corpus and reports makespan (primary), redundant work, EP count, and worker utilization (§Optimality, *The Simulation Gap*). Until those results land, H1 is the default but provisional choice.
+The simulator sweeps thresholds per variant against the nixpkgs trace corpus and reports makespan (primary), redundant work, EP count, and worker utilization (§Optimality, _The Simulation Gap_). Until those results land, H1 is the default but provisional choice.
 
-**Initialization hypothesis (orthogonal axis) — atom-seeded coarsening.** The walk above seeds entry points from individual plan nodes. An alternative seeds the initial EP cover from **atom boundaries**: the atoms present in the uncached DAG become the initial EP set, which the promotion criteria + confidence gating then refine (splitting an internal node into its own EP when it earns promotion; absorbing trivial atoms). This is a **soft prior, not a hard partition** — the plan/derivation substrate is retained, so finer-than-atom EPs remain reachable, and atom durations stay exact (an EP's cost is the sum of its *uncached* member plans, which remain individually visible). The motivation is alignment with the *predictability frontier*: the atom-id is the profile key (§The Atom-Id Advantage), so atom boundaries are exactly where predictions — and therefore confidence gating — are most reliable, while refining below an atom enters low-confidence, unprofiled territory where the learning-augmented advantage thins. Whether this prior improves *realized* makespan/redundancy is **not assumed**; it is evaluated as a seeding axis (`from-scratch` vs `atom-seeded`) crossed with the promotion variants in the trace-driven simulation. Because nixpkgs does not use the atom format, the trace corpus demarks top-level `pkgs`-set attributes as **synthetic atoms** for this axis — a proxy adequate for the comparison. Operationally (the candidate evaluated): (1) from lock information, mark which uncached plan nodes are atoms (in simulation, the synthetic `is_atom` marks); (2) take those atoms as the initial EP cover; (3) **absorb trivial atoms** — an atom with no, or only a few cheap, dependencies (aggregate cost below $\theta_{\text{trivial}}$) folds into its parent rather than becoming its own EP, avoiding scheduling overhead; (4) **refine large atoms** — run the H1 promotion criteria *within* an atom to split out internal nodes that fire a criterion (long critical path / expensive) as their own EPs, confidence-gated as usual.
+**Initialization hypothesis (orthogonal axis) — atom-seeded coarsening.** The walk above seeds entry points from individual plan nodes. An alternative seeds the initial EP cover from **atom boundaries**: the atoms present in the uncached DAG become the initial EP set, which the promotion criteria + confidence gating then refine (splitting an internal node into its own EP when it earns promotion; absorbing trivial atoms). This is a **soft prior, not a hard partition** — the plan/derivation substrate is retained, so finer-than-atom EPs remain reachable, and atom durations stay exact (an EP's cost is the sum of its _uncached_ member plans, which remain individually visible). The motivation is alignment with the _predictability frontier_: the atom-id is the profile key (§The Atom-Id Advantage), so atom boundaries are exactly where predictions — and therefore confidence gating — are most reliable, while refining below an atom enters low-confidence, unprofiled territory where the learning-augmented advantage thins. Whether this prior improves _realized_ makespan/redundancy is **not assumed**; it is evaluated as a seeding axis (`from-scratch` vs `atom-seeded`) crossed with the promotion variants in the trace-driven simulation. Because nixpkgs does not use the atom format, the trace corpus demarks top-level `pkgs`-set attributes as **synthetic atoms** for this axis — a proxy adequate for the comparison. Operationally (the candidate evaluated): (1) from lock information, mark which uncached plan nodes are atoms (in simulation, the synthetic `is_atom` marks); (2) take those atoms as the initial EP cover; (3) **absorb trivial atoms** — an atom with no, or only a few cheap, dependencies (aggregate cost below $\theta_{\text{trivial}}$) folds into its parent rather than becoming its own EP, avoiding scheduling overhead; (4) **refine large atoms** — run the H1 promotion criteria _within_ an atom to split out internal nodes that fire a criterion (long critical path / expensive) as their own EPs, confidence-gated as usual.
 
 **The Scheduling Table T (one graph, not two)**:
 There is exactly **one** graph — $G_\cup$. The coarsened
@@ -367,7 +367,7 @@ small), not maintained incrementally.
 
 #### 2b. Event-Driven PEFT Dispatch Protocol
 
-Instead of sequential topological dispatch or epoch batching, the scheduler employs **event-driven PEFT (Predict Earliest Finish Time) re-planning** on the **full EP DAG** (pending + ready + frozen). PEFT (Arabnejad & Barbosa, 2014) replaces static HEFT's upward rank with an **Optimistic Cost Table** (OCT). For each entry point `e` and worker `w`, `OCT(e, w)` is the optimistic cost to complete *all* remaining work downstream of `e`, assuming `e` runs on `w` and every future assignment is optimal. It is computed **backward** over the scheduling table T from exit EPs (EPs with no EP-level dependents):
+Instead of sequential topological dispatch or epoch batching, the scheduler employs **event-driven PEFT (Predict Earliest Finish Time) re-planning** on the **full EP DAG** (pending + ready + frozen). PEFT (Arabnejad & Barbosa, 2014) replaces static HEFT's upward rank with an **Optimistic Cost Table** (OCT). For each entry point `e` and worker `w`, `OCT(e, w)` is the optimistic cost to complete _all_ remaining work downstream of `e`, assuming `e` runs on `w` and every future assignment is optimal. It is computed **backward** over the scheduling table T from exit EPs (EPs with no EP-level dependents):
 
 $$OCT(e_i, w_k) = \max_{e_j \in \operatorname{succ}(e_i)} \; \min_{w_m \in W} \big[\, OCT(e_j, w_m) + d(e_j, w_m) \,\big], \qquad OCT(e_{\text{exit}}, w_k) = 0$$
 
@@ -375,8 +375,8 @@ PEFT uses OCT for both decisions HEFT made from upward rank, in $O(|S|^2 \cdot |
 
 1. **Priority ordering**: rank ready EPs by **effective priority**, dispatched in descending order:
    $$\operatorname{prio}(e) = \overline{\operatorname{OCT}}(e) + \gamma \cdot \operatorname{age}(e), \qquad \operatorname{age}(e) = \text{ticks since } e \text{ became ready}$$
-   The average-OCT term $\overline{\operatorname{OCT}}(e)$ schedules high-downstream-impact work first (replacing static upward rank); the **delay credit** $\gamma \cdot \operatorname{age}(e)$ makes a waiting EP's priority rise *without bound*. Because static OCT has a **bounded spread**, any ready EP therefore overtakes *any* stream of higher-priority arrivals within a **bounded wait of $\approx (\text{OCT spread}) / \gamma$** — so starvation is impossible **by construction** (not by a threshold/cutoff). This is the teeth of the **bounded-fair-dispatch (P5'+P12)** guarantee; at $\gamma = 0$ it degenerates to pure OCT and admits starvation (the model-checked counterexample). The credit is deliberately a **plain linear term, not a service-weighted virtual runtime** (CFS-style): the build scheduler is run-to-completion, so accrued *wait* — not time-sliced service — is the right primitive, and the linear form is what keeps the bounded-wait result provable. It is the greedy tier's reading of the *same* **delay cost** the MCMF tier places on a task's unscheduled edge (§Future Work): one shared cost model, two solvers, one property. The Δ dispatch hold (P9') is subsumed — a held EP dispatches the moment its credit makes it top priority with a feasible worker.
-2. **Worker selection**: for each ready EP, select the worker **minimizing `EFT(e, w) + OCT(e, w)`**, where `EFT(e, w) = worker_available_time(w) + d(e, w)`. This places the EP where it both finishes earliest *and* best sets up downstream work. Because `d(e, w)` is the cache- and fit-adjusted duration from §3, cache affinity and resource fit enter the selection through the duration model — there is no separate placement score.
+   The average-OCT term $\overline{\operatorname{OCT}}(e)$ schedules high-downstream-impact work first (replacing static upward rank); the **delay credit** $\gamma \cdot \operatorname{age}(e)$ makes a waiting EP's priority rise _without bound_. Because static OCT has a **bounded spread**, any ready EP therefore overtakes _any_ stream of higher-priority arrivals within a **bounded wait of $\approx (\text{OCT spread}) / \gamma$** — so starvation is impossible **by construction** (not by a threshold/cutoff). This is the teeth of the **bounded-fair-dispatch (P5'+P12)** guarantee; at $\gamma = 0$ it degenerates to pure OCT and admits starvation (the model-checked counterexample). The credit is deliberately a **plain linear term, not a service-weighted virtual runtime** (CFS-style): the build scheduler is run-to-completion, so accrued _wait_ — not time-sliced service — is the right primitive, and the linear form is what keeps the bounded-wait result provable. It is the greedy tier's reading of the _same_ **delay cost** the MCMF tier places on a task's unscheduled edge (§Future Work): one shared cost model, two solvers, one property. The Δ dispatch hold (P9') is subsumed — a held EP dispatches the moment its credit makes it top priority with a feasible worker.
+2. **Worker selection**: for each ready EP, select the worker **minimizing `EFT(e, w) + OCT(e, w)`**, where `EFT(e, w) = worker_available_time(w) + d(e, w)`. This places the EP where it both finishes earliest _and_ best sets up downstream work. Because `d(e, w)` is the cache- and fit-adjusted duration from §3, cache affinity and resource fit enter the selection through the duration model — there is no separate placement score.
 
 Ready EPs with feasible workers are dispatched within the bounded window Δ (immediately when prediction confidence is low — see P9' under §Guarantees), while pending EPs have their priorities and tentative placements computed but do NOT lock workers; workers remain available for ready work. The Δ hold is overridden by the delay credit: an EP held for cache warmth is released and dispatched as soon as its accrued delay credit would otherwise risk starvation, so fairness always dominates the warm-cache wait.
 
@@ -402,8 +402,8 @@ The state transitions are governed by the following event handlers:
      eos-network-protocol.md:282-300) to a **store shim**.
      The scheduler makes no per-node store round trips and
      holds no snix imports or gRPC client code; the shim
-     owns amortization (see *Cache filter and the store
-     boundary* below). The in-memory pre-filter shrinks the
+     owns amortization (see _Cache filter and the store
+     boundary_ below). The in-memory pre-filter shrinks the
      batch handed to the shim; terminal GC should not be
      overly aggressive, as retaining completed EPs briefly
      serves as a "recently cached" index that shrinks it
@@ -775,7 +775,7 @@ failure/health events trigger only PEFT re-planning.
 | Re-coarsening           | Greedy walk over MUTABLE partition           | $O(\|V'_{\text{mut}}\| + \|E'_{\text{mut}}\|)$ | RequestArrival |
 | Cache-skip scan         | Check scope overlap for mutable EPs          | $O(\|S_{\text{mut}}\| \cdot \bar\kappa)$       | EPComplete     |
 | Dependency cascade      | Update ready status of pending EPs           | $O(\|S\|)$                                     | EPComplete     |
-| EP DAG construction       | Transitive closure on selected set           | $O(\|S\|^2)$ worst case                        | RequestArrival |
+| EP DAG construction     | Transitive closure on selected set           | $O(\|S\|^2)$ worst case                        | RequestArrival |
 | PEFT re-planning        | Full EP DAG scheduling                       | $O(\|S\|^2 \cdot \|W\|)$                       | All events     |
 | EMA update              | Per-completion profile update                | $O(1)$                                         | EPComplete     |
 
@@ -795,7 +795,7 @@ full DAG construction cost:
 | :-------------------- | :------------------------------------------- | :----------------------------------------- |
 | DAG construction      | Topological sort + cache filtering           | $O(\|V'\| + \|E'\|)$                       |
 | Entry point selection | Greedy top-down walk with fan-in/cost checks | $O(\|V'\| + \|E'\|)$                       |
-| EP DAG construction     | Transitive closure on selected set           | $O(\|S\|^2)$ worst case                    |
+| EP DAG construction   | Transitive closure on selected set           | $O(\|S\|^2)$ worst case                    |
 | PEFT planning         | Initial full EP DAG scheduling               | $O(\|S\|^2 \cdot \|W\|)$                   |
 | LRH lookup (per EP)   | Cache affinity scoring                       | $O(\log\|R\| + C)$                         |
 | **Total (initial)**   | **First scheduling pass**                    | $O(\|V'\| + \|E'\| + \|S\|^2 \cdot \|W\|)$ |
@@ -914,8 +914,8 @@ fork-join, convergence, independent) with weak fairness.
   indefinitely — neither by an unrelated running EP nor by a
   stream of higher-priority arrivals. This is the umbrella
   liveness guarantee, with two facets verified separately:
-  - **Head-of-line freedom (P5')** — the *no-contention /
-    structural* facet: a large, slow EP on one worker never
+  - **Head-of-line freedom (P5')** — the _no-contention /
+    structural_ facet: a large, slow EP on one worker never
     blocks dispatch of unrelated ready EPs to other workers
     (no dispatch queue, no global ordering). Verified as the
     `HoLFreedom` structural invariant (every topology, including
@@ -924,7 +924,7 @@ fork-join, convergence, independent) with weak fairness.
     only by that EP's readiness and the worker's capacity, never
     by another EP. Non-vacuous — a serializing dispatch rule
     violates it within two steps (mutation-tested).
-  - **Starvation-freedom (P12)** — the *contention* facet: under
+  - **Starvation-freedom (P12)** — the _contention_ facet: under
     continuous higher-priority arrival, a low-priority ready EP
     is still eventually dispatched, because its priority carries
     a delay credit $\gamma \cdot \operatorname{age}$ (§2b) that
@@ -932,7 +932,7 @@ fork-join, convergence, independent) with weak fairness.
     `StarvationModel` (single worker, recurring high-priority
     stream); non-vacuous — $\gamma = 0$ yields a TLC starvation
     counterexample. This generalizes P9' from the
-    highest-priority ready EP (dispatched within Δ) to *every*
+    highest-priority ready EP (dispatched within Δ) to _every_
     ready EP (dispatched within a larger but finite, delay-credit
     bound), so priority ordering never breaks liveness.
 - **Completion propagation (P6)**: Every dispatched EP
@@ -958,6 +958,7 @@ fork-join, convergence, independent) with weak fairness.
   of magnitude over a cold fetch. This relaxation is what makes
   PEFT's look-ahead valuable — strict work conservation forced
   immediate dispatch and rendered the look-ahead inert.
+
 - **Transient recovery (P10)**: After a transient
   infrastructure failure (worker crash, network partition),
   the affected EPs are reverted to `ready` and
@@ -1272,11 +1273,11 @@ The initial design dispatched with **static HEFT** (Topcuoglu
 et al., IEEE TPDS 2002), prioritizing EPs by upward rank and
 building a time-slotted assignment plan. It is superseded by
 PEFT (§2b) for two reasons. First, HEFT's time-slot matrix for
-*pending* EPs is causally disconnected from dispatch under strict
+_pending_ EPs is causally disconnected from dispatch under strict
 work conservation — the predictions never drive a decision, so
 the matrix was effectively phantom. Second, PEFT's Optimistic
 Cost Table is strictly more informative than upward rank
-(it is worker-aware and downstream-path-aware) at the *same*
+(it is worker-aware and downstream-path-aware) at the _same_
 $O(|S|^2 \cdot |W|)$ complexity. The lookahead-HEFT variant
 (Bittencourt et al., Euromicro PDP 2010) achieves comparable
 downstream awareness but at $O(|S|^3)$ — too expensive for the
@@ -1845,16 +1846,16 @@ point selection is a potential novel contribution.
    The entry point DAG is constructed once and dispatched
    topologically without re-computation.
 
-3. **Entry point granularity** — RESOLVED *in form, not in
-   calibration*. Granularity is algorithmic (determined per
+3. **Entry point granularity** — RESOLVED _in form, not in
+   calibration_. Granularity is algorithmic (determined per
    plan by analyzing the subgraph below each candidate), not
-   a static parameter — that much is settled. *Which* signals
+   a static parameter — that much is settled. _Which_ signals
    and thresholds drive promotion is **not** settled: the
    leading hypothesis H1 (§2a) promotes on critical-path cut,
    cost-gated convergence, and troublesome cost, all
    confidence-gated; the alternatives H2–H4 and the threshold
    calibration are decided by trace-driven simulation
-   (§Optimality, *The Simulation Gap*), not by this ADR.
+   (§Optimality, _The Simulation Gap_), not by this ADR.
    In all variants, small tightly-coupled subgraphs are
    absorbed into their parent entry point while large,
    loosely-coupled subgraphs are split at convergence points;
@@ -1956,27 +1957,27 @@ independent) using TLC with weak fairness.
 
 **Verified properties:**
 
-| Property                     | Type     | Status |
-| :--------------------------- | :------- | :----- |
-| Ordering soundness (P1)      | Safety   | ✅     |
-| Capacity safety (P4)         | Safety   | ✅     |
-| Artifact completeness (P3)   | Safety   | ✅     |
-| Progress (P5)                | Liveness | ✅     |
-| Completion prop. (P6)        | Liveness | ✅     |
-| HoL freedom (P5')            | Safety   | ✅     |
-| Starvation-freedom (P12)     | Liveness | ✅     |
-| Per-request completion (P6') | Liveness | ✅     |
-| Frozen stability (P8)        | Safety   | ✅     |
-| Work conservation (P9, strict) | Liveness | ✅ (Δ = 0 case of P9') |
-| Bounded-window work cons. (P9') | Liveness | ✅ (Δ ∈ {0, 2}) |
-| Transient recovery (P10)     | Liveness | ✅     |
-| Failure isolation (P11)      | Safety   | ✅     |
-| Acyclic merge (P14)          | Safety   | ✅     |
-| No non-terminal wedge (P15)  | Safety   | ✅     |
+| Property                        | Type     | Status                 |
+| :------------------------------ | :------- | :--------------------- |
+| Ordering soundness (P1)         | Safety   | ✅                     |
+| Capacity safety (P4)            | Safety   | ✅                     |
+| Artifact completeness (P3)      | Safety   | ✅                     |
+| Progress (P5)                   | Liveness | ✅                     |
+| Completion prop. (P6)           | Liveness | ✅                     |
+| HoL freedom (P5')               | Safety   | ✅                     |
+| Starvation-freedom (P12)        | Liveness | ✅                     |
+| Per-request completion (P6')    | Liveness | ✅                     |
+| Frozen stability (P8)           | Safety   | ✅                     |
+| Work conservation (P9, strict)  | Liveness | ✅ (Δ = 0 case of P9') |
+| Bounded-window work cons. (P9') | Liveness | ✅ (Δ ∈ {0, 2})        |
+| Transient recovery (P10)        | Liveness | ✅                     |
+| Failure isolation (P11)         | Safety   | ✅                     |
+| Acyclic merge (P14)             | Safety   | ✅                     |
+| No non-terminal wedge (P15)     | Safety   | ✅                     |
 
 The bounded-window **P9'** (§Guarantees) is checked in the
 `MultiRequestModel` with a `clock` variable, `readySince`
-timestamps, and a clock-guarded `Tick` so an *intentional*
+timestamps, and a clock-guarded `Tick` so an _intentional_
 dispatch delay within Δ does not count as a fairness violation;
 the Δ = 0 configuration recovers the strict P9. The time-free
 safety properties (P1, P3, P4, P8, P11) are independent of the
@@ -2015,7 +2016,7 @@ classical axioms only (`propext`, `Classical.choice`,
 | Thm 7   | Re-coarsening convergence: monotonicity and finite-step cache convergence                     | ✅     |
 
 > **Makespan layering**: Theorems 2/2'/6 are stated over the
-> *structural* (critical-path) makespan — a function of durations,
+> _structural_ (critical-path) makespan — a function of durations,
 > which is the layer where the $(1+\varepsilon)/(1-\varepsilon)$
 > degradation argument lives. The resource-contention factor
 > (ideal critical path vs. resource-constrained schedule) is the
@@ -2055,7 +2056,7 @@ See `docs/models/lean/` for proof sources.
    the quantitative makespan penalty is not mechanized.
    Low risk: the transient is geometrically short and
    capacity safety (Track A) holds throughout.
-4. **Starvation prevention (P12) — RESOLVED**: the priority ordering carries a delay credit $\gamma \cdot \operatorname{age}(e)$ (§2b) — the greedy-tier reading of the MCMF delay cost — so a low-priority EP's effective priority rises until it outranks continuous higher-priority arrivals. Starvation-freedom is model-checked in `StarvationModel` (TLA+; single worker, recurring high-priority stream), non-vacuously ($\gamma = 0$ reproduces the starvation counterexample). See §Guarantees, *Bounded-fair-dispatch (P5' + P12)*.
+4. **Starvation prevention (P12) — RESOLVED**: the priority ordering carries a delay credit $\gamma \cdot \operatorname{age}(e)$ (§2b) — the greedy-tier reading of the MCMF delay cost — so a low-priority EP's effective priority rises until it outranks continuous higher-priority arrivals. Starvation-freedom is model-checked in `StarvationModel` (TLA+; single worker, recurring high-priority stream), non-vacuously ($\gamma = 0$ reproduces the starvation counterexample). See §Guarantees, _Bounded-fair-dispatch (P5' + P12)_.
 5. **DAG Boundedness and Memory Limits (P13)**: The TLA+ and Lean models assume a finite vertex set $V$. At runtime, the unified global DAG must be bounded to prevent memory exhaustion under continuous request streams. Proving memory safety and progress under sliding window request pruning is a future modeling objective.
 
 ## Future Work: Federated Scale via Min-Cost Max-Flow (MCMF)

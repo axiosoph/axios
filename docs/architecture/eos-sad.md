@@ -84,12 +84,12 @@ graph TB
 
 ### 1.3 System Boundaries
 
-| Boundary                  | Inside Eos                                                                | Outside Eos                                                     |
-| :------------------------ | :------------------------------------------------------------------------ | :---------------------------------------------------------------- |
+| Boundary                  | Inside Eos                                                                             | Outside Eos                                                                        |
+| :------------------------ | :------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------- |
 | **Scheduling**            | Dispatching build actions to executor workers, action-id cache, DAG traversal ordering | The `build` function itself, sandboxing, FHS-view materialization (L2/HTC concern) |
-| **Atom Fetching**         | Fetching top-level atoms into local store (registries → local → ion peer) | Atom identity, signing, verification (L1 concern)                |
-| **Dependency Resolution** | Not an Eos concern                                                        | Lock file resolution, atom-DAG construction, SAT solving (L4/Ion concern) |
-| **Artifact Storage**      | All workers use the global shared store (HTC's CAS)                       | Store implementation, GC, replication (L2/HTC concern)            |
+| **Atom Fetching**         | Fetching top-level atoms into local store (registries → local → ion peer)              | Atom identity, signing, verification (L1 concern)                                  |
+| **Dependency Resolution** | Not an Eos concern                                                                     | Lock file resolution, atom-DAG construction, SAT solving (L4/Ion concern)          |
+| **Artifact Storage**      | All workers use the global shared store (HTC's CAS)                                    | Store implementation, GC, replication (L2/HTC concern)                             |
 
 ### 1.4 Layer Discipline
 
@@ -102,8 +102,8 @@ Dependencies flow strictly downward: Ion (L4) → Eos (L3) → HTC (L2) → Atom
   dependencies** — no FHS-specific code, no snix code. All build execution
   occurs through workers implementing HTC's executor trait
   (`build(atom_closure, toolchain_composition, action params) → output
-  tree`, htc-sad §3.5) via gRPC/Cap'n Proto. This mirrors `layer-
-  boundaries.md`'s `[boundary-downward-only]` rule; eos depends on HTC only
+tree`, htc-sad §3.5) via gRPC/Cap'n Proto. This mirrors `layer-
+boundaries.md`'s `[boundary-downward-only]` rule; eos depends on HTC only
   through the executor trait it dispatches through (htc-sad §1.4).
 
 ### 1.5 Deployment Modes
@@ -113,11 +113,11 @@ and dependency injection. All modes share identical codepaths —
 the mode determines wiring, not logic. See
 [ADR-0003](../adr/0003-composable-deployment-modes.md).
 
-| Mode                | Description                                                                                                                          |
-| :------------------ | :-------------------------------------------------------------------------------------------------------------------------------------- |
-| **Monolithic Ion**  | `BuildEngine` compiled into `ion-cli`. Zero daemons, zero sockets. The executor trait is wired in-process (FHS executor). |
+| Mode                | Description                                                                                                                           |
+| :------------------ | :------------------------------------------------------------------------------------------------------------------------------------ |
+| **Monolithic Ion**  | `BuildEngine` compiled into `ion-cli`. Zero daemons, zero sockets. The executor trait is wired in-process (FHS executor).             |
 | **Monolithic Eos**  | Single `eosd` daemon with an executor implementation compiled in. Ion connects as a thin client. Simplifies multi-client single-host. |
-| **Distributed Eos** | Ion → `eosd` → executor worker pool → executor backends (HTC's shared CAS + FHS executor). Each component independently scalable. |
+| **Distributed Eos** | Ion → `eosd` → executor worker pool → executor backends (HTC's shared CAS + FHS executor). Each component independently scalable.     |
 
 All modes produce identical outputs (mode bisimilarity). The
 monolithic modes are compiler features (Cargo feature flags),
@@ -128,11 +128,11 @@ not architectural modes — they MUST NOT modify codepaths.
 The system uses two functionally distinct store types (a third, `ArtifactStore`,
 is owned one layer down):
 
-| Store             | Layer      | Semantics                                          | Interface                                  |
-| :---------------- | :--------- | :--------------------------------------------------- | :------------------------------------------- |
-| **AtomRegistry**  | L1         | Append-only, signed, distributed publishing        | `claim()`, `publish()`                     |
-| **AtomStore**     | L1         | Mutable working store, collects atoms from sources | `ingest()`, `import_path()`                |
-| **ArtifactStore** | L2 (HTC)   | Content-addressed build output blobs (HTC's shared CAS — `snix-castore` `BlobService`/`DirectoryService`, reused, htc-sad §2.4) | `store()`, `fetch()`, `check_substitute()` |
+| Store             | Layer    | Semantics                                                                                                                       | Interface                                  |
+| :---------------- | :------- | :------------------------------------------------------------------------------------------------------------------------------ | :----------------------------------------- |
+| **AtomRegistry**  | L1       | Append-only, signed, distributed publishing                                                                                     | `claim()`, `publish()`                     |
+| **AtomStore**     | L1       | Mutable working store, collects atoms from sources                                                                              | `ingest()`, `import_path()`                |
+| **ArtifactStore** | L2 (HTC) | Content-addressed build output blobs (HTC's shared CAS — `snix-castore` `BlobService`/`DirectoryService`, reused, htc-sad §2.4) | `store()`, `fetch()`, `check_substitute()` |
 
 Eos consumes atoms via `AtomContent` — the forgetful functor
 that drops mutation observers (`ingest`, `contains`) from
@@ -357,10 +357,10 @@ composition, and writes of the resulting output tree.
 The end-to-end lifecycle follows the `BuildPlan` coproduct — each requested
 action resolves to one of two variants:
 
-| Variant              | Meaning                    | Action                    |
-| :-------------------- | :--------------------------- | :--------------------------- |
-| `Cached(output_tree)` | Output exists in the CAS     | Return immediately         |
-| `NeedsBuild(action)`  | Nothing cached                | Dispatch to executor worker |
+| Variant               | Meaning                  | Action                      |
+| :-------------------- | :----------------------- | :-------------------------- |
+| `Cached(output_tree)` | Output exists in the CAS | Return immediately          |
+| `NeedsBuild(action)`  | Nothing cached           | Dispatch to executor worker |
 
 This two-variant cache-skipping model is the system's core value
 proposition: the `action_id` cache (§6.5) plus the shared CAS (§2.3, §6.1)
@@ -649,7 +649,7 @@ All data in the system is content-addressed:
   over the H formula in §6.5) — the one drv/plan-hash-shaped identity in
   the system.
 - **Artifacts**: content-addressed output trees in HTC's shared CAS
-  (htc-sad §2.4), each *build event* producing one `BuildRecord` —
+  (htc-sad §2.4), each _build event_ producing one `BuildRecord` —
   records accumulate per action (multiple builders may legitimately
   contribute distinct witnesses, useful as reproducibility evidence;
   execution-model.md §2.2, ADR-0006 §4) (htc-sad §2.3).
@@ -812,12 +812,11 @@ required tags must be a subset of the worker's tags.
 Common tag conventions (not hardcoded in the protocol):
 
 | Tag Key                | Example Value  | Semantics                        |
-| :--------------------- | :------------- | :-------------------------------- |
+| :--------------------- | :------------- | :------------------------------- |
 | `system`               | `x86_64-linux` | Target system triple             |
 | `feature:kvm`          | `true`         | `requiredSystemFeatures` match   |
 | `feature:big-parallel` | `true`         | `requiredSystemFeatures` match   |
 | `tier`                 | `large`        | Hardware tier for weight scoring |
-
 
 **Scheduling weight** (optional):
 
@@ -884,12 +883,12 @@ over ping (scheduler→worker) because:
 
 Two independent transport layers:
 
-| Surface                | Protocol        | Transport              | Auth                                                    |
-| :--------------------- | :-------------- | :---------------------- | :--------------------------------------------------------- |
-| Client → Daemon        | Cap'n Proto RPC | UDS (dev) / TCP (prod) | Pluggable (NullAuth / CyphrAuth / MtlsAuth / TokenAuth) |
-| Daemon → Workers       | Cap'n Proto RPC | UDS or TCP             | Internal cluster trust                                  |
-| Workers → Shared CAS   | gRPC            | TCP                    | Store config                                            |
-| Workers → Executor Backend | gRPC       | TCP                    | Executor config                                         |
+| Surface                    | Protocol        | Transport              | Auth                                                    |
+| :------------------------- | :-------------- | :--------------------- | :------------------------------------------------------ |
+| Client → Daemon            | Cap'n Proto RPC | UDS (dev) / TCP (prod) | Pluggable (NullAuth / CyphrAuth / MtlsAuth / TokenAuth) |
+| Daemon → Workers           | Cap'n Proto RPC | UDS or TCP             | Internal cluster trust                                  |
+| Workers → Shared CAS       | gRPC            | TCP                    | Store config                                            |
+| Workers → Executor Backend | gRPC            | TCP                    | Executor config                                         |
 
 ### 8.2 Authentication
 
@@ -1027,14 +1026,14 @@ The daemon holds only ephemeral in-flight state. On restart:
 The following areas require further analysis. Each may result
 in a future ADR or specification amendment.
 
-| #   | Gap                       | Notes                                                                                                                               |
-| :-- | :------------------------ | :---------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **Caching strategy**      | How is the action cache distributed across a cluster? How do developer-signed metadata tags interact with cache-skipping (§6.6)?    |
-| 2   | **Scheduling depth**      | Priority, preemption, work-stealing trade-offs, and fairness require rigorous analysis against scheduling literature. Proposed ADR. |
-| 3   | **Store topology**        | How do HTC's shared CAS instances relate in multi-site deployments? Store-to-store substitution and trust policy interaction.       |
-| 4   | **Observability**         | Metrics, tracing, structured logging for operator debugging.                                                                        |
-| 5   | **Graceful degradation**  | Behavior under partial availability (fewer workers, store unreachable).                                                             |
-| 6   | **Pluggable auth design** | Auth trait interface, initial implementations, transport vs application layer boundary.                                             |
+| #   | Gap                                    | Notes                                                                                                                                                                                                                     |
+| :-- | :------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | **Caching strategy**                   | How is the action cache distributed across a cluster? How do developer-signed metadata tags interact with cache-skipping (§6.6)?                                                                                          |
+| 2   | **Scheduling depth**                   | Priority, preemption, work-stealing trade-offs, and fairness require rigorous analysis against scheduling literature. Proposed ADR.                                                                                       |
+| 3   | **Store topology**                     | How do HTC's shared CAS instances relate in multi-site deployments? Store-to-store substitution and trust policy interaction.                                                                                             |
+| 4   | **Observability**                      | Metrics, tracing, structured logging for operator debugging.                                                                                                                                                              |
+| 5   | **Graceful degradation**               | Behavior under partial availability (fewer workers, store unreachable).                                                                                                                                                   |
+| 6   | **Pluggable auth design**              | Auth trait interface, initial implementations, transport vs application layer boundary.                                                                                                                                   |
 | 8   | **Toolchain-composition lock pinning** | `action_id` (§6.5) commits to `toolchain_composition_root`, but no lock entry type yet pins a toolchain composition (ADR-0005 Open Items; htc-sad §9 item 11) — a P2/P5 dependency of this document's own identity chain. |
 
 ---
@@ -1061,7 +1060,7 @@ explicitly outside its scope:
   between clusters, not shared tenancy within a cluster.
   Intra-cluster fairness is not a current concern.
 - **The build function itself**: `build(atom closure, toolchain
-  composition, action params) → output tree` — sandboxing, FHS-view
+composition, action params) → output tree` — sandboxing, FHS-view
   materialization, interface analysis, and composition are HTC's (L2)
   contract, not eos's. Eos dispatches through the executor trait; it does
   not implement it.
@@ -1070,58 +1069,58 @@ explicitly outside its scope:
 
 ## Appendix A: Terminology
 
-| Term         | Definition                                                           |
-| :----------- | :--------------------------------------------------------------------- |
-| **Anchor**   | Cryptographic commitment establishing atom-set identity              |
-| **Atom-id**  | The abstract pair `(anchor, label)` — identity is the pair itself, not a digest of it (atom-sad §6.1, `[identity-content-addressed]`) |
-| **Atom-set** | Collection of atoms sharing a common anchor                          |
-| **Label**    | Human-readable name for an atom within an atom-set                   |
-| **Digest**   | Abstract content-addressed hash (algorithm not hardcoded)            |
-| **Action**   | One invocation of HTC's `build` function; identified by `action_id` (htc-sad §6.5) |
-| **Action-id**| `H(atom_czd_closure_root, toolchain_composition_root, action_params)` — the scheduler's cache key (ADR-0005 §2) |
-| **Plan**     | Engine-specific build recipe (`BuildEngine::Plan` associated type); the MVP realization is the atom action, identified by `action_id` (ADR-0005 Supersede-ADR-0001) |
-| **Output**   | Engine-specific build result (`BuildEngine::Output` associated type); the MVP realization is an output tree in HTC's CAS |
-| **Artifact** | Content-addressed blob/tree in HTC's shared CAS                       |
-| **Revision** | A specific commit in source history                                  |
+| Term          | Definition                                                                                                                                                          |
+| :------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Anchor**    | Cryptographic commitment establishing atom-set identity                                                                                                             |
+| **Atom-id**   | The abstract pair `(anchor, label)` — identity is the pair itself, not a digest of it (atom-sad §6.1, `[identity-content-addressed]`)                               |
+| **Atom-set**  | Collection of atoms sharing a common anchor                                                                                                                         |
+| **Label**     | Human-readable name for an atom within an atom-set                                                                                                                  |
+| **Digest**    | Abstract content-addressed hash (algorithm not hardcoded)                                                                                                           |
+| **Action**    | One invocation of HTC's `build` function; identified by `action_id` (htc-sad §6.5)                                                                                  |
+| **Action-id** | `H(atom_czd_closure_root, toolchain_composition_root, action_params)` — the scheduler's cache key (ADR-0005 §2)                                                     |
+| **Plan**      | Engine-specific build recipe (`BuildEngine::Plan` associated type); the MVP realization is the atom action, identified by `action_id` (ADR-0005 Supersede-ADR-0001) |
+| **Output**    | Engine-specific build result (`BuildEngine::Output` associated type); the MVP realization is an output tree in HTC's CAS                                            |
+| **Artifact**  | Content-addressed blob/tree in HTC's shared CAS                                                                                                                     |
+| **Revision**  | A specific commit in source history                                                                                                                                 |
 
 Composition, interface manifest, and `BuildRecord` are HTC-owned objects
 consumed, not redefined, here — see htc-sad Appendix A.
 
 ## Appendix B: Crate Map
 
-| Layer | Crate        | Kind            | Purpose                                                     |
-| :---- | :----------- | :-------------- | :------------------------------------------------------------ |
+| Layer | Crate        | Kind            | Purpose                                                                                                                             |
+| :---- | :----------- | :-------------- | :---------------------------------------------------------------------------------------------------------------------------------- |
 | L3    | `eos-core`   | Contract        | Engine traits: `BuildEngine`, `ArtifactStore`, `AtomIndex` — binds HTC's executor trait via the `BuildEngine::Plan` associated type |
-| L3    | `eos-daemon` | Implementation  | Scheduler, executor worker pool, RPC server (zero executor-implementation deps target) |
-| L3    | `eos-proto`  | Contract (wire) | Cap'n Proto schema and generated code                       |
-| L3    | `eos-snix`   | Implementation  | Slated for removal (evaluator eradicated, ADR-0006 §3) |
-| L3    | `eos`        | Implementation  | Orchestration: wires engine + store                         |
-| L4    | `ion-eos`    | Bridge          | Client interface: Ion → Eos daemon via Cap'n Proto          |
+| L3    | `eos-daemon` | Implementation  | Scheduler, executor worker pool, RPC server (zero executor-implementation deps target)                                              |
+| L3    | `eos-proto`  | Contract (wire) | Cap'n Proto schema and generated code                                                                                               |
+| L3    | `eos-snix`   | Implementation  | Slated for removal (evaluator eradicated, ADR-0006 §3)                                                                              |
+| L3    | `eos`        | Implementation  | Orchestration: wires engine + store                                                                                                 |
+| L4    | `ion-eos`    | Bridge          | Client interface: Ion → Eos daemon via Cap'n Proto                                                                                  |
 
 The primary FHS executor is HTC-owned (L2, htc-sad Appendix B); this map
 does not restate its crate surface.
 
 ## Appendix C: Specification Cross-Reference
 
-| SAD Section          | Governing Specification                                                                                    |
-| :------------------- | :-------------------------------------------------------------------------------------------------------------- |
-| §2.1 Daemon          | [eos-scheduler.md](../specs/eos-scheduler.md)                                                              |
-| §2.2 Executor Workers | [htc-sad.md](htc-sad.md) §3.5 (executor trait); [eos-build-engine.md](../specs/eos-build-engine.md) (re-scoped) |
-| §2.3–2.4 Executor Backends | [htc-sad.md](htc-sad.md) §2.4, §4, §6.8                                                              |
-| §4.1 Build Lifecycle | [ion-eos-contract.md](../specs/ion-eos-contract.md)                                                        |
-| §4.3 Atom Fetching   | [ion-eos-contract.md](../specs/ion-eos-contract.md) §Content Delivery; [ion-sad.md](ion-sad.md) §6.6 (Eos Handoff) |
-| §6.1 Shared Store    | [htc-sad.md](htc-sad.md) §2.4                                                                                |
-| §6.2 Executor Isolation | [htc-sad.md](htc-sad.md) §1.1, §6.8; [eos-sandboxing.md](../specs/eos-sandboxing.md) (re-scoped)          |
-| §6.3 Fetch Execution | [htc-sad.md](htc-sad.md) §4.2                                                                                |
-| §6.4 Build Sandbox   | [htc-sad.md](htc-sad.md) §4; [eos-sandboxing.md](../specs/eos-sandboxing.md) (re-scoped)                    |
-| §6.5 Action-Id Cache | [htc-sad.md](htc-sad.md) §6.5; [ADR-0005](../adr/0005-hermetic-transactional-composition.md) §2             |
-| §6.6 Content Addressing | [htc-sad.md](htc-sad.md) §6.5; [atom-sad.md](atom-sad.md) §6.5–§6.7                                       |
-| §6.7 Substitution    | [eos-network-protocol.md](../specs/eos-network-protocol.md) §Substitution                                  |
-| §6.8 Formal Model    | [publishing-stack-layers.md](../models/publishing-stack-layers.md)                                         |
-| §7 Worker Model      | [eos-scheduler.md](../specs/eos-scheduler.md), [eos-network-protocol.md](../specs/eos-network-protocol.md) |
-| §8 Transport         | [eos-network-protocol.md](../specs/eos-network-protocol.md)                                                |
-| Layer Discipline     | [layer-boundaries.md](../specs/layer-boundaries.md); [ADR-0005](../adr/0005-hermetic-transactional-composition.md) §9 (`[htc-layer-designation]`) |
-| DAG Intake           | [ion-sad.md](ion-sad.md) §6.6 (Eos Handoff, minimal pointer); [ADR-0005](../adr/0005-hermetic-transactional-composition.md) §6 |
+| SAD Section                | Governing Specification                                                                                                                           |
+| :------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------ |
+| §2.1 Daemon                | [eos-scheduler.md](../specs/eos-scheduler.md)                                                                                                     |
+| §2.2 Executor Workers      | [htc-sad.md](htc-sad.md) §3.5 (executor trait); [eos-build-engine.md](../specs/eos-build-engine.md) (re-scoped)                                   |
+| §2.3–2.4 Executor Backends | [htc-sad.md](htc-sad.md) §2.4, §4, §6.8                                                                                                           |
+| §4.1 Build Lifecycle       | [ion-eos-contract.md](../specs/ion-eos-contract.md)                                                                                               |
+| §4.3 Atom Fetching         | [ion-eos-contract.md](../specs/ion-eos-contract.md) §Content Delivery; [ion-sad.md](ion-sad.md) §6.6 (Eos Handoff)                                |
+| §6.1 Shared Store          | [htc-sad.md](htc-sad.md) §2.4                                                                                                                     |
+| §6.2 Executor Isolation    | [htc-sad.md](htc-sad.md) §1.1, §6.8; [eos-sandboxing.md](../specs/eos-sandboxing.md) (re-scoped)                                                  |
+| §6.3 Fetch Execution       | [htc-sad.md](htc-sad.md) §4.2                                                                                                                     |
+| §6.4 Build Sandbox         | [htc-sad.md](htc-sad.md) §4; [eos-sandboxing.md](../specs/eos-sandboxing.md) (re-scoped)                                                          |
+| §6.5 Action-Id Cache       | [htc-sad.md](htc-sad.md) §6.5; [ADR-0005](../adr/0005-hermetic-transactional-composition.md) §2                                                   |
+| §6.6 Content Addressing    | [htc-sad.md](htc-sad.md) §6.5; [atom-sad.md](atom-sad.md) §6.5–§6.7                                                                               |
+| §6.7 Substitution          | [eos-network-protocol.md](../specs/eos-network-protocol.md) §Substitution                                                                         |
+| §6.8 Formal Model          | [publishing-stack-layers.md](../models/publishing-stack-layers.md)                                                                                |
+| §7 Worker Model            | [eos-scheduler.md](../specs/eos-scheduler.md), [eos-network-protocol.md](../specs/eos-network-protocol.md)                                        |
+| §8 Transport               | [eos-network-protocol.md](../specs/eos-network-protocol.md)                                                                                       |
+| Layer Discipline           | [layer-boundaries.md](../specs/layer-boundaries.md); [ADR-0005](../adr/0005-hermetic-transactional-composition.md) §9 (`[htc-layer-designation]`) |
+| DAG Intake                 | [ion-sad.md](ion-sad.md) §6.6 (Eos Handoff, minimal pointer); [ADR-0005](../adr/0005-hermetic-transactional-composition.md) §6                    |
 
 ## Appendix D: Known Layer Violations
 
@@ -1129,7 +1128,7 @@ The following are documented violations of the layer boundaries
 that require migration work:
 
 | #   | Violation                            | Location                    | Migration                          |
-| :-- | :----------------------------------- | :--------------------------- | :----------------------------------- |
+| :-- | :----------------------------------- | :-------------------------- | :--------------------------------- |
 | 1   | Lock types in `eos` instead of `ion` | `eos/eos/src/lock.rs`       | Migrate to `ion/ion-lock/`         |
 | 2   | `ion-eos` ad-hoc TOML parsing        | `ion-eos/src/lib.rs:78-92`  | Use lock types                     |
 | 3   | Eos receives raw lock content        | `run_orchestrated_build()`  | Accept structured `eos-core` types |

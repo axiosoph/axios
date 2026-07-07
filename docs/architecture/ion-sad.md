@@ -308,7 +308,7 @@ pipeline:
 
 > **Note (2026-07-05; amended 2026-07-07):** This section's terminology
 > matches the substrate model — no evaluation stage; `action_params`,
-> not `eval_args` (eos-sad.md §6.5). The compose *object model*
+> not `eval_args` (eos-sad.md §6.5). The compose _object model_
 > (`compose.use`/`compose.as.nix`) described an evaluator-shaped
 > composer and is **dead** per
 > [ADR-0006](../adr/0006-execution-as-the-primitive.md) §3 (the

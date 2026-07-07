@@ -44,7 +44,7 @@ Under the atom-DAG/executor-trait architecture
 ([ADR-0005](../adr/0005-hermetic-transactional-composition.md),
 [htc-sad.md](../architecture/htc-sad.md)), sandboxing responsibilities are:
 
-1. **FHS-view materialization**: the primary executor mounts a *composed*
+1. **FHS-view materialization**: the primary executor mounts a _composed_
    input tree — the atom closure plus toolchain composition, merged — as
    the build's rootfs, not a set of per-input directories. Inputs are
    read-only and digest-verified by the CAS.
@@ -78,11 +78,6 @@ scheduler.
 - [eos-sad.md](../architecture/eos-sad.md) — §6.2 (Executor Isolation), §6.4
   (Build Sandboxing) — the L3-side restatement that this contract is wholly
   delegated, not performed, by the scheduler
-- [eos-snix-backend.md](eos-snix-backend.md) — the optional legacy
-  executor's own retained build/store mechanics (Derivation→BuildRequest
-  conversion, platform sandbox dispatch); its Nix-expression evaluation
-  capability is out of this document's scope (see that file's historical
-  note)
 
 **Criticality Tier:** High — build hermeticity governs the reproducibility
 of the entire stack. Failure to contain build execution permits arbitrary
@@ -120,12 +115,11 @@ Pipeline) — not reproduced here.
 ### FHS-View Materialization
 
 **[eos-sandbox-fhs-materialization]**: The primary executor MUST mount the
-*composed* atom closure and toolchain composition as a single FHS-view
+_composed_ atom closure and toolchain composition as a single FHS-view
 rootfs (htc-sad.md §2, §4.1) — a merged tree at conventional FHS paths, not
 a set of per-input directories addressed by an `inputs_dir` parameter (the
-underlying `snix-build` gRPC surface's own layout convention,
-[eos-snix-backend.md](eos-snix-backend.md) §Snix gRPC Build Protocol, which
-this executor's composition-to-rootfs step sits above, not inside). Every
+underlying `snix-build` gRPC surface's own layout convention (the snix
+fork's build protocol).
 file and directory in the mounted view MUST be read-only and digest-verified
 by the CAS at materialization time — a build process MUST NOT be able to
 write into any part of the mounted closure.
@@ -158,7 +152,7 @@ derivation-level flag.
 **[eos-sandbox-read-set-capture]**: The castore FUSE daemon that
 materializes the FHS view (§Sandbox Execution Model) MUST log `(path,
 digest)` for every read of the composed closure during a build or
-check-phase run — this daemon is the *only* source of those bytes, making it
+check-phase run — this daemon is the _only_ source of those bytes, making it
 an unbypassable observation point (htc-sad.md §6.3, the Trace Observer).
 The resulting observed read-set MUST be a subset of the declared closure
 (`[htc-declared-closure-enforced]`, htc-sad.md §1.1: reads ⊆ declared,
@@ -186,8 +180,8 @@ given executor achieves isolation (eos-sad.md §6.2).
 **[eos-build-sandbox-host-isolation]**: Build execution MUST NOT write
 outside the temporary directory allocated for the build task. Inputs MUST
 be mounted read-only (§FHS-View Materialization). This invariant is
-strengthened by its declared-closure form: the build's *observed* read set
-MUST be contained within its *declared* closure —
+strengthened by its declared-closure form: the build's _observed_ read set
+MUST be contained within its _declared_ closure —
 `[htc-declared-closure-enforced]` (htc-sad.md §1.1) — a containment property
 the sandbox enforces directly (by denying reads outside the materialized
 view), not one inferred after the fact from the read-set log
@@ -202,11 +196,11 @@ mounts is one instance of three materialization tiers over the same
 composition object (`[htc-materialization-tiers]`, ADR-0005 §11; htc-sad.md
 §5):
 
-| Tier | Mechanism | Use site |
-| :--- | :--- | :--- |
+| Tier        | Mechanism                                                            | Use site                                                      |
+| :---------- | :------------------------------------------------------------------- | :------------------------------------------------------------ |
 | **Observe** | castore FUSE (this document's concern — builds and check-phase runs) | Read-set logging is active; never used for production runtime |
-| **Fast** | composefs/EROFS + fs-verity | Production runtime views — no observation, no overhead |
-| **Export** | plain copy / OCI image / tarball | Interop and deployment onto systems outside this substrate |
+| **Fast**    | composefs/EROFS + fs-verity                                          | Production runtime views — no observation, no overhead        |
+| **Export**  | plain copy / OCI image / tarball                                     | Interop and deployment onto systems outside this substrate    |
 
 The sandbox this document specifies operates exclusively at the Observe
 tier. Fast and Export tiers are runtime/deployment concerns outside build
@@ -240,17 +234,17 @@ mounted closure is read-only; there is no writable path inside it.
 
 ## Verification
 
-| Constraint                              | Method               | Result     | Detail                                                                          |
-| :--------------------------------------- | :-------------------- | :--------- | :------------------------------------------------------------------------------ |
-| `eos-sandbox-fhs-materialization`       | Sandbox mount test    | UNVERIFIED | Verify a composed rootfs (not per-input dirs) is mounted read-only for a build  |
-| `eos-build-sandbox-network-containment` | Build socket test     | UNVERIFIED | Verify non-proxy network access is refused; verify record/replay mode behavior |
-| `eos-sandbox-read-set-capture`          | FUSE log inspection   | UNVERIFIED | Verify every read during a build is logged and the digest lands in `BuildRecord` |
-| `eos-build-sandbox-delegation`          | Architecture audit    | UNVERIFIED | Verify Eos daemon/scheduler perform no sandboxing; all isolation is executor-side |
-| `eos-build-sandbox-host-isolation`      | Filesystem probe test | UNVERIFIED | Attempt writes outside scratch dir and reads outside declared closure; verify denial |
+| Constraint                              | Method                | Result     | Detail                                                                                      |
+| :-------------------------------------- | :-------------------- | :--------- | :------------------------------------------------------------------------------------------ |
+| `eos-sandbox-fhs-materialization`       | Sandbox mount test    | UNVERIFIED | Verify a composed rootfs (not per-input dirs) is mounted read-only for a build              |
+| `eos-build-sandbox-network-containment` | Build socket test     | UNVERIFIED | Verify non-proxy network access is refused; verify record/replay mode behavior              |
+| `eos-sandbox-read-set-capture`          | FUSE log inspection   | UNVERIFIED | Verify every read during a build is logged and the digest lands in `BuildRecord`            |
+| `eos-build-sandbox-delegation`          | Architecture audit    | UNVERIFIED | Verify Eos daemon/scheduler perform no sandboxing; all isolation is executor-side           |
+| `eos-build-sandbox-host-isolation`      | Filesystem probe test | UNVERIFIED | Attempt writes outside scratch dir and reads outside declared closure; verify denial        |
 | `eos-sandbox-materialization-tiers`     | Tier dispatch test    | UNVERIFIED | Verify builds/check-phases use Observe tier exclusively; no Fast/Export mount at build time |
-| `no-fetch-outside-recorded-set`         | Replay-mode fuzz test | UNVERIFIED | Issue unrecorded requests in replay mode, verify refusal + log entry            |
-| `no-read-outside-declared-closure`      | Sandbox escape test   | UNVERIFIED | Attempt reads of undeclared paths, verify denial at the mount boundary          |
-| `no-write-outside-build-scratch`        | Sandbox escape test   | UNVERIFIED | Attempt writes to the read-only mounted closure, verify denial                 |
+| `no-fetch-outside-recorded-set`         | Replay-mode fuzz test | UNVERIFIED | Issue unrecorded requests in replay mode, verify refusal + log entry                        |
+| `no-read-outside-declared-closure`      | Sandbox escape test   | UNVERIFIED | Attempt reads of undeclared paths, verify denial at the mount boundary                      |
+| `no-write-outside-build-scratch`        | Sandbox escape test   | UNVERIFIED | Attempt writes to the read-only mounted closure, verify denial                              |
 
 ---
 
@@ -261,7 +255,7 @@ mounted closure is read-only; there is no writable path inside it.
    substitute for OS-level sandboxing. All isolation for the primary
    executor is OS-level (namespaces, FUSE-mounted read-only views, the
    fetch proxy) — the sandbox contract this document specifies is the
-   *entire* isolation story for a build, not a supplement to a language-level
+   _entire_ isolation story for a build, not a supplement to a language-level
    guarantee.
 
 2. **FUSE Mounts Are Load-Bearing, Not Optional**: The castore FUSE daemon

@@ -23,7 +23,7 @@ if ! command -v tlc >/dev/null 2>&1; then
     exec nix-shell shell.nix --run "$(printf '%q ' "$(pwd)/run_model_check.sh" "$@")"
 fi
 
-LOG_DIR="../../../.scratch/eos-scheduler-validation"
+LOG_DIR="${LOG_DIR:-/tmp/eos-scheduler-validation}"
 mkdir -p "$LOG_DIR"
 LOG="$LOG_DIR/tla_model_check.log"
 
