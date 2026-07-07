@@ -75,6 +75,18 @@ design); reorder-invariance laws kept. §9.14's owner-set patch superseded
 by consumer-side requires-edge generalization. New §7.3: the boundary
 discipline — what this model deliberately does not own._
 
+_v0.10 (2026-07-07): the substrate trichotomy made explicit in the
+formalism (nrd's directive: the three founding primitives should be
+primitives in the formalism, not only in the narrative). The composition
+algebra — §0.5, the composition value of §1.1, §1.2, §1.4, §1.5, §5.3,
+§6.4 — is re-homed to the [Composition Model](composition-model.md);
+storage is axiomatized in the [Storage Model](storage-model.md). The
+moved sections are retained below as stubs so section numbering and
+inbound references stay stable. This document now consumes `Composition`
+as an abstract type and owns the dynamic primitive alone. P1 moves with
+the merge monoid; obligation numbering (P1–P10) is unique across the
+three models._
+
 _Trigger: early substrate implementation work treated **build** as the
 primitive and bolted observation into its materialization layer (a FUSE
 read-set inside `BuildResult`). The substrate's founding analysis had
@@ -101,44 +113,11 @@ derive as policy strata — rather than as separately engineered features._
 
 ## 0.5 The language-free purity thesis
 
-Nix's purity is folklorically attributed to its purely functional
-language — and at the binding level the attribution is correct: the
-language's semantics is what guarantees that package _composition_
-combines purely (referential transparency of the generator ⇒ coherence of
-the generated graph). Removing the language therefore creates a real
-obligation, and this model is how it is discharged:
-
-> **Purity moves from a property of the generator to a property of the
-> artifact.** Nix guarantees "this graph was produced by a pure function"
-> — a _provenance_ claim, which evaporates the moment an object crosses a
-> trust boundary (a foreign drv must be re-evaluated or trusted). This
-> model guarantees "this object satisfies checkable laws, whoever produced
-> it" — digest identity for referential transparency (a composition root
-> _is_ its meaning; substitution of interface-equals is the β-rule, §1.4),
-> the merge monoid for combination (§1.2), certificates for linking
-> coherence (§1.4), signatures for authorship (§3.4). Validity is carried
-> _by the object_, which is the only kind of purity that survives
-> decentralization.
-
-In embedding terms: Nix embeds composition **shallowly** in a host
-language and inherits purity from the metalanguage; this model embeds it
-**deeply** — compositions are first-order data with algebraic laws — and
-trades the language's expressiveness for analyzability (you cannot ask a
-Nix closure _why_ it contains a path; it is the residue of an arbitrary
-Turing-complete evaluation. You can ask a certificate). In _Build Systems
-à la Carte_ terms: the model deliberately occupies the **applicative
-fragment** — dependency structure is static data, never the output of
-arbitrary computation — and the monadic escape (Nix's import-from-
-derivation) is deleted with the eval stage, its legitimate use-cases
-re-entering through exactly one audited door: trial → promotion → signed
-intent (§3.3). Where Nix evaluation may diverge and resists analysis,
-environment formation is a terminating fixpoint (P2) over declared data.
-
-The generating _language_ thereby becomes optional, untrusted sugar:
-anything may emit compositions — a CLI, a script, someday a DSL — because
-soundness is enforced at the object level, not the generator level. The
-system is "implicitly functional": it has functional programming's
-combinatorial guarantees with no functional language in the trusted core.
+_Re-homed: [Composition Model §1](composition-model.md#1-the-language-free-purity-thesis)
+— the thesis is the composition primitive's framing result. The clause
+that is execution's own is restated where it binds: the executor never
+interprets `command`; there is no interpreted language in the trusted
+core (§2.1)._
 
 ## 1. The semantic domain
 
@@ -149,57 +128,20 @@ All values are content-addressed; identity is digest.
 - **Blob** `b` — bytes. Identity `H(b)`.
 - **Tree** `t` — a Merkle tree of named blobs/trees (castore-shaped).
   Identity: root digest.
-- **Composition** `c` — a finite map from conventional paths to content
-  entries, signed. Its _denotation_ is a partial function:
-
-  ```
-  ⟦c⟧ : Path ⇀ Content        (Content = blob | tree-node | symlink)
-  ```
-
-  A composition is a **value that denotes an environment**. This is the
-  precise sense in which the system is "purely functional": a process under
-  this model runs against an environment that is itself a first-class,
-  content-addressed, signed value — not against an ambient mutable world.
-
-  The denotation includes **directory enumeration order** (castore trees
-  are name-sorted; executors MUST present that order). Without this, two
-  conforming executors backed by different mount technologies could return
-  different `readdir` orders for one view, and a build sensitive to
-  enumeration order would break action-stratum bisimulation (§6.1).
+- **Composition** `c` — the second primitive's value: a signed finite
+  map from conventional paths to content entries, with denotation
+  `⟦c⟧ : Path ⇀ Content` (directory enumeration order included). Its
+  full algebra — merge, interfaces, strata of intent, overrides,
+  materialization — is owned by the
+  [Composition Model](composition-model.md) (§2 there); this document
+  consumes the denotation and nothing else.
 
 ### 1.2 Composition merge is a partial commutative monoid
 
-Define `c₁ ⊕ c₂` (merge) as the union of the two maps, **defined only when
-they agree on the intersection of their domains** (byte-identical entries).
-Disagreement is a _conflict_ — merge is undefined, surfaced as an explicit
-error at compose time (never resolved silently — the collision point is
-exactly where ABI reality lives).
-
-Laws (where defined):
-
-```
-c ⊕ ∅ = c                      (identity: the empty composition)
-c₁ ⊕ c₂ = c₂ ⊕ c₁              (commutative)
-(c₁ ⊕ c₂) ⊕ c₃ = c₁ ⊕ (c₂ ⊕ c₃)  (associative)
-c ⊕ c = c                      (idempotent)
-```
-
-`(Comp, ⊕, ∅)` is a **partial commutative idempotent monoid**. This tiny
-structure carries real weight: it is what makes "compose the toolchain with
-the dep trees with the fetch blobs" order-independent and deterministic, and
-it is the merge over which independent subgraphs compose in the action DAG
-(§5.1).
-
-**Conflict is defined over denotations, not keys** (correction F5, second
-adversarial review): entries include subtree grafts (`Dir{tree}`), so
-`{/usr ↦ Dir t}` and `{/usr/lib/x ↦ File b}` have disjoint keys but
-overlapping denotations — key-level conflict detection would either miss
-the collision or silently shadow. Two compositions conflict iff their
-_denotations_ disagree on any path in the intersection of their
-denotation domains (equivalently: mandate a prefix-free normal form and
-check keys there). _Proof obligation P1 (cheap, Alloy-able): the concrete
-merge implementation satisfies the laws AND detects exactly the
-denotational conflicts — the graft case is in P1's scope explicitly._
+_Re-homed: [Composition Model §3](composition-model.md#3-composition-merge-is-a-partial-commutative-monoid),
+together with P1. Execution uses exactly one fact from it: independent
+subgraphs of the action DAG merge views by the partial commutative
+idempotent monoid `(Comp, ⊕, ∅)` (§5.1)._
 
 ### 1.3 The world and its channels
 
@@ -237,173 +179,18 @@ Det = { p ∈ P | no channel is open under p }
 
 ### 1.4 Interfaces: the typing of compositions
 
-The merge monoid (§1.2) says when compositions _can_ coexist (path
-disjointness). It says nothing about whether the result _works_. That is
-the job of the **interface layer** — and it is the seam the whole
-substitution story hangs on, so it enters the formal core rather than
-remaining prose.
-
-**The judgment.** Interface manifests (htc-sad §2.2) assign each tree its
-provides/requires per namespace, with `iface_digest = H(canonical
-interface description)`. For a composition `c`, lift pointwise:
-
-```
-Prov(c) = ⋃ provides of member trees
-Req(c)  = ⋃ requires of member trees NOT satisfied within c
-          (the composition's free variables — its unbound obligations)
-```
-
-A **binding** is a justified edge `required ↦ provider` with
-`satisfies(needs, provides)` holding (htc-sad §6.1's relation). The
-`iface_digest` is the substrate's **chosen identity proxy for "same
-contract"** — normalized, hashed, unforgeable, _decidable by
-construction_ where semantic ABI equality is not. (Honesty is inherited
-from htc-sad §6.2's precision statement: symbol-level satisfaction is
-necessary, not sufficient; strict mode remains the guarantee floor. The
-proxy is load-bearing precisely because it is a proxy we can check.)
-
-**This is a module system.** Compositions are modules; interface
-manifests are their signatures; binding is linking. Substitution
-soundness — the LEGO thesis, "swap the OpenSSL blob, nothing rebuilds" —
-is exactly signature-preserving relinking, and `iface_digest` is what
-makes "signature-preserving" checkable. In this precise sense **the
-runtime is more than an optimized runtime: the executor and materializer
-are the interpreters of the value algebra, and the interface layer is its
-type discipline** — the support contract under every claim the model
-makes about pure computation.
-
-**The granularity strata** (explicit, where the derivation blurred them):
-
-```
-package      an atom's output tree + its interface manifest
-             (typed but not linked: Req ≠ ∅ is normal and healthy)
-
-environment  a composition equipped with a COHERENCE CERTIFICATE:
-             every internal require bound, at most one provider chosen
-             per (ns, name) per scope (no diamonds), the choice function
-             recorded (defaults ∪ user overrides), and the residual
-             Req(c) — the declared ambient base (kernel ABI, loader) —
-             stated, not silent. An environment is a LINKED module.
-
-system       a composition of environments, cross-environment
-             obligations discharged or scoped. Per-composition scoping
-             (ADR-0005's store-path role decomposition: conflict-free co-installation) is what permits two environments to bind
-             DIFFERENT versions of one provider: ⊕'s conflict rule
-             forces explicit prefix/namespace separation, so
-             co-installation is a theorem of the merge monoid, not a
-             convention.
-```
-
-**Environment formation IS resolution.** The coherence certificate is the
-recorded output of a fixpoint + choice function over interface bindings —
-ion's version-resolution algebra, one layer down. Bindings all the way
-down, again: this is the third instantiation (lock, composition, and now
-environment linkage) of the same name→signed-pointer discipline.
-
-**Repair happens at the environment, not the package.** A closure fault
-(§4.4) — a missing runtime dep that every detector missed — is repaired
-by _composing_ the missing provider into the environment (or declaring a
-binding, §4.2), re-certifying, re-signing. New composition root, zero
-rebuilds, the package untouched. The environment is the unit of repair;
-this is where nrd's "missing deps are simply composable into environments
-of additional packages" becomes a law rather than a hope.
-
-**Versioning.** An environment's _identity_ is its composition root; its
-_contract_ is its interface (Prov/residual Req and their digests). A
-semantic version is neither — it is human-facing naming, and it applies
-exactly when an environment is _published as an atom_ (signed intent
-whose content is the composition), at which point ion's existing version
-machinery covers it with nothing new invented. Whether environments
-routinely publish as atoms is an open question (§9), but the model makes
-it a choice, not a gap. Composition of environments into an OCI image
-(one layer per environment, each with its certificate) is an Export-tier
-mapping that gives layering _meaning_ — the layer boundary is a certified
-linking boundary, not an accident of Dockerfile ordering.
+_Re-homed: [Composition Model §4](composition-model.md#4-interfaces-the-typing-of-compositions).
+What execution borrows: `satisfies`/`iface_digest` as the checkable
+contract proxy (htc-sad §6.1–6.2), and the environment — not the
+package — as the unit of repair for closure faults (§4.4)._
 
 ### 1.5 The two strata of intent
 
-Atoms are the unit of publishable, versioned, signed intent. The question
-"should package-atoms and environment/generator-atoms be distinct types?"
-cuts at the right joint only when asked about _laws_, not _schemas_ — and
-there the answer is yes, there are exactly two strata of intent, mirroring
-the action/trial stratification one layer up:
-
-```
-executable intent   elaboration REQUIRES execution: a package atom
-                    denotes actions; realizing it crosses into §2's
-                    world (sandbox, cache, records, signer trust §3.4).
-                    Verifiable only by building.
-
-algebraic intent    elaboration is pure computation in the value
-                    algebra — precisely: PURE IN (intent, fact-set)
-                    (correction F6, second adversarial review: v0.6's
-                    "from the intent alone" was an overclaim, since
-                    interface manifests are analyzer OUTPUTS — i.e.
-                    executions — so even base-case formation is
-                    fact-conditioned, and version resolution pins a
-                    worldly discovery snapshot just as the lock does).
-                    An environment atom denotes a composition +
-                    certificate via the formation fixpoint (terminating
-                    — a sibling obligation to P2, same mathematics); a
-                    generator atom denotes an Env → Env operator
-                    pipeline (§5.3). Given the pinned fact snapshot,
-                    elaboration needs no executor, no sandbox, no cache,
-                    and is SELF-VERIFYING BY RECOMPUTATION: a registry
-                    can check an environment's coherence RELATIVE TO ITS
-                    CLAIMED MANIFESTS at publish time (the manifests'
-                    own truth rides §3.4 signer trust or re-analysis).
-                    No registry can refuse a package that won't build
-                    without building it.
-```
-
-**Why this helps rather than decorates:** several results already proven
-quietly depend on "the composition side never touches the execution
-layer" — repair-without-rebuild (§1.4), the rebind stratum of overrides
-(§5.3), install-without-execute (§6.4), transactional update. The strata
-give that recurring precondition a name and a single home. They also
-settle the earlier versioning question with symmetry rather than fiat:
-
-```
-package atom      manifest ──resolution──▶ lock         (pinned intent)
-environment atom  manifest ──formation───▶ certificate  (pinned intent)
-```
-
-The certificate is the environment's lockfile — the same
-intent→pinned-elaboration shape, fourth instantiation of the binding
-algebra. Both strata version and resolve through ion's existing
-machinery; environment members ARE references (set/label/version
-constraints) — what environments lack is not dependency _declaration_ but
-build-input _semantics_ (no toolchain, no fetch set, no build/runtime dep
-split).
-
-**Kinds are open; strata are closed.** Package, environment, generator —
-and future kinds (test intent is already a manifest section per §5.2) —
-form an open, schema-level family. Each kind belongs to exactly one
-stratum, and the stratum determines its laws (execution-realized and
-trust-mediated, vs. purely elaborated and recomputation-verified). A
-mixed atom (one publishing intent in both strata) breaks no law; whether
-the schema permits or discourages it is a convention call (§9.13).
-
-**Pipelines cross strata; steps do not.** The strata classify elaboration
-_steps_; an atom denotes an elaboration _pipeline_, and pipelines may
-interleave strata freely — a system atom is the canonical case: members
-composed (algebraic) → config intent rendered by actions (execution) →
-rendered blobs bound (algebraic) → certificate. Boot and running services
-are executions _of_ the finished artifact at use time, outside elaboration
-entirely (the atom ships the activation program as content). The
-prohibited object is a mixed **step** — a computation partly pure, partly
-world: Nix's import-from-derivation is precisely that violation, and
-promotion (§3.3) is its lawful replacement. Cross-strata data flows only
-through CAS values, records, and promotion.
-
-**Fact-conditioned formation stays algebraic.** Formation may consume
-execution records and attestations as _inputs_ ("admit P only if its
-tests pass", "members must carry k reproducibility attestations") and
-remain in the algebraic stratum, **provided the certificate pins the fact
-snapshot consumed**: formation is pure in `(intent, fact-set)`,
-recomputable by anyone holding both. Publication gating (§3.2) is the
-degenerate case; staged rollouts and policy-gated environments are the
-general one.
+_Re-homed: [Composition Model §5](composition-model.md#5-the-two-strata-of-intent).
+The strata mirror this document's action/trial stratification at the
+intent layer; the executable stratum is realized here (§2–§3), and
+cross-strata data flows only through CAS values, records, and promotion
+(§3.3)._
 
 ## 2. Execution
 
@@ -484,7 +271,8 @@ consumers bind to the concrete output digests of whichever witness they
 consumed — every downstream branch is internally consistent by
 content-addressing. The one genuine obligation: when a downstream
 request is formed, the witness _pick_ is a **recorded choice over the
-fact snapshot** (the same fact-conditioned machinery as §1.5), so P7's
+fact snapshot** (the same fact-conditioned machinery as the fact-set discipline,
+[Composition Model §6](composition-model.md#6-the-fact-set-the-substrates-only-state)), so P7's
 determinism holds relative to (intent, fact-set, choice policy).
 Multiplicity is not an anomaly: distinct witnesses of one request are
 free reproducibility evidence (§2.3), surfaced, never reconciled away.
@@ -750,7 +538,8 @@ Dep_v(a)                    ⊆   dom(⟦v⟧)         (structure: per view)
   execution ever touches) are _real_ in this model. Nix never had to say
   this because hash-scanning made runtime references a subset of
   build-time presence by construction; this model deliberately does not
-  inherit that coincidence, and §1.4's environment-level repair exists
+  inherit that coincidence, and the environment-level repair of
+  [Composition Model §4](composition-model.md#4-interfaces-the-typing-of-compositions) exists
   precisely because of it.
 - **Lower bound — evidential.** `R_static`: name references extracted
   structurally (ELF `DT_NEEDED`, shebangs, import syntax — the Debian/RPM
@@ -837,7 +626,8 @@ digests in its view (via `⊕` and binding). The structure actually used is:
 
 - **The action DAG** — nodes are requests, edges are output-digest flows
   into downstream views. Sequential dependency is edge order.
-- **Independent subgraphs** merge views by `⊕` (the §1.2 partial monoid) —
+- **Independent subgraphs** merge views by `⊕` (the partial monoid of
+  [Composition Model §3](composition-model.md#3-composition-merge-is-a-partial-commutative-monoid)) —
   and eos's parallel dispatch is exactly the evaluation of independent
   subgraphs.
 
@@ -896,71 +686,19 @@ changed), which is exactly the desired scope of re-execution. (Manifest
 support: test/check params must live in a manifest section that feeds test
 requests only — an atom-API obligation this model imposes on L1/L4.)
 
-### 5.3 The override algebra: generators live inside the model
-
-What Nix does with an overlay — an untyped function over the package
-universe ("give everything Python 3.4") — this model does with a **typed
-edit over the binding graph**, and the difference is the model's central
-economic claim. Define the substitution operator:
-
-```
-subst[n ↦ p′] : Comp → Comp     -- rebind every binding of name n to p′
-```
-
-Its validity is _checked, per consumer_: for each require previously bound
-to the old provider, `satisfies(needs, provides(p′))` must hold (§1.4;
-under Strict policy only digest-equality passes; under Compat, an
-interface-satisfying swap passes with a recorded proof — the
-`SubstitutionRecord` htc-sad §2.1/§6.5 already anticipated). This one
-operator splits every override into its two true strata:
-
-- **Rebinding (runtime stratum, cheap).** Consumers whose interface
-  contracts survive the swap are _relinked_: composition edit, recertify,
-  re-sign. Zero rebuilds. This is the security-patch case — the
-  Guix-grafts use case with proofs instead of binary patching.
-- **Rebuild frontier (intent stratum, bounded).** Consumers where
-  satisfaction _fails_ form the frontier `F` — they genuinely need their
-  intent edited (build against the new provider ⇒ new `action_id`s), or
-  they stay on the old provider in their own scope (co-installation,
-  §1.4, is the lawful answer to the diamond). Downstream of `F`, early
-  cutoff (§2.4) prunes every descendant whose rebuilt output is
-  digest-identical.
-
-**Theorem (bounded blast radius — relative to the interface proxy).** An
-override's rebuild set is exactly `F` plus its non-cutoff descendants,
-_where `F` is computed against `iface_digest` satisfaction_ — and per
-htc-sad §6.2's precision statement that proxy is necessary-not-sufficient,
-so real breakage escaping it (same-symbol struct-layout changes) makes
-`F` an under-approximation; strict mode remains the guarantee floor
-(correction F10, second adversarial review: v0.6 stated this without the
-qualifier the rest of the corpus honestly carries). Contrast the system
-being replaced: Nix rebuilds the _entire reverse-dependency closure_ of
-the overridden node, unconditionally — input-addressed identity with no
-interface layer means it cannot certify that anything survived. The
-interface certificate is precisely the instrument that turns "rebuild the
-world below the change" into "rebuild what the change (checkably) broke."
-
-An **overlay** is then a reusable, named sequence of algebra operations
-(`subst`, `⊕`-extend, prune, choice-function override) — data, so it can
-itself be content-addressed and signed like everything else. No language
-in the trusted core; the expressive power Nix gets from functions, this
-model gets from operators whose blast radius the type layer computes.
-
-**Property (generator normal form).** Environments are freely generated
-from packages by `⊕` and binding; therefore every generator's effect —
-whatever its surface abstraction — has a normal form as a package-level
-edit set: `(remove R, add A, rebind B, re-certify)`. A Nix overlay is an
-opaque function whose effect is learned by evaluating the world twice and
-diffing; a generator here is _statically diffable_ as a certificate
-delta before it is ever applied. The package is the primitive of the
-generator/environment relation; environments are states; generators are
-transitions compiled to the operator algebra.
-
 The nixpkgs pathology this kills, named precisely: coupling build and test
 into one derivation makes the _pair_ the unit of caching, so a sandbox-
 induced test failure poisons a perfectly good build. Here the build fact
 stands alone; the trial's failure gates advertisement (§3.2), and its fix
 (test-flag edit, network policy change) re-runs _only the trial_.
+
+### 5.3 The override algebra: generators live inside the model
+
+_Re-homed: [Composition Model §7](composition-model.md#7-the-override-algebra-generators-live-inside-the-model).
+Execution's stake is the rebuild frontier: consumers whose interface
+satisfaction fails under a `subst` need intent edits (new `action_id`s),
+and early cutoff (§2.4) prunes every descendant whose rebuilt output is
+digest-identical._
 
 ## 6. The executor
 
@@ -1055,54 +793,11 @@ instrument with its own privilege/coverage trade.
 
 ### 6.4 Materialization, installation, and transactional update
 
-The runtime has a second operation beside `execute` — the interpreter of
-the value layer itself:
-
-```
-materialize : CompositionRoot → View
-```
-
-Obligation: the view presents exactly `⟦c⟧` (§1.1, enumeration order
-included), tamper-evident where the mechanism allows (composefs +
-fs-verity: the kernel refuses corrupted content _at read time_ — a
-guarantee Nix does not have; its store verifies at substitution and
-executes tampered bytes happily).
-
-**Installation is the dogfood test, and the model passes it with zero new
-concepts.** Installing the system (bootstrap binary included) is:
-
-```
-1. obtain the signed composition        →  §3.4 trust anchors verify the
-                                           SIGNER; nothing else is trusted
-2. fetch blobs by digest, any channel   →  CAS substitution; the transport
-                                           is untrusted BY CONSTRUCTION —
-                                           content-addressing is the
-                                           verification, so mirrors, CDNs,
-                                           peers are all equally fine
-3. materialize, persistently            →  the composefs layer
-```
-
-Note what installation is **not**: it is not an `execute` — no sandbox, no
-policy stratum, no record. Fetching during install needs no trial
-machinery because nothing here has identity to corrupt: a blob either
-matches its digest or is rejected. (This sharpens the deposit/bind law,
-§5.2: fetch-by-digest is _substitution into an existing binding_, the
-third and most trivial way content moves — deposit needs promotion to
-bind; substitution needs nothing because the binding, signed, already
-exists.) The bootstrap binary itself ships as a tree pinned by a
-composition: **the system installs itself with its own two primitives**,
-and the only bootstrap-specific artifact is the initial trust-anchor set.
-
-**Update is a root swap; transactionality is structural.** A new system
-state is a new composition root; switching a mount (or a symlink to a
-mounted image) is atomic. The old root remains valid — rollback is
-keeping it; GC is dropping unreferenced blobs. "Combining and cheaply
-updating pieces of a layer, transactionally" is then: recompose (edit
-bindings, `⊕` in a new environment), re-certify (§1.4), re-sign, swap.
-No package rebuilds anywhere in the loop unless intent changed — the
-separation of the action DAG (rebuild world) from the composition algebra
-(rebind world) is the entire point of the model, exercised end to end by
-the system's own installation.
+_Re-homed: [Composition Model §8](composition-model.md#8-materialization-installation-and-transactional-update).
+The executor-side residue is already stated in §6.3: the executor
+materializes exactly `⟦view⟧`. Installation and transactional update
+involve no `execute` at all — they are the static primitives' own
+operations._
 
 ## 7. Boundary mappings
 
@@ -1159,8 +854,9 @@ future reader and reviewer of this document:
 
 Worth proving (small, load-bearing, mechanical):
 
-- **P1** — `⊕` partial-monoid laws + exact conflict detection (Alloy;
-  disciplines the composer implementation).
+- **P1** _(re-homed v0.10)_ — owned by the
+  [Composition Model §10](composition-model.md#10-proof-obligations):
+  `⊕` partial-monoid laws + exact denotational conflict detection.
 - **P2** — justified-closure fixpoint: monotone, terminating, refinement-
   monotone (Lean; disciplines the closure computer — this is the algorithm
   the whole minimal-composition story rests on).
@@ -1259,7 +955,7 @@ Deliberately NOT proof targets, with reasons:
     deserves a deliberate decision rather than a default.
 11. **The override operator set** _(rewritten in v0.4 — v0.3 misfiled
     this as a "generator gap")_: overlays are not a missing language
-    feature; they are operations inside the algebra (§5.3 — `subst`,
+    feature; they are operations inside the algebra (Composition Model §7 — `subst`,
     extend, prune, choice-function override), with blast radius computed
     by the interface layer instead of assumed total. What remains open
     is only the _surface_: the canonical operator set, whether overlays
@@ -1301,5 +997,6 @@ Deliberately NOT proof targets, with reasons:
     the `Either<AtomId, Name>` sort-order definition; a
     tool-authored-entry liveness class (the reconcile/sanitization purge
     rules must not eat promoted fetch entries — pre-existing P4 flag);
-    whether lock and certificate share one formal treatment (§1.5's
+    whether lock and certificate share one formal treatment (Composition
+    Model §5's
     symmetry); and P7's resolution-determinism elaboration.
