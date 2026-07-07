@@ -35,7 +35,10 @@ use crate::config::DaemonConfig;
 /// multi-threaded Tokio runtime, so the orchestrator future — which holds a
 /// resolved entry across `await` points — must itself be `Send`. This blanket
 /// trait bundles those bounds so callers name a single contract.
-pub trait InjectedSource: atom_core::AtomContent + atom_core::AtomSource<Entry: Send> + Clone {}
+pub trait InjectedSource:
+    atom_core::AtomContent + atom_core::AtomSource<Entry: Send> + Clone
+{
+}
 
 impl<T> InjectedSource for T where
     T: atom_core::AtomContent + atom_core::AtomSource<Entry: Send> + Clone
@@ -488,7 +491,9 @@ mod tests {
             eval_args: Vec::new(),
         };
 
-        scheduler.submit(request).expect("submit should schedule the job");
+        scheduler
+            .submit(request)
+            .expect("submit should schedule the job");
 
         // The spawned build task must drive the injected source's `resolve`.
         let observed = tokio::time::timeout(Duration::from_secs(5), rx.recv())
