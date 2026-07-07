@@ -62,6 +62,15 @@ The payoff is the flexible, checkable composition described above — rebind ins
 
 One more inversion worth knowing about: when several builders run the same action, they may produce byte-different results (parallelism, linkers, luck). Instead of pretending a canonical answer exists, the substrate lets **witnesses accumulate** — each result is a signed record, and _your_ builds use whichever witness your trust settings accept. Agreement among independent builders is surfaced as evidence of reproducibility; disagreement is surfaced as information. Nothing is ever silently reconciled.
 
+## Not just for Nix people
+
+This design's history runs through Nix, and it's easy to read it as "Nix, reconsidered." But the problems it addresses are older and wider, in both directions:
+
+- **Upstream of Nix**: the pain that made people pay Nix's considerable costs in the first place — builds that only work on one machine, dependency sets nobody can actually enumerate, environments that drift until "works on my laptop" is a debugging category. Those are general build-system problems, decades old. This design targets them without the tolls that kept most of the industry away: no new language to adopt, no mass rebuilds on every change, no parallel packaging universe to migrate into.
+- **Alongside OCI**: containers are the industry's production runtime, and their most persistent pain is that images are stacks of _arbitrary, opaque binary layers_ — nobody can say what's inside one, which layer provides which library, or why two nearly identical images share almost nothing. Compositions give exactly those artifacts contracts: an exported image's layers become certified, content-addressed statements of what they provide and require, deduplicated by construction because a layer here carries bindings rather than bytes. The container runtime doesn't change; what changes is that its contents stop being opaque.
+
+The convergence isn't a coincidence. Both lineages suffer from the same two root mistakes — data welded to structure, and identity with no interface layer — so fixing them once, below both, fixes both. It's early, and the design still has empirical bets to win before big claims are earned; but the motivation is honestly wider than a better Nix.
+
 ## Going deeper
 
 The precise versions of everything above, with the laws and proof obligations:
