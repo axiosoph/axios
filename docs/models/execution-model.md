@@ -896,7 +896,7 @@ Worth proving (small, load-bearing, mechanical):
 - **P4 (extended v0.7; shrunk v0.8)** — covers concurrent completion as
   _set-accumulation_: check that commutative witness insertion preserves
   the dispatch state machine's invariants. No reconciliation rule (v0.8
-  struck it); the queued eos amendments are wording-level (§5.1).
+  struck it); the eos amendments were wording-level and have landed (§5.1).
 
 Deliberately NOT proof targets, with reasons:
 
