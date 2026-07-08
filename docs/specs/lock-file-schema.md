@@ -10,803 +10,249 @@
   document are to be interpreted as described in BCP 14 (RFC 2119, RFC 8174) when,
   and only when, they appear in all capitals, as shown here.
 
-  See: workflows/spec.md for the full protocol specification.
-  See: docs/models/publishing-stack-layers.md for the algebraic domain model.
+  Version 2 — wholesale supersession of the v1 (PoC-era) schema, per
+  ADR-0006 and the 2026-07-08 lock redesign. The v1 spec's evaluator-
+  shaped remnants (its `[compose]` tombstone, `[[deps]]` type dispatch,
+  semver mandate, and owner back-pointers) are replaced, not amended.
 -->
 
 ## Domain
 
-**Problem Domain:** The lock file is the sole serialized contract between
-Ion (L4 — resolution frontend) and Eos (L3 — build engine). Ion produces
-lock files by resolving manifests against atom-sets and external sources.
-Eos consumes lock files to fetch, verify, and build the complete
-dependency closure. No other input — manifest, plugin state, resolution
-history — crosses this boundary.
+**Problem Domain:** The lock file is the serialized record of an atom's
+**resolution**: the recorded choice function over a discovery snapshot
+that makes executable-intent elaboration pure in `(intent, fact-set)`
+([Composition Model](../models/composition-model.md) §5–§6). Ion (L4)
+writes it; Eos (L3) consumes it to fetch, verify, and form execution
+requests. **Resolution of an atom is reconciliation over its
+dependencies' locked worlds, plus the atom's own constraints, plus its
+declared overrides** — the lock records the ground result and nothing
+else.
 
-This spec defines the TOML schema of the lock file: its top-level
-structure, section semantics, dependency entry shapes, field definitions,
-serialization invariants, and extensibility model. The Rust types in
-`ion-lock` (or equivalent shared crate) are the canonical programmatic
-representation; this document is the normative human-readable reference.
+The lock is deliberately small. Four concepts: set anchors, ground
+dependency pins with a requires graph, promoted fetch pins, and a schema
+version. Everything else that once seemed lock-shaped lives elsewhere by
+decision: constraints, params, overrides, and toolchain-role defaults in
+the manifest (which ships inside the atom snapshot and therefore inside
+`action_id`); interface manifests and build records on the atom metadata
+chain; adopted ecosystem lockfiles inside the atom's sources.
 
 **Model Reference:**
 
-- [publishing-stack-layers.md](../models/publishing-stack-layers.md) — §2.1 (Atom), §2.2 (AtomSet), §3.1 (Resolution)
-- [ion-eos-contract.md](ion-eos-contract.md) — Handoff boundaries (`handoff-lock-sufficiency`)
-- [ion-resolution.md](ion-resolution.md) — Lock file production pipeline
+- [Composition Model](../models/composition-model.md) — §5 (two strata of
+  intent; the lock/certificate symmetry), §6 (fact-set; snapshot pinning)
+- [Execution Model](../models/execution-model.md) — §2.4 (`action_id`;
+  identity discipline), §3.3 (promotion; adopted lockfiles), §8 (P5–P7)
+- [ADR-0006](../adr/0006-execution-as-the-primitive.md) — §3 (no
+  evaluator: no composer, ever)
+- [ion-eos-contract.md](ion-eos-contract.md) — handoff boundary
 
-**Criticality Tier:** High — the lock file is a trust boundary. Every
-field is either a cryptographic commitment (digest, revision) or a
-locator (URL, mirror). Malformed or incomplete locks lead to unverifiable
-builds, silent dependency drift, or build failures.
+**Criticality Tier:** High — the lock is a trust boundary. Every value
+is either a cryptographic commitment or an explicitly non-authoritative
+transport hint.
 
----
+## Formal requirements
 
-## Concepts
+These bind the schema as a whole; every section constraint below serves
+one of them.
 
-**Lock File**: A TOML document capturing the fully-resolved, pinned
-dependency graph for a single atom-set root. It is deterministically
-serializable: two resolution passes over identical inputs MUST produce
-byte-identical lock files.
+**[lock-sufficiency]**: The lock MUST pin every worldly discovery needed
+to form execution requests for the atom: the transitive dependency
+closure by content identity, and every fetch payload not adopted from an
+ecosystem lockfile in the atom's sources. Build-time resolution or
+discovery of any kind MUST NOT be required by a consumer holding the
+atom snapshot and its lock.
 
-**Anchor**: A cryptographic commitment (genesis commit hash) that
-uniquely identifies an atom-set. Serialized as a 40-character lowercase
-hexadecimal string (SHA-1) or 64-character string (SHA-256). Serves as
-the key in `[sets.<anchor>]` tables.
+**[lock-recomputability]**: Resolution MUST be deterministic: the same
+manifest and the same discovery snapshot MUST re-derive a byte-identical
+lock. Serialization MUST be canonical (see [lock-canonical-form]).
 
-**Atom-id**: The abstract `(anchor, label)` pair that permanently and
-uniquely identifies an atom. It is NOT a hash — the pair itself is the
-identity. Serves as the key in the lock's `DepMap`. Intra-lock
-cross-references that point at an atom carry that atom's `publish_czd`
-(a `Czd`), which is the unambiguous cryptographic pin for the specific
-publish event.
+**[lock-groundness]**: Every lock value MUST be ground: names bound to
+content identities and exact version strings. Version constraints,
+ranges, override declarations, and any other unresolved intent MUST NOT
+appear in the lock; they are manifest-side. The only equality relation a
+lock consumer needs is syntactic.
 
-**Label**: A human-readable name for an atom within an atom-set. Used
-by the `label` field on `type = "atom"` entries.
+**[lock-closure-completeness]**: The `[deps]` section MUST contain the
+full transitive closure of the atom's dependencies as resolved. Which
+entries are direct is the manifest's knowledge and MUST NOT be
+duplicated in the lock (no root marker, no `[self]`).
 
----
+**[lock-action-totality]**: The lock, together with the atom snapshot
+containing it, MUST suffice to compute `action_id` for the atom and for
+every entry in its closure (Execution Model §2.4) with no further input.
 
-## Constraints
+## Top level
 
-### Top-Level Structure
+**[lock-schema-version]**: The lock MUST contain a top-level integer
+field `schema`. This document specifies `schema = 2`. Consumers MUST
+refuse locks whose schema version they do not implement.
 
-A conforming lock file MUST be a valid TOML document containing exactly
-the following top-level keys:
+**[lock-tool-owned]**: The lock is tool-authored. Tools SHOULD emit a
+leading comment identifying the generator; humans review lock diffs and
+MUST NOT be required to hand-edit them for any supported workflow.
 
-```
-TYPE LockFile = {
-    version : Nat,                          -- Schema version
-    sets    : Map<Anchor, SetDetails>,      -- Atom-set declarations
-    deps    : Array<Dep>,                   -- Unified dependency array
-}
-```
+## `[sets]` — set anchors
 
-**[lock-version-field]**: The `version` field MUST be present at the top
-level as an unsigned integer. The current schema version is `0`.
-Consumers MUST reject lock files with an unrecognized `version` value.
-`VERIFIED: unverified`
+**[lock-set-anchor]**: Each key under `[sets]` is a local set alias; its
+`anchor` field MUST be the set repository's genesis commit object id,
+prefixed with its hash algorithm (`"sha1:…"` for git's current default;
+a future `"sha256:…"` MUST be representable). The anchor IS the set's
+identity.
 
-**[lock-auto-generated-comment]**: Lock files SHOULD begin with the
-comment `# This file is automatically @generated by eka.` followed by
-`# It is not intended for manual editing.` Consumers MUST NOT depend on
-the presence or content of comments.
-`VERIFIED: unverified`
+**[lock-set-mirrors]**: The `mirrors` field MUST be an array of
+transport hints (URLs or the `"::"` local sentinel). Mirrors are NEVER
+identity and NEVER trusted: content fetched from any mirror MUST verify
+against the content identities in this lock. Consumers MAY consult
+mirrors from any other source.
 
-#### Minimal Valid Lock File
+**[lock-set-referenced]**: Every set alias appearing in a `[deps]` key
+path MUST have an entry under `[sets]`, and every `[sets]` entry MUST be
+referenced by at least one dep entry.
 
-A lock file with no dependencies is valid:
+## `[deps.<set>.<label>]` — the ground pins
 
-```toml
-# This file is automatically @generated by eka.
-# It is not intended for manual editing.
-version = 0
+Dependency entries are nested tables keyed by set alias, then atom
+label. This two-level keying is the `(set, label)` name anchor; there is
+no per-entry type dispatch and no `set` field.
 
-```
+**[lock-dep-version]**: The `version` field MUST be the exact, non-empty
+UTF-8 version string of the resolved publish, recorded verbatim as
+published (raw scheme — no normalization, no semver requirement; scheme
+interpretation is a manifest/resolution concern, never a lock concern).
 
----
+**[lock-dep-publish]**: The `publish` field MUST be the content digest
+of the resolved publish transaction (the bare publish czd), prefixed
+with its hash algorithm. This is the entry's identity; everything else
+is annotation.
 
-### `[sets.<anchor>]` Tables
+**[lock-dep-requires]**: The `requires` field MUST be an array listing
+the entry's direct dependencies as dotted key paths (`"<set>.<label>"`
+for dep entries, `"fetch.<name>"` for fetch entries), sorted bytewise.
+Requires edges are the closure's graph structure and the reference-
+counting basis for garbage collection. Provider-side owner
+back-pointers MUST NOT exist.
 
-Atom-set declarations map anchor hashes to human-readable metadata and
-mirror locations. Each key under `[sets]` is a git object hash
-(lowercase hex).
+**[lock-dep-ordering]**: Dep entries MUST be serialized in bytewise
+lexicographic order of set alias, then label. (Fetch entries sort
+independently within `[fetch]`; no cross-section ordering relation
+exists or is needed.)
 
-```
-TYPE SetDetails = {
-    tag     : String,           -- Human-readable atom-set identifier
-    mirrors : Array<String>,    -- Git mirror URLs
-}
-```
+## `[fetch.<name>]` — promoted fetch pins
 
-**[lock-set-key-format]**: Each key in the `[sets]` table MUST be a
-valid lowercase hexadecimal git object hash — either 40 characters
-(SHA-1) or 64 characters (SHA-256).
-`VERIFIED: unverified`
+Fetch entries record **promoted** discoveries (record-mode trial →
+reviewed, signed intent; Execution Model §3.3). Origin coincides with
+section: everything under `[fetch]` is promotion-authored and NOT
+regenerable by resolution.
 
-**[lock-set-tag]**: The `tag` field MUST be a non-empty UTF-8 string
-serving as a human-readable alias for the atom-set. It carries no
-cryptographic authority; the anchor hash is the identity.
-`VERIFIED: unverified`
+**[lock-fetch-digest]**: Each fetch entry MUST contain a `digest` field:
+the algorithm-prefixed content digest of the fetched payload. The digest
+is the identity; the `url` field is a transport hint and MUST NOT be
+treated as authoritative.
 
-**[lock-set-mirrors]**: The `mirrors` field MUST be a non-empty array of
-strings. Each entry is either:
+**[lock-fetch-liveness]**: A fetch entry is live while at least one
+`requires` edge references it. Automated sanitization MUST NOT remove a
+live fetch entry, and MUST NOT remove a dead one except under an
+explicit user-invoked purge — promoted knowledge is not regenerable and
+its removal is a user decision.
 
-- A valid git URL (SSH, HTTPS, or file protocol), or
-- The sentinel string `"::"`, denoting a local-only atom-set with no
-  remote mirror.
-  `VERIFIED: unverified`
+**[lock-fetch-adopted-absent]**: Dependencies pinned by an **adopted**
+ecosystem lockfile (e.g. `Cargo.lock` shipped inside the atom's sources)
+MUST NOT be re-declared as fetch entries. The adopted lockfile is the
+pin payload, already inside the atom snapshot and therefore already
+inside `action_id`.
 
-**[lock-set-mirror-local-sentinel]**: The `"::"` sentinel MUST appear as
-the sole entry in `mirrors` when an atom-set exists only on the local
-filesystem. Lock files containing `"::"` are inherently non-portable —
-they cannot be consumed by a remote eos instance.
-`VERIFIED: unverified`
+## Canonical form and write discipline
 
-**[lock-set-referenced]**: Every anchor hash appearing in a `set` field
-of any `type = "atom"` dependency entry MUST have a corresponding
-`[sets.<anchor>]` table. Orphan set declarations (sets referenced by no
-dependency) SHOULD be stripped during lock reconciliation but MUST NOT
-cause a parse error.
-`VERIFIED: unverified`
+**[lock-canonical-form]**: Serialization MUST be canonical: fixed
+section order (`schema`, `[sets]`, `[deps]`, `[fetch]`); keys sorted
+bytewise at every nesting level; a single canonical TOML formatting.
+Two locks with equal content MUST be byte-identical.
 
-#### Example
+**[lock-atomic-write]**: Every lock mutation MUST be a whole-file
+atomic write. Write phases (resolution; later promotions) land in their
+own sections; independent promotions MUST be reorder-invariant —
+running two independent promotions in either order MUST yield the same
+bytes (Execution Model §8, P6).
 
-```toml
-[sets.b7d610651b8dd7975eb0265fbf93ee70bc39c291]
-tag = "home-config"
-mirrors = ["ssh://git@github.com/user/home.git"]
+## Deliberate absences
 
-[sets.47478f45ed0de99d42495a0842b1fa41eac1ce14]
-tag = "local-atoms"
-mirrors = ["::"]
-```
+Each absence is a decision with a source; adding any of these is a
+regression, not an extension.
 
----
+**[lock-no-compose]**: The lock MUST NOT contain a `[compose]` section,
+composer selection, or evaluator arguments of any kind (ADR-0006 §3).
 
-### `[compose]` Section — REMOVED
+**[lock-no-params]**: Action parameters MUST NOT appear in the lock.
+They are declared in the manifest, which ships inside the atom snapshot
+and is therefore already inside `action_id` (they are declared, not
+resolved).
 
-> **REMOVED (2026-07-07, [ADR-0006](../adr/0006-execution-as-the-primitive.md)
-> §3):** the `[compose]` section (composer selection, the `Using` enum's
-> `Atom`/`NixTrivial`/`Config` variants, `[compose.args]`, and the
-> `[lock-compose-*]` constraints) described an evaluator-shaped composer.
-> The evaluator is removed from the design entirely — no composer exists.
-> The successor intent schema (action params, test params, intent kinds)
-> is the manifest/lock redesign (ADR-0006 §Consequences), deliberately not
-> designed here.
+**[lock-no-toolchain-section]**: The lock MUST NOT contain a toolchain
+section or toolchain entry type. Toolchain-role defaults are ordinary
+dependencies declared in the manifest; the _effective_ toolchain after
+role-keyed override propagation enters `action_id` as the toolchain
+composition root and is never lock state.
 
-### `[[deps]]` — Unified Dependency Array
+**[lock-no-interfaces]**: Interface manifests MUST NOT appear in the
+lock. They are facts, not choices; they live on the atom metadata chain
+beside build records.
 
-All dependencies — atom-level and backend-specific — reside in a single
-TOML array of tables (`[[deps]]`). Each entry is a tagged record
-dispatched by the `type` field.
+**[lock-no-override-state]**: Override declarations (target-keyed or
+role-keyed, forced or bounded) MUST NOT appear in the lock. The lock
+records their ground _results_; the pin-diff is the audit trail.
 
-```
-TYPE Dep =
-    Atom     of AtomDep
-  | Nix      of NixDep
-  | NixGit   of NixGitDep
-  | NixTar   of NixTarDep
-  | NixSrc   of BuildSrc
-```
+**[lock-no-foreign-metadata]**: The lock MUST NOT contain registry
+metadata, timestamps, resolution history, environment markers, or
+conditional entries of any kind.
 
-**[lock-dep-type-dispatch]**: Every `[[deps]]` entry MUST contain a
-`type` field whose value is a non-empty string. The `type` value
-determines the entry's shape and which fields are valid. Consumers MUST
-reject entries with an unrecognized `type` value.
-`VERIFIED: unverified`
+## Whole-lock hashing is not an identity
 
-**[lock-dep-no-unknown-fields]**: Each dependency entry MUST NOT contain
-fields beyond those specified for its `type`. Consumers SHOULD use
-strict deserialization (`deny_unknown_fields`) to enforce this.
-`VERIFIED: unverified`
+**[lock-no-plan-digest]**: Consumers MUST NOT use a digest of the whole
+lock file as a cache key, plan identity, or build identity. Identity is
+per-action (`action_id`, Execution Model §2.4): an edit anywhere in a
+lock MUST NOT shift the identity of actions whose own closure slices
+are unchanged. (This retires the v1-era `plan_digest`.)
 
-**[lock-dep-ordering]**: The `[[deps]]` array MUST be serialized in a
-deterministic order. The canonical ordering is defined by the `DepMap`
-type: entries keyed by `Either<AtomId, Name>` in `BTreeMap` order.
-Atom entries sort by `AtomId` (lexicographic on the `(anchor, label)`
-pair); non-atom entries sort by `Name` (lexicographic on the name
-string). Within a single serialization, atom entries and non-atom
-entries interleave according to their unified sort key.
-`VERIFIED: unverified`
-
----
-
-#### `type = "atom"` — Protocol-Level Atom Dependency
-
-```
-TYPE AtomDep = {
-    type        : "atom",
-    label       : Label,                     -- Human-readable label within the atom-set (AtomId component)
-    version     : SemVer,                    -- Resolved semantic version (atom-core)
-    set         : Anchor,                    -- Anchor hash (AtomId component; references [sets.<anchor>]) (atom-core)
-    publish_czd : Czd,                       -- Bare Coz digest of the publish CozMessage (atom-core)
-    requires    : Array<Czd>,                 -- publish_czd of each direct dep atom (ion extension, optional)
-    direct      : Bool,                      -- false = transitive dep (ion extension, optional)
-}
-```
-
-**[lock-atom-label]**: The `label` field MUST be a valid atom label:
-a non-empty UTF-8 string conforming to the label grammar defined by
-`atom-id`.
-`VERIFIED: unverified`
-
-**[lock-atom-version]**: The `version` field MUST be a valid semver
-string as defined by [SemVer 2.0.0](https://semver.org/). Pre-release
-identifiers (e.g., `0.1.4-local`) are permitted.
-`VERIFIED: unverified`
-
-**[lock-atom-set-ref]**: The `set` field MUST contain an anchor hash
-that matches a key in the `[sets]` table. This binds the atom to its
-atom-set, providing mirror information for fetching.
-`VERIFIED: unverified`
-
-**[lock-atom-publish-czd]**: The `publish_czd` field MUST be the bare
-Coz digest of the publish `CozMessage` for this atom version. It is the
-cryptographic pin: the lock commits to exactly this signed publish event.
-`publish_czd` is the sole verifiable identity anchor in the atom entry;
-it is verified by peeling the publish tag chain and confirming the pinned
-czd appears in the chain. `dig` (the hash of the reproducible atom
-snapshot) is NOT stored in the lock — it lives inside the signed publish
-payload and is verified by peel on acquisition (`peeled_sha == payload.dig`).
-The atom commit (`rev`) is also NOT stored — it is peelable from the
-publish tag chain via `publish_czd`.
-`VERIFIED: unverified`
-
-**[lock-atom-requires]**: The `requires` field is OPTIONAL. When
-present, it MUST be an array of `Czd` values. Each element is the
-`publish_czd` of another `type = "atom"` entry in `[[deps]]` and MUST
-correspond to exactly one such entry matched by `publish_czd`. This
-field encodes the transitive atom dependency graph as a flat adjacency
-list. An empty array and an absent field are semantically equivalent.
-`VERIFIED: unverified`
-
-**[lock-atom-direct]**: The `direct` field is OPTIONAL. When absent, the
-dependency is considered direct (explicitly declared in the manifest).
-When present and `false`, the dependency is transitive (pulled in by
-another atom's `requires`). Producers MUST omit `direct` for direct
-dependencies (it defaults to `true`) and MUST include `direct = false`
-for transitive ones.
-`VERIFIED: unverified`
-
-#### Example
+## Example
 
 ```toml
-[[deps]]
-type = "atom"
-label = "hosts"
-version = "0.1.1"
-set = "b7d610651b8dd7975eb0265fbf93ee70bc39c291"
-publish_czd = "12207a5c47bd2e1f8093ccdb0dbd49b6e79e12c6e48e35bb18f3e0cd527a5d34729"
+# ion.lock — generated by ion; do not edit
+schema = 2
 
-[[deps]]
-type = "atom"
-label = "home"
-version = "0.1.8"
-set = "f36300e6cd435c5b56751f2792e67f32cf1b666e"
-publish_czd = "12201c4f43d8ed0e2d18d3e9b472d22b7d30c83ad27ab33d1e9cf7a7a3c45aeae61"
-requires = ["12207a5c47bd2e1f8093ccdb0dbd49b6e79e12c6e48e35bb18f3e0cd527a5d34729"]
-direct = false
+[sets.core]
+anchor  = "sha1:9f2c81d4…"
+mirrors = ["::", "https://mirror.example.org/core"]
+
+[deps.core.gcc]
+version  = "13.3.0"
+publish  = "sha256:57de9a02…"
+requires = []
+
+[deps.core.libfoo]
+version  = "2.1.4"
+publish  = "sha256:7be13c55…"
+requires = ["core.openssl", "core.zlib-ng", "fetch.libfoo-vendor-models"]
+
+[deps.core.openssl]
+version  = "3.0.16"
+publish  = "sha256:c2104e88…"
+requires = []
+
+[deps.core.zlib-ng]
+version  = "2.2.1"
+publish  = "sha256:e9973b19…"
+requires = []
+
+[fetch.libfoo-vendor-models]
+url    = "https://files.example.com/models-4.2.tar.zst"
+digest = "blake3:aa31f6c0…"
 ```
 
----
-
-#### `type = "nix"` — Plain Nix File Fetch
-
-A single Nix source file fetched by URL with content-hash verification.
-
-```
-TYPE NixDep = {
-    type  : "nix",
-    name  : String,         -- Human-readable identifier
-    url   : URL,            -- Fetch URL
-    hash  : SriHash,        -- SRI-format content hash
-    owner : Czd,            -- publish_czd of owning atom (optional)
-}
-```
-
-**[lock-nix-hash-format]**: The `hash` field MUST be an SRI-format hash
-string (`<algorithm>-<base64>` or `<algorithm>:<nixbase32>`). The hash
-algorithm is not constrained by this spec but MUST be consistent with
-the fetch strategy. SHA-256 is the prevalent algorithm.
-`VERIFIED: unverified`
-
-#### Example
-
-```toml
-[[deps]]
-type = "nix"
-name = "foks"
-url = "https://raw.githubusercontent.com/NixOS/nixpkgs/393d5e815a/pkgs/by-name/fo/foks/package.nix"
-hash = "sha256:1spc2lsx16xy612lg8rsyd34j9fy6kmspxcvcfmawkxmyvi32g9v"
-```
-
----
-
-#### `type = "nix+git"` — Nix Git Repository Fetch
-
-A git repository pinned to a specific revision.
-
-```
-TYPE NixGitDep = {
-    type    : "nix+git",
-    name    : String,       -- Human-readable identifier
-    url     : GitURL,       -- Git repository URL
-    rev     : GitDigest,    -- Pinned commit hash
-    version : SemVer,       -- Resolved version (optional)
-    owner   : Czd,          -- publish_czd of owning atom (optional)
-}
-```
-
-**[lock-nix-git-rev]**: The `rev` field MUST be a valid git commit hash.
-This replaces the `hash` field used by other nix types — git
-repositories are pinned by revision, not content hash, because git's own
-content-addressing provides integrity.
-`VERIFIED: unverified`
-
-**[lock-nix-git-version]**: The `version` field is OPTIONAL. When
-present, it records the semver version that was resolved to this
-revision. It is informational metadata — the `rev` is the authoritative
-pin.
-`VERIFIED: unverified`
-
-#### Example
-
-```toml
-[[deps]]
-type = "nix+git"
-name = "nixpkgs"
-url = "https://github.com/nixos/nixpkgs"
-rev = "aa0ebc256a5b0540e9df53c64ef6930471c98407"
-```
-
----
-
-#### `type = "nix+tar"` — Nix Tarball Fetch
-
-A tarball or archive fetched by URL with content-hash verification.
-
-```
-TYPE NixTarDep = {
-    type  : "nix+tar",
-    name  : String,         -- Human-readable identifier
-    url   : URL,            -- Tarball URL
-    hash  : SriHash,        -- SRI-format content hash
-    owner : Czd,            -- publish_czd of owning atom (optional)
-}
-```
-
-#### Example
-
-```toml
-[[deps]]
-type = "nix+tar"
-name = "microvm-module"
-url = "https://github.com/astro/microvm.nix/archive/80bddbd51fda.tar.gz"
-hash = "sha256:0lkjn8q6p0c18acj43pj1cbiyixnf98wvkbgppr5vz73qkypii2g"
-```
-
----
-
-#### `type = "nix+src"` — Nix Source File Fetch
-
-A raw source file (JSON, Nix, configuration) fetched by URL. Distinct
-from `type = "nix"` in semantics: `nix+src` entries are build-time
-sources (registries, configuration data), not evaluable Nix expressions.
-
-```
-TYPE BuildSrc = {
-    type  : "nix+src",
-    name  : String,         -- Human-readable identifier
-    url   : URL,            -- Source URL
-    hash  : SriHash,        -- SRI-format content hash
-    owner : Czd,            -- publish_czd of owning atom (optional)
-}
-```
-
-#### Example
-
-```toml
-[[deps]]
-type = "nix+src"
-name = "flake-registry"
-url = "https://raw.githubusercontent.com/NixOS/flake-registry/master/flake-registry.json"
-hash = "sha256-hClMprWwiEQe7mUUToXZAR5wbhoVFi+UuqLL2K/eIPw="
-owner = "12207a5c47bd2e1f8093ccdb0dbd49b6e79e12c6e48e35bb18f3e0cd527a5d34729"
-```
-
----
-
-### Field Semantics
-
-#### Cross-Cutting Fields
-
-**`owner`** — Present on all non-atom dependency types (`nix`,
-`nix+git`, `nix+tar`, `nix+src`). OPTIONAL. When present, its value
-MUST be the `publish_czd` of exactly one `type = "atom"` entry in
-`[[deps]]`. It traces _provenance_: which atom's evaluation introduced
-this external dependency into the graph. When absent, the dependency is
-a direct dependency of the root atom.
-
-The `owner` field serves two consumers:
-
-- **Ion**: Garbage collection — when an atom is removed from the
-  manifest, its owned external dependencies can be pruned.
-- **Eos**: Dependency closure — eos can determine which external
-  fetches must complete before a given atom's evaluation begins by
-  collecting all deps whose `owner` matches that atom's `publish_czd`.
-
-**`name`** — Present on all non-atom dependency types. MUST be a
-non-empty UTF-8 string. Serves as the human-readable identifier and
-the deduplication key within the lock's `DepMap`. Two non-atom entries
-MUST NOT share the same `name`.
-
-#### `set`
-
-The `set` field on `type = "atom"` entries binds an atom to its
-atom-set. Its value is an anchor hash that MUST match a key in
-`[sets]`. Through this indirection, multiple atoms can share a single
-set of mirrors without duplicating URL lists.
-
-#### `requires`
-
-The `requires` field encodes the atom-level dependency graph as a flat
-adjacency list. Each `Czd` in the array is the `publish_czd` of a
-depended-on atom entry and represents an edge: "this atom depends on that
-atom." The complete dependency DAG is reconstructable by iterating
-`[[deps]]` entries of `type = "atom"` and building a
-`Map<Czd, Vec<Czd>>` from their `requires` fields.
-
-> **Note:** `requires` captures only _atom_ dependencies. External
-> dependencies (nix, nix+git, etc.) introduced by an atom are traced
-> via the `owner` field on those entries, not via `requires`. To compute
-> the full fetch closure for an atom, consumers must union the
-> `requires` graph with the `owner` provenance chain.
-
-#### `direct`
-
-When `direct = false`, the atom is a transitive dependency — it was
-pulled into the lock by another atom's `requires` chain, not by an
-explicit manifest declaration. This distinction is semantic metadata for
-frontends (e.g., `ion lock --why <atom>` diagnostics). Eos does not
-differentiate direct from transitive — all locked atoms are built
-equivalently.
-
----
-
-### Extensibility Model
-
-**[lock-type-namespace]**: The `type` field value follows a namespace
-convention: a bare identifier (e.g., `atom`, `nix`) or a compound
-identifier with `+` delimiter (e.g., `nix+git`, `nix+tar`, `nix+src`).
-The prefix before `+` identifies the backend ecosystem; the suffix
-after `+` identifies the fetch strategy.
-`VERIFIED: unverified`
-
-**[lock-type-extension-mechanism]**: New dependency types are introduced
-by:
-
-1. Defining a new `type` tag value (e.g., `guix+git`).
-2. Adding a corresponding variant to the `Dep` enum in the Rust types.
-3. Implementing the fetch and verification strategy in the consuming
-   eos backend.
-
-No changes to the lock file schema, TOML structure, or existing
-dependency types are required. This is the `plugin-type-extensibility`
-property from [ion-eos-contract.md](ion-eos-contract.md).
-`VERIFIED: unverified`
-
-**[lock-type-backend-dispatch]**: Eos uses the `type` field as the
-dispatch key for backend selection. The `type` prefix namespace
-determines which eos backend handles the entry:
-
-- `atom` → protocol-level atom fetcher (all backends)
-- `nix`, `nix+*` → Nix/Snix backend fetchers
-- `guix`, `guix+*` → Guix backend fetchers (future)
-  `VERIFIED: unverified`
-
-> **Note (2026-07-05, no semantic change):** "Backend" here predates
-> the executor-trait framing: dispatch is no longer to a whole-package
-> Nix/Snix/Guix _backend_ but to a fetch-type-specific handler behind
-> the executor's fetch proxy (HTC/L2, `htc-sad.md` §4.2) or, for the
-> `nix`/`nix+*` rows specifically — retired with the evaluator
-> ([ADR-0006](../adr/0006-execution-as-the-primitive.md) §3); these rows
-> are slated for redesign into generic fetch entries. Re-deriving this row's dispatch model is **P4** debt (a
-> compiled-in fetch-type registry vs. a preservation mode — see
-> `[lock-dep-no-unknown-fields]`/ion-sad §6.5), not performed here; see
-> [ADR-0005](../adr/0005-hermetic-transactional-composition.md) §Open
-> Items.
-
----
-
-### Serialization Invariants
-
-**[lock-deterministic-serialization]**: Two resolution passes over
-identical inputs MUST produce byte-identical lock files. This requires:
-
-- `BTreeMap` ordering for `[sets]` (keys sorted lexicographically).
-- `DepMap` ordering for `[[deps]]` (entries sorted by
-  `Either<AtomId, Name>` in `BTreeMap` order).
-- Consistent field ordering within each TOML table (serde's default
-  struct field order).
-- No trailing whitespace, consistent newline style (LF).
-  `VERIFIED: unverified`
-
-**[lock-serde-tag-dispatch]**: The Rust `Dep` enum MUST use
-`#[serde(tag = "type")]` for serialization. This produces internally-
-tagged TOML tables where the `type` field is inlined alongside the
-variant's fields, rather than wrapping in a nested table.
-`VERIFIED: unverified`
-
-**[lock-serde-deny-unknown]**: All lock file structs (`Lockfile`,
-`SetDetails`, `AtomDep`, `NixDep`, `NixGitDep`, `NixTarDep`, `BuildSrc`,
-`Using`) MUST use `#[serde(deny_unknown_fields)]`. This ensures strict
-schema enforcement — any unrecognized field in a lock file causes a
-parse error, preventing silent data loss during schema evolution.
-`VERIFIED: unverified`
-
-**[lock-depmap-values-only]**: The `DepMap` type serializes as a
-values-only TOML array (`[[deps]]`). The `BTreeMap` keys
-(`Either<AtomId, Name>`) are reconstructed during deserialization from
-the entry contents — they are not serialized. This keeps the TOML
-representation flat and readable.
-`VERIFIED: unverified`
-
-**[lock-optional-field-elision]**: Optional fields (`requires`,
-`direct`, `owner`, `version` on `NixGitDep`) MUST be omitted from
-serialization when they carry their default value:
-
-- `requires`: omitted when empty (`skip_serializing_if = "Vec::is_empty"`)
-- `direct`: omitted when `true` (direct is the default)
-- `owner`: omitted when `None`
-- `version` on `NixGitDep`: omitted when `None`
-  `VERIFIED: unverified`
-
----
-
-### Structural Invariants
-
-**[lock-sufficiency]**: The lock file MUST be the sole input required by
-eos to fetch, verify, and build the complete dependency closure. No
-external state — manifests, plugin configuration, environment variables,
-or resolution history — is required. This is the `handoff-lock-sufficiency`
-invariant from [ion-eos-contract.md](ion-eos-contract.md).
-`VERIFIED: unverified`
-
-**[lock-hash-integrity]**: Every digest in the lock file MUST be
-verifiable against the fetched content. For atom entries, `publish_czd`
-is the cryptographic pin: eos verifies by locating it in the publish tag
-chain and confirming `peeled_sha == payload.dig`. For non-atom entries,
-`hash` fields (SRI hash) MUST be verified against the fetched content.
-Eos MUST verify all digests before using the corresponding artifact.
-Verification failure MUST abort the build.
-`VERIFIED: unverified`
-
-**[lock-dag-acyclicity]**: The dependency graph encoded by `requires`
-fields MUST be a directed acyclic graph (DAG). Cycles MUST be rejected
-during lock production (by ion) and SHOULD be detected during lock
-consumption (by eos).
-`VERIFIED: unverified`
-
-**[lock-requires-closure]**: Every `Czd` appearing in any `requires`
-array MUST equal the `publish_czd` of exactly one `type = "atom"` entry
-in `[[deps]]`. Matching is by `publish_czd` — not by `(set, label)`.
-Dangling references MUST be rejected.
-`VERIFIED: unverified`
-
-**[lock-owner-closure]**: Every `Czd` appearing in any `owner` field MUST
-equal the `publish_czd` of exactly one `type = "atom"` entry in `[[deps]]`.
-Matching is by `publish_czd` — not by `(set, label)`. Dangling owner
-references MUST be rejected.
-`VERIFIED: unverified`
-
-**[lock-version-compatibility]**: Consumers MUST reject lock files whose
-`version` field is greater than the highest version they support.
-Consumers MAY accept lock files with a lower version if the schema is
-backward-compatible. Version `0` is the initial schema defined by this
-spec.
-`VERIFIED: unverified`
-
----
-
-## Verification
-
-| Constraint                         | Method                  | Result     | Detail                                   |
-| :--------------------------------- | :---------------------- | :--------- | :--------------------------------------- |
-| `lock-version-field`               | Unit tests              | UNVERIFIED | Parse valid and invalid version values   |
-| `lock-auto-generated-comment`      | N/A (advisory)          | UNVERIFIED | SHOULD-level; not enforceable            |
-| `lock-set-key-format`              | Regex validation        | UNVERIFIED | Validate hex length and character set    |
-| `lock-set-tag`                     | Deserialization tests   | UNVERIFIED | Empty string rejection                   |
-| `lock-set-mirrors`                 | Deserialization tests   | UNVERIFIED | Empty array rejection, URL validation    |
-| `lock-set-mirror-local-sentinel`   | Unit tests              | UNVERIFIED | `"::"` as sole entry semantics           |
-| `lock-set-referenced`              | Cross-reference check   | UNVERIFIED | Ensure all `set` fields resolve          |
-| `lock-dep-type-dispatch`           | Tagged enum tests       | UNVERIFIED | All five type values parse correctly     |
-| `lock-dep-no-unknown-fields`       | `deny_unknown_fields`   | UNVERIFIED | Unrecognized field rejection             |
-| `lock-dep-ordering`                | Serialization roundtrip | UNVERIFIED | Deterministic output comparison          |
-| `lock-atom-label`                  | Label grammar tests     | UNVERIFIED | Invalid label rejection                  |
-| `lock-atom-version`                | Semver parsing          | UNVERIFIED | Pre-release identifier support           |
-| `lock-atom-set-ref`                | Cross-reference check   | UNVERIFIED | Dangling set reference rejection         |
-| `lock-atom-publish-czd`            | Czd format + chain peel | UNVERIFIED | Verify czd in chain; peeled sha == dig   |
-| `lock-atom-requires`               | Closure validation      | UNVERIFIED | Dangling publish_czd reference rejection |
-| `lock-atom-direct`                 | Default value tests     | UNVERIFIED | Absent → true, explicit false            |
-| `lock-nix-hash-format`             | SRI parsing             | UNVERIFIED | Algorithm prefix + encoding              |
-| `lock-nix-git-rev`                 | Hex validation          | UNVERIFIED | Git commit hash length and character set |
-| `lock-nix-git-version`             | Semver parsing          | UNVERIFIED | Optional field handling                  |
-| `lock-type-namespace`              | Pattern validation      | UNVERIFIED | Compound identifier grammar              |
-| `lock-type-extension-mechanism`    | Design review           | UNVERIFIED | Architectural property                   |
-| `lock-type-backend-dispatch`       | Integration tests       | UNVERIFIED | Eos backend routing                      |
-| `lock-deterministic-serialization` | Roundtrip tests         | UNVERIFIED | Byte-identical output                    |
-| `lock-serde-tag-dispatch`          | Serde attribute audit   | UNVERIFIED | Code inspection                          |
-| `lock-serde-deny-unknown`          | Serde attribute audit   | UNVERIFIED | Code inspection                          |
-| `lock-depmap-values-only`          | Serialization tests     | UNVERIFIED | Array-of-tables output                   |
-| `lock-optional-field-elision`      | Serialization tests     | UNVERIFIED | Absent vs default equivalence            |
-| `lock-sufficiency`                 | Integration tests       | UNVERIFIED | Build from lock only                     |
-| `lock-hash-integrity`              | Fetch + verify tests    | UNVERIFIED | Content vs digest comparison             |
-| `lock-dag-acyclicity`              | Graph validation        | UNVERIFIED | Cycle detection algorithm                |
-| `lock-requires-closure`            | Cross-reference check   | UNVERIFIED | Dangling atom-id rejection               |
-| `lock-owner-closure`               | Cross-reference check   | UNVERIFIED | Dangling owner rejection                 |
-| `lock-version-compatibility`       | Version gate tests      | UNVERIFIED | Unknown version rejection                |
-
----
-
-## Appendix A: Complete Lock File Example
-
-The following is a representative lock file demonstrating all sections
-and dependency types:
-
-```toml
-# This file is automatically @generated by eka.
-# It is not intended for manual editing.
-version = 0
-
-[sets.b7d610651b8dd7975eb0265fbf93ee70bc39c291]
-tag = "home-config"
-mirrors = ["ssh://git@github.com/user/home.git"]
-
-[sets.f36300e6cd435c5b56751f2792e67f32cf1b666e]
-tag = "shared-atoms"
-mirrors = ["https://git.example.com/my-repo.git"]
-
-[sets.47478f45ed0de99d42495a0842b1fa41eac1ce14]
-tag = "local-atoms"
-mirrors = ["::"]
-
-[[deps]]
-type = "atom"
-label = "hosts"
-version = "0.1.1"
-set = "b7d610651b8dd7975eb0265fbf93ee70bc39c291"
-publish_czd = "12207a5c47bd2e1f8093ccdb0dbd49b6e79e12c6e48e35bb18f3e0cd527a5d34729"
-
-[[deps]]
-type = "atom"
-label = "home"
-version = "0.1.8"
-set = "f36300e6cd435c5b56751f2792e67f32cf1b666e"
-publish_czd = "12201c4f43d8ed0e2d18d3e9b472d22b7d30c83ad27ab33d1e9cf7a7a3c45aeae61"
-requires = ["12207a5c47bd2e1f8093ccdb0dbd49b6e79e12c6e48e35bb18f3e0cd527a5d34729"]
-direct = false
-
-[[deps]]
-type = "atom"
-label = "users"
-version = "0.1.4-local"
-set = "47478f45ed0de99d42495a0842b1fa41eac1ce14"
-publish_czd = "1220f8a2c9d4e6b7a138cf9e4d2f53a1b7e0c45d28a9f3e6b74c2d1a8f53e0b962"
-
-[[deps]]
-type = "nix"
-name = "foks"
-url = "https://raw.githubusercontent.com/NixOS/nixpkgs/393d5e815a/pkgs/by-name/fo/foks/package.nix"
-hash = "sha256:1spc2lsx16xy612lg8rsyd34j9fy6kmspxcvcfmawkxmyvi32g9v"
-
-[[deps]]
-type = "nix+git"
-name = "hm-module"
-url = "https://github.com/nix-community/home-manager.git"
-rev = "d0300c8808e41da81d6edfc202f3d3833c157daf"
-
-[[deps]]
-type = "nix+git"
-name = "nixpkgs"
-url = "https://github.com/nixos/nixpkgs"
-rev = "aa0ebc256a5b0540e9df53c64ef6930471c98407"
-
-[[deps]]
-type = "nix+src"
-name = "flake-registry"
-url = "https://raw.githubusercontent.com/NixOS/flake-registry/master/flake-registry.json"
-hash = "sha256-hClMprWwiEQe7mUUToXZAR5wbhoVFi+UuqLL2K/eIPw="
-owner = "12207a5c47bd2e1f8093ccdb0dbd49b6e79e12c6e48e35bb18f3e0cd527a5d34729"
-
-[[deps]]
-type = "nix+tar"
-name = "microvm-module"
-url = "https://github.com/astro/microvm.nix/archive/80bddbd51fda.tar.gz"
-hash = "sha256:0lkjn8q6p0c18acj43pj1cbiyixnf98wvkbgppr5vz73qkypii2g"
-
-[[deps]]
-type = "nix+tar"
-name = "nixos-unstable"
-url = "https://github.com/nixos/nixpkgs/archive/nixos-unstable.tar.gz"
-hash = "sha256-gTrEEp5gEspIcCOx9PD8kMaF1iEmfBcTbO0Jag2QhQs="
-```
-
----
-
-## Appendix B: Serde Pattern Reference
-
-The following Rust type signatures constitute the canonical programmatic
-schema. These are distilled from the PoC types in
-`eka/crates/atom/src/package/metadata/lock/` and refined per the design
-synthesis analysis.
-
-```rust
-/// Root lock file structure.
-#[derive(Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Lockfile {
-    pub version: u16,
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub sets: BTreeMap<GitDigest, SetDetails>,
-    #[serde(default, skip_serializing_if = "DepMap::is_empty")]
-    pub deps: DepMap,
-}
-
-/// Atom-set metadata.
-#[derive(Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct SetDetails {
-    pub tag: String,
-    pub mirrors: BTreeSet<String>,
-}
-
-/// Dependency entry — enum dispatched by `type` field.
-#[derive(Serialize, Deserialize)]
-#[serde(tag = "type")]
-pub enum Dep {
-    #[serde(rename = "atom")]
-    Atom(AtomDep),
-    #[serde(rename = "nix")]
-    Nix(NixDep),
-    #[serde(rename = "nix+git")]
-    NixGit(NixGitDep),
-    #[serde(rename = "nix+tar")]
-    NixTar(NixTarDep),
-    #[serde(rename = "nix+src")]
-    NixSrc(BuildSrc),
-}
-
-/// Values-only array wrapper over BTreeMap for deterministic ordering.
-/// Serializes as [[deps]] (TOML array of tables).
-/// Keys are reconstructed from entry contents during deserialization.
-/// AtomId = (Anchor, Label) — the abstract pair, NOT a hash.
-pub struct DepMap(BTreeMap<Either<AtomId, Name>, Dep>);
-```
-
----
-
-## Implications
-
-1. **Lock File Placement**: This spec defines the _schema_, not the
-   file path convention. The conventional path is `atom.lock` adjacent
-   to the root `atom.toml`. The lock file path is an ion concern; eos
-   receives the lock content, not a path.
-
-2. **Shared Crate**: The lock types are consumed by both ion and eos.
-   They SHOULD reside in a shared crate (`ion-lock` or equivalent) with
-   public visibility, not buried in atom internals as `pub(crate)`.
-   This is a refinement of the PoC architecture.
-
-3. **`owner` Graph Traversal**: To compute the complete fetch closure
-   for a given atom, consumers must:
-   (a) Follow the `requires` adjacency list for atom-level deps.
-   (b) Collect all non-atom deps whose `owner` matches the atom's `publish_czd`.
-   (c) Recurse through transitive atom deps and repeat (b).
-   This two-path traversal is implicit in the schema design; consumers
-   are responsible for implementing it correctly.
-
-4. **Version Evolution**: When the lock schema changes in a
-   backward-incompatible manner, the `version` field MUST be
-   incremented. Consumers gate on `version` to select the appropriate
-   parser. Additive changes (new optional fields, new `type` values)
-   do not require a version bump.
+## Open items binding this spec
+
+- The publish czd's digest algorithm is whatever coz produces — the
+  concrete prefix string MUST be pinned from `atom-core` before
+  implementation (placeholder above: `sha256`).
+- The manifest schema (constraints, overrides, toolchain roles,
+  ecosystem declaration, params) is a separate specification; this spec
+  constrains only what crosses into the lock.
