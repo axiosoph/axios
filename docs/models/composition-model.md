@@ -224,17 +224,49 @@ environment  a composition equipped with a COHERENCE CERTIFICATE:
 
 ```
 
-**Environments are recursive; there is no third stratum.** (Amendment,
-nrd 2026-07-08 — the earlier draft carried a "system" stratum defined as
-"a composition of environments"; it had no coherent distinction from an
-environment once scopes nest, and is dissolved.) The containment law:
-**packages contain only packages; environments compose environments and
-packages.** What "system" named is simply the outermost environment.
-Per-composition scoping (ADR-0005's store-path role decomposition:
+**Environments are recursive, and the third stratum is a declaration
+of boundaries.** (Amended twice, nrd 2026-07-08: the original "system =
+a composition of environments" was vacuous once scopes nest and was
+briefly dissolved; it is reinstated with sharper content.) The
+containment law: **packages contain only packages; environments compose
+environments and packages.** A **system** is then not a bigger
+environment but a different artifact: where an environment's
+certificate proves the internal coherence of ONE scope, a system
+**declares a family of scopes** — the namespace partitioned into
+disjoint domains, each pinned to its own composition root (the base
+environment at `/usr` and `/lib`; a config layer at `/etc`, swappable
+without touching the base; a user layer at `/home/<user>`; quirk scopes
+for individually-patched programs) — and its certificate proves
+**boundary coherence**: every layer's residual requires discharged by a
+sibling layer or the declared ambient base. Domains are disjoint by
+construction, so layers compose by ordinary `⊕` — no ordered shadowing,
+no OCI-style "later wins" — and each layer swaps transactionally on its
+own cadence. Under the flat-is-normal norm, the system kind is exactly
+**the declarative record of the scope boundaries that earned their
+existence, and why**. Per-composition scoping (ADR-0005's store-path role decomposition:
 conflict-free co-installation) is what permits two nested environments
 to bind DIFFERENT versions of one provider: ⊕'s conflict rule forces
 explicit prefix/namespace separation, so co-installation is a theorem of
 the merge monoid, not a convention.
+
+**Reconciliation: merging environments is re-formation.** Composing two
+certified environments into ONE scope must produce a single choice per
+shared (ns, name): reconciliation finds a provider `c*` with
+`satisfies(needs, provides(c*))` for every consumer across BOTH
+environments, applies `subst[name ↦ c*]` to whichever side pinned
+differently, and re-runs the formation fixpoint — so the merged
+certificate may legitimately pin different members than either
+constituent did. Reconciliation is resolution-shaped — candidates from
+the pinned fact snapshot, interface satisfaction as the constraint
+relation, version order used only as preference — and deterministic in
+(intent, fact-set snapshot, choice policy) like all formation (P8).
+Costs are the algebra's usual: surviving consumers rebind free;
+failures form the bounded frontier; and when NO shared pick exists, the
+lawful alternatives are exactly two — edit intent (bump or backtrack),
+or refuse to merge the scope and **declare the boundary instead** (a
+system layer, above). Formation is the degenerate case: forming an
+environment from n packages is reconciling n trivial environments —
+one operation, not two.
 
 **Flat is the normal form; a scope boundary must earn its existence.**
 The default composition is a single scope: everything merged by `⊕`, one
@@ -358,7 +390,7 @@ convention call (execution model §9.13).
 
 **Pipelines cross strata; steps do not.** The strata classify elaboration
 _steps_; an atom denotes an elaboration _pipeline_, and pipelines may
-interleave strata freely — a whole-system environment atom is the canonical case: members
+interleave strata freely — a system atom is the canonical case: members
 composed (algebraic) → config intent rendered by actions (execution) →
 rendered blobs bound (algebraic) → certificate. Boot and running services
 are executions _of_ the finished artifact at use time, outside elaboration
@@ -591,7 +623,9 @@ the execution model, P10 in the storage model):
   observed evidence), is deterministic in `(intent, fact-set snapshot,
 choice policy)`, and its certificate is **recomputable**: any holder
   of intent + snapshot re-derives a byte-identical certificate
-  (self-verification by recomputation, §5).
+  (self-verification by recomputation, §5). Reconciliation (§4) is in
+  P8's scope: merging certified environments is re-formation over the
+  union of constraints and owes the same determinism.
 - **P9** — **override soundness**: `subst[n ↦ p′]` preserves certificate
   coherence for every consumer whose satisfaction survives the swap;
   the rebuild frontier `F` is exactly the satisfaction-failure set
