@@ -460,6 +460,21 @@ interface layer means it cannot certify that anything survived. The
 interface certificate is precisely the instrument that turns "rebuild the
 world below the change" into "rebuild what the change (checkably) broke."
 
+**Ratified posture (nrd, 2026-07-08): Compat is the default constraint
+strength for patch-level provider swaps.** Evidence: the interface-proxy
+operating-characteristics study (`tools/iface-proxy-study/` — Debian
+libssl3 3.0.15→3.0.16 against a 100-consumer sample: 97/97 clearable
+under both symbol-level and ABI-level analysis with an empty
+disagreement set, both classifiers negative-controlled; 0/8 false clears
+on crypto-exercising execution tests). Scope is deliberate: the evidence
+covers patch-level updates of an ABI-disciplined provider; swaps beyond
+patch level default to **strict** until their gradient is measured, and
+per-edge strictness declarations override the default in either
+direction. ABI-level analysis (the `abicompat`/`abidiff` class) is the
+evidence grade the study exercised; whether symbol-level alone may ever
+authorize Compat clearance remains open — the study found no divergence
+between the two, so the floor question did not force itself.
+
 An **overlay** is then a reusable, named sequence of algebra operations
 (`subst`, `⊕`-extend, prune, choice-function override) — data, so it can
 itself be content-addressed and signed like everything else. No language
