@@ -84,7 +84,7 @@ storage is axiomatized in the [Storage Model](storage-model.md). The
 moved sections are retained below as stubs so section numbering and
 inbound references stay stable. This document now consumes `Composition`
 as an abstract type and owns the dynamic primitive alone. P1 moves with
-the merge monoid; obligation numbering (P1–P10) is unique across the
+the merge monoid; obligation numbering (P1–P11) is unique across the
 three models._
 
 _Trigger: early substrate implementation work treated **build** as the

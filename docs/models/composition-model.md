@@ -348,8 +348,11 @@ algebraic intent    elaboration is pure computation in the value
                     worldly discovery snapshot just as the lock does).
                     An environment atom denotes a composition +
                     certificate via the formation fixpoint (P8); a
-                    generator atom denotes an Env → Env operator
-                    pipeline (§7). Given the pinned fact snapshot,
+                    generator atom denotes a published, signed,
+                    versioned choice-function delta — a generator in
+                    intension, acting on elaborations generally:
+                    package resolution and environment formation alike
+                    (§7). Given the pinned fact snapshot,
                     elaboration needs no executor, no sandbox, no cache,
                     and is SELF-VERIFYING BY RECOMPUTATION: a registry
                     can check an environment's coherence RELATIVE TO ITS
@@ -517,6 +520,40 @@ itself be content-addressed and signed like everything else. No language
 in the trusted core; the expressive power Nix gets from functions, this
 model gets from operators whose blast radius the type layer computes.
 
+**Overrides are choice-function deltas — generators in intension.**
+(Ratified, nrd 2026-07-08.) An override declaration denotes a **delta**
+`Δ` on the choice function: elaboration consumes `c = defaults ∪ Δ` —
+the recorded slot §4 always carried. Since elaboration is pure in
+(intent, snapshot, choice policy) (P8), applying `Δ` IS a
+transformation of the result: a **generator**, presented _intensionally_
+(a rule perturbing choice) rather than _extensionally_ (an edit set) —
+and the generator normal form below is the compiler between the two
+presentations. Generators therefore act on **elaborations generally**,
+package resolution and environment formation alike, not on environments
+only. Two keying classes, distinguished by quantifier:
+
+- **target-keyed** (pointwise): finite-support deltas that name their
+  choice points — necessarily manual.
+- **role-keyed** (uniform): deltas quantified over a declared role
+  (∀ atoms declaring role `cc`: prefer `p`) — automatic **within
+  bounds**: each atom's own declared constraints bound the unification,
+  and failures take reconciliation's lawful exits (above). A **forced**
+  delta binds outside the bounds — a `Declared`-class human assertion
+  (execution model §4.2): explicit, signed, marked in the certificate
+  as an unproven binding; never silent, never a default, lintable as
+  impermanent.
+
+**Law (delta composition).** Deltas compose by union, **defined only
+where they agree on the intersection of their domains**: two deltas
+assigning different providers to one choice point conflict explicitly,
+surfaced at compose time, never resolved by ordering. Choice deltas
+thus form a **partial commutative idempotent monoid** — the merge
+monoid's shape (§3) recurring one level up: `⊕` for content, delta
+union for choices. Override application is order-independent by
+construction; the overlay-ordering folklore of function-based override
+systems is structurally unexpressible here. _Proof obligation P11
+(§10): the delta monoid laws and compilation soundness._
+
 **Property (generator normal form).** Environments are freely generated
 from packages by `⊕` and binding; therefore every generator's effect —
 whatever its surface abstraction — has a normal form as a package-level
@@ -632,6 +669,13 @@ choice policy)`, and its certificate is **recomputable**: any holder
   relative to the `iface_digest` proxy; recertification after rebind
   yields a valid certificate (§7). Testable against the composer
   implementation.
+
+- **P11** — **the delta monoid and its compiler**: choice-delta union
+  satisfies the partial-monoid laws with exact same-point conflict
+  detection (the §3 mirror at the choice level), and normal-form
+  compilation is sound: elaborating under `defaults ∪ Δ` yields the
+  same state as applying Δ's compiled edit set
+  `(remove, add, rebind, re-certify)` to the default elaboration (§7).
 
 Seam obligations shared with the execution model, homed there: **P6**
 (promotion coherence — the arrow of §0's cycle), **P7** (`resolve`
