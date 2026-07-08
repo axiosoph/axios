@@ -1,0 +1,33 @@
+FROM iface-proxy-base:snapshot-raw
+
+# The fakechroot debootstrap that produced snapshot-raw ran unprivileged
+# (no real chroot/mknod available under rootless podman), so /tmp came out
+# owned by the invoking host uid with mode 0755 instead of the standard
+# 1777 sticky-world-writable -- breaks anything that writes temp files as
+# a different in-container uid (e.g. apt-key/gpg). Fix it explicitly.
+RUN chown root:root /tmp && chmod 1777 /tmp
+
+# This base image was produced by debootstrapping bookworm directly from
+# the snapshot.debian.org instant matching libssl3 3.0.15-1~deb12u1
+# (phase-1's "old provider" timestamp, 20241101T025324Z) -- see
+# ../fetch_snapshot_rootfs.sh. Every package below therefore resolves
+# against the exact same historical archive state as phase 1, with no
+# version skew against a rolling base image (that was tried first and
+# hit irreconcilable exact-version toolchain conflicts -- see PHASE2-REPORT).
+RUN rm -f /etc/apt/sources.list.d/* && \
+    printf 'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20241101T025324Z/ bookworm main\ndeb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/20241101T025324Z/ bookworm-security main\n' > /etc/apt/sources.list && \
+    printf 'Acquire::Check-Valid-Until "false";\nAcquire::Retries "3";\nAPT::Get::Assume-Yes "true";\n' > /etc/apt/apt.conf.d/99snapshot
+
+# Bootstrap ca-certificates over plain http (the fresh debootstrap has no
+# trust store yet for https); then switch sources.list to https (with
+# deb-src too, for apt-get source) for every subsequent fetch.
+RUN apt-get update && apt-get install --no-install-recommends -y ca-certificates && \
+    printf 'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/20241101T025324Z/ bookworm main\ndeb-src [check-valid-until=no] https://snapshot.debian.org/archive/debian/20241101T025324Z/ bookworm main\ndeb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/20241101T025324Z/ bookworm-security main\ndeb-src [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/20241101T025324Z/ bookworm-security main\n' > /etc/apt/sources.list && \
+    apt-get update
+
+RUN apt-get install --no-install-recommends -y \
+    curl wget devscripts dpkg-dev apt-utils gnupg python3 \
+    build-essential fakeroot equivs procps iproute2 && \
+    apt-get clean
+
+WORKDIR /work
