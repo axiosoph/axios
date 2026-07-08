@@ -154,18 +154,25 @@ trusted: content fetched from any mirror MUST verify against the
 content identities in this lock. Consumers MAY consult mirrors from any
 other source.
 
-**[lock-set-referenced]**: Every set alias appearing in a `[deps]` key
-path MUST have an entry under `[sets]`, and every `[sets]` entry MUST be
+**[lock-set-referenced]**: Every alias appearing in a dep entry's `set`
+field MUST have an entry under `[sets]`, and every `[sets]` entry MUST be
 referenced by at least one dep entry.
 
-## `[deps.<set>.<label>]` — the ground pins
+## `[[deps]]` — the ground pins
 
-Dependency entries are nested tables keyed by set alias, then atom
-label. This two-level keying is the `(set, label)` name anchor; there is
-no per-entry type dispatch and no `set` field.
+Dependency entries form an **array of tables**: the closure is a list of
+ground facts, and the list IS the closure — the lock imposes no
+namespace hierarchy (that is manifest-side shape). Each entry carries
+its `(set, label)` identity as explicit fields, which places identity
+under the same consistency check as every other annotation.
 
-**[lock-single-version]**: A lock MUST bind at most one version per
-`(set, label)` — the nested keying makes this structural. Within one
+**[lock-dep-identity]**: Each dep entry MUST carry a `set` field (an
+alias defined under `[sets]`) and a `label` field (the atom label).
+There is no per-entry type dispatch.
+
+**[lock-single-version]**: A lock MUST contain at most one dep entry per
+`(set, label)`; a duplicate is a hard validation error (canonical
+ordering makes duplicates adjacent, so the check is linear). Within one
 atom's closure, resolution reconciles to a single shared choice per
 name (Composition Model §4); diamond requirements that cannot reconcile
 are a resolution failure at this layer. Divergent-version coexistence
@@ -181,16 +188,17 @@ interpretation is a manifest/resolution concern, never a lock concern).
 of the resolved publish transaction (the bare publish czd), prefixed
 with its hash algorithm. This is the entry's identity.
 
-**[lock-annotation-consistency]**: `version` and the `(set, label)` key
-path MUST equal the values derivable from the entry's `publish`
+**[lock-annotation-consistency]**: `set` (via its anchor), `label`, and
+`version` MUST equal the values derivable from the entry's `publish`
 transaction. A mismatch is a hard validation error: annotations exist
 for humans and indexing, never as independent authority.
 
 **[lock-dep-requires]**: The `requires` field MUST be an array listing
-the entry's direct dependencies as dotted key paths (`"<set>.<label>"`
-for dep entries, `"fetch.<name>"` for fetch entries), sorted bytewise.
-Requires edges are the closure's graph structure. Provider-side owner
-back-pointers MUST NOT exist.
+the entry's direct dependencies as `"<set>.<label>"` references for dep
+entries and `"fetch.<name>"` references for fetch entries, sorted
+bytewise. These reference `(set, label)` and fetch-name identities, not
+TOML paths. Requires edges are the closure's graph structure.
+Provider-side owner back-pointers MUST NOT exist.
 
 **[lock-requires-resolvable]**: Every `requires` edge MUST name an entry
 that exists in this lock. Dangling edges are a hard validation error.
@@ -205,29 +213,34 @@ manifest-side per [lock-closure-completeness]. The lock alone is
 deliberately not a self-contained GC domain: sanitization MUST take its
 roots from the manifest.
 
-**[lock-dep-ordering]**: Dep entries MUST be serialized in bytewise
-lexicographic order of set alias, then label. (Fetch entries sort
-independently within `[fetch]`; no cross-section ordering relation
+**[lock-dep-ordering]**: Dep entries MUST appear in bytewise
+lexicographic order of `(set, label)` — with the array shape, canonical
+order is literally serialization order. (Fetch entries sort
+independently within `[[fetch]]`; no cross-section ordering relation
 exists or is needed.)
 
-## `[fetch.<name>]` — promoted fetch pins
+## `[[fetch]]` — promoted fetch pins
 
 Fetch entries record **promoted** discoveries (record-mode trial →
-reviewed, signed intent; Execution Model §3.3). Origin coincides with
-section: everything under `[fetch]` is promotion-authored and NOT
-regenerable by resolution.
+reviewed, signed intent; Execution Model §3.3), as an array of tables
+with an explicit `name` field. Origin coincides with section:
+everything under `[[fetch]]` is promotion-authored and NOT regenerable
+by resolution.
 
 **[lock-fetch-digest]**: Each fetch entry MUST contain a `digest` field:
 the algorithm-prefixed content digest of the fetched payload. The digest
 is the identity; the `url` field is a transport hint and MUST NOT be
 treated as authoritative.
 
-**[lock-fetch-naming]**: Fetch names are lock-local labels with no
-cross-lock meaning. The promoting tool MUST derive names
-deterministically from the discovery context, and a promotion whose
-name collides with an existing entry carrying a different digest MUST
-fail loudly for user resolution. (TOML itself rejects duplicate keys;
-this constraint binds the promoting tool, not the parser.)
+**[lock-fetch-naming]**: Each fetch entry MUST carry a `name` field:
+a lock-local label with no cross-lock meaning, unique within the lock
+(a duplicate name is a hard validation error). The promoting tool MUST
+derive names deterministically from the discovery context, and a
+promotion whose name collides with an existing entry carrying a
+different digest MUST fail loudly for user resolution.
+
+**[lock-fetch-ordering]**: Fetch entries MUST appear in bytewise
+lexicographic order of `name`.
 
 **[lock-fetch-liveness]**: A fetch entry is live while at least one
 `requires` edge references it. Automated sanitization MUST NOT remove a
@@ -244,8 +257,8 @@ pin payload, already inside the atom snapshot.
 
 **[lock-canonical-form]**: Serialization MUST be canonical, defined
 concretely as: UTF-8, LF newlines, exactly one terminating newline; no
-comments; fixed section order (`schema`, `[sets]`, `[deps]`, `[fetch]`);
-keys sorted bytewise at every nesting level; exactly one blank line
+comments; fixed section order (`schema`, `[sets]`, `[[deps]]`, `[[fetch]]`);
+keys within tables sorted bytewise; array-of-table entries ordered per [lock-dep-ordering]/[lock-fetch-ordering]; exactly one blank line
 between tables and none elsewhere; bare keys wherever TOML permits,
 otherwise basic (double-quoted) keys; all string values as basic
 strings with TOML's minimal escaping; exactly one space on each side of
@@ -312,29 +325,40 @@ anchor = "sha1:9f2c81d4…"
 mirrors = ["::", "https://mirror.example.org/core"]
 snapshot = "sha1:b03d55e1…"
 
-[deps.core.gcc]
+[[deps]]
+label = "gcc"
 publish = "sha256:57de9a02…"
 requires = []
+set = "core"
 version = "13.3.0"
 
-[deps.core.libfoo]
+[[deps]]
+label = "libfoo"
 publish = "sha256:7be13c55…"
 requires = ["core.openssl", "core.zlib-ng", "fetch.libfoo-vendor-models"]
+set = "core"
 version = "2.1.4"
 
-[deps.core.openssl]
+[[deps]]
+label = "openssl"
 publish = "sha256:c2104e88…"
 requires = []
+set = "core"
 version = "3.0.16"
 
-[deps.core.zlib-ng]
+[[deps]]
+label = "zlib-ng"
 publish = "sha256:e9973b19…"
 requires = []
+set = "core"
 version = "2.2.1"
 
-[fetch.libfoo-vendor-models]
+[[fetch]]
 digest = "blake3:aa31f6c0…"
+name = "libfoo-vendor-models"
 url = "https://files.example.com/models-4.2.tar.zst"
+```
+
 ```
 
 ## Supersessions and open items
@@ -354,3 +378,4 @@ url = "https://files.example.com/models-4.2.tar.zst"
 - The manifest schema (constraints, overrides, toolchain roles,
   ecosystem declaration, params) is a separate specification; this spec
   constrains only what crosses into the lock.
+```
