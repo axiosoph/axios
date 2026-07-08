@@ -51,11 +51,11 @@ sources.
 
 **Criticality Tier:** High — the lock is a trust boundary. Every value
 plays exactly one of three roles: a **cryptographic commitment**
-(`anchor`, `snapshot`, `publish`, `digest`), a **non-authoritative
-transport hint** (`mirrors`, `url`), or a **structural annotation**
-(`schema`, `version`, `requires`). Annotations are never the basis of a
-fetch or trust decision and MUST be consistent with the commitments
-([lock-annotation-consistency]).
+(`anchor`, `charter_head`, `snapshot`, `publish`, `digest`), a
+**non-authoritative transport hint** (`mirrors`, `url`), or a
+**structural annotation** (`schema`, `version`, `requires`). Annotations
+are never the basis of a fetch or trust decision and MUST be consistent
+with the commitments ([lock-annotation-consistency]).
 
 ## Formal requirements
 
@@ -131,14 +131,47 @@ and tool output, never in lock bytes.
 ## `[sets]` — set anchors and discovery snapshots
 
 **[lock-set-anchor]**: Each key under `[sets]` is a local set alias; its
-`anchor` field MUST be the set repository's genesis commit object id,
-prefixed with the git object-id algorithm of that repository (`sha1:`
-today; `sha256:` when a repository uses it). The anchor IS the set's
-identity. SHA-1 is not collision-resistant (Storage Model §5); the
-weakness is bounded: content never verifies against the anchor — only
-against the `publish` and `digest` commitments — and the claim/publish
-signature chain and temporal-ancestry checks ride above it. The blake3
-re-derivation at artifact-store ingestion is the hardening path.
+`anchor` field MUST be the algorithm-prefixed coz digest of the
+atom-set's founding charter transaction: `anchor = czd(charter₀)`
+(atom-transactions.md's `[charter-anchor]`). The anchor IS the set's
+identity, and this derivation is backend-agnostic: the value is a coz
+digest regardless of which VCS backend hosts the set's source. This
+supersedes the prior genesis-commit derivation. The founding commit is
+not lost — `charter.src` is the chartering-point revision, and because
+a revision hash commits to its entire ancestry, `charter.src`
+transitively pins the genesis commit (atom-transactions.md's
+`[charter-ancestry]`) without itself being the genesis commit or
+serving as the set's identity; that role now belongs one layer up, to
+`anchor`. A weak source-repository hash — SHA-1 is not
+collision-resistant (Storage Model §5) — therefore no longer bears on
+the lock's own identity value directly: it bears only on the ancestry
+`charter.src` transitively pins, not on `anchor` itself. Continuity
+across a hash-migrating
+history rewrite is a successor charter's explicit concern
+(atom-transactions.md's `[charter-succession]`, `[anchor-hash-agile]`),
+never this field's: `anchor` is immutable for the set's lifetime
+regardless of what happens to the source repository underneath it.
+
+**[lock-set-charter-head]**: Each `[sets]` entry MUST record a
+`charter_head` field: the algorithm-prefixed coz digest of the charter
+transaction — the founding charter, or a later successor — that this
+lock's resolution observed as the **effective charter**
+(atom-transactions.md's `[charter-succession-linear]`: the head of the
+unique valid succession chain, ordered by chain position, never by the
+untrusted `now` field). This is the lock's contribution to
+atom-transactions.md's `[chain-monotonicity]`, which explicitly
+requires it: a consumer holding this lock MUST refuse to accept a
+served succession chain that regresses below the recorded
+`charter_head` — reproducing a prefix of previously observed chain
+state is a detected rollback, never an alternative history.
+`charter_head` MUST equal `anchor` exactly while the set has undergone
+no succession (the founding charter is still effective); it diverges
+from `anchor` — both remaining valid digests of real charter
+transactions — precisely when a successor charter (key rotation or
+ownership transfer, atom-transactions.md's `[charter-succession]`) is
+the effective charter at resolution time. Unlike `anchor`, which is
+immutable for the set's lifetime, `charter_head` MAY advance on
+re-resolution as succession proceeds; it MUST NOT regress.
 
 **[lock-set-snapshot]**: Each `[sets]` entry MUST record a `snapshot`
 field: the algorithm-prefixed object id of the set repository's tip
@@ -308,7 +341,8 @@ the v1-era `plan_digest` and the job-identity scheme built on it.)
 schema = 2
 
 [sets.core]
-anchor = "sha1:9f2c81d4…"
+anchor = "sha256:3fa1c9e0…"
+charter_head = "sha256:3fa1c9e0…"
 mirrors = ["::", "https://mirror.example.org/core"]
 snapshot = "sha1:b03d55e1…"
 
@@ -350,7 +384,10 @@ url = "https://files.example.com/models-4.2.tar.zst"
   a live contract boundary.
 - The publish czd's digest algorithm is whatever coz produces — the
   concrete prefix string MUST be pinned from `atom-core` before
-  implementation (placeholder above: `sha256`).
+  implementation (placeholder above: `sha256`). `anchor` and
+  `charter_head` share this open item rather than a separate one: both
+  are now coz czds ([lock-set-anchor], [lock-set-charter-head]), not
+  git object ids, so both carry the same pending prefix pin.
 - The manifest schema (constraints, overrides, toolchain roles,
   ecosystem declaration, params) is a separate specification; this spec
   constrains only what crosses into the lock.
