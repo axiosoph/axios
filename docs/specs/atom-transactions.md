@@ -335,11 +335,15 @@ TYPE  ClaimPayload = {
         now:    u64,
         owner:  Vec<u8>,   -- opaque identity digest
         pkg:    String,    -- PURL type (e.g., "cargo", "npm", "pypi")
+        prior:  Czd?,      -- OPTIONAL: czd of a replaced claim ([claim-replacement-authority])
+        governance: bool?, -- OPTIONAL: MUST be true on governance replacement; absent otherwise
         src:    Vec<u8>,   -- source revision hash at claim time (temporal floor)
         tmb:    Tmb,       -- standard Coz: signing key thumbprint
         typ:    "atom/claim"
       }                                                           (atom-id)
   -- CozMessage MUST include `key` field (public key for TOFU).
+  -- `prior` and `governance` are root-level PROTOCOL fields (declared
+  -- here precisely so the reserved-root-keys rule is satisfied).
   -- The `anchor` field IS the chain link to the charter: anchor ==
   -- czd(charter₀). No separate charter field exists or is needed —
   -- exactly as publish chains to claim by `claim: Czd`, claim chains
@@ -398,9 +402,11 @@ charter is the unique charter in the succession chain carrying no
 `prior` field.
 `VERIFIED: unverified (models require extension — see Verification note)`
 
-**[claim-chains-charter]**: Every claim's `anchor` field MUST equal the
-czd of a verifiable charter (founding, or reachable from the founding
-charter via `[charter-succession]`). This is the claim-level analogue of
+**[claim-chains-charter]**: Every claim's `anchor` field MUST equal
+`czd(charter₀)` — the founding charter's czd, exactly. Succession
+governs _authorization_, never the anchor value (a successor's czd is
+not an anchor and MUST NOT appear as one). This is the claim-level
+analogue of
 `[publish-chains-claim]`: charter : claim :: claim : publish.
 `VERIFIED: unverified (models require extension)`
 
@@ -425,7 +431,13 @@ authorities, distinguishable by every consumer:
   replacement payload MUST carry `governance: true`. A governance
   replacement is a first-class, visible seizure event; consumers' trust
   policies MUST be able to distinguish it and MAY refuse, warn, or pin
-  the prior owner. Silent seizure is structurally unexpressible.
+  the prior owner. The honest strength of this guarantee: seizure is
+  unmarked-and-invisible to no one — it is visible to every consumer
+  who observes the newer state, and rollback below any consumer's
+  recorded state is detectable (`[chain-monotonicity]`); a consumer who
+  has never seen the newer state makes a TOFU judgment, as at all first
+  contact. Absolute freshness without a transport of record is not
+  claimed — monotonic non-regression plus mandatory marking is.
 
 Publishes chained to a replaced claim remain verifiable history;
 new publishes MUST chain to the current claim.
@@ -436,7 +448,11 @@ to) the effective charter's `src`. Together with the existing
 claim→publish ancestry, the temporal floor becomes
 `charter.src ⟶ claim.src ⟶ publish.src`, rooted at a signed object.
 History prior to `charter.src` is visible but unowned by the set —
-**orphaned unless re-claimed** after the chartering point.
+**orphaned unless re-claimed** after the chartering point. This is a
+consumer obligation, not narrative: a resolver encountering a claim
+whose `src` does not descend from the effective charter's `src` MUST
+treat it as unowned by this set — neither silently valid nor silently
+dropped, but surfaced as pre-charter state awaiting re-claim.
 `VERIFIED: unverified (models require extension)`
 
 **[charter-succession]**: A successor charter (carrying `prior`) MUST be
@@ -451,6 +467,34 @@ merely _adding_ a key usually requires no charter at all — hierarchical
 and rooted identity frameworks (`[owner-abstract]`) authorize new keys
 under an unchanged owner digest; succession charters are needed only
 when the owner identity itself changes.
+`VERIFIED: unverified (models require extension)`
+
+**[charter-succession-linear]**: A charter has at most one valid
+successor. Nothing can prevent a key from _signing_ two successors
+naming the same `prior`; the constraint therefore binds consumers:
+observing divergent successors is a **set-authority fork**, and a
+consumer MUST fail closed for any authority decision downstream of the
+divergence point — neither branch is effective — surfacing the
+divergence for an out-of-band trust decision. A consumer's previously
+recorded chain head (`[chain-monotonicity]`) remains valid for
+decisions at or below that head. The effective charter is the head of
+the unique valid chain, ordered by **chain position** (`prior` links),
+never by `now`: the `now` field is untrusted for authority ordering
+(it feeds only the temporal-floor checks). Ownership transfers MUST be
+dual-signed: the successor payload is signed by a key authorized by the
+prior charter's owner, and the CozMessage MUST additionally carry a
+signature by the incoming owner's key (proof of possession) — a
+unilateral transfer naming an unwitting recipient is invalid.
+`VERIFIED: unverified (models require extension)`
+
+**[chain-monotonicity]**: Consumers MUST record the czd of the charter
+chain head (and SHOULD record the claim czds) under which they acted,
+and MUST refuse any served chain that regresses below a recorded head
+— a prefix of previously observed state is a detected rollback, not an
+alternative. First contact with a set is a TOFU decision, as all first
+contact is. Locks participate: a resolved lock pins the charter head
+its resolution consulted (a follow-up field in the lock schema).
+`VERIFIED: unverified (models require extension)`
 `VERIFIED: unverified (models require extension)`
 
 **[charter-fork-distinction]**: A charter with no valid succession chain
@@ -583,19 +627,25 @@ from the claim's key (e.g., after key rotation). It
 MAY be omitted when the same key signed both claim and publish.
 `VERIFIED: unit-test (publish roundtrip works with/without key)`
 
-**[anchor-immutable]**: An anchor MUST NOT change over the lifetime
-of its atom-set. Once established, the anchor is permanent.
-`VERIFIED: unverified`
+**[anchor-immutable]** _(amended 2026-07-08)_: An anchor MUST NOT
+change over the lifetime of its atom-set: it is `czd(charter₀)`
+permanently; succession never alters it (`[charter-succession]`).
+`VERIFIED: unverified (models require extension)`
 
-**[anchor-content-addressed]**: An anchor MUST be a cryptographic
-digest derived from content. It MUST NOT be derived from mutable
-metadata.
-`VERIFIED: unverified`
+**[anchor-content-addressed]** _(amended 2026-07-08)_: An anchor MUST
+be the coz digest of the signed founding charter — content-addressed
+over an _owned_ payload, never derived from unowned or mutable source
+metadata (the pre-charter genesis-hash derivation is retired).
+`VERIFIED: unverified (models require extension)`
 
-**[anchor-discoverable]**: Given access to a source, any party
-MUST be able to independently derive the anchor without trusting
-the publisher.
-`VERIFIED: unverified`
+**[anchor-resolvable]** _(supersedes [anchor-discoverable],
+2026-07-08)_: Given a source, any party MUST be able to enumerate
+candidate charters and verify a given anchor against its founding
+charter without trusting the publisher. _Selecting_ among candidate
+anchors is a recorded consumer trust decision (in locks and URIs), not
+a derivation — the anchor is given, then verified; it is no longer
+derivable from source content alone.
+`VERIFIED: unverified (models require extension)`
 
 **[manifest-minimal]**: The `Manifest` trait MUST require exactly
 `label` and `version`. All other metadata is ecosystem-specific
@@ -669,7 +719,12 @@ includes the public key.
 
 - **PRE** (founding): no `prior` field; `src` MUST be a revision that
   exists in the source. The founding charter's czd becomes the
-  atom-set's anchor.
+  atom-set's anchor. **Bootstrap gate**: if the source already carries
+  claims predating any charter, the founding charter MUST be authorized
+  by the owner of the earliest such claim — chartering over a live,
+  claimed set is a migration act reserved to its incumbent, not a race
+  open to strangers. A virgin source is first-to-charter by design
+  (that is `[charter-fork-distinction]` working).
 - **PRE** (successor): `prior` MUST be the czd of a valid charter in
   this set's succession chain; the signing key MUST be authorized by
   that charter's `owner`; `now` MUST exceed the prior charter's `now`.
@@ -906,7 +961,10 @@ content or the complete source history:
 > transaction changes the trust chain's root and the fork semantics that
 > the TLA+ fork-scenario configuration models. All `[charter-*]`,
 > `[claim-chains-charter]`, `[claim-charter-authorization]`, and
-> `[claim-replacement-authority]` constraints are `unverified` pending
+> `[claim-replacement-authority]`, `[charter-succession-linear]`,
+> `[chain-monotonicity]`, and the three amended anchor invariants
+> ([anchor-immutable], [anchor-content-addressed], [anchor-resolvable])
+> are `unverified` pending
 > extension of both formal models; the existing verified rows below
 > remain valid for the claim/publish subchain but the fork scenario MUST
 > be re-modeled against charter succession before implementation.
@@ -927,7 +985,15 @@ Fork scenario confirmed satisfiable (SAT).
 - `unit-test` — deterministic test in isolation
 - `integration-test` — end-to-end test requiring git backend
 
-**Coverage:** 13 formal (TLC/Alloy), 11 rustc, 4 cargo-dep, 6 unit-test, 8 integration-test = **42 total, 0 agent-check**.
+**Coverage:** 13 formal (TLC/Alloy), 11 rustc, 4 cargo-dep, 6 unit-test,
+8 integration-test = **42 total, 0 agent-check** — _plus the 2026-07-08
+charter amendment's constraints ([charter-typ], [charter-anchor],
+[claim-chains-charter], [claim-charter-authorization],
+[claim-replacement-authority], [charter-ancestry], [charter-succession],
+[charter-succession-linear], [chain-monotonicity],
+[charter-fork-distinction], and the three amended anchor invariants),
+all currently `unverified` pending the mandatory model extension (see
+IMPORTANT note above). The table below predates the amendment._
 
 > [!NOTE]
 > Phase 1 items promoted to **pass** on 2026-02-28 based on atom-id
@@ -961,14 +1027,14 @@ Fork scenario confirmed satisfiable (SAT).
 | no-duplicate-version          | machine (TLC)    | **pass** | TLA+ `NoDuplicateVersion` — 2 configs      | —     |
 | no-cross-layer-crypto         | cargo-dep        | pending  | atom-core has zero crypto deps             | 3     |
 | no-backdated-publish          | machine (TLC)    | **pass** | TLA+ `NoBackdatedPublish` — 2 configs      | —     |
-| verification-local            | integration-test | pending  | Pipeline steps 1–8 offline                 | 4     |
-| verification-provenance       | integration-test | pending  | Pipeline steps 9–12 with source access     | 4     |
+| verification-local            | integration-test | pending  | Pipeline steps 1–13 offline                | 4     |
+| verification-provenance       | integration-test | pending  | Pipeline steps 14–18 with source access    | 4     |
 | atom-snapshot-reproducible    | unit-test        | pending  | Same inputs → same snapshot hash           | 4     |
 | ingest-preserves-identity     | machine (Alloy)  | **pass** | Alloy `ingest_preserves_identity`          | —     |
 | backend-agnostic-protocol     | rustc            | pending  | Trait sigs use only associated types       | 3     |
 | anchor-immutable              | integration-test | pending  | Anchor unchanged across operations         | 4     |
-| anchor-content-addressed      | integration-test | pending  | Anchor = hash(genesis content)             | 4     |
-| anchor-discoverable           | integration-test | pending  | Anchor derivable from source alone         | 4     |
+| anchor-content-addressed      | integration-test | pending  | Anchor = czd(charter₀) (amended)           | 4     |
+| anchor-resolvable             | integration-test | pending  | Charter enumerable; anchor verifiable      | 4     |
 | manifest-minimal              | machine (Alloy)  | **pass** | Alloy `manifest_properties` fact           | —     |
 | backend-bit-perfect           | integration-test | pending  | CozMessage bytes unchanged after store     | 4     |
 | atomid-per-source-unique      | machine (TLC)    | **pass** | TLA+ `AtomIdPerSourceUnique` — 2 configs   | —     |
