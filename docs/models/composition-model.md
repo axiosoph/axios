@@ -112,6 +112,55 @@ soundness is enforced at the object level, not the generator level. The
 system is "implicitly functional": it has functional programming's
 combinatorial guarantees with no functional language in the trusted core.
 
+### 1.1 Corollary: endpoint completeness
+
+(Ratified, nrd 2026-07-08.) The purity thesis has a quantitative core,
+scattered until now across three documents and stated here once. **Every
+execution edge connects two fully-determined points in content-addressed
+space:**
+
+- **The intent endpoint is complete.** An atom's snapshot pins manifest,
+  sources, and lock under one snapshot identity; lock exhaustiveness
+  ([lock spec](../specs/lock-file-schema.md) `[lock-sufficiency]`,
+  `[lock-groundness]`, `[lock-closure-completeness]`) guarantees no
+  worldly discovery remains at build time, and `[lock-action-totality]`
+  makes the passage from intent to action identity a **total function**:
+  the lock determines, by pure elaboration, all three inputs of
+  `action_id = H(atom_czd_closure_root, toolchain_composition_root,
+params)` (execution model §2.4), discharging P7's totality gate.
+  Pinned intent determines action identity; nothing else enters.
+- **The artifact endpoint is complete.** Canonical-serialization
+  injectivity (storage model P10, axioms A1–A3) makes a composition root
+  determine its denotation up to byte identity: the root _is_ the
+  environment (§2).
+
+The two endpoints live in **different** content-addressed spaces — coz-
+signed atom identity on the intent side, the blake3 artifact store on the
+other; the argument needs completeness of each space, not a shared
+namespace. The two stores share the content-addressing idea, never an
+identifier type (storage model §5).
+
+Purity is therefore **formal, not folkloric**: what was asked and what
+was produced are both unambiguous mathematical points, so substitution
+(§4), caching, and blast-radius arguments reduce to equational reasoning
+over digests. What this corollary deliberately does **not** claim: that
+the arrow between the endpoints is a function. `execute` remains a
+witnessed relation (execution model §2–§3) — records accumulate,
+hermetic ≠ reproducible, determinism is attested per witness, never
+assumed. The purity lives in the endpoints, not the arrow; strengthening
+this to "source root ↦ output root is a pure function" would silently
+re-import the reproducibility assumption this substrate refuses. The
+arrow carries its own faithfulness obligations — request-preimage
+completeness (P5) and resolve determinism (P7) guarantee the concrete
+request the executor sees carries exactly the pinned intent — but those
+are properties of the arrow's formation, not of the endpoints.
+
+**Dependency list (the tripwire).** Endpoint legs: `[lock-sufficiency]`,
+`[lock-groundness]`, `[lock-closure-completeness]`,
+`[lock-action-totality]` (intent side); P10 (artifact side). Arrow
+faithfulness: P5, P7. If any of these weakens, this corollary names
+exactly what breaks with it.
+
 ## 2. The composition domain
 
 All values are content-addressed; identity is digest (storage model A2).

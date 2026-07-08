@@ -472,7 +472,11 @@ purely; the executor is the boundary that runs them; results re-enter the
 pure universe as data. The system state is always pure (one Merkle
 universe holding sources, requests, records, compositions, certificates
 alike); impurity exists only in the transition `execute`, never in the
-state — effects are edges, nodes are values.
+state — effects are edges, nodes are values. The quantitative core of
+this — both endpoints of every execution edge are fully-determined
+content-addressed points, while the edge itself stays a witnessed
+relation — is stated once as the endpoint-completeness corollary
+([composition model §1.1](composition-model.md#11-corollary-endpoint-completeness)).
 
 In _Build Systems à la Carte_ terms, dynamic dependency — computing the
 next build from a previous build's _result_ — is monadic `bind`, and

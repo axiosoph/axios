@@ -97,3 +97,5 @@ proof obligation contributed to the substrate queue:
   no two distinct values share a preimage. An audit obligation with a
   checkable inventory, like P5 — not mathematical news, but every
   digest-equality argument in the sibling models silently rests on it.
+  P10 is the artifact-side leg of the endpoint-completeness corollary
+  ([Composition Model §1.1](composition-model.md#11-corollary-endpoint-completeness)).
