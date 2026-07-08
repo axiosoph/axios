@@ -42,9 +42,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     // 2. Parse configuration
     let config = Arc::new(DaemonConfig::parse());
-    if config.eval_worker {
-        return run_eval_worker(config).await;
-    }
     let socket_path = config
         .resolve_socket_path()
         .map_err(std::io::Error::other)?;
@@ -189,53 +186,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             }
         })
         .await;
-
-    Ok(())
-}
-
-async fn run_eval_worker(
-    config: Arc<DaemonConfig>,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    use std::io::{Read, Write};
-
-    // 1. Read EvalRequestDto from stdin
-    let mut stdin_bytes = Vec::new();
-    std::io::stdin().read_to_end(&mut stdin_bytes)?;
-
-    let dto: eos_snix::eval::EvalRequestDto = serde_json::from_slice(&stdin_bytes)?;
-    let request = dto
-        .into_request()
-        .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { Box::new(e) })?;
-
-    // 2. Initialize Snix services
-    let (blob_service, directory_service, path_info_service, nar_calculation_service) =
-        services::construct_store_services(&config).await?;
-
-    // Create a dummy build service for the evaluator since builds are decoupled.
-    let build_service = Arc::new(snix_build::buildservice::DummyBuildService::default());
-
-    // 3. Run evaluation
-    let tokio_handle = tokio::runtime::Handle::current();
-    let rx = eos_snix::eval::evaluate_on_thread(
-        request.expression,
-        request.inputs,
-        request.eval_args,
-        blob_service,
-        directory_service,
-        path_info_service,
-        nar_calculation_service.into(),
-        build_service,
-        tokio_handle,
-    );
-
-    let plan = rx
-        .await
-        .map_err(|_| std::io::Error::other("eval thread panicked"))??;
-
-    // 4. Serialize Derivation to stdout as ATerm bytes
-    let aterm_bytes = plan.to_aterm_bytes();
-    std::io::stdout().write_all(&aterm_bytes)?;
-    std::io::stdout().flush()?;
 
     Ok(())
 }

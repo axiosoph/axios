@@ -16,6 +16,8 @@
 //!   signed fact; multiplicity per request is legitimate; equality claims go through
 //!   [`RecordCore`], never the full record (model §3.1, F4).
 
+pub mod facts;
+
 use std::collections::BTreeMap;
 
 pub use htc_comp::{CPath, Digest};
