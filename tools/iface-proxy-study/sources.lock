@@ -1,0 +1,42 @@
+# Pinned sources for the interface-proxy phase-1 spike.
+#
+# Everything below resolves through snapshot.debian.org, which serves
+# byte-identical archives forever at a given timestamp -- re-running the
+# scripts against these exact URLs reproduces the same inputs.
+#
+# Case study: PRIMARY (openssl patch-level update), bookworm (Debian 12),
+# amd64, package "openssl" source / "libssl3" binary.
+
+[library-old]
+package = "libssl3"
+version = "3.0.15-1~deb12u1"
+openssl-upstream-version = "3.0.15"
+snapshot-timestamp = "20241101T025324Z"
+url = "https://snapshot.debian.org/archive/debian/20241101T025324Z/pool/main/o/openssl/libssl3_3.0.15-1~deb12u1_amd64.deb"
+sha256 = "d7897e6c55a8d9e229dcf16b0b1d472d7f7be741b2b3b2ac624908ff63215a93"
+
+[library-new]
+package = "libssl3"
+version = "3.0.16-1~deb12u1"
+openssl-upstream-version = "3.0.16"
+snapshot-timestamp = "20250426T204242Z"
+url = "https://snapshot.debian.org/archive/debian/20250426T204242Z/pool/main/o/openssl/libssl3_3.0.16-1~deb12u1_amd64.deb"
+sha256 = "eaa2bab2130820f09361dc8186ddeb11d2a18ec5e5e3806f24414d5d8065a57a"
+
+[reverse-dep-index]
+description = "bookworm main/binary-amd64 Packages index, snapshotted at the same instant as library-old, used to enumerate every package depending on libssl3"
+snapshot-timestamp = "20241101T025324Z"
+url = "https://snapshot.debian.org/archive/debian/20241101T025324Z/dists/bookworm/main/binary-amd64/Packages.xz"
+sha256 = "aea3ea5e8161c894b6374538a9f81f5e334b9a5d4f01e40e3e6f636e75023de0"
+
+[sample]
+description = "100 of 838 libssl3 reverse-deps, deterministic seeded sample"
+seed = 42
+size = 100
+population = 838
+pin-file = "data/consumers-sample.csv"
+note = "each row carries the package's own Filename + SHA256 from the Packages index above; scripts/fetch_consumers.sh verifies every download against it"
+
+[tooling]
+abicompat = "libabigail 2.5.0, via `nix shell nixpkgs#libabigail`"
+objdump = "GNU binutils (system toolchain, gcc-wrapper-15.2.0 nix closure)"
