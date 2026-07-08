@@ -19,16 +19,19 @@ Two things make this fragile:
 
 ## Surety of source
 
-Atom inverts this. Instead of trusting credentials on a central server, Atom binds published packages directly to their origin repository's history through cryptographic proofs.
+Atom inverts this. Instead of trusting credentials on a central server, Atom binds published packages directly to a signed declaration of ownership over their origin repository, and then to that repository's history, through cryptographic proofs.
 
 Under this model, mirrors, registries, and stores are just transport. Authenticity is verified locally by the consumer:
 
-$$\text{Genesis Commit} \to \text{Claim Transaction} \to \text{Publish Transaction} \to \text{Content Snapshot}$$
+$$\text{Charter Transaction} \to \text{Claim Transaction} \to \text{Publish Transaction} \to \text{Content Snapshot}$$
 
 The chain has three links:
 
-1. **Anchor** — Package identity is bound to the repository's genesis commit hash. You can't fake this without creating a different repository entirely.
-2. **Claim** — The owner publishes a signed `claim` transaction containing their public key, the anchor, and the package label. This establishes ownership via Trust-On-First-Use (TOFU).
+1. **Charter** — Before anyone can claim a package, the repository's owner signs a **founding charter**: a transaction that says, in effect, "this repository publishes packages, starting here, under this key." Package identity is bound to the cryptographic digest of that signed transaction, not to the repository's raw genesis commit hash. This is a deliberate change from an earlier design: a commit hash is unowned data — anyone holding a copy of the repository can compute it, so anchoring identity there meant the _first_ claim to show up won the name, with nothing stopping a second party from doing the same over a copy of the same history. A charter is instead a specific, signed act by whoever is establishing the package, so the chain roots in something owned rather than something merely observed. The genesis commit isn't discarded — the charter's own history pointer transitively pins it — it just stops being what identity is anchored to. Because the anchor is now a digest of a signed transaction rather than a git-specific hash, the same scheme works no matter what version-control system holds the source.
+
+   Rooting identity in a signed charter also settles what happens when the same source history is published by more than one party — a fork. Two charters signed over identical history are, by construction, two distinct packages: each fork mints its own charter, so there's no shared identity to contend over. And ownership can change hands without the package's identity changing: a _successor_ charter, signed by the outgoing owner and chained back to the founding charter, records a key rotation or a transfer to a new owner. The anchor never moves; only who controls it does. Because a charter marks a specific point in the repository's history, everything before that point remains visible in the repository, but it is not part of the package's owned history until someone charters or claims it after the fact.
+
+2. **Claim** — The owner publishes a signed `claim` transaction, authorized by the charter's owner, containing their public key, a reference back to the charter, and the package label. Trust-on-first-use now happens once, at the charter — a claim itself is owner-authorized, not a race to be first.
 3. **Publish** — Each version release is signed in a `publish` transaction that cryptographically binds to:
    - The authorizing `claim` digest.
    - The exact source commit (`src`).
@@ -37,13 +40,13 @@ The chain has three links:
 
 ## Local verification and DAG validation
 
-Verification happens in two phases. The first (8 steps) runs locally with zero network access and is mandatory. The second (4 steps) optionally checks content provenance by fetching minimal source metadata.
+Verification happens in two phases. The first (13 steps, covering the charter, claim, and publish signatures and their chain of authorization) runs locally with zero network access and is mandatory. The second (5 steps) optionally checks content provenance by fetching minimal source metadata.
 
 Both phases validate the Git DAG using a temporal ancestry check:
 
-$$\text{genesis} \to \text{claim.src} \to \text{publish.src}$$
+$$\text{charter.src} \to \text{claim.src} \to \text{publish.src}$$
 
-The client confirms that the genesis commit is an ancestor of the claim's source commit, which is an ancestor of the publish's source commit. This temporal floor prevents backdating: even if an attacker steals a publisher's key, they cannot publish a version and pretend it predates the compromise.
+The client confirms that the charter's source revision is an ancestor of the claim's source commit, which is an ancestor of the publish's source commit. This temporal floor prevents backdating: even if an attacker steals a publisher's key, they cannot publish a version and pretend it predates the compromise.
 
 Because the content snapshot is deterministic, the client can also download the source tree at `publish.src`, navigate to `path`, regenerate the snapshot, and confirm the hash matches `dig`.
 
