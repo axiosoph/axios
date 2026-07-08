@@ -222,15 +222,19 @@ environment  a composition equipped with a COHERENCE CERTIFICATE:
              Req(c) — the declared ambient base (kernel ABI, loader) —
              stated, not silent. An environment is a LINKED module.
 
-system       a composition of environments, cross-environment
-             obligations discharged or scoped. Per-composition scoping
-             (ADR-0005's store-path role decomposition: conflict-free
-             co-installation) is what permits two environments to bind
-             DIFFERENT versions of one provider: ⊕'s conflict rule
-             forces explicit prefix/namespace separation, so
-             co-installation is a theorem of the merge monoid, not a
-             convention.
 ```
+
+**Environments are recursive; there is no third stratum.** (Amendment,
+nrd 2026-07-08 — the earlier draft carried a "system" stratum defined as
+"a composition of environments"; it had no coherent distinction from an
+environment once scopes nest, and is dissolved.) The containment law:
+**packages contain only packages; environments compose environments and
+packages.** What "system" named is simply the outermost environment.
+Per-composition scoping (ADR-0005's store-path role decomposition:
+conflict-free co-installation) is what permits two nested environments
+to bind DIFFERENT versions of one provider: ⊕'s conflict rule forces
+explicit prefix/namespace separation, so co-installation is a theorem of
+the merge monoid, not a convention.
 
 **Flat is the normal form; a scope boundary must earn its existence.**
 The default composition is a single scope: everything merged by `⊕`, one
@@ -354,7 +358,7 @@ convention call (execution model §9.13).
 
 **Pipelines cross strata; steps do not.** The strata classify elaboration
 _steps_; an atom denotes an elaboration _pipeline_, and pipelines may
-interleave strata freely — a system atom is the canonical case: members
+interleave strata freely — a whole-system environment atom is the canonical case: members
 composed (algebraic) → config intent rendered by actions (execution) →
 rendered blobs bound (algebraic) → certificate. Boot and running services
 are executions _of_ the finished artifact at use time, outside elaboration
