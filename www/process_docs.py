@@ -18,20 +18,19 @@ def rewrite_links(text, section):
             return match.group(0)
 
         # Map uncompiled directories to GitHub to avoid broken links
-        if any(d in url_part for d in ("models/", "plans/", ".sketches/", "charters/")):
+        if "charters/" in url_part or "models/tla/" in url_part or "models/lean/" in url_part:
             clean_part = url_part
             while clean_part.startswith("../"):
                 clean_part = clean_part[3:]
-            if clean_part.startswith(".sketches/"):
-                gh_url = f"https://github.com/axiosoph/axios/tree/main/{clean_part}"
-            else:
-                gh_url = f"https://github.com/axiosoph/axios/tree/main/docs/{clean_part}"
+            gh_url = f"https://github.com/axiosoph/axios/tree/main/docs/{clean_part}"
             return f"[{text_part}]({gh_url}{hash_part})"
 
         if url_part.startswith("../specs/"):
             norm_url = "reference/" + url_part[9:]
         elif url_part.startswith("../adr/"):
             norm_url = "architecture/" + url_part[7:]
+        elif url_part.startswith("../models/"):
+            norm_url = "models/" + url_part[10:]
         elif url_part.startswith("../architecture/"):
             norm_url = "architecture/" + url_part[16:]
         elif url_part.startswith("../"):
@@ -70,7 +69,7 @@ def process_section(src_dir, dst_dir, section, description_tpl, default_title="D
         for i, line in enumerate(lines):
             stripped = line.strip()
             if stripped.startswith("#"):
-                title_match = re.match(r"^#+\s*(?:SPEC:\s*)?(.*)$", stripped)
+                title_match = re.match(r"^#+\s*(?:(?:SPEC|MODEL):\s*)?(.*)$", stripped)
                 if title_match:
                     title = title_match.group(1).strip()
                 body_start = i + 1
@@ -103,7 +102,7 @@ if __name__ == "__main__":
     def get_spec_tags(filename):
         if filename in ("atom-sourcing.md", "atom-transactions.md", "git-storage-format.md"):
             return ["atom", "layer1"]
-        elif filename in ("eos-build-engine.md", "eos-network-protocol.md", "eos-sandboxing.md", "eos-scheduler.md", "eos-snix-backend.md"):
+        elif filename in ("eos-build-engine.md", "eos-network-protocol.md", "eos-sandboxing.md", "eos-scheduler.md"):
             return ["eos", "layer2"]
         elif filename in ("ion-manifest.md", "ion-resolution.md", "lock-file-schema.md"):
             return ["ion", "layer3"]
@@ -129,6 +128,13 @@ if __name__ == "__main__":
         "../docs/architecture", "content/architecture", "architecture",
         "System architecture: {title}", "Architecture Document",
         tags=["sad"],
+    )
+
+    print("models:")
+    process_section(
+        "../docs/models", "content/models", "models",
+        "Formal model: {title}", "Formal Model",
+        tags=["model"],
     )
 
     # spec-audit.md is superseded (see banner in the source doc) and is no

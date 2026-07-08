@@ -29,16 +29,16 @@ the behavioral contracts between workspaces as if callers invoke trait
 methods directly. This is sufficient for validating interface design,
 protocol ordering, and implementation interchangeability.
 
-| In Scope                                  | Out of Scope                              |
-| :---------------------------------------- | :---------------------------------------- |
-| Trait behavioral contracts (coalgebras)   | Transport mechanism (IPC, network, gRPC)  |
-| Protocol ordering (session types)         | Serialization / wire format               |
-| Store relationships (ingest homomorphism) | Authentication / authorization            |
-| Concurrency model (parallel builds)       | Git object internals (atom-git impl)      |
-| Error recovery asymmetry (plan vs apply)  | Nix/snix evaluation internals (legacy passthrough-snix executor only) |
-| Static ontology (olog)                    | Dependency resolution (SAT solver, locks) |
-| Scheduling correctness (bisimulation)     | Manifest format (ion.toml parsing)        |
-|                                           | Network topology (distributed eos, peers) |
+| In Scope                                  | Out of Scope                                                         |
+| :---------------------------------------- | :------------------------------------------------------------------- |
+| Trait behavioral contracts (coalgebras)   | Transport mechanism (IPC, network, gRPC)                             |
+| Protocol ordering (session types)         | Serialization / wire format                                          |
+| Store relationships (ingest homomorphism) | Authentication / authorization                                       |
+| Concurrency model (parallel builds)       | Git object internals (atom-git impl)                                 |
+| Error recovery asymmetry (plan vs apply)  | Nix/snix evaluation internals (removed with the evaluator, ADR-0006) |
+| Static ontology (olog)                    | Dependency resolution (SAT solver, locks)                            |
+| Scheduling correctness (bisimulation)     | Manifest format (ion.toml parsing)                                   |
+|                                           | Network topology (distributed eos, peers)                            |
 
 The model's coalgebras treat trait invocations as abstract observations
 regardless of whether the call is local, crosses a process boundary via
@@ -117,13 +117,13 @@ realigning those numbers stack-wide is explicit follow-up work outside
 this ADR's (and this node's) file scope — see htc-sad §1.5's "five
 nouns, one function."
 
-| Object              | Description                                                  | Layer |
-| :------------------- | :------------------------------------------------------------ | :---- |
-| Composition          | Signed name→digest binding — the closure object (htc-sad §2.1) | HTC   |
-| Interface Manifest   | Derived, static (provides/requires) fact about one tree; binding-free by construction (htc-sad §2.2) | HTC   |
-| Action               | One invocation of `build`, identified by `action_id`; for the primary executor, `Plan` binds to `Action` (htc-sad §1.5, §6.5) | HTC   |
-| View                 | A composition mounted at runtime — not persisted (htc-sad §1.5) | HTC   |
-| Build Record         | SLSA-shaped provenance for one action (htc-sad §2.3)          | HTC   |
+| Object             | Description                                                                                                                   | Layer |
+| :----------------- | :---------------------------------------------------------------------------------------------------------------------------- | :---- |
+| Composition        | Signed name→digest binding — the closure object (htc-sad §2.1)                                                                | HTC   |
+| Interface Manifest | Derived, static (provides/requires) fact about one tree; binding-free by construction (htc-sad §2.2)                          | HTC   |
+| Action             | One invocation of `build`, identified by `action_id`; for the primary executor, `Plan` binds to `Action` (htc-sad §1.5, §6.5) | HTC   |
+| View               | A composition mounted at runtime — not persisted (htc-sad §1.5)                                                               | HTC   |
+| Build Record       | SLSA-shaped provenance for one action (htc-sad §2.3)                                                                          | HTC   |
 
 **Key morphisms:**
 
@@ -306,12 +306,10 @@ BuildPlan<P> = Cached { outputs: Vec<ArtifactRef> }
 
 For the primary executor, `P = E::Plan` binds to `Action`
 (atom_czd_closure_root + toolchain_composition_root + action_params,
-htc-sad §6.5), and `action_id` (`E::Digest`) is the cache key. The
-third rung, `NeedsEvaluation { atom: AtomRef }`, survives only inside
-the **optional legacy passthrough-snix executor**, whose `Plan =
-Derivation` binding retains a genuine evaluation phase
-(eos-build-engine.md §Type Declarations); it is not part of the
-primary path modeled here.
+htc-sad §6.5), and `action_id` (`E::Digest`) is the cache key. (A
+third rung, `NeedsEvaluation`, formerly survived inside an optional
+passthrough-snix executor; that executor was removed — ADR-0006 §3 —
+and the two-variant coproduct stands alone.)
 
 Bisimulation: e₁ ~ e₂ iff plans agree (variant-matching + content
 equality) and apply produces digest-equivalent outputs for equivalent
@@ -394,21 +392,14 @@ claim czd to embed in the publish payload.
 The BuildPlan enum is a session type branching point. Each variant
 determines the remainder of the interaction: Cached ends immediately,
 NeedsBuild requires one apply round-trip (action dispatch to the
-executor, keyed by `action_id`). The optional legacy passthrough-snix
-executor retains a third branch, `NeedsEvaluation: !AtomRef . ?P . !P
-. ?Vec<Output> . end` (evaluate then apply), scoped to that executor —
-not part of the primary session modeled above.
+executor, keyed by `action_id`). (A third branch formerly belonged to
+the removed passthrough executor, ADR-0006 §3.)
 
 **Finding:** CacheSession ≅ BuildSession — the two cache-skipping
 levels at the primary executor (artifact exists, action not yet
 built) are isomorphic to the BuildPlan variants (Cached, NeedsBuild).
 This confirms that the build protocol precisely captures the
-cache-skipping decision tree at the primary executor's granularity.
-The legacy passthrough-snix executor's three-level CacheSession
-(artifact exists, plan exists, nothing cached) ≅ its own
-three-variant BuildSession (Cached, NeedsBuild, NeedsEvaluation)
-survives unchanged, one level down, as the same isomorphism scoped
-to that optional executor.
+cache-skipping decision tree at the executor's granularity.
 
 #### 3.3. PopulateSession (ion → AtomStore)
 
@@ -516,9 +507,9 @@ BuildSession =
   }
 ```
 
-The optional legacy passthrough-snix executor's `NeedsEvaluation`
-branch nests one more round-trip ahead of the same
-`ApplyOk`/`ApplyFail` recovery structure — `!AtomRef . & { EvalOk: ?P
+(A removed `NeedsEvaluation` branch formerly nested one more
+round-trip ahead of the same recovery structure — ADR-0006 §3; its shape,
+for the historical record: `!AtomRef . & { EvalOk: ?P
 . !P . { ApplyOk | ApplyFail: ⊕{retry|delegate|abort} }, EvalFail:
 ?Error . ⊕{retry|delegate|abort} }` — under `PlanOk`, alongside
 `Cached`/`NeedsBuild` above. The recovery algebra is identical; only
@@ -576,34 +567,33 @@ domain-relevant quantities. Implementation-specific constants
 
 ### Coalgebra Observers
 
-| Observer                       | Complexity  | Parameters               | Notes                                        |
-| :----------------------------- | :---------- | :----------------------- | :------------------------------------------- |
-| AtomSource.resolve             | O(1)        | —                        | Hash-based lookup by atom-id                 |
-| AtomSource.discover            | O(n)        | n = atoms in store       | Scan; O(k) with index (k = result count)     |
-| AtomContent.content            | O(\|T\|)    | \|T\| = tree entry count | Walks content tree; I/O-bound for remote     |
-| AtomRegistry.claim             | O(1)        | —                        | czd computation + Ed25519 sign               |
-| AtomRegistry.publish           | O(1)        | —                        | Sign version transaction                     |
-| AtomStore.ingest               | O(\|S\|)    | \|S\| = atoms in source  | Iterates source; O(\|S∖W\|) with dedup check |
-| AtomStore.contains             | O(1)        | —                        | Hash-based membership test                   |
-| BuildEngine.plan (primary executor)        | O(1)–O(\|lock\|) | Lock size (atom + toolchain refs) | Cached: O(1). NeedsBuild: O(\|lock\|) — `action_id` hashes already-resolved lock data (htc-sad §6.5), not an evaluation |
-| BuildEngine.plan (legacy passthrough-snix) | O(1)–O(∞)   | Expression complexity    | Cached: O(1). NeedsEvaluation: Turing-complete (Nix). Legacy executor only |
-| BuildEngine.apply              | O(build)    | Plan-specific            | Dominated by actual build execution          |
-| ArtifactStore.fetch            | O(1)        | —                        | Content-addressed lookup; +latency if remote |
-| ArtifactStore.store            | O(\|blob\|) | \|blob\| = artifact size | Must hash entire blob                        |
-| ArtifactStore.exists           | O(1)        | —                        | Digest lookup                                |
-| ArtifactStore.check_substitute | O(k)        | k = number of digests    | Batch existence check                        |
-| Scheduler.schedule             | O(n log n)  | n = atoms in batch       | Priority-based; O(n) for round-robin         |
-| Scheduler.delegate             | O(1)        | —                        | Channel transfer                             |
+| Observer                            | Complexity       | Parameters                        | Notes                                                                                                                   |
+| :---------------------------------- | :--------------- | :-------------------------------- | :---------------------------------------------------------------------------------------------------------------------- |
+| AtomSource.resolve                  | O(1)             | —                                 | Hash-based lookup by atom-id                                                                                            |
+| AtomSource.discover                 | O(n)             | n = atoms in store                | Scan; O(k) with index (k = result count)                                                                                |
+| AtomContent.content                 | O(\|T\|)         | \|T\| = tree entry count          | Walks content tree; I/O-bound for remote                                                                                |
+| AtomRegistry.claim                  | O(1)             | —                                 | czd computation + Ed25519 sign                                                                                          |
+| AtomRegistry.publish                | O(1)             | —                                 | Sign version transaction                                                                                                |
+| AtomStore.ingest                    | O(\|S\|)         | \|S\| = atoms in source           | Iterates source; O(\|S∖W\|) with dedup check                                                                            |
+| AtomStore.contains                  | O(1)             | —                                 | Hash-based membership test                                                                                              |
+| BuildEngine.plan (primary executor) | O(1)–O(\|lock\|) | Lock size (atom + toolchain refs) | Cached: O(1). NeedsBuild: O(\|lock\|) — `action_id` hashes already-resolved lock data (htc-sad §6.5), not an evaluation |
+| BuildEngine.apply                   | O(build)         | Plan-specific                     | Dominated by actual build execution                                                                                     |
+| ArtifactStore.fetch                 | O(1)             | —                                 | Content-addressed lookup; +latency if remote                                                                            |
+| ArtifactStore.store                 | O(\|blob\|)      | \|blob\| = artifact size          | Must hash entire blob                                                                                                   |
+| ArtifactStore.exists                | O(1)             | —                                 | Digest lookup                                                                                                           |
+| ArtifactStore.check_substitute      | O(k)             | k = number of digests             | Batch existence check                                                                                                   |
+| Scheduler.schedule                  | O(n log n)       | n = atoms in batch                | Priority-based; O(n) for round-robin                                                                                    |
+| Scheduler.delegate                  | O(1)             | —                                 | Channel transfer                                                                                                        |
 
 ### Session Costs (End-to-End)
 
-| Session         | Best Case       | Typical Case               | Worst Case                       |
-| :-------------- | :-------------- | :------------------------- | :------------------------------- |
-| PublishSession  | O(1)            | O(1)                       | O(1) — bounded by crypto ops     |
-| BuildSession    | O(1) (Cached)   | O(build) (NeedsBuild)      | O(build) (NeedsBuild) — primary executor has only two variants, so worst case equals typical case. The legacy passthrough-snix executor's NeedsEvaluation branch adds O(eval) + O(build), scoped to that optional path. |
-| BatchBuild      | O(1) (all hit)  | O(max(build_i)) wall-clock | O(Σ build_i) total work          |
-| PopulateSession | O(1) (one atom) | O(\|S\|) (full ingest)     | O(\|S\|) — linear in source size |
-| Delegation      | O(1)            | O(1)                       | O(1) — channel transfer          |
+| Session         | Best Case       | Typical Case               | Worst Case                                                                                 |
+| :-------------- | :-------------- | :------------------------- | :----------------------------------------------------------------------------------------- |
+| PublishSession  | O(1)            | O(1)                       | O(1) — bounded by crypto ops                                                               |
+| BuildSession    | O(1) (Cached)   | O(build) (NeedsBuild)      | O(build) (NeedsBuild) — executor has only two variants, so worst case equals typical case. |
+| BatchBuild      | O(1) (all hit)  | O(max(build_i)) wall-clock | O(Σ build_i) total work                                                                    |
+| PopulateSession | O(1) (one atom) | O(\|S\|) (full ingest)     | O(\|S\|) — linear in source size                                                           |
+| Delegation      | O(1)            | O(1)                       | O(1) — channel transfer                                                                    |
 
 ### Performance Implications
 
@@ -611,8 +601,7 @@ domain-relevant quantities. Implementation-specific constants
    BuildPlan's two variants there correspond to two complexity
    classes: Cached = O(1), NeedsBuild = O(build) — action dispatch,
    keyed by `action_id`. There is no evaluation stage to fall through
-   to; the O(eval) + O(build) jump survives only inside the optional
-   legacy passthrough-snix executor's NeedsEvaluation variant. Cache
+   to (the O(eval) class was removed with the evaluator, ADR-0006). Cache
    hit rate (action-id cache hits, plus CAS sharing across identical
    action_ids) remains the dominant performance lever.
 
@@ -635,8 +624,8 @@ domain-relevant quantities. Implementation-specific constants
    variance hotspot.** `action_id` is a hash over already-resolved
    lock data (atom_czd_closure_root + toolchain_composition_root +
    action_params, htc-sad §6.5), not an evaluation: O(1)–O(|lock|).
-   The O(∞) Turing-complete variance survives only inside the optional
-   legacy passthrough-snix executor's plan step. Optimization effort at
+   The O(∞) Turing-complete variance was removed with the evaluator
+   (ADR-0006). Optimization effort at
    the eos layer should focus on maximizing action-id cache hits and
    CAS sharing across identical action_ids, not on minimizing
    evaluation cost — there is none on the primary path. Apply remains
@@ -653,9 +642,8 @@ domain-relevant quantities. Implementation-specific constants
    construction.
 
 2. **BuildPlan is protocol structure.** CacheSession ≅ BuildSession:
-   the two variants (primary executor) precisely encode the
-   cache-skipping decision tree; the legacy passthrough-snix executor's
-   three-variant form is the same isomorphism one level down. Any
+   the two variants precisely encode the
+   cache-skipping decision tree. Any
    change to caching must be reflected in `BuildPlan` and vice versa.
 
 3. **Deployment modes are formally interchangeable.** BuildEngine

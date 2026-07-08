@@ -1,31 +1,31 @@
 {
   "_doc": "H1-vs-H4 divergence fixture. Root `top` has two subtrees that separate the critical-path criterion (H1) from the subgraph-cost criterion (H4). SERIAL branch `s_head -> s1 -> s2 -> s3` (all d=2): critical_path(s_head)=8, subgraph_cost(s_head)=8. WIDE branch `w_head -> {w1..w6}` (all d=2): critical_path(w_head)=4, subgraph_cost(w_head)=14. With theta_critical=6 H1 promotes s_head (cp 8>6) but not w_head (cp 4<6). With theta_subgraph=10 H4 promotes w_head (subgraph 14>10) but not s_head (subgraph 8<10). All other criteria held inert. The promoted EP sets thus diverge: H1={top,s_head}, H4={top,w_head}.",
   "nodes": [
-    {"id": "top", "duration": 1.0},
-    {"id": "s_head", "duration": 2.0},
-    {"id": "s1", "duration": 2.0},
-    {"id": "s2", "duration": 2.0},
-    {"id": "s3", "duration": 2.0},
-    {"id": "w_head", "duration": 2.0},
-    {"id": "w1", "duration": 2.0},
-    {"id": "w2", "duration": 2.0},
-    {"id": "w3", "duration": 2.0},
-    {"id": "w4", "duration": 2.0},
-    {"id": "w5", "duration": 2.0},
-    {"id": "w6", "duration": 2.0}
+    { "id": "top", "duration": 1.0 },
+    { "id": "s_head", "duration": 2.0 },
+    { "id": "s1", "duration": 2.0 },
+    { "id": "s2", "duration": 2.0 },
+    { "id": "s3", "duration": 2.0 },
+    { "id": "w_head", "duration": 2.0 },
+    { "id": "w1", "duration": 2.0 },
+    { "id": "w2", "duration": 2.0 },
+    { "id": "w3", "duration": 2.0 },
+    { "id": "w4", "duration": 2.0 },
+    { "id": "w5", "duration": 2.0 },
+    { "id": "w6", "duration": 2.0 }
   ],
   "edges": [
-    {"from": "top", "to": "s_head"},
-    {"from": "top", "to": "w_head"},
-    {"from": "s_head", "to": "s1"},
-    {"from": "s1", "to": "s2"},
-    {"from": "s2", "to": "s3"},
-    {"from": "w_head", "to": "w1"},
-    {"from": "w_head", "to": "w2"},
-    {"from": "w_head", "to": "w3"},
-    {"from": "w_head", "to": "w4"},
-    {"from": "w_head", "to": "w5"},
-    {"from": "w_head", "to": "w6"}
+    { "from": "top", "to": "s_head" },
+    { "from": "top", "to": "w_head" },
+    { "from": "s_head", "to": "s1" },
+    { "from": "s1", "to": "s2" },
+    { "from": "s2", "to": "s3" },
+    { "from": "w_head", "to": "w1" },
+    { "from": "w_head", "to": "w2" },
+    { "from": "w_head", "to": "w3" },
+    { "from": "w_head", "to": "w4" },
+    { "from": "w_head", "to": "w5" },
+    { "from": "w_head", "to": "w6" }
   ],
-  "workers": [{"id": "w0", "capacity": {"mem": 8000000000}}]
+  "workers": [{ "id": "w0", "capacity": { "mem": 8000000000 } }]
 }

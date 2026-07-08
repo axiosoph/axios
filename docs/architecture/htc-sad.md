@@ -33,7 +33,7 @@ dependency pointers inside the artifacts themselves.
 HTC owns:
 
 - **The build function** — `build(atom closure, toolchain composition,
-  action params) → output tree`, executed by upstream's own build process
+action params) → output tree`, executed by upstream's own build process
   inside a materialized FHS view. There is no evaluator; the function is
   deterministic and hermetic — the same three inputs always produce the
   same result, success or failure — but it is **not total**: an
@@ -54,7 +54,7 @@ HTC owns:
 HTC does **not** own: atom identity, ownership, or the lock's atom
 contribution (L1, atom); dependency resolution, the lock file as a whole,
 or the manifest (L4, ion); scheduling policy, worker placement, or the
-atom-DAG (L3, eos — HTC is what eos's executor trait dispatches *to*, not
+atom-DAG (L3, eos — HTC is what eos's executor trait dispatches _to_, not
 the scheduler itself); key management and signing primitives (Cyphr/Coz,
 below L1). HTC defines the build/composition contract those layers consume
 and is consumed by; it never resolves atoms or schedules itself.
@@ -64,12 +64,12 @@ and is consumed by; it never resolves atoms or schedules itself.
 declared atom closure and toolchain composition, plus whatever the fetch
 proxy explicitly permits through its own separate channel (§4.2). The
 build's observed read set is checked against this declared closure —
-reads ⊆ declared — and that containment is *enforced by the sandbox*, not
+reads ⊆ declared — and that containment is _enforced by the sandbox_, not
 trusted from the build's own behavior. This is HTC's foundational
 guarantee, carried forward unchanged from Nix's own sandbox model; §6.3
-names the mechanism that observes it for the *build/check-phase* case,
-and §8.1 names the corresponding runtime-side failure mode for a *mounted
-view* that turns out to be missing something it needs.
+names the mechanism that observes it for the _build/check-phase_ case,
+and §8.1 names the corresponding runtime-side failure mode for a _mounted
+view_ that turns out to be missing something it needs.
 
 ### 1.2 External Actors
 
@@ -109,14 +109,14 @@ graph TB
 
 ### 1.3 System Boundaries
 
-| Boundary          | Inside HTC                                                                    | Outside HTC                                                                    |
-| :----------------- | :----------------------------------------------------------------------------- | :------------------------------------------------------------------------------ |
-| **Identity**       | Action identity (`action_id`, §6.5); composition/manifest/build-record digests | Atom identity, the `(anchor, label)` pair (L1)                                 |
-| **Execution**      | `build`, sandboxing, FHS-view materialization, upstream's own process          | Scheduling policy, worker placement, DAG traversal (L3, eos)                   |
-| **Analysis**       | Interface manifest derivation (provides/requires), observation records, satisfaction | Manifest/lock authorship, resolution (L4, ion)                                 |
-| **Fetch**          | The record/replay proxy's *execution* of a fetch entry                        | Fetch entry *declaration* — a `[[deps]]` entry with `type = "fetch"`, dispatched via ion's `[lock-dep-type-dispatch]`, is L4's (ion) |
-| **Storage**        | CAS (blobs, trees), composition/manifest/build-record persistence            | Atom registry/store (L1); the lock file as a whole (L4)                       |
-| **Runtime**        | View mounting (composefs/fs-verity, FUSE), closure-fault handling             | System integration below the mount (units, users, kernel modules) — out of v0 |
+| Boundary      | Inside HTC                                                                           | Outside HTC                                                                                                                          |
+| :------------ | :----------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------- |
+| **Identity**  | Action identity (`action_id`, §6.5); composition/manifest/build-record digests       | Atom identity, the `(anchor, label)` pair (L1)                                                                                       |
+| **Execution** | `build`, sandboxing, FHS-view materialization, upstream's own process                | Scheduling policy, worker placement, DAG traversal (L3, eos)                                                                         |
+| **Analysis**  | Interface manifest derivation (provides/requires), observation records, satisfaction | Manifest/lock authorship, resolution (L4, ion)                                                                                       |
+| **Fetch**     | The record/replay proxy's _execution_ of a fetch entry                               | Fetch entry _declaration_ — a `[[deps]]` entry with `type = "fetch"`, dispatched via ion's `[lock-dep-type-dispatch]`, is L4's (ion) |
+| **Storage**   | CAS (blobs, trees), composition/manifest/build-record persistence                    | Atom registry/store (L1); the lock file as a whole (L4)                                                                              |
+| **Runtime**   | View mounting (composefs/fs-verity, FUSE), closure-fault handling                    | System integration below the mount (units, users, kernel modules) — out of v0                                                        |
 
 ### 1.4 Layer Discipline
 
@@ -135,13 +135,13 @@ that amendment is follow-up work outside this document's file scope.
 Five nouns, one function (ADR-0005 §1), restated as the taxonomy this SAD
 elaborates:
 
-| Noun                  | Role                                                          | Persisted where                     |
-| :--------------------- | :-------------------------------------------------------------- | :------------------------------------ |
-| **Atom**               | Signed intent (sources + lock) — defined at L1, consumed here  | Atom registry/store (L1)              |
-| **Tree**               | A castore Merkle output                                        | CAS                                    |
+| Noun                   | Role                                                          | Persisted where                                                                         |
+| :--------------------- | :------------------------------------------------------------ | :-------------------------------------------------------------------------------------- |
+| **Atom**               | Signed intent (sources + lock) — defined at L1, consumed here | Atom registry/store (L1)                                                                |
+| **Tree**               | A castore Merkle output                                       | CAS                                                                                     |
 | **Interface manifest** | A derived, static fact (provides/requires) about one tree     | CAS, keyed `(ns, analyzer_czd, subject_digest)` — see §2.2 for why not by subject alone |
-| **Composition**        | A signed name→digest binding — the closure object              | CAS, keyed by its own Merkle root      |
-| **View**               | A composition mounted at runtime                                | Not persisted — a mount, materialized on demand |
+| **Composition**        | A signed name→digest binding — the closure object             | CAS, keyed by its own Merkle root                                                       |
+| **View**               | A composition mounted at runtime                              | Not persisted — a mount, materialized on demand                                         |
 
 The **one function**, `build`, is not in this table because it is not a
 persisted noun; an **action** is one invocation of it, identified by
@@ -214,7 +214,7 @@ behaves identically to a fully exact-pinned Nix-style closure. Signed the
 same way atoms sign (a composition has a czd). The entries map at `Dir`
 granularity means a composition is typically a few dozen lines binding
 package trees to FHS prefixes — human-readable, diffable. Note the
-identical *shape* to the atom lock — `name → signed content pointer` — one
+identical _shape_ to the atom lock — `name → signed content pointer` — one
 layer down; see atom-sad §6.5/§6.7 for that isomorphism (not restated
 here).
 
@@ -239,7 +239,7 @@ compositions, each with its own independently-computed root; the manifest
 itself never names which composition will use it.
 
 **Keying, precisely.** `provides`/`requires` are a pure function of
-*(which analyzer, which blob)*, not of the blob alone — a newer analyzer
+_(which analyzer, which blob)_, not of the blob alone — a newer analyzer
 version can extract different (typically more precise) facts from
 identical bytes. The manifest is therefore memoized in the CAS keyed
 `(ns, analyzer_czd, subject_digest)` (§3.2), not by `subject` in
@@ -252,7 +252,7 @@ manifest — it occupies a different key.
 Dynamic facts — what a check-phase run actually touched via
 `dlopen`-by-computed-string, Python's `importlib`, or similar (§6.3) —
 depend on which composition was mounted and what code path executed
-during *that specific run*. They are not a pure function of the subject
+during _that specific run_. They are not a pure function of the subject
 blob, so they cannot share the manifest's memoize-once-per-pair guarantee
 without breaking it. They are tracked as a separate, run-scoped
 observation record —
@@ -312,7 +312,6 @@ graph TB
   FHSD["FHS-view delta\n(mount composed tree as rootfs,\non snix-build's OCI executor)"]
 
   EXECT -. implements (primary) .-> FHSD
-  EXECT -. implements (optional legacy) .-> SNIXEVAL["passthrough-snix executor\n(snix-eval + snix-glue, §6.8)"]
   FHSD --> FUSEL
   FHSD --> FETCHP
   FHSD -->|"output tree"| ANALYZERS
@@ -390,11 +389,14 @@ capture).
 ### 3.5 Executor Trait
 
 The single contract eos's scheduler (L3) dispatches through:
-`build(atom_closure, toolchain_composition, params) → output tree`. Two
-implementations are named in this SAD: the **primary** FHS executor (§4,
-this document's main subject) and the **optional legacy** passthrough-snix
-executor (§6.8), which links `snix-eval`/`snix-glue` in-process to run
-legacy Nix expressions. The trait boundary is exactly where sandboxing
+`build(atom_closure, toolchain_composition, params) → output tree` — the
+deterministic (action-stratum) instance of the general `execute` operation
+(execution-model.md §2; ADR-0006 §1). One implementation is named in this
+SAD: the **primary** FHS executor (§4, this document's main subject).
+(An "optional legacy passthrough-snix executor" was formerly named here;
+it was removed by [ADR-0006](../adr/0006-execution-as-the-primitive.md)
+§3 — no evaluator exists at any tier.) The trait boundary is exactly
+where sandboxing
 technology's volatility is isolated from the scheduling theory it serves
 (ADR-0005 §Hickey/Lowy Audits, Temporal Volatility).
 
@@ -431,7 +433,7 @@ composition puts it there — no patchelf, no wrappers, no `stdenv`.
 ### 4.2 Fetch: Record and Replay
 
 Per [htc-fetch-set-lock-plugin] (ADR-0005 §7), the governing rule for
-*where* a fetch pin lives is: **lock = intent (before the build); metadata
+_where_ a fetch pin lives is: **lock = intent (before the build); metadata
 = fact (after the build)**. Execution — the part this SAD owns — has two
 modes:
 
@@ -446,7 +448,7 @@ modes:
   becomes the pure function `request → pinned bytes`.
 
 Nondeterministic endpoints (redirect chains, mirrors) are normalized at
-record time by keying on the *final* content — the same epistemics as a
+record time by keying on the _final_ content — the same epistemics as a
 Nix FOD hash bump. Prior art: Bazel's repository cache and downloader
 config, Gradle dependency verification; record-then-replay-proxy is a
 standard hermetic-CI pattern, not novel to this substrate.
@@ -462,11 +464,11 @@ how the composition's entry set is computed in the first place.
 Per [htc-materialization-tiers] (ADR-0005 §11), three tiers over one
 composition object:
 
-| Tier        | Mechanism                                | Use                                                    |
-| :----------- | :------------------------------------------ | :-------------------------------------------------------- |
-| **Observe** | castore FUSE (reused: `snix-castore`)     | builds, check phases — logs every read (§6.3)          |
-| **Fast**    | composefs/EROFS + fs-verity               | production runtime views                                |
-| **Export**  | plain copy / OCI image / tarball          | interop, deployment elsewhere                           |
+| Tier        | Mechanism                             | Use                                           |
+| :---------- | :------------------------------------ | :-------------------------------------------- |
+| **Observe** | castore FUSE (reused: `snix-castore`) | builds, check phases — logs every read (§6.3) |
+| **Fast**    | composefs/EROFS + fs-verity           | production runtime views                      |
+| **Export**  | plain copy / OCI image / tarball      | interop, deployment elsewhere                 |
 
 ### 5.1 Observe Tier
 
@@ -480,13 +482,13 @@ observability; it is never used for production runtime.
 One **EROFS metadata-only image** describes the entire merged tree (the
 composition, compiled); one flat **objects dir** holds content files named
 by fs-verity digest (the CAS itself, or hardlinks into it); mounted as a
-*single* overlayfs with data-only lowerdirs. Kernel requirement: ≥ 6.5
+_single_ overlayfs with data-only lowerdirs. Kernel requirement: ≥ 6.5
 (basic composefs), ≥ 6.6 (verity redirect validation), ≥ 6.7 (nested
 mounts) — the format is stable and already shipping in
 bootc/OSTree/containers-storage. This is **O(1) layers by construction**,
 unlike the overlayfs-layer-stacking bottleneck a Nix-paths-as-Docker-layers
 approach hits (lookup cost and layer-count limits scale with lowerdir
-count there). fs-verity makes the *running* closure tamper-evident — the
+count there). fs-verity makes the _running_ closure tamper-evident — the
 kernel refuses to hand back corrupted content when it is read, which is a
 strictly stronger guarantee than Nix's NAR-verification-at-
 substitution-time-only model (a tampered Nix store file executes happily;
@@ -512,22 +514,22 @@ one layer up.
 
 ### 6.2 The ELF Plugin — Concrete Algorithm
 
-*Provides*, per shared object in the tree: `DT_SONAME`; the exported
+_Provides_, per shared object in the tree: `DT_SONAME`; the exported
 dynamic symbol set with version definitions (`.gnu.version_d`);
 `iface_digest = H(sorted [(symbol, version, type-class)])`.
 
-*Requires*, per ELF (binary or library): `DT_NEEDED` entries; undefined
+_Requires_, per ELF (binary or library): `DT_NEEDED` entries; undefined
 dynamic symbols + version needs (`.gnu.version_r`); `PT_INTERP` (the
 loader itself is a require); shebang lines (→ `cli-name` namespace);
 `.pc`/CMake config files (→ `pkgconfig` namespace, dev-facet).
 
-*Satisfies*: `needs.symbols ⊆ provider.exports ∧ needs.versions ⊆
+_Satisfies_: `needs.symbols ⊆ provider.exports ∧ needs.versions ⊆
 provider.version_defs` — cheap set inclusion, emitting a checkable proof
 object (the intersection witness) recordable in a composition's
 `provenance` (§2.1).
 
-**Honest precision statement**: symbol/version satisfaction is *necessary,
-not sufficient* — same-symbol struct-layout changes escape it
+**Honest precision statement**: symbol/version satisfaction is _necessary,
+not sufficient_ — same-symbol struct-layout changes escape it
 (`libabigail`'s DWARF type analysis catches most of those; behavioral
 changes, nothing catches). Stage 1 ships symbol-level; DWARF type-level is
 a named stage-2 upgrade (§9) with the same `satisfies` interface, not a
@@ -544,9 +546,9 @@ machine-checked and recorded.
 
 ### 6.3 The Trace Observer
 
-Builds already consume their *composed-view* inputs — the materialized
+Builds already consume their _composed-view_ inputs — the materialized
 atom closure and toolchain composition — through the castore FUSE daemon;
-the daemon is the *only* source of **those** bytes, making it a perfect,
+the daemon is the _only_ source of **those** bytes, making it a perfect,
 unbypassable observation point for the declared closure. (Fetch-set bytes
 are a separate channel — §4.2's record/replay proxy sees and logs those
 directly; they never pass through FUSE.) Recording `(path, digest)` per
@@ -556,7 +558,7 @@ under-approximation feeding a proven over-approximation: reads ⊆ declared
 closure, [htc-declared-closure-enforced] (§1.1) — enforced by the sandbox,
 not trusted; unread ∖ declared = **prunable closure bloat**.
 
-For *runtime* observation (producing an `ObservationRecord`, §2.2), the
+For _runtime_ observation (producing an `ObservationRecord`, §2.2), the
 artifact's check phase / smoke tests run with the composed view mounted at
 Observe tier instead of Fast tier — same daemon, same log.
 `dlopen`-by-computed-string and Python dynamic imports are caught here, as
@@ -589,7 +591,7 @@ same-atom, then lock order — the same resolution-determinism discipline
 ion-sad §6.7 states for the lock, applied here one layer up). Compare
 Nix's closure = "every store path whose hash appears in the output bytes"
 — over-approximate, under-approximate, and unexplainable. This closure is
-*justified*: every entry is present because a named require binds to it,
+_justified_: every entry is present because a named require binds to it,
 and the justification graph is itself a storable artifact.
 
 ### 6.5 Action Identity
@@ -631,16 +633,14 @@ ADR-0004 (theory body untouched, ADR-0005's supersession note) for that.
 
 ### 6.8 The GPL Seam and the Executor Boundary
 
-Per [htc-gpl-seam-wire-first] (ADR-0005 §10): the primary FHS executor
-speaks to snix's castore and build components over gRPC as independent
-processes — never linked in-process. The **optional legacy** executor
-(passthrough-snix) links `snix-eval`/`snix-glue`/`nix-compat` in-process to
-run pre-existing Nix expressions unmodified; it exists for interoperating
-with legacy content, is not the default, and is not required for the MVP
-path. Which wire-first implementation the primary executor ultimately uses
-— unmodified upstream snix binaries, or a fork-and-simplified castore+build
-subset — is **not decided by this SAD**; it is an open item deferred to
-P3 (ADR-0005 §Open Items).
+Per [htc-gpl-seam-wire-first] (ADR-0005 §10, resolved): the FHS executor
+speaks to the snix fork's castore and build components over gRPC as
+independent processes — never linked in-process. (A passthrough-snix
+executor that linked `snix-eval`/`snix-glue`/`nix-compat` in-process was
+formerly allowed here as a legacy escape hatch; it was removed by
+[ADR-0006](../adr/0006-execution-as-the-primitive.md) §3.) The fork
+decision itself — castore + build only, stripped of the evaluator, run as
+an independent GPL-3 service — is recorded in ADR-0005 §10.
 
 ### 6.9 The Lock↔Composition Isomorphism
 
@@ -669,16 +669,16 @@ Known Gap (§9) and an ADR-0005 open item (P1), not resolved here.
 
 ## 7. Wire and Storage Formats
 
-| Concern                                              | Governing document (this layer)                        |
-| :------------------------------------------------------ | :--------------------------------------------------------- |
-| Composition schema, root computation, signing         | §2.1, this document                                      |
-| Interface manifest schema                             | §2.2, this document                                      |
-| Observation record schema                             | §2.2, this document                                      |
-| Build record schema                                   | §2.3, this document                                      |
-| Fetch entry declaration (`[[deps]]`, `type = "fetch"`)  | `lock-file-schema.md`'s `[lock-type-extension-mechanism]` (L4, ion — not restated here) |
-| Fetch entry execution (record/replay)                  | §4.2, this document                                      |
-| CAS blob/tree encoding                                 | `snix-castore` (reused, unmodified at the wire level)     |
-| Runtime mount format                                   | composefs/EROFS + fs-verity (external kernel format, ≥ 6.5) |
+| Concern                                                | Governing document (this layer)                                                         |
+| :----------------------------------------------------- | :-------------------------------------------------------------------------------------- |
+| Composition schema, root computation, signing          | §2.1, this document                                                                     |
+| Interface manifest schema                              | §2.2, this document                                                                     |
+| Observation record schema                              | §2.2, this document                                                                     |
+| Build record schema                                    | §2.3, this document                                                                     |
+| Fetch entry declaration (`[[deps]]`, `type = "fetch"`) | `lock-file-schema.md`'s `[lock-type-extension-mechanism]` (L4, ion — not restated here) |
+| Fetch entry execution (record/replay)                  | §4.2, this document                                                                     |
+| CAS blob/tree encoding                                 | `snix-castore` (reused, unmodified at the wire level)                                   |
+| Runtime mount format                                   | composefs/EROFS + fs-verity (external kernel format, ≥ 6.5)                             |
 
 No specification file under `docs/specs/` exists for this layer yet; spec
 authorship is P3/P4 work (Appendix C). This SAD and ADR-0005 are the
@@ -686,33 +686,33 @@ normative record until then.
 
 ## 8. Failure Modes
 
-| #   | Failure                                                      | Behavior                                                                |
-| :-- | :-------------------------------------------------------------- | :-------------------------------------------------------------------------- |
-| 8.1 | Missing dependency at Fast-tier runtime                       | **Closure fault** — fail-closed, logged with the exact unsatisfied require (§6.3) |
-| 8.2 | Composition merge conflict at compose time                   | Explicit error — never silently resolved (§3.1)                        |
-| 8.3 | Fetch request not in the recorded map (replay mode)           | Connection refused, logged                                              |
-| 8.4 | TLS interception friction (tooling pins certs, record mode)   | Bounded annoyance — needs a protocol-aware handler (git, crates, npm known shapes) |
-| 8.5 | Upstream fetch nondeterminism (mirrors/redirects drift)       | Loud fetch-set diff at re-record time — same epistemics as a Nix FOD hash bump |
-| 8.6 | ABI-satisfaction proof fails to verify                        | Composition rejected at compose time — the entry cannot bind             |
-| 8.7 | Tampered Fast-tier content (fs-verity mismatch)                | Mount succeeds (metadata-only); kernel refuses that file's read — stronger than Nix's NAR-verify-at-substitution-only |
-| 8.8 | Package violates the fetch-separable/staged-install convention | Requires the one conventional patch this model still allows (rare)      |
+| #   | Failure                                                                                                                                                 | Behavior                                                                                                                                                                                                  |
+| :-- | :------------------------------------------------------------------------------------------------------------------------------------------------------ | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 8.1 | Missing dependency at Fast-tier runtime                                                                                                                 | **Closure fault** — fail-closed, logged with the exact unsatisfied require (§6.3)                                                                                                                         |
+| 8.2 | Composition merge conflict at compose time                                                                                                              | Explicit error — never silently resolved (§3.1)                                                                                                                                                           |
+| 8.3 | Fetch request not in the recorded map (replay mode)                                                                                                     | Connection refused, logged                                                                                                                                                                                |
+| 8.4 | TLS interception friction (tooling pins certs, record mode)                                                                                             | Bounded annoyance — needs a protocol-aware handler (git, crates, npm known shapes)                                                                                                                        |
+| 8.5 | Upstream fetch nondeterminism (mirrors/redirects drift)                                                                                                 | Loud fetch-set diff at re-record time — same epistemics as a Nix FOD hash bump                                                                                                                            |
+| 8.6 | ABI-satisfaction proof fails to verify                                                                                                                  | Composition rejected at compose time — the entry cannot bind                                                                                                                                              |
+| 8.7 | Tampered Fast-tier content (fs-verity mismatch)                                                                                                         | Mount succeeds (metadata-only); kernel refuses that file's read — stronger than Nix's NAR-verify-at-substitution-only                                                                                     |
+| 8.8 | Package violates the fetch-separable/staged-install convention                                                                                          | Requires the one conventional patch this model still allows (rare)                                                                                                                                        |
 | 8.9 | Host-probing configure script's feature auto-detection finds an optional dependency present in the toolchain composition and silently enables a feature | Not eliminated by hermeticity — the probe's output is stable per action identity, but divergent auto-detection is real; must be pinned via an explicit action param (variant), not detected automatically |
 
 ## 9. Known Gaps and Future Explorations
 
-| #   | Gap                                                                              | Notes                                                                     |
-| :-- | :---------------------------------------------------------------------------------- | :----------------------------------------------------------------------------- |
-| 1   | **DWARF type-level ABI** (stage 2)                                                | Symbol/version satisfaction (§6.2) is necessary, not sufficient; `libabigail`-class analysis is the named hardening, same `satisfies` interface |
-| 2   | **System integration** (setuid, systemd units, kernel modules, users/groups)      | Real scope, bootc/OSTree territory — explicitly **out of v0**             |
-| 3   | **macOS/Windows executors**                                                       | The substrate is Linux-first (user namespaces, overlayfs, fs-verity); other platforms need different executors (sandbox-exec/VM), same objects, different P3 |
-| 4   | **The GPL-seam fork-vs-upstream call** (ADR-0005 §10's "G2" gate) — fork-and-simplify snix vs. speak upstream's protocol, formally | ADR-0005 §10 resolves the posture (wire-first); the specific implementation call is deferred to **P3** |
-| 5   | **Signed-metadata-append hardening**                                              | Builder≠owner signer authorization, fact-append vs. moved-tip-warning carve-out, fact-kind convention — consumed contract, design campaign **P1** |
-| 6   | **Lock fetch-plugin liveness + preservation semantics**                          | Owner-derived liveness vs. purge-on-reconcile; `deny_unknown_fields` vs. preserve-if-unknown — consumed contract, design campaign **P2/P4** |
-| 7   | **Successor `[compose]` semantics, spec re-derivation**                           | `lock-file-schema.md`'s NixTrivial `[compose]` variant remains valid only as the passthrough-snix executor's on-ramp — P2 debt, not resolved here |
-| 8   | **composefs mount privilege**                                                     | Kernel mount of EROFS/composefs needs elevated privilege or a user namespace — qualifies ADR-0003's zero-root claim; resolve at P3/P4 |
-| 9   | **`snix-castore` naming collision**                                               | `composition.rs` already exists there (unrelated: service DI config); this substrate needs a distinct proto/package name before P3 |
-| 10  | **Capability-runtime (WASI) execution tier**                                     | Post-MVP horizon; the composition object is designed to survive the transition intact, becoming the capability grant |
-| 11  | **Toolchain-composition provenance and lock pinning**                            | `action_id` (§6.5) commits to `toolchain_composition_root` as an input, but no lock entry type exists for pinning a toolchain composition; by the lock=intent rule (§4.2) this belongs lock-side. Design campaign: **P2/P5** |
+| #   | Gap                                                                                                                                | Notes                                                                                                                                                                                                                        |
+| :-- | :--------------------------------------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **DWARF type-level ABI** (stage 2)                                                                                                 | Symbol/version satisfaction (§6.2) is necessary, not sufficient; `libabigail`-class analysis is the named hardening, same `satisfies` interface                                                                              |
+| 2   | **System integration** (setuid, systemd units, kernel modules, users/groups)                                                       | Real scope, bootc/OSTree territory — explicitly **out of v0**                                                                                                                                                                |
+| 3   | **macOS/Windows executors**                                                                                                        | The substrate is Linux-first (user namespaces, overlayfs, fs-verity); other platforms need different executors (sandbox-exec/VM), same objects, different P3                                                                 |
+| 4   | **The GPL-seam fork-vs-upstream call** (ADR-0005 §10's "G2" gate) — fork-and-simplify snix vs. speak upstream's protocol, formally | ADR-0005 §10 resolves the posture (wire-first); the specific implementation call is deferred to **P3**                                                                                                                       |
+| 5   | **Signed-metadata-append hardening**                                                                                               | Builder≠owner signer authorization, fact-append vs. moved-tip-warning carve-out, fact-kind convention — consumed contract, design campaign **P1**                                                                            |
+| 6   | **Lock fetch-plugin liveness + preservation semantics**                                                                            | Owner-derived liveness vs. purge-on-reconcile; `deny_unknown_fields` vs. preserve-if-unknown — consumed contract, design campaign **P2/P4**                                                                                  |
+| 7   | **Successor `[compose]` semantics, spec re-derivation**                                                                            | `[compose]` removed with the evaluator (ADR-0006 §3); the successor intent schema is the manifest/lock redesign                                                                                                              |
+| 8   | **composefs mount privilege**                                                                                                      | Kernel mount of EROFS/composefs needs elevated privilege or a user namespace — qualifies ADR-0003's zero-root claim; resolve at P3/P4                                                                                        |
+| 9   | **`snix-castore` naming collision**                                                                                                | `composition.rs` already exists there (unrelated: service DI config); this substrate needs a distinct proto/package name before P3                                                                                           |
+| 10  | **Capability-runtime (WASI) execution tier**                                                                                       | Post-MVP horizon; the composition object is designed to survive the transition intact, becoming the capability grant                                                                                                         |
+| 11  | **Toolchain-composition provenance and lock pinning**                                                                              | `action_id` (§6.5) commits to `toolchain_composition_root` as an input, but no lock entry type exists for pinning a toolchain composition; by the lock=intent rule (§4.2) this belongs lock-side. Design campaign: **P2/P5** |
 
 ## 10. Scope Boundaries
 
@@ -735,33 +735,32 @@ Out of scope for the HTC layer:
 
 ## Appendix A: Terminology
 
-| Term                | Definition                                                              |
-| :------------------- | :-------------------------------------------------------------------------- |
-| Atom                 | Signed intent (sources + lock) — defined at L1, consumed unchanged here |
-| Action               | One invocation of `build`; identified by `action_id` (§6.5)             |
-| Tree                 | A castore Merkle output                                                 |
-| Interface manifest   | A derived, static fact about one tree: provides/requires, keyed `(ns, analyzer_czd, subject_digest)` (§2.2) |
-| Observation record   | A derived, run-scoped fact about a specific check-phase run, keyed `(subject, composition)` — not part of the interface manifest (§2.2, §6.3) |
-| Composition          | A signed, content-addressed name→digest binding — the closure object (§2.1) |
-| View                 | A composition mounted at runtime, at one of three tiers (§5)            |
-| Constraint           | A per-entry composition attribute: exact-digest or ABI-satisfaction (§6.6) |
-| Closure fault        | A Fast-tier runtime miss against the composed view — fail-closed (§6.3, §8.1) |
-| Composition-addressing | The paradigm name (ADR-0005 §9) for the property every HTC layer shares |
-| HTC                  | Hermetic Transactional Composition — this layer's name (ADR-0005 §9)    |
+| Term                   | Definition                                                                                                                                    |
+| :--------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------- |
+| Atom                   | Signed intent (sources + lock) — defined at L1, consumed unchanged here                                                                       |
+| Action                 | One invocation of `build`; identified by `action_id` (§6.5)                                                                                   |
+| Tree                   | A castore Merkle output                                                                                                                       |
+| Interface manifest     | A derived, static fact about one tree: provides/requires, keyed `(ns, analyzer_czd, subject_digest)` (§2.2)                                   |
+| Observation record     | A derived, run-scoped fact about a specific check-phase run, keyed `(subject, composition)` — not part of the interface manifest (§2.2, §6.3) |
+| Composition            | A signed, content-addressed name→digest binding — the closure object (§2.1)                                                                   |
+| View                   | A composition mounted at runtime, at one of three tiers (§5)                                                                                  |
+| Constraint             | A per-entry composition attribute: exact-digest or ABI-satisfaction (§6.6)                                                                    |
+| Closure fault          | A Fast-tier runtime miss against the composed view — fail-closed (§6.3, §8.1)                                                                 |
+| Composition-addressing | The paradigm name (ADR-0005 §9) for the property every HTC layer shares                                                                       |
+| HTC                    | Hermetic Transactional Composition — this layer's name (ADR-0005 §9)                                                                          |
 
 ## Appendix B: Component Map
 
-| Layer | Component (planned)   | Kind           | Purpose                                                          |
-| :---- | :---------------------- | :-------------- | :------------------------------------------------------------------ |
-| L2    | `htc-compose`          | Component      | Composition format, root computation, signing, merge/conflict, `mkcomposefs` emission |
-| L2    | `htc-analyze-elf`      | Component (atom)| ELF interface analyzer plugin                                     |
-| L2    | `htc-analyze-python`   | Component (atom)| Python interface analyzer plugin                                  |
-| L2    | `htc-closure`          | Component      | Runtime closure computer (satisfaction fixpoint, minimization)     |
-| L2    | `htc-fetch-proxy`      | Component      | Record/replay content-addressing proxy, TLS CA injection, git handler |
-| L2    | `htc-fuse-log`         | Component      | FUSE read-set logging (wraps `snix-castore`'s FUSE daemon)         |
-| L2    | Executor trait         | Contract        | `build(atom_closure, toolchain, params) → output tree` (§3.5)      |
-| L2    | FHS executor (primary) | Implementation  | Reuses `snix-castore` + `snix-build` (OCI/bwrap) over gRPC, per §6.8 |
-| L2    | Passthrough-snix executor (optional) | Implementation | Links `snix-eval`/`snix-glue` in-process; legacy escape hatch only |
+| Layer | Component (planned)    | Kind             | Purpose                                                                               |
+| :---- | :--------------------- | :--------------- | :------------------------------------------------------------------------------------ |
+| L2    | `htc-compose`          | Component        | Composition format, root computation, signing, merge/conflict, `mkcomposefs` emission |
+| L2    | `htc-analyze-elf`      | Component (atom) | ELF interface analyzer plugin                                                         |
+| L2    | `htc-analyze-python`   | Component (atom) | Python interface analyzer plugin                                                      |
+| L2    | `htc-closure`          | Component        | Runtime closure computer (satisfaction fixpoint, minimization)                        |
+| L2    | `htc-fetch-proxy`      | Component        | Record/replay content-addressing proxy, TLS CA injection, git handler                 |
+| L2    | `htc-fuse-log`         | Component        | FUSE read-set logging (wraps `snix-castore`'s FUSE daemon)                            |
+| L2    | Executor trait         | Contract         | `build(atom_closure, toolchain, params) → output tree` (§3.5)                         |
+| L2    | FHS executor (primary) | Implementation   | Reuses `snix-castore` + `snix-build` (OCI/bwrap) over gRPC, per §6.8                  |
 
 None of these components exist in the codebase yet; this table is the
 planned crate/component surface P3/P4 implementation targets, not an
@@ -785,12 +784,12 @@ build-contract neutrality).
 
 ## Appendix D: Known Specification Drift
 
-- `docs/specs/lock-file-schema.md`'s `[compose]` section bakes a
-  `NixTrivial`/`use="nix"` variant into the **core** lock schema, not a
-  plugin. It remains valid today as the passthrough-snix
-  executor's on-ramp (§6.8); the successor compose semantics this layer's
-  executor trait implies are designed in ADR-0005/this SAD, but the spec
-  re-derivation itself is **not** performed here — it is P2 debt.
+- **RESOLVED (2026-07-07)** — `docs/specs/lock-file-schema.md`'s
+  `[compose]` section baked a `NixTrivial`/`use="nix"` variant into the
+  core lock schema as the passthrough executor's on-ramp; the executor
+  was removed by [ADR-0006](../adr/0006-execution-as-the-primitive.md)
+  §3 and the `[compose]` section removed with it. The successor intent
+  schema is the manifest/lock redesign (ADR-0006 §Consequences).
 - **RESOLVED** — `docs/specs/ion-eos-contract.md` previously stated
   (at its old §lines 557–564) that dependencies are "fetched by snix
   from the lock-specified mirrors using normal Nix fetching

@@ -45,7 +45,7 @@ L4  ion/       Frontend: CLI, manifests, resolution
 L3  eos/       Engine: builds, stores, scheduling
 L2  HTC        Build-execution & composition substrate: CAS, compositions,
                 interface manifests, build records, fetch-proxy execution,
-                closure computation, materialization (no crate workspace yet)
+                closure computation, materialization (skeleton workspace: htc/)
 L1  atom/      Protocol: identity, addressing, publishing
 L0  Cyphr      Cryptographic substrate (external; future)
 ```
@@ -139,13 +139,13 @@ Each workspace is independent — run commands from the workspace root:
 
 ### eos/ (L3 — Runtime)
 
-| Crate        | Purpose                                                      |
-| :----------- | :----------------------------------------------------------- |
-| `eos-core`   | Engine traits: `BuildEngine`, `ArtifactStore`                |
-| `eos-proto`  | Cap'n Proto wire schema and generated bindings               |
-| `eos-snix`   | Optional legacy executor: passthrough Nix-expression backend |
-| `eos-daemon` | Scheduler, executor worker pool, RPC server                  |
-| `eos`        | Orchestration: wires engine + store                          |
+| Crate        | Purpose                                                |
+| :----------- | :----------------------------------------------------- |
+| `eos-core`   | Engine traits: `BuildEngine`, `ArtifactStore`          |
+| `eos-proto`  | Cap'n Proto wire schema and generated bindings         |
+| `eos-snix`   | Slated for removal (evaluator eradicated, ADR-0006 §3) |
+| `eos-daemon` | Scheduler, executor worker pool, RPC server            |
+| `eos`        | Orchestration: wires engine + store                    |
 
 ### ion/ (L4 — Frontend)
 

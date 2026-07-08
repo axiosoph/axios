@@ -3,7 +3,7 @@
 - **Status**: PROPOSED (SUPERSEDED IN PART by ADR-0003, ADR-0005)
 - **Date**: 2026-02-07 (revised)
 - **Deciders**: nrd
-- **Source**: [Plan](../plans/ion-atom-restructuring.md) | [Sketch](../../.sketches/2026-02-07-ion-atom-restructuring.md)
+- **Source**: the 2026-02-07 ion/atom restructuring analysis (plan retired)
 - **Supersedes**: Revisions 1–3
 - **Related**: [ADR-0002](0002-decoupling-snix-backend.md), [ADR-0003](0003-composable-deployment-modes.md), [ADR-0005](0005-hermetic-transactional-composition.md)
 
@@ -132,10 +132,11 @@ ingestion from any source uses the same codepath.
 | `eos`        | Core orchestration engine and worker registry      | eos-core, eos-snix                 |
 
 (Note: Superseded in part by
-[ADR-0005](0005-hermetic-transactional-composition.md) — "evaluator
-implementations" is dead scope under the substrate re-scope; `eos-snix`
-survives only as one implementation of an executor trait, entangled with
-the GPL-seam decision (ADR-0005 §10).)
+[ADR-0005](0005-hermetic-transactional-composition.md) and
+[ADR-0006](0006-execution-as-the-primitive.md) — "evaluator
+implementations" is dead scope, and the passthrough executor `eos-snix`
+embodied was removed entirely (ADR-0006 §3); the crate is slated for
+removal.)
 
 **BuildEngine** — plan/apply with cache-skipping:
 

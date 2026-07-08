@@ -17,7 +17,7 @@ dispatch rule mirrors **`docs/models/tla/StarvationModel.tla`**.
 
 ## Trace file format
 
-The simulator's sole input is a *trace*: a JSON document with four top-level
+The simulator's sole input is a _trace_: a JSON document with four top-level
 keys. It is the data contract for node P9 (corpus extraction) and node P10
 (heuristic evaluation).
 
@@ -25,31 +25,31 @@ keys. It is the data contract for node P9 (corpus extraction) and node P10
 {
   "nodes": [
     {
-      "id": "top",            // opaque plan digest, unique within the trace
-      "duration": 1.0,        // isolated build duration, seconds (d(v))
+      "id": "top", // opaque plan digest, unique within the trace
+      "duration": 1.0, // isolated build duration, seconds (d(v))
       "peak_mem": 1000000000, // optional: predicted peak memory, bytes
-      "is_atom": false,       // optional: synthetic atom marker (atom-seeded variant)
+      "is_atom": false, // optional: synthetic atom marker (atom-seeded variant)
       "plan_name": "top-1.0", // optional: version-stable profile key (corpus fidelity)
-      "confidence": 0.9,      // optional: prediction confidence [0,1] (default 0.5)
-      "arrival": 0.0          // optional: system-entry time (RequestArrival staggering; default 0)
-    }
+      "confidence": 0.9, // optional: prediction confidence [0,1] (default 0.5)
+      "arrival": 0.0, // optional: system-entry time (RequestArrival staggering; default 0)
+    },
   ],
   "edges": [
-    { "from": "top", "to": "a" }  // "from" depends on "to": "to" builds first
+    { "from": "top", "to": "a" }, // "from" depends on "to": "to" builds first
   ],
   "workers": [
     {
-      "id": "w0",                          // opaque worker identity, unique
-      "speed": 1.0,                        // optional: duration multiplier (<1 faster)
-      "capacity": { "mem": 8000000000 },   // optional: abstract capacity vector
-      "cached": ["leaf"]                   // optional: plan ids cached locally at t=0
-    }
+      "id": "w0", // opaque worker identity, unique
+      "speed": 1.0, // optional: duration multiplier (<1 faster)
+      "capacity": { "mem": 8000000000 }, // optional: abstract capacity vector
+      "cached": ["leaf"], // optional: plan ids cached locally at t=0
+    },
   ],
-  "store_cached": ["some-prebuilt-plan"]   // optional: globally cached; filtered pre-coarsening
+  "store_cached": ["some-prebuilt-plan"], // optional: globally cached; filtered pre-coarsening
 }
 ```
 
-**Edge orientation.** An edge `{ "from": X, "to": Y }` means *X depends on Y*,
+**Edge orientation.** An edge `{ "from": X, "to": Y }` means _X depends on Y_,
 so Y must be built before X. Equivalently, Y is a dependency of X and X is a
 dependent of Y. The graph must be acyclic (validated when the graph is built).
 
@@ -63,24 +63,24 @@ negative durations.
 eos-sim --trace <FILE> [OPTIONS]
 ```
 
-| Flag | Default | Meaning |
-| :--- | :--- | :--- |
-| `--seed <U64>` | `0` | Deterministic tie-break seed. |
-| `--variant <H1\|H2\|H3\|H4>` | `H1` | Promotion variant (ADR §2a). |
-| `--seeding <from-scratch\|atom-seeded>` | `from-scratch` | Initial-cover seeding axis. |
-| `--theta-critical <F>` | `30` | Critical-path-cut threshold. |
-| `--theta-redundancy <F>` | `20` | Cost-gated convergence threshold. |
-| `--theta-cost <F>` | `60` | Troublesome-node threshold. |
-| `--theta-scale <F>` | `1` | Confidence-gating scale (`0` disables gating). |
-| `--theta-subgraph <F>` | `120` | H4 subgraph-cost threshold. |
-| `--theta-fanin <N>` | `2` | H4 fan-in threshold. |
-| `--theta-trivial <F>` | `10` | Atom-absorption threshold (atom-seeded). |
-| `--cache-speedup <F>` | `0.5` | Cache-affinity speedup factor (Option C). |
-| `--beta <F>` | `0.5` | Resource-fit penalty weight (Option C). |
-| `--delta <F>` | `0` | Bounded dispatch window Δ, seconds (P9′). |
-| `--gamma <F>` | `0` | Delay-credit weight γ (P12 fairness). |
-| `--lambda <F>` | `1` | Redundant-work weight in the objective. |
-| `--json` | off | Emit the metrics JSON line instead of the human summary. |
+| Flag                                    | Default        | Meaning                                                  |
+| :-------------------------------------- | :------------- | :------------------------------------------------------- |
+| `--seed <U64>`                          | `0`            | Deterministic tie-break seed.                            |
+| `--variant <H1\|H2\|H3\|H4>`            | `H1`           | Promotion variant (ADR §2a).                             |
+| `--seeding <from-scratch\|atom-seeded>` | `from-scratch` | Initial-cover seeding axis.                              |
+| `--theta-critical <F>`                  | `30`           | Critical-path-cut threshold.                             |
+| `--theta-redundancy <F>`                | `20`           | Cost-gated convergence threshold.                        |
+| `--theta-cost <F>`                      | `60`           | Troublesome-node threshold.                              |
+| `--theta-scale <F>`                     | `1`            | Confidence-gating scale (`0` disables gating).           |
+| `--theta-subgraph <F>`                  | `120`          | H4 subgraph-cost threshold.                              |
+| `--theta-fanin <N>`                     | `2`            | H4 fan-in threshold.                                     |
+| `--theta-trivial <F>`                   | `10`           | Atom-absorption threshold (atom-seeded).                 |
+| `--cache-speedup <F>`                   | `0.5`          | Cache-affinity speedup factor (Option C).                |
+| `--beta <F>`                            | `0.5`          | Resource-fit penalty weight (Option C).                  |
+| `--delta <F>`                           | `0`            | Bounded dispatch window Δ, seconds (P9′).                |
+| `--gamma <F>`                           | `0`            | Delay-credit weight γ (P12 fairness).                    |
+| `--lambda <F>`                          | `1`            | Redundant-work weight in the objective.                  |
+| `--json`                                | off            | Emit the metrics JSON line instead of the human summary. |
 
 On a successful run the simulator prints the two contract lines consumed by
 node P10 / constraint C2, around the metrics block:

@@ -1,9 +1,9 @@
 +++
-title = "Explanations and audits"
-description = "High-level conceptual overviews, design discussions, and spec audits"
+title = "Explanations"
+description = "High-level conceptual overviews and design discussions"
 weight = 2
 quadrant = "Explanation"
-audience = "Contributors and architects tracking Axios system design and specs completeness"
+audience = "Contributors and architects tracking Axios system design"
 +++
 
-Conceptual articles, specification audits, and architectural overviews.
+Conceptual articles and architectural overviews.

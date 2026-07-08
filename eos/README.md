@@ -88,7 +88,7 @@ The Eos workspace is decomposed into five crates. Dependencies flow strictly dow
         ┌─────────┴─────────┐
         ▼                   ▼
   ┌──────────┐        ┌──────────┐
-  │eos-daemon│        │ eos-snix │ (Legacy Nix-compat executor)
+  │eos-daemon│        │ eos-snix │ (slated for removal, ADR-0006)
   └─────┬────┘        └─────┬────┘
         │   ┌───────────────┘
         ▼   ▼
@@ -113,9 +113,9 @@ The foundational layer defining the L3 interface boundaries. It contains no back
 
 Defines the wire format protocol schemas (`eos.capnp`) and handles the compilation of Cap'n Proto schemas into Rust bindings at build time.
 
-### 3. `eos-snix` (optional legacy executor)
+### 3. `eos-snix` (slated for removal)
 
-Wraps HTC's optional passthrough-snix executor for interoperating with pre-existing Nix-expression content — not the default backend (see [htc-sad.md](../docs/architecture/htc-sad.md) §6.8). It integrates `nix-compat`, `snix-castore`, `snix-store`, `snix-eval`, and `snix-build`, encapsulating the thread-locality constraint of the Nix language evaluator (`snix-eval` types contain `Rc<Closure>` and are `!Send`) by running its evaluation in isolated worker threads. Full detail: [eos-snix-backend.md](../docs/specs/eos-snix-backend.md).
+The passthrough executor this crate embodied was removed from the design by [ADR-0006](../docs/adr/0006-execution-as-the-primitive.md) §3 (the evaluator is eradicated — never implemented for users, not supported). The crate remains in-tree pending implementation cleanup; do not build on it.
 
 ### 4. `eos-daemon`
 
@@ -159,7 +159,6 @@ optional legacy passthrough-snix executor links `snix-eval`/`snix-glue`
 in-process to run a Nix expression's own build process unmodified,
 confined to whatever isolation `snix-eval` itself provides upstream. This
 is legacy-executor-internal detail, not part of the scheduler's contract —
-see [eos-snix-backend.md](../docs/specs/eos-snix-backend.md).
 
 ### Platform Isolation Dispatch
 

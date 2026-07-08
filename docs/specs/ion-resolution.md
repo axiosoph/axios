@@ -283,7 +283,7 @@ in the manifest MUST be purged from the lock.
   `VERIFIED: unverified`
 
 > **Note (2026-07-05, P4 flag):** Same tension as `[no-stale-lock-
-> entry]` above: this would purge tool-recorded fetch entries the
+entry]` above: this would purge tool-recorded fetch entries the
 > substrate's record-mode fetch proxy writes back with no manifest
 > declaration. Design campaign **P4** resolves both together, per
 > [ADR-0005](../adr/0005-hermetic-transactional-composition.md) §Open

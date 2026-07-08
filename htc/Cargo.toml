@@ -1,0 +1,9 @@
+[workspace]
+members  = ["htc-comp", "htc-exec"]
+resolver = "2"
+
+[workspace.package]
+edition    = "2021"
+license    = "MIT OR Apache-2.0"
+repository = "https://github.com/axiosoph/axios"
+version    = "0.1.0"

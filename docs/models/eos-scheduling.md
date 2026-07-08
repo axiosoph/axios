@@ -3,7 +3,7 @@
 > **Terminology note**: This model's nodes are **atom actions** — the
 > substrate build unit (ADR-0005, htc-sad §1.5/§6.5), identified by
 > `action_id = H(atom_czd_closure_root, toolchain_composition_root,
-> action_params)`. Earlier revisions of this model used "derivation"
+action_params)`. Earlier revisions of this model used "derivation"
 > for the Nix-native build unit; that mapping is retired except where
 > a passage below is explicitly scoped to the legacy passthrough-snix
 > executor, which still binds `BuildEngine::Plan = Derivation`. See
@@ -48,15 +48,15 @@ bounded performance relative to an optimal offline algorithm.
 
 **Model Scope:**
 
-| In Scope                                   | Out of Scope                              |
-| :----------------------------------------- | :---------------------------------------- |
+| In Scope                                   | Out of Scope                                                    |
+| :----------------------------------------- | :-------------------------------------------------------------- |
 | Entry point DAG construction correctness   | executor internals / within-atom parallelism (upstream make -j) |
-| Dispatch protocol ordering and liveness    | Builder-internal dependency resolution    |
-| CAS-idempotent store deduplication         | Artifact store implementation details     |
-| Coverage property (partition completeness) | Wire protocol (Cap'n Proto serialization) |
-| Consistency/robustness competitive bounds  | Authentication/authorization middleware   |
-| Federated liveness under partition         | Specific hash algorithm (BLAKE3, etc.)    |
-| Historical profile EMA convergence         | Operator tuning parameter selection       |
+| Dispatch protocol ordering and liveness    | Builder-internal dependency resolution                          |
+| CAS-idempotent store deduplication         | Artifact store implementation details                           |
+| Coverage property (partition completeness) | Wire protocol (Cap'n Proto serialization)                       |
+| Consistency/robustness competitive bounds  | Authentication/authorization middleware                         |
+| Federated liveness under partition         | Specific hash algorithm (BLAKE3, etc.)                          |
+| Historical profile EMA convergence         | Operator tuning parameter selection                             |
 
 ## Formalism Selection
 
@@ -260,9 +260,14 @@ software-level performance optimization (Track B) and is omitted
 from the Track A correctness model. In the absence of locks, correct
 build execution under overlapping entry point scopes relies entirely
 on the content-addressed, idempotent storage model (CAS). Simultaneous
-identical builds both write to the store safely, producing identical
-content at identical output-tree digests, ensuring consistency without
-blocking.
+identical builds both write to the store safely — builds are NOT
+assumed bit-deterministic (execution-model.md §2.2): records
+(witnesses) accumulate per request, each downstream branch coheres by
+binding the concrete output digests it consumed, and witness selection
+at request formation is a recorded choice. Safety rests on commutative
+witness accumulation plus per-branch content-addressed coherence, not
+on output determinism (ADR-0006 §4) — consistency without blocking
+either way.
 
 #### State Space
 
@@ -502,7 +507,7 @@ The gap is captured by $\alpha$ — heuristic quality on perfect predictions.
 **Atom-scale re-scoping**: Under the atom-DAG doctrine (ADR-0005), $G'$
 arrives pre-coarsened — every node is already an atom action, not a
 fine-grained, evaluation-expanded Nix derivation. The coarsening gap
-above still stands as an open formal question, but its *practical*
+above still stands as an open formal question, but its _practical_
 weight shrinks: the degenerate identity witness of Theorem 1 ($S = V'$,
 every node its own entry point) was a worst-case corner when $V'$ ranged
 over thousands of derivations; at atom granularity it is closer to the
@@ -594,7 +599,7 @@ This bound is tight — there exist adversarial DAGs that
 achieve it (Graham 1966). However, it is rarely tight in
 practice for build dependency graphs. Empirical studies of
 HEFT on DAGs of comparable size ($|S| \leq 20$) typically
-show 1.1–1.3× optimal — and this regime is *more* representative
+show 1.1–1.3× optimal — and this regime is _more_ representative
 at atom-DAG scale, where a request's entry-point DAG spans dozens
 of atom actions rather than the thousands of fine-grained
 derivations a full Nix evaluation could produce.

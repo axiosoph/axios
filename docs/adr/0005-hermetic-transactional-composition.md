@@ -3,10 +3,10 @@
 - **Status**: PROPOSED (DRAFT)
 - **Date**: 2026-07-05
 - **Deciders**: nrd
-- **Source**: [The Post-Store Substrate](../../.scratch/2026-07-03-post-store-substrate.md)
-  | [Composition Substrate Architecture](../../.scratch/2026-07-04-composition-substrate-architecture.md)
-  | [Substrate Roadmap](../../.scratch/2026-07-04-substrate-roadmap.md)
-  | [HTC SAD](../architecture/htc-sad.md)
+- **Source**: the 2026-07-03/04 composition-substrate design analyses
+  (store-path role decomposition, substrate architecture, and staged
+  roadmap; their load-bearing content is carried by this ADR and the
+  [HTC SAD](../architecture/htc-sad.md))
 - **Supersedes**: [ADR-0002](0002-decoupling-snix-backend.md) §Tier 3
   (Evaluation via Remote Eval Workers), wholesale, including the eval worker
   pool | [ADR-0001](0001-monorepo-workspace-architecture.md) §Decision's
@@ -45,13 +45,13 @@ an eval subsystem as central design.
 The reason to leave Nix's model rather than incrementally patch it is
 structural, not aesthetic. A collision-resistant hash has no accessible
 fixed point: an artifact cannot embed a pointer to its own content hash, so
-any system that embeds hash-pointers *inside* artifacts (as Nix's store
+any system that embeds hash-pointers _inside_ artifacts (as Nix's store
 paths do — `RPATH`, shebangs, baked-in dependency paths) is structurally
 obstructed from being purely content-addressed. Nix's own fix for this
 (content-addressed derivations, [RFC 62][rfc62]) has been unstabilized since
 2019 fighting exactly this obstruction with hash-rewriting and
 self-reference normalization that breaks signatures. Move the pointers
-*beside* the artifact instead of inside it — into a separate, signed,
+_beside_ the artifact instead of inside it — into a separate, signed,
 content-addressed binding object — and the obstruction dissolves by
 construction rather than by patching.
 
@@ -74,7 +74,7 @@ construction rather than by patching.
   `libabigail`). Nobody has composed them into one package substrate.
 - **Axios's own lock is already the composition primitive, one layer up.**
   The keystone lock decided 2026-06-28 — `(set, label) → {version,
-  publish_czd}`, name-anchored, never remotely resolved, store-keyed by
+publish_czd}`, name-anchored, never remotely resolved, store-keyed by
   `blake3(publish_czd)` — is structurally identical to the runtime
   composition object this ADR introduces: a name → signed-content-pointer
   map, itself content-addressed. Dropping the hashed `id` in that decision
@@ -83,7 +83,7 @@ construction rather than by patching.
   It's bindings all the way down.
 - **Eos already schedules over input identity, not over Nix specifically.**
   The Graham/PEFT dispatch theory and its TLA⁺/Lean proofs never inspected
-  what a DAG node *was*, only that nodes are pure actions forming a DAG. The
+  what a DAG node _was_, only that nodes are pure actions forming a DAG. The
   re-scope this ADR makes (atom-level nodes instead of derivation-level
   nodes) is a substitution the theory was already agnostic to.
 - **The doctrine currently contradicts the direction in three places.**
@@ -158,7 +158,7 @@ SAD §2.1, §6.5.
 An interface manifest is `{subject: tree_digest, provides: [(ns, name,
 iface_digest)], requires: [(ns, name, needs)]}` — never a foreign artifact
 hash. It is keyed `(ns, analyzer_czd, subject_digest)` (§5), not by
-`subject` alone: analysis is a pure function of *(analyzer, blob)*, not of
+`subject` alone: analysis is a pure function of _(analyzer, blob)_, not of
 the blob in isolation, since a newer analyzer version can extract
 different facts from the same bytes. **Dynamically observed facts are not
 part of this object.** A manifest's static provides/requires are
@@ -228,19 +228,21 @@ normalization): HTC SAD §4.
 
 ### 8. No Nix language, no nixpkgs in the MVP [htc-no-nix-mvp]
 
+> **SUPERSEDED IN PART by [ADR-0006](0006-execution-as-the-primitive.md)
+> §3 (2026-07-07):** the "optional legacy passthrough-snix executor"
+> allowance below is withdrawn. The executor was never implemented, the
+> system has no users, and the evaluator is asserted unnecessary — there
+> is no legacy escape hatch. The `[compose]` lock surface and
+> `TrivialAtom=Nix` manifest surface died with it; the successor intent
+> schema is the manifest/lock redesign (ADR-0006 §Consequences). The
+> first sentence below stands unchanged and stronger.
+
 The composition substrate ships with no interpreted composition/expression
-language and no dependency on `nixpkgs` as a package corpus. A
+language and no dependency on `nixpkgs` as a package corpus. ~~A
 passthrough-snix executor (linking `snix-eval` to run legacy Nix
-expressions) MAY exist as an **optional legacy escape hatch** for
-interoperating with existing Nix-expression content — it is explicitly not
-the plan, not the default, and not required for the MVP's `eka
-add → resolve → lock → build → analyze → compose → run` path. Any
-`compose`/lock-schema surface that still bakes in a Nix-shaped assumption
-(the `[compose]` NixTrivial variant, `ion-manifest.md`'s `TrivialAtom=Nix`)
-remains valid **only** as the passthrough-snix executor's on-ramp, pending
-the P2 re-derivation of successor compose semantics (recorded as a P2 debt
-— not resolved by this ADR; the spec re-derivation is out of
-this ADR's non-goals).
+expressions) MAY exist as an **optional legacy escape hatch**~~ — withdrawn
+per the supersession note above; no evaluator exists in this design at any
+tier.
 
 ### 9. Layer designation: L2, "Hermetic Transactional Composition" (HTC) [htc-layer-designation]
 
@@ -274,10 +276,12 @@ does not itself edit `layer-boundaries.md` or any spec file).
 **independent processes**, spoken to over gRPC — never linked in-process
 into this substrate's own binaries going forward. The current `eos-snix`
 posture (linking `snix-eval`/`snix-glue`/`nix-compat` in-process, per
-ADR-0002 §Tier 3's "coupling budget") is **explicitly not directional**; it
-survives only as part of the optional passthrough-snix executor (§8). What
+ADR-0002 §Tier 3's "coupling budget") is **explicitly not directional**; ~~it
+survives only as part of the optional passthrough-snix executor (§8)~~ (the
+passthrough executor is removed by [ADR-0006](0006-execution-as-the-primitive.md)
+§3; the `eos-snix` crate is slated for removal). What
 remains genuinely open, and is **deferred to P3** rather than decided here,
-is *which* wire-first implementation: speaking gRPC to unmodified upstream
+is _which_ wire-first implementation: speaking gRPC to unmodified upstream
 snix binaries, or forking-and-simplifying snix (castore + build only, with
 non-trivial modifications) to serve a narrower, purpose-built protocol
 surface. Fork-and-simplify is named as the **likely** path — the licensing
@@ -304,7 +308,7 @@ image / tarball — interop and deployment elsewhere). Full detail: HTC SAD
 `roots = requires(requested artifacts)`; a fixpoint resolves each `Required`
 against a `Provided` in the candidate set, pulling in each chosen
 provider's own requires; the result is augmented with check-phase-observed
-facts and minimized to drop unbound candidates. The result is a *justified*
+facts and minimized to drop unbound candidates. The result is a _justified_
 runtime composition — every entry present because a named require binds to
 it, the justification graph itself storable — replacing Nix's
 over-approximate, under-approximate, unexplainable hash-grep. A missing
@@ -324,7 +328,7 @@ with the exact unsatisfied require. Full derivation: HTC SAD §6.4.
      view + the one function `build` — no lazy functional language, no
      `stdenv`/`cc-wrapper`/patchelf lore, no fixed-output exceptions, no
      `nixpkgs`. Interface manifests are the only genuinely new concept, and
-     they make *explicit* what Nix left as implicit lore (ABI compatibility
+     they make _explicit_ what Nix left as implicit lore (ABI compatibility
      via mass rebuilds, `outputs.dev` splitting conventions).
 2. **Temporal Volatility (Lowy Audit):**
    - **Two independent tracks, cleanly separated by volatility.** Atom
@@ -347,7 +351,7 @@ with the exact unsatisfied require. Full derivation: HTC SAD §6.4.
 - The self-reference obstruction that has stalled Nix's own
   content-addressed derivations for seven years dissolves by construction,
   not by patching.
-- composefs+fs-verity gives kernel-enforced *runtime* closure integrity —
+- composefs+fs-verity gives kernel-enforced _runtime_ closure integrity —
   strictly stronger than Nix's NAR-verification-at-substitution-time-only
   guarantee.
 - LEGO-style substitution (an ABI-compatible security patch swapped into a
@@ -401,8 +405,8 @@ with the exact unsatisfied require. Full derivation: HTC SAD §6.4.
   against.
 - composefs's kernel mount is a genuinely new privilege consideration
   (§Open Items) that ADR-0003's "the store doesn't need root" argument did
-  not anticipate, because that argument was about store *writes*, not
-  runtime view *mounts*.
+  not anticipate, because that argument was about store _writes_, not
+  runtime view _mounts_.
 - Packages that violate either of the two upstream conventions this model
   leans on (fetch separable from build; staged install via `DESTDIR`-style
   prefixes) require the one conventional patch this model still allows —
@@ -412,7 +416,7 @@ with the exact unsatisfied require. Full derivation: HTC SAD §6.4.
 
 - **Composefs mount privilege vs. ADR-0003's zero-root claim.** ADR-0003
   argues no daemon needs root because the snix store doesn't need root
-  privileges to *write*. Mounting a composefs/EROFS view at runtime is a
+  privileges to _write_. Mounting a composefs/EROFS view at runtime is a
   kernel mount operation, which needs either elevated privilege or a user
   namespace — a consideration ADR-0003 did not evaluate because it predates
   this materialization mechanism. Resolve when P3/P4 reach the Fast-tier
@@ -482,8 +486,8 @@ The FHS view is what makes today's unmodified upstream builds work now.
 ### Alt 5: Trace-only closure discovery (Vesta/BuildXL/Riker-style), no declared closure
 
 Rejected as the sole mechanism. Declaration is what makes the guarantee
-*enforceable* before the fact (the sandbox denies out-of-closure reads);
-pure tracing only *measures* after the fact. The substrate uses both:
+_enforceable_ before the fact (the sandbox denies out-of-closure reads);
+pure tracing only _measures_ after the fact. The substrate uses both:
 declaration is the contract, observation is the measurement, and their
 delta is a first-class prunable-bloat artifact — an analysis Nix has no
 analogue for.
@@ -506,15 +510,16 @@ by substituting a composition-shaped plan-equivalent.
   `(anchor, label)`, not a digest of it, and there is no `AtomDigest` of
   identity (atom-sad §6.1, `[identity-content-addressed]`).
 - ~~`"Plan" is the abstract term. For the snix engine, a plan is a
-  derivation (.drv)`~~ (§Decision, the cryptographic-chain prose) → the
+derivation (.drv)`~~ (§Decision, the cryptographic-chain prose) → the
   MVP plan-equivalent is the atom **action**, identified by `action_id`
   ([htc-action-identity], §2). The `BuildEngine::Plan` associated-type
   design is vindicated by this substitution, not broken by it.
 - ~~`NeedsEvaluation { atom: AtomRef }` — nothing cached~~ (§Decision, the
   `BuildPlan` enum) → the three-variant `BuildPlan` cache ladder collapses
-  to two rungs (`Cached`/`NeedsBuild`) for the primary executor;
-  `NeedsEvaluation` survives only inside the optional passthrough-snix
-  executor (§8).
+  to two rungs (`Cached`/`NeedsBuild`); ~~`NeedsEvaluation` survives only
+  inside the optional passthrough-snix executor (§8)~~ — the executor is
+  removed by [ADR-0006](0006-execution-as-the-primitive.md) §3, so the
+  two-variant coproduct stands alone.
 - ~~`Cyphr (L0) → Atom (L1) → Eos (L2) → Ion (L3) → Plugins (L4)`~~
   (§Decision, the workspace-layer diagram) → the full 6-layer stack per
   [htc-layer-designation] (§9).
@@ -536,10 +541,12 @@ superseded wholesale by [htc-atom-dag-executor-trait] (§6) and
 workers for.
 
 Tiers 1, 2, and 4 — store access via gRPC, build dispatch via gRPC with a
-Cap'n Proto shim, compile-time-only type dependencies — are **not**
-superseded; they hold, scoped to the optional passthrough-snix executor,
-and this ADR's [htc-gpl-seam-wire-first] (§10) widens rather than reverses
-the seam they established. The backend-agnostic clause the ADR itself
+Cap'n Proto shim, compile-time-only type dependencies — ~~are **not**
+superseded; they hold, scoped to the optional passthrough-snix executor~~
+were superseded wholesale with the rest of ADR-0002 by
+[ADR-0006](0006-execution-as-the-primitive.md) §3 when the passthrough
+executor was removed; this ADR's [htc-gpl-seam-wire-first] (§10) remains
+the live wire-first posture. The backend-agnostic clause the ADR itself
 states, in §Backend-Agnostic Shim Topology — "\[the snix gRPC affordance\]
 is an affordance of snix's service-oriented architecture, not a design
 requirement of Eos" — is carried forward as continuity evidence: this ADR
@@ -556,16 +563,16 @@ The **verified theory body is untouched by this ADR**: the TLA⁺ models
 (P1–P15), the Lean theorems (Thms 1–7), the PEFT/OCT dispatch algorithm,
 and the delay-credit fairness discipline are node-agnostic and carry over
 to atom-DAG scheduling unchanged, exactly as [htc-atom-dag-executor-trait]
-(§6) states. What is superseded is the plan/drv-DAG *framing* those proofs
+(§6) states. What is superseded is the plan/drv-DAG _framing_ those proofs
 are described through:
 
 - ~~`atom-id = digest(anchor, label) is cryptographically stable across
-  versions`~~ (§The Atom-Id Advantage, restated once more in §Why It Is
+versions`~~ (§The Atom-Id Advantage, restated once more in §Why It Is
   Highly Efficacious for This Domain, item 2 "Atom-id prediction oracle")
   → **CONTRADICTS** the
   keystone identity decision: `AtomId` is the abstract pair `(anchor,
-  label)`, not a digest of it (atom-sad §6.1, `[identity-content-
-  addressed]`). The argument's substance — that atom identity is stable
+label)`, not a digest of it (atom-sad §6.1, `[identity-content-
+addressed]`). The argument's substance — that atom identity is stable
   across builds and therefore a high-quality prediction key — survives
   unchanged over the pair; only the digest formula is wrong and is struck.
 - ~~terminology note casting "plan" as the `[derivation]`-equivalent unit
@@ -574,13 +581,14 @@ are described through:
   `action_id` ([htc-action-identity], §2), not a plan produced by
   evaluating a Nix expression.
 - ~~`Scheduling a plan for build automatically builds all its transitive
-  dependencies. The builder resolves the full dependency chain
-  internally`~~ (§The Plan DAG Problem) → under the executor trait, the
+dependencies. The builder resolves the full dependency chain
+internally`~~ (§The Plan DAG Problem) → under the executor trait, the
   executor builds exactly one atom action; the entry-point/coarsening
   apparatus this premise motivated is reclassified from a core scheduling
-  mechanism to a refinement path available *within* an atom action
-  (upstream's own `make -j`) and, separately, a mechanism the optional
-  passthrough-snix executor still needs for its own legacy DAG shape.
+  mechanism to a refinement path available _within_ an atom action
+  (upstream's own `make -j`). ~~And, separately, a mechanism the optional
+  passthrough-snix executor still needs~~ — executor removed,
+  [ADR-0006](0006-execution-as-the-primitive.md) §3.
 - ~~profiles keyed by the plan's `plan_name` (its `StorePath`-derived,
   version-stable identifier)~~ (§1. Historical Build Profiles) → the
   natural profile key under this ADR is the atom pair / `action_id`, not a

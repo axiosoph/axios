@@ -138,9 +138,12 @@ fn fires(g: &Graph, cfg: &HeuristicConfig, m: &Metrics, v: usize) -> bool {
             // fraction of the total estimated makespan, or the node is
             // individually expensive. Avoids the absolute-threshold
             // over-promotion seen on dense/homogeneous graphs.
-            let cp_frac = if m.cp_max > 0.0 { m.cp[v] / m.cp_max } else { 0.0 };
-            cp_frac > cfg.theta_rel_critical
-                || d > cfg.theta_eff(cfg.theta_cost, conf)
+            let cp_frac = if m.cp_max > 0.0 {
+                m.cp[v] / m.cp_max
+            } else {
+                0.0
+            };
+            cp_frac > cfg.theta_rel_critical || d > cfg.theta_eff(cfg.theta_cost, conf)
         },
         Variant::H6 => {
             // Strict-AND: both CP prominence AND individual cost must fire.
@@ -388,8 +391,8 @@ mod tests {
         // For `mid`: cp(mid) = 3+9 = 12; fan_in(mid) = 1 so convergence = 0; d = 3.
         // With w_critical=1, w_redundancy=1, w_cost=1:
         //   score = 12 + 0 + 3 = 15.
-        // theta_combined=14 (fired), theta_critical=20 (not fired alone), theta_cost=10 (not fired alone).
-        // Confidence gating off (theta_scale=0).
+        // theta_combined=14 (fired), theta_critical=20 (not fired alone), theta_cost=10 (not fired
+        // alone). Confidence gating off (theta_scale=0).
         let json = r#"{
             "nodes": [
                 {"id": "top",  "duration": 1.0},
@@ -406,10 +409,10 @@ mod tests {
         let cfg = HeuristicConfig {
             variant: Variant::H2,
             theta_scale: 0.0,
-            theta_critical: 20.0,   // cp(mid)=12 < 20 → H1 criterion alone wouldn't fire
-            theta_cost: 10.0,       // d(mid)=3 < 10 → troublesome alone wouldn't fire
-            theta_redundancy: 1e9,  // inert
-            theta_combined: 14.0,   // score=15 > 14 → combined fires
+            theta_critical: 20.0, // cp(mid)=12 < 20 → H1 criterion alone wouldn't fire
+            theta_cost: 10.0,     // d(mid)=3 < 10 → troublesome alone wouldn't fire
+            theta_redundancy: 1e9, // inert
+            theta_combined: 14.0, // score=15 > 14 → combined fires
             w_critical: 1.0,
             w_redundancy: 1.0,
             w_cost: 1.0,
@@ -421,9 +424,14 @@ mod tests {
             "H2 must promote `mid` when combined score exceeds theta_combined"
         );
         // Verify H1 alone would NOT have promoted it (sanity cross-check).
-        let h1_cfg = HeuristicConfig { variant: Variant::H1, ..cfg.clone() };
+        let h1_cfg = HeuristicConfig {
+            variant: Variant::H1,
+            ..cfg.clone()
+        };
         assert!(
-            !Coarsening::build(&g, &h1_cfg).entries().contains(&g.index_of("mid").unwrap()),
+            !Coarsening::build(&g, &h1_cfg)
+                .entries()
+                .contains(&g.index_of("mid").unwrap()),
             "H1 must not promote `mid` when no individual criterion fires"
         );
     }
@@ -453,8 +461,8 @@ mod tests {
         let cfg = HeuristicConfig {
             variant: Variant::H3,
             theta_scale: 0.0,
-            theta_critical: 20.0, // cp(shared)=10 < 20 → no fire
-            theta_cost: 15.0,     // d(shared)=10 < 15 → no fire; d(heavy)=20 > 15 → fires
+            theta_critical: 20.0,  // cp(shared)=10 < 20 → no fire
+            theta_cost: 15.0,      // d(shared)=10 < 15 → no fire; d(heavy)=20 > 15 → fires
             theta_redundancy: 5.0, // inert for H3 (no convergence term)
             ..HeuristicConfig::default()
         };
@@ -470,9 +478,14 @@ mod tests {
             "H3 must promote `heavy` via the troublesome-node criterion"
         );
         // Contrast: H1 WOULD promote `shared` via convergence (fan_in=2, d=10, (2-1)*10=10 > 5).
-        let h1_cfg = HeuristicConfig { variant: Variant::H1, ..cfg.clone() };
+        let h1_cfg = HeuristicConfig {
+            variant: Variant::H1,
+            ..cfg.clone()
+        };
         assert!(
-            Coarsening::build(&g, &h1_cfg).entries().contains(&g.index_of("shared").unwrap()),
+            Coarsening::build(&g, &h1_cfg)
+                .entries()
+                .contains(&g.index_of("shared").unwrap()),
             "H1 must promote `shared` via cost-gated convergence (contrast with H3)"
         );
     }
@@ -502,7 +515,10 @@ mod tests {
             "H6: mid not promoted (cost criterion fails)"
         );
         // Contrast: H3 (OR) promotes mid because cp=6 > theta_critical=5.
-        let h3_cfg = HeuristicConfig { variant: Variant::H3, ..cfg.clone() };
+        let h3_cfg = HeuristicConfig {
+            variant: Variant::H3,
+            ..cfg.clone()
+        };
         assert!(
             Coarsening::build(&g, &h3_cfg)
                 .entries()

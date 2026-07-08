@@ -10,7 +10,6 @@ atom-id = { path = "../../atom/atom-id" }
 base64 = "0.22"
 blake3 = "1"
 eos-core = { path = "../eos-core" }
-eos-snix = { path = "../eos-snix" }
 futures = "0.3"
 hex = "0.4"
 nix-compat = { git = "https://github.com/nrdxp/snix.git", branch = "eos-patches" }

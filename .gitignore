@@ -25,6 +25,9 @@ states/
 # Local campaign scratch files
 .scratch/
 
+# Campaign flight recorder (local ledger subrepo)
+.ledger/
+
 .agents
 .prior_art_cache
 

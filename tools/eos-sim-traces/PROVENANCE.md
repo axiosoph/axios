@@ -2,13 +2,13 @@
 
 ## Anchor
 
-| Field | Value |
-| :--- | :--- |
-| Anchor commit | `d010928ab02ae9123365071097e4b8f6e9d529b1` |
-| Hydra eval ID | `1826247` |
-| Hydra jobset | `nixpkgs/unstable` |
-| Build count | 284,864 |
-| Date extracted | 2026-06-14 |
+| Field          | Value                                      |
+| :------------- | :----------------------------------------- |
+| Anchor commit  | `d010928ab02ae9123365071097e4b8f6e9d529b1` |
+| Hydra eval ID  | `1826247`                                  |
+| Hydra jobset   | `nixpkgs/unstable`                         |
+| Build count    | 284,864                                    |
+| Date extracted | 2026-06-14                                 |
 
 ## Discovered API Schema
 
@@ -35,11 +35,13 @@ endpoint is NOT used for extraction — it returns ~100 MB of JSON and times out
 ## Live API Schema Discovery (2026-06-14)
 
 ### `GET /api/latestbuilds` response fields
+
 `job`, `project`, `id`, `finished`, `jobset`, `buildstatus`, `nixname`,
 `timestamp`, `system`. Note: `starttime`, `stoptime`, and `drvpath` are absent
 from the list response; a second `GET /build/{id}` call is required for timing.
 
 ### `GET /build/{id}` response fields
+
 `buildmetrics`, `buildoutputs`, `buildproducts`, `buildstatus`, `drvpath`,
 `finished`, `id`, `job`, `jobset`, `jobsetevals`, `nixname`, `priority`,
 `project`, `releasename`, `starttime`, `stoptime`, `system`, `timestamp`.
@@ -50,6 +52,7 @@ is not available from any Hydra endpoint. Only the top-level build's
 inspection of `hydra-api.yaml`.
 
 ### Jobset behaviour
+
 - `nixpkgs/unstable`: most builds are binary-cache hits (`starttime == stoptime`).
   Some packages (ripgrep, bat, fd) occasionally have real timing.
 - `nixpkgs/staging-next`: rebuilds from scratch; nearly all builds have real
@@ -118,38 +121,38 @@ ends and "prerequisite infrastructure" begins.
 
 ## Duration Source Tiers
 
-| Tier | Source | `measured` flag |
-| :--- | :----- | :---: |
-| 1 | Hydra build record: `stoptime − starttime` | `true` |
-| 2 | Heuristic by drv name pattern | `false` |
+| Tier | Source                                     | `measured` flag |
+| :--- | :----------------------------------------- | :-------------: |
+| 1    | Hydra build record: `stoptime − starttime` |     `true`      |
+| 2    | Heuristic by drv name pattern              |     `false`     |
 
 Tier-2 heuristic parameters (midpoints of stated ranges):
 
-| Pattern | Duration (s) | Range (s) |
-| :--- | :---: | :--- |
-| name contains `gcc`, `clang`, `rustc`, or `llvm` | 510 | 120–900 |
-| name matches `*-source`, `*-src`, `fetch*` | 6 | 2–10 |
-| name contains `doc` or `man` | 17 | 5–30 |
-| name contains `hook`, `setup`, or `wrapper` | 3 | 1–5 |
-| everything else | 75 | 30–120 |
+| Pattern                                          | Duration (s) | Range (s) |
+| :----------------------------------------------- | :----------: | :-------- |
+| name contains `gcc`, `clang`, `rustc`, or `llvm` |     510      | 120–900   |
+| name matches `*-source`, `*-src`, `fetch*`       |      6       | 2–10      |
+| name contains `doc` or `man`                     |      17      | 5–30      |
+| name contains `hook`, `setup`, or `wrapper`      |      3       | 1–5       |
+| everything else                                  |      75      | 30–120    |
 
 ## Plastic Deviations
 
 ### Deviation 1 — Coverage Matrix Size Thresholds
 
 The original spec thresholds (Small < 50, Medium < 500, Large ≥ 500) were
-designed for per-package or synthetic traces.  A nixpkgs **full recursive
+designed for per-package or synthetic traces. A nixpkgs **full recursive
 derivation closure** always includes the nixpkgs bootstrap chain; even the
-smallest packages (jq, ripgrep) have N ≈ 1 000 nodes.  Under the spec
+smallest packages (jq, ripgrep) have N ≈ 1 000 nodes. Under the spec
 thresholds every package would land in "Large", defeating the matrix.
 
 Thresholds are recalibrated to the observed closure-size distribution:
 
-| Bucket | N range | Representative packages |
-| :----- | :------ | :---------------------- |
-| Small  | < 1 100 | jq (979), python3 (1 040) |
+| Bucket | N range     | Representative packages                    |
+| :----- | :---------- | :----------------------------------------- |
+| Small  | < 1 100     | jq (979), python3 (1 040)                  |
 | Medium | 1 100–3 000 | curl (1 200), ripgrep (1 368), git (1 525) |
-| Large  | ≥ 3 000 | ffmpeg (3 211), libreoffice (3 846) |
+| Large  | ≥ 3 000     | ffmpeg (3 211), libreoffice (3 846)        |
 
 **Justification:** nixpkgs derivation closures are fundamentally more granular
 than the spec assumed — off by ≈ 2 orders of magnitude.
@@ -157,7 +160,7 @@ than the spec assumed — off by ≈ 2 orders of magnitude.
 ### Deviation 2 — Coverage Matrix CPR Thresholds
 
 The original spec thresholds (low < 0.5, mid 0.5–2.0, high > 2.0) were designed
-for a broad, synthetic CPR range.  With nixpkgs closures the bootstrap chain
+for a broad, synthetic CPR range. With nixpkgs closures the bootstrap chain
 creates a near-fixed critical-path depth (~188–256 hops across all packages).
 Unit-duration CPR (= P × depth / N where P = 8) always falls in [0.52, 1.54] —
 entirely within the original "mid" [0.5, 2.0] band — making the low and high
@@ -165,14 +168,14 @@ cells structurally unreachable.
 
 Thresholds are recalibrated to discriminate the actual unit-CPR distribution:
 
-| Bucket | CPR range | Representative packages |
-| :----- | :-------- | :---------------------- |
-| Low    | ≤ 0.60    | libreoffice (0.53) |
+| Bucket | CPR range | Representative packages                    |
+| :----- | :-------- | :----------------------------------------- |
+| Low    | ≤ 0.60    | libreoffice (0.53)                         |
 | Mid    | 0.60–1.48 | ffmpeg (0.64), curl (1.45), python3 (1.47) |
-| High   | > 1.48    | jq (1.54) |
+| High   | > 1.48    | jq (1.54)                                  |
 
 **Justification:** the bootstrap chain fixes critical-path depth at 190–256
-hops regardless of package size, so CPR varies only through N.  The recalibrated
+hops regardless of package size, so CPR varies only through N. The recalibrated
 thresholds reflect the observed distribution rather than an unachievable range.
 
 ### Deviation 3 — validate Uses Unit Durations for Coverage Classification
@@ -182,10 +185,10 @@ The `validate` subcommand classifies each trace into coverage cells using
 heuristic durations.
 
 **Justification:** tier-2 heuristics assign large fixed costs to gcc/clang/rustc
-drv names (510 s each).  These names appear at nearly identical depths in every
+drv names (510 s each). These names appear at nearly identical depths in every
 nixpkgs closure (they are part of the shared bootstrap chain), so the heuristic
 CPR is homogenised across all packages — every package maps to mid-CPR regardless
-of structural variation.  Unit durations (1 s per node) remove this confound and
+of structural variation. Unit durations (1 s per node) remove this confound and
 restore the structural discriminability the coverage matrix is meant to capture,
 consistent with the spec's "uniform unit durations as structural proxy when Hydra
 timing is absent."
@@ -195,38 +198,38 @@ timing is absent."
 The trim algorithm cuts at the maximum depth that retains ≥ 500 nodes while
 preserving all fan-in ≥ 3 convergence nodes.
 
-| Package | N (pre-trim) | N (post-trim) | Trim depth | Conv. before | Conv. after |
-| :------ | :----------: | :-----------: | :--------: | :----------: | :---------: |
-| ffmpeg  | 3211 | 3211 | 256 (no trim) | 2288 | 2288 |
-| libreoffice | 3846 | 3846 | 253 (no trim) | 3617 | 3617 |
-| chromium | 3551 | 3551 | 258 (no trim) | 543 | 543 |
+| Package     | N (pre-trim) | N (post-trim) |  Trim depth   | Conv. before | Conv. after |
+| :---------- | :----------: | :-----------: | :-----------: | :----------: | :---------: |
+| ffmpeg      |     3211     |     3211      | 256 (no trim) |     2288     |    2288     |
+| libreoffice |     3846     |     3846      | 253 (no trim) |     3617     |    3617     |
+| chromium    |     3551     |     3551      | 258 (no trim) |     543      |     543     |
 
 All other packages had N < 2 000 and were not trimmed.
 
 All large packages exceeded 2 000 nodes but were retained in full: their deep
 bootstrap chains meant any trim boundary in the ≥ 500-node window would
-have removed all structural variation.  Chromium was extracted with
+have removed all structural variation. Chromium was extracted with
 `--trim-at 10000` to preserve the complete closure.
 
 ## Packages and Coverage
 
 Unit CPR = 8 × depth / N (structural proxy; Hydra timing unavailable for all packages).
 
-| Package | N | depth | unit CPR | Size bucket | CPR bucket | Coverage cells |
-| :------ | :-: | :---: | :------: | :---------: | :--------: | :------------- |
-| jq | 979 | 188 | 1.54 | small | high | small_high_cpr, high_convergence |
-| python3 | 1040 | 190 | 1.47 | small | mid | small_mid_cpr, high_convergence |
-| curl | 1200 | 216 | 1.45 | medium | mid | medium_mid_cpr, high_convergence |
-| ripgrep | 1368 | 233 | 1.37 | medium | mid | medium_mid_cpr, high_convergence |
-| bat | 1369 | 233 | 1.37 | medium | mid | medium_mid_cpr, high_convergence |
-| fd | 1366 | 233 | 1.37 | medium | mid | medium_mid_cpr, high_convergence |
-| openssh | 1415 | 223 | 1.27 | medium | mid | medium_mid_cpr, high_convergence |
-| rustc | 1292 | 225 | 1.40 | medium | mid | medium_mid_cpr, high_convergence |
-| git | 1525 | 232 | 1.22 | medium | mid | medium_mid_cpr, high_convergence |
-| linux | 1456 | 233 | 1.29 | medium | mid | medium_mid_cpr, high_convergence |
-| ffmpeg | 3211 | 256 | 0.64 | large | mid | large_mid_cpr, high_convergence |
-| libreoffice | 3846 | 253 | 0.53 | large | low | large_low_cpr, high_convergence |
-| chromium | 3551 | 258 | 0.58 | large | low | large_low_cpr, high_convergence |
+| Package     |  N   | depth | unit CPR | Size bucket | CPR bucket | Coverage cells                   |
+| :---------- | :--: | :---: | :------: | :---------: | :--------: | :------------------------------- |
+| jq          | 979  |  188  |   1.54   |    small    |    high    | small_high_cpr, high_convergence |
+| python3     | 1040 |  190  |   1.47   |    small    |    mid     | small_mid_cpr, high_convergence  |
+| curl        | 1200 |  216  |   1.45   |   medium    |    mid     | medium_mid_cpr, high_convergence |
+| ripgrep     | 1368 |  233  |   1.37   |   medium    |    mid     | medium_mid_cpr, high_convergence |
+| bat         | 1369 |  233  |   1.37   |   medium    |    mid     | medium_mid_cpr, high_convergence |
+| fd          | 1366 |  233  |   1.37   |   medium    |    mid     | medium_mid_cpr, high_convergence |
+| openssh     | 1415 |  223  |   1.27   |   medium    |    mid     | medium_mid_cpr, high_convergence |
+| rustc       | 1292 |  225  |   1.40   |   medium    |    mid     | medium_mid_cpr, high_convergence |
+| git         | 1525 |  232  |   1.22   |   medium    |    mid     | medium_mid_cpr, high_convergence |
+| linux       | 1456 |  233  |   1.29   |   medium    |    mid     | medium_mid_cpr, high_convergence |
+| ffmpeg      | 3211 |  256  |   0.64   |    large    |    mid     | large_mid_cpr, high_convergence  |
+| libreoffice | 3846 |  253  |   0.53   |    large    |    low     | large_low_cpr, high_convergence  |
+| chromium    | 3551 |  258  |   0.58   |    large    |    low     | large_low_cpr, high_convergence  |
 
 Coverage matrix (6 / 11 cells):
 
@@ -244,9 +247,9 @@ High convergence     | ✓ (all packages)
 The 5 unfilled cells are structurally unavoidable with nixpkgs recursive closures:
 the bootstrap chain creates an **anti-diagonal** in the size × CPR plane —
 larger N drives CPR lower (depth is near-fixed), and smaller N drives CPR
-higher.  Cells on the off-diagonal (small_low_cpr, medium_low_cpr, large_high_cpr,
+higher. Cells on the off-diagonal (small_low_cpr, medium_low_cpr, large_high_cpr,
 medium_high_cpr) require packages that do not exist in the nixpkgs universe at
-this granularity.  Low convergence is absent because every nixpkgs closure
+this granularity. Low convergence is absent because every nixpkgs closure
 converges onto the bootstrap toolchain (max_fanin ≥ 558 for all packages).
 
 ## Measured-Duration Ratio
@@ -261,20 +264,20 @@ The selected build's duration is assigned to the **atom (root) node only**. All
 transitive dependencies remain tier-2 heuristic because Hydra provides no per-step
 timing — transitive deps are binary-cache hits in every nixpkgs eval.
 
-| Package | Hydra build id | Jobset | nixname | Duration (s) | Atom measured |
-| :------ | :------------- | :----- | :------ | :----------: | :-----------: |
-| jq | 328455127 | staging-next | jq-1.8.1 | 20 | true |
-| python3 | 329391844 | unstable | python3-3.13.13 | 0 (cache hit) | false |
-| curl | 328400561 | staging-next | curl-8.20.0 | 33 | true |
-| ripgrep | 331539602 | unstable | ripgrep-15.1.0 | 68 | true |
-| bat | 329109413 | unstable | bat-0.26.1 | 356 | true |
-| fd | 323973745 | unstable | fd-10.4.2 | 130 | true |
-| openssh | 328853533 | staging-next | openssh-10.3p1 | 73 | true |
-| rustc | 323560330 | staging-next | rustc-wrapper-1.94.0 | 1 | true |
-| git | 328842901 | staging-next | git-2.54.0 | 677 | true |
-| ffmpeg | 328722742 | staging-next | ffmpeg-8.1 | 776 | true |
-| libreoffice | 331538425 | unstable | libreoffice-25.8.5.2-wrapped | 1 | true |
-| chromium | (cache hit) | unstable | chromium-138 | 1 (cache hit) | true* |
+| Package     | Hydra build id | Jobset       | nixname                      | Duration (s)  | Atom measured |
+| :---------- | :------------- | :----------- | :--------------------------- | :-----------: | :-----------: |
+| jq          | 328455127      | staging-next | jq-1.8.1                     |      20       |     true      |
+| python3     | 329391844      | unstable     | python3-3.13.13              | 0 (cache hit) |     false     |
+| curl        | 328400561      | staging-next | curl-8.20.0                  |      33       |     true      |
+| ripgrep     | 331539602      | unstable     | ripgrep-15.1.0               |      68       |     true      |
+| bat         | 329109413      | unstable     | bat-0.26.1                   |      356      |     true      |
+| fd          | 323973745      | unstable     | fd-10.4.2                    |      130      |     true      |
+| openssh     | 328853533      | staging-next | openssh-10.3p1               |      73       |     true      |
+| rustc       | 323560330      | staging-next | rustc-wrapper-1.94.0         |       1       |     true      |
+| git         | 328842901      | staging-next | git-2.54.0                   |      677      |     true      |
+| ffmpeg      | 328722742      | staging-next | ffmpeg-8.1                   |      776      |     true      |
+| libreoffice | 331538425      | unstable     | libreoffice-25.8.5.2-wrapped |       1       |     true      |
+| chromium    | (cache hit)    | unstable     | chromium-138                 | 1 (cache hit) |    true\*     |
 
 **Per-package measured ratio:** 1/N (0.0–0.1%) for 9 of 12 packages; 0/N for
 python3 (cache hit). All traces remain "BELOW 40% MEASURED" because only the
@@ -282,9 +285,9 @@ root/atom derivation can receive tier-1 timing — the ~1000–3800 transitive
 dependencies per package are all binary-cache hits in Hydra with no available
 per-node timing in any endpoint.
 
-*chromium: The root atom derivation was a Hydra cache hit (duration 1s, marked
+_chromium: The root atom derivation was a Hydra cache hit (duration 1s, marked
 `measured=true`). The closure contains chromium-specific sub-derivations (e.g.
-`chromium-138-rust-1.86-*`) that match the `^chromium-\d` tier-2a named-package
+`chromium-138-rust-1.86-_`) that match the `^chromium-\d` tier-2a named-package
 rule and receive jittered durations around 10,800s — the documented community
 build time for Chromium on fast hardware. This faithfully represents the build
 cost: the final wrapper is cheap; the actual compilation phases are expensive.
@@ -304,44 +307,44 @@ remain in use for all transitive deps and are documented as estimates.
 
 Generated by `eos-corpus merge-traces` from the 13 per-package base traces.
 
-**Purpose:** test heuristic rankings on the actual EOS scheduler surface.  The
+**Purpose:** test heuristic rankings on the actual EOS scheduler surface. The
 real scheduler merges all requested package closures into a single DAG before
-making EP-selection decisions.  Per-package traces do not capture the elevated
+making EP-selection decisions. Per-package traces do not capture the elevated
 fan-in that shared bootstrap nodes acquire when multiple packages are built
 together.
 
 **Construction:** node deduplication by store-path ID (globally unique at the
-same anchor commit).  Every package root node retains `is_atom=true` in the
-merged graph.  The `store_cached=[]` base trace is paired with
+same anchor commit). Every package root node retains `is_atom=true` in the
+merged graph. The `store_cached=[]` base trace is paired with
 `cold`/`partial`/`warm` cache-state variants generated by `emit_cache_variants`.
 
 **Statistics:**
 
-| Field | Value |
-| :---- | ----: |
-| Total nodes | 4323 |
-| Total edges | 26246 |
-| Atom nodes (package roots) | 13 |
-| True roots (in-degree 0) | 7 |
-| Per-package node sum | 26419 |
-| Deduplication ratio | 84% |
+| Field                      | Value |
+| :------------------------- | ----: |
+| Total nodes                |  4323 |
+| Total edges                | 26246 |
+| Atom nodes (package roots) |    13 |
+| True roots (in-degree 0)   |     7 |
+| Per-package node sum       | 26419 |
+| Deduplication ratio        |   84% |
 
 The 84% reduction confirms the deep shared bootstrap chain (974 nodes common
-to all 13 packages).  Six package atoms have in-degree > 0 in the unified DAG
+to all 13 packages). Six package atoms have in-degree > 0 in the unified DAG
 because other corpus packages depend on them (e.g., python3 has fan-in 316,
 curl has fan-in 22, openssh has fan-in 2).
 
 **Heuristic behaviour on unified DAG (base cache, 8 workers):**
 
-| Variant | Makespan (s) | vs H1 | EPs |
-| :------ | -----------: | ----: | --: |
-| H2 (θ=30) | 55201 | −0.28% | 4279 |
-| H1 | 55358 | 0 | 4228 |
-| H2 (θ=60) | 55358 | ≈0% | 4223 |
-| H3 | 55394 | +0.07% | 4201 |
-| H4 | 55426 | +0.12% | 4217 |
-| H0 | 225636 | +308% | 7 |
+| Variant   | Makespan (s) |  vs H1 |  EPs |
+| :-------- | -----------: | -----: | ---: |
+| H2 (θ=30) |        55201 | −0.28% | 4279 |
+| H1        |        55358 |      0 | 4228 |
+| H2 (θ=60) |        55358 |    ≈0% | 4223 |
+| H3        |        55394 | +0.07% | 4201 |
+| H4        |        55426 | +0.12% | 4217 |
+| H0        |       225636 |  +308% |    7 |
 
 H1 promotes 97.8% of nodes (4228/4323) on the unified DAG because shared
-bootstrap nodes acquire high fan-in.  Rankings are preserved across all cache
+bootstrap nodes acquire high fan-in. Rankings are preserved across all cache
 states (base/cold/partial/warm) and match the per-package study.

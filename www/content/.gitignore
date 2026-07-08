@@ -6,3 +6,7 @@ reference/*.md
 # Dynamically copied Architecture Decision Records and Software Architecture Documents
 architecture/*.md
 !architecture/_index.md
+
+# Dynamically copied formal models
+models/*.md
+!models/_index.md

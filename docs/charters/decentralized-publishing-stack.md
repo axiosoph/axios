@@ -53,7 +53,6 @@ pluggable — the only decisions baked in are the ones that _must_ be.
 
 ## Prerequisites
 
-The existing [ion-atom-restructuring plan](../plans/ion-atom-restructuring.md)
 predates this charter. Its Phase 1 (monorepo scaffold) is a mechanical
 prerequisite: creating workspace directories, skeleton crates, and
 inter-workspace path dependencies. This phase executes directly from the
@@ -75,28 +74,23 @@ that subsequent workstreams populate.
    - Status: **Complete**
 
 2. **Atom Protocol Library** — Establish the protocol foundation: identity primitives (atom-id), URI parsing (atom-uri), trait surface (atom-core), and the git bridge (atom-git). Everything else depends on this.
-   - Spawns: `.sketches/atom-protocol.md`
    - Draws from: existing plan Phases 2–5, informed by the formal model
    - Specification: `docs/specs/atom-transactions.md` (40 constraints, 13 machine-verified)
    - Status: **In Progress** — specification complete, implementation pending
 
 3. **Hermetic Transactional Composition (HTC)** — Build the post-Nix substrate (ADR-0005): the hermetic FHS builder, interface analyzers, the composer, the fetch proxy, and the runtime closure computer. Replaces the input-addressed store path with a pure CAS, a signed composition object, and a mounted view.
-   - Spawns: `.sketches/htc-substrate.md`
    - Draws from: ADR-0005, `docs/architecture/htc-sad.md`
    - Status: Not Started
 
 4. **Eos Scheduling Engine** — Schedule the atom-DAG (ADR-0005): read the DAG directly off atom locks, dispatch builds via the proven Graham/PEFT discipline, and treat the executor (snix or a successor) as a pluggable trait rather than the assumed backend. There is no evaluation stage.
-   - Spawns: `.sketches/eos-runtime.md`
    - Draws from: existing plan Phases 6–8, informed by the formal model and ADR-0005
    - Status: Specs, TLA⁺/Lean proofs, the simulator, and the trace corpus are strong. The Rust implementation is throwaway by doctrine; re-scoping it to the atom-DAG per ADR-0005 has not started.
 
 5. **Ion Frontend** — Build the user-facing layer: CLI, concrete `ion.toml` manifest, SAT resolver, and workspace coordination. Ion is the planner; it decides what to build and dispatches to eos.
-   - Spawns: `.sketches/ion-frontend.md`
    - Draws from: existing plan Phases 9–11, informed by the formal model
    - Status: Not Started
 
 6. **Integration** — End-to-end validation across all workspaces: the full data flow from manifest through resolution, ingestion, scheduling, building, to artifact. Cryptographic chain verification.
-   - Spawns: `.sketches/stack-integration.md`
    - Draws from: existing plan Phase 12
    - Status: Not Started
 
@@ -158,10 +152,9 @@ The following artifacts were produced _before_ this charter existed. They
 established the technical architecture that this charter now frames
 strategically:
 
-- Sketch: [ion-atom-restructuring](../../.sketches/2026-02-07-ion-atom-restructuring.md) (10 challenge iterations)
-- Plan: [ion-atom-restructuring](../plans/ion-atom-restructuring.md) (12-phase execution blueprint)
+- Design history: the 2026-02-07 ion/atom restructuring analysis (10 challenge iterations)
 - ADR: [0001-monorepo-workspace-architecture](../adr/0001-monorepo-workspace-architecture.md)
-- Charter sketch: [charter-framing](../../.sketches/2026-02-15-charter-framing.md)
+- Design history: the 2026-02-15 charter-framing analysis
 
 ### Downstream Artifacts
 
@@ -169,5 +162,4 @@ strategically:
 - Spec: [atom-transactions](../specs/atom-transactions.md) (40 constraints, BCP 14)
 - TLA+: [AtomTransactions](../specs/tla/AtomTransactions.tla) (temporal safety, 2 configs)
 - Alloy: [atom_structure](../specs/alloy/atom_structure.als) (structural assertions, scope 4)
-- Sketch: [atom-protocol-plan](../../.sketches/2026-02-15-atom-protocol-plan.md)
-- Plan: [atom-protocol-library](../plans/atom-protocol-library.md)
+- Design history: the 2026-02-15 atom-protocol planning analysis

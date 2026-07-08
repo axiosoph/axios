@@ -6,15 +6,15 @@ tags = ["general"]
 audience = "Axios stack developers, codebase contributors, and architects"
 +++
 
-The Axios stack is a layered, content-addressed publishing and build system. The codebase is split into three independent Cargo workspaces with a downward-only dependency chain: **Ion (L3)** $\to$ **Eos (L2)** $\to$ **Atom (L1)**.
+The Axios stack is a layered, content-addressed publishing and build system. The codebase is split into three independent Cargo workspaces with a downward-only dependency chain: **Ion (L4)** $\to$ **Eos (L3)** $\to$ **Atom (L1)**. In the stack's layer model, the [HTC substrate](hermetic-transactional-composition.md) (L2) sits between Eos and Atom; its executor trait is the boundary Eos dispatches through.
 
 A standalone utility crate, **alurl**, lives at the repository root. It handles URL alias resolution for `atom-uri`.
 
 ## Workspace organization
 
 - **L1: Atom** (`atom/`) — The protocol layer. Defines package identity (`AtomId`, the abstract `(anchor, label)` pair — not a hash of it), cryptographic signing (via [Coz](https://github.com/Cyphrme/Coz)), content-addressed store references (`publish_czd`, with the store keyed `blake3(publish_czd)`), and transport mapping. Has no knowledge of build environments or dependency resolution. Four crates: `atom-id`, `atom-uri`, `atom-core`, `atom-git`.
-- **L2: Eos** (`eos/`) — The runtime scheduler. Constructs build plans and coordinates cache-skipping, dispatching sandboxed execution to workers behind an executor trait — `eos-snix` today, re-scoping toward [HTC](hermetic-transactional-composition.md)'s executor trait per ADR-0005. Five crates: `eos-core`, `eos`, `eos-snix`, `eos-daemon`, `eos-proto`.
-- **L3: Ion** (`ion/`) — CLI and dependency resolver. Parses manifests (`ion.toml`), resolves the dependency graph with a SAT solver, and writes lockfiles (`ion.lock`). Five crates: `ion-cli`, `ion-manifest`, `ion-lock`, `ion-resolve`, `ion-eos`.
+- **L3: Eos** (`eos/`) — The runtime scheduler. Constructs build plans and coordinates cache-skipping, dispatching sandboxed execution to workers behind [HTC](hermetic-transactional-composition.md)'s executor trait. Five crates: `eos-core`, `eos`, `eos-snix` (slated for removal — the evaluator is deleted from the design, ADR-0006 §3), `eos-daemon`, `eos-proto`.
+- **L4: Ion** (`ion/`) — CLI and dependency resolver. Parses manifests (`ion.toml`), resolves the dependency graph with a SAT solver, and writes lockfiles (`ion.lock`). Five crates: `ion-cli`, `ion-manifest`, `ion-lock`, `ion-resolve`, `ion-eos`.
 - **alurl** (`alurl/`) — URL alias detection and expansion. Resolves `+`-prefixed identifiers (e.g. `+gh/owner/repo`) through configurable alias maps.
 
 L2 crates never import L3. L1 crates never import L2.
@@ -83,7 +83,7 @@ The default implementation of these traits lives in `atom-git`, which maps the o
 
 ### L2: Scheduler interface (eos-core)
 
-The build scheduler separates evaluation from execution:
+The scheduler's current trait predates the execution model and still carries an evaluation step (see the note below the listing):
 
 - `BuildEngine` — Evaluates atom references into build plans, checks the cache, runs sandboxed builds, and extracts artifact metadata.
 
@@ -109,4 +109,4 @@ The build scheduler separates evaluation from execution:
 
 - `ArtifactStore` — Cache and storage interface. Links build artifacts to source atom digests for cache-skipping.
 
-`eos-snix` is the current build engine. Per [ADR-0005](../architecture/0005-hermetic-transactional-composition.md), Eos is re-scoping around [HTC](hermetic-transactional-composition.md)'s executor trait: the `evaluate`/`plan`/`build` split above reflects `BuildEngine`'s pre-substrate design, and the associated `Plan` type is exactly the escape hatch that substitution exercises — `eos-snix` becomes one executor implementation behind that trait rather than the assumed default, and the evaluation step `evaluate` names is being deleted from the design, not deferred.
+Per [ADR-0006](../architecture/0006-execution-as-the-primitive.md), the evaluator is removed from the design entirely: `eos-snix` is slated for removal, the stage `evaluate` names no longer exists, and the trait above is pre-substrate code documented here only until the executor is re-cut around HTC's trait — `execute(request) → record`, with a build as the fully-sandboxed instance. The `evaluate`/`plan`/`build` split reflects the code as it stands today, not the design.

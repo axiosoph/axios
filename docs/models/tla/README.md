@@ -92,13 +92,13 @@ over all transitions), ensuring the system cannot stall indefinitely.
 
 Each model instantiates `EosScheduling` or defines a custom multi-request scenario:
 
-| Model               | Topology           | Primary Concern                                  |
-| :------------------ | :----------------- | :----------------------------------------------- |
-| `LinearModel`       | A → B → C          | Sequential cascade failure                       |
-| `DiamondModel`      | A → {B,C} → D      | Fork/join synchronisation                        |
-| `ConvergenceModel`  | {A,B} → C          | Multi-dependency convergence                     |
-| `IndependentModel`  | A, B, C (no edges) | Capacity bin-packing                             |
-| `MultiRequestModel` | Dynamic merging    | Merging, cache-skip, cancellation, liveness, HoL |
+| Model               | Topology                                          | Primary Concern                                                |
+| :------------------ | :------------------------------------------------ | :------------------------------------------------------------- |
+| `LinearModel`       | A → B → C                                         | Sequential cascade failure                                     |
+| `DiamondModel`      | A → {B,C} → D                                     | Fork/join synchronisation                                      |
+| `ConvergenceModel`  | {A,B} → C                                         | Multi-dependency convergence                                   |
+| `IndependentModel`  | A, B, C (no edges)                                | Capacity bin-packing                                           |
+| `MultiRequestModel` | Dynamic merging                                   | Merging, cache-skip, cancellation, liveness, HoL               |
 | `StarvationModel`   | 1 worker, recurring high-pri stream + low-pri job | Starvation-freedom (P12) of the delay-cost fairness discipline |
 
 ## What the Models Verify

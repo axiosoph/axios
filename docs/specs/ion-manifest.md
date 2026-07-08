@@ -109,12 +109,13 @@ TYPE  TrivialAtom = Nix(PathBuf)              -- nix expression at given path
               | Static(Config)                -- static configuration atom
 ```
 
-> **Note (2026-07-05, no semantic change):** `TrivialAtom::Nix` remains
-> valid today only as the optional passthrough-snix legacy executor's
-> on-ramp; the substrate's successor compose semantics are designed in
-> [ADR-0005](../adr/0005-hermetic-transactional-composition.md) /
-> [htc-sad.md](../architecture/htc-sad.md) — spec re-derivation against
-> that model is **P2** debt, not performed here.
+> **REMOVED (2026-07-07,
+> [ADR-0006](../adr/0006-execution-as-the-primitive.md) §3):** the
+> `Compose`/`TrivialAtom` types above described an evaluator-shaped
+> composer; the evaluator is removed and no composer exists in this
+> design. The type declarations are retained above only until the
+> manifest/lock redesign (ADR-0006 §Consequences) lands the successor
+> intent schema — treat them as dead, not as valid-under-a-legacy-path.
 
 ```
 TYPE  Manifest = {
@@ -218,7 +219,7 @@ output: type tag, name, URL, and hash.
 `VERIFIED: unverified`
 
 > **Note (2026-07-05, P4 flag):** The substrate's record-mode fetch
-> proxy (HTC/L2, `htc-sad.md` §4.2) performs fetch *discovery* during
+> proxy (HTC/L2, `htc-sad.md` §4.2) performs fetch _discovery_ during
 > an explicitly-impure first build and writes results back into the
 > lock — in tension with this invariant's "resolution executes within
 > ion" framing. A carve-out or reframing (the proxy as ion-driven
@@ -340,13 +341,12 @@ nixpkgs.git = "https://github.com/NixOS/nixpkgs"
 nixpkgs.version = ">=24.05"
 ```
 
-> **Note (2026-07-05, no semantic change):** The `compose.with.atom-nix`
-> and `deps.direct.nix` shapes above remain valid today only as the
-> optional passthrough-snix legacy executor's on-ramp; the substrate's
-> successor compose/fetch-plugin semantics are designed in
-> [ADR-0005](../adr/0005-hermetic-transactional-composition.md) /
-> [htc-sad.md](../architecture/htc-sad.md) — spec re-derivation against
-> that model is **P2** debt, not performed here.
+> **REMOVED (2026-07-07,
+> [ADR-0006](../adr/0006-execution-as-the-primitive.md) §3):** the
+> `compose.with.atom-nix` and `deps.direct.nix` shapes above described
+> the evaluator's on-ramp; the evaluator is removed. Successor
+> compose/fetch-plugin semantics are the manifest/lock redesign
+> (ADR-0006 §Consequences) — treat these shapes as dead.
 
 ## Verification
 

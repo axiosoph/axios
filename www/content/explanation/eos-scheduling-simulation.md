@@ -37,9 +37,10 @@ The cost is severe — and it gets worse as the worker pool grows. At 8 workers,
 
 The simulation tested four substantive heuristics. In order of measured performance:
 
-**H4 — cost and fan-in thresholds.** Promote a node if its estimated duration, fan-in count, or subgraph cost exceeds a fixed limit. Simple, but it misses an important class of bottleneck: nodes that aren't expensive in isolation but are expensive *because many things depend on them*. A node that costs 60 seconds and has ten packages waiting on it holds up ten threads of work simultaneously. H4's absolute thresholds can miss this if it doesn't happen to cross any single threshold.
+**H4 — cost and fan-in thresholds.** Promote a node if its estimated duration, fan-in count, or subgraph cost exceeds a fixed limit. Simple, but it misses an important class of bottleneck: nodes that aren't expensive in isolation but are expensive _because many things depend on them_. A node that costs 60 seconds and has ten packages waiting on it holds up ten threads of work simultaneously. H4's absolute thresholds can miss this if it doesn't happen to cross any single threshold.
 
-**H1 — three independent criteria.** Promote a node if *any* of these hold:
+**H1 — three independent criteria.** Promote a node if _any_ of these hold:
+
 - Its contribution to the longest dependency chain (critical path) exceeds a threshold
 - Its **convergence value** — `(fan_in − 1) × duration` — exceeds a threshold
 - Its cost alone exceeds a threshold
@@ -50,13 +51,13 @@ The convergence criterion is what gives H1 its consistent edge over H4. A node w
 
 ## The ranking
 
-| Configuration | Measured gap vs H1 | Stable across conditions? |
-| :------------ | :----------------: | :-----------------------: |
-| H2 (θ_combined = 30) | −0.28 to −0.50% | Yes |
-| H1 (default parameters) | — | reference |
-| H2 (θ_combined = 60, default) | ≈ 0% | Ties H1 |
-| H4 | +0.12 to +0.43% | Yes |
-| H0 | +190 to +308% | Worsens with worker count |
+| Configuration                 | Measured gap vs H1 | Stable across conditions? |
+| :---------------------------- | :----------------: | :-----------------------: |
+| H2 (θ_combined = 30)          |  −0.28 to −0.50%   |            Yes            |
+| H1 (default parameters)       |         —          |         reference         |
+| H2 (θ_combined = 60, default) |        ≈ 0%        |          Ties H1          |
+| H4                            |  +0.12 to +0.43%   |            Yes            |
+| H0                            |   +190 to +308%    | Worsens with worker count |
 
 The H2(θ=30) advantage is smaller on the actual unified DAG (0.28%) than in per-package testing (up to 0.50%). This is expected: when packages share a deep bootstrap chain, H1's convergence criterion already fires on most shared nodes, leaving less work for H2's combined score to improve upon. The advantage is real but more modest in production than the isolated-package numbers suggest.
 

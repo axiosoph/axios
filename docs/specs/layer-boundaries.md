@@ -285,7 +285,7 @@ VERIFIED: _pending_
 Composition) owns:
 
 - **The build function and sandboxed execution**: `build(atom
-  closure, toolchain composition, action params) → output tree`,
+closure, toolchain composition, action params) → output tree`,
   executed by upstream's own unmodified build process inside a
   materialized FHS view via an OCI/bwrap sandbox (`snix-build`,
   reused) — the one function this layer exists to provide (htc-sad.md
@@ -306,7 +306,7 @@ Composition) owns:
 - **Build records**: SLSA-shaped per-action provenance, signed and
   appended via L1's metadata-append channel (htc-sad.md §2.3, §6.10).
 - **Fetch-proxy execution**: the record/replay HTTP(S) CONNECT proxy
-  that *executes* (never declares) the non-atom fetch entries L4
+  that _executes_ (never declares) the non-atom fetch entries L4
   (ion) records as lock plugin entries (htc-sad.md §4.2).
 - **Closure computation**: the satisfaction fixpoint that computes a
   justified runtime composition from declared + observed requires
@@ -322,7 +322,7 @@ L2 MUST NOT own: atom identity or the lock's atom contribution
 (that's L1), dependency resolution, the lock file, fetch-entry
 _declaration_, or the manifest (that's L4), or scheduling policy,
 worker placement, or the atom-DAG (that's L3 — L2 is what L3's
-executor trait dispatches *to*, not the scheduler itself).
+executor trait dispatches _to_, not the scheduler itself).
 
 VERIFIED: _pending_
 
@@ -371,9 +371,9 @@ VERIFIED: _pending_
   dispatched by `type` (e.g. `type = "fetch"`), per
   `[lock-type-extension-mechanism]` (lock-file-schema.md) — ion
   declares, never executes, a fetch (ADR-0005 §7). "Nix expressions"
-  as a dependency class is removed from the MVP taxonomy; it
-  survives only within the optional passthrough-snix legacy
-  executor's scope (htc-sad.md §6.8).
+  as a dependency class is removed from the taxonomy entirely (the
+  passthrough executor allowance was withdrawn by
+  [ADR-0006](../adr/0006-execution-as-the-primitive.md) §3).
 - Lock file → eos contract translation: converting lock file
   content into `eos-core` types (`EvalRequest`, `ResolvedInput`)
 - CLI interface: commands, user-facing output, dev workspace
@@ -486,14 +486,14 @@ After lock file migration, `ion-eos` additionally depends on
 artifact store (L3) are architecturally distinct and MUST NOT
 be conflated.
 
-| Property            | Atom Store (L1)                         | Artifact Store (L3)                   |
-| :------------------ | :-------------------------------------- | :------------------------------------ |
-| **Data**            | Atom source trees (source code)         | Build outputs (derivations, binaries) |
-| **Trait**           | `AtomSource` / `AtomStore` (atom-core)  | `ArtifactStore` (eos-core)            |
-| **Addressing**      | `AtomId` (pair) / `blake3(publish_czd)` | Plan hash / output digest             |
+| Property            | Atom Store (L1)                         | Artifact Store (L3)                                                                                        |
+| :------------------ | :-------------------------------------- | :--------------------------------------------------------------------------------------------------------- |
+| **Data**            | Atom source trees (source code)         | Build outputs (derivations, binaries)                                                                      |
+| **Trait**           | `AtomSource` / `AtomStore` (atom-core)  | `ArtifactStore` (eos-core)                                                                                 |
+| **Addressing**      | `AtomId` (pair) / `blake3(publish_czd)` | Plan hash / output digest                                                                                  |
 | **Primary backend** | git                                     | CAS (L2/HTC; `snix-castore`-backed — the fork-vs-speak-upstream-snix call is deferred to P3, ADR-0005 §10) |
-| **Populated by**    | Ion (ingestion), eos composite source   | Eos (build outputs)                   |
-| **Read by**         | Eos (build inputs via `AtomSource`)     | Eos (cache hits), ion (build results) |
+| **Populated by**    | Ion (ingestion), eos composite source   | Eos (build outputs)                                                                                        |
+| **Read by**         | Eos (build inputs via `AtomSource`)     | Eos (cache hits), ion (build results)                                                                      |
 
 A host MAY run both an atom store and an artifact store, but
 they are logically and physically separate. An implementation
@@ -655,8 +655,8 @@ protocol-native abstractions.
 
 Per the fetch-ownership split ([ADR-0005](../adr/0005-hermetic-transactional-composition.md)
 §7, `[htc-fetch-set-lock-plugin]`): non-atom dependency fetching
-(tarballs, git sources, …) is *declared* at L4 (ion, as lock
-`[[deps]]` entries) and *executed* at L2 (HTC's record/replay
+(tarballs, git sources, …) is _declared_ at L4 (ion, as lock
+`[[deps]]` entries) and _executed_ at L2 (HTC's record/replay
 proxy) — eos owns neither end. `eos/eos/src/fetch.rs` performing
 its own `curl`/`git clone` for these deps is pre-substrate residual
 scope, not an intentional design placement; it is superseded by the
@@ -725,23 +725,23 @@ apply these questions in order:
 
 ## Verification Status
 
-| Constraint                       | Tag                     | Method                              | Status                                            |
-| :------------------------------- | :---------------------- | :---------------------------------- | :------------------------------------------------ |
-| `[boundary-downward-only]`       | `UNVERIFIED`            | `cargo metadata` graph analysis     | Pending CI script                                 |
-| `[boundary-contract-only]`       | `UNVERIFIED`            | `cargo metadata` graph analysis     | Pending CI script                                 |
-| `[boundary-impl-isolation]`      | `UNVERIFIED`            | `cargo metadata` graph analysis     | Pending CI script                                 |
-| `[boundary-intra-workspace]`     | `VERIFIED: agent-check` | By definition (unconstrained)       | Trivially satisfied                               |
-| `[boundary-contract-types]`      | `UNVERIFIED`            | Manual audit                        | No current violations after lock reclassification |
-| `[boundary-contract-dep-budget]` | `UNVERIFIED`            | `cargo metadata` dep count          | Pending CI script                                 |
-| `[boundary-no-backend-leakage]`  | `UNVERIFIED`            | Public API audit                    | Pending                                           |
-| `[boundary-L1-concerns]`         | `VERIFIED: agent-check` | Cross-referenced with ADR-0001      | Consistent                                        |
+| Constraint                       | Tag                     | Method                                    | Status                                                 |
+| :------------------------------- | :---------------------- | :---------------------------------------- | :----------------------------------------------------- |
+| `[boundary-downward-only]`       | `UNVERIFIED`            | `cargo metadata` graph analysis           | Pending CI script                                      |
+| `[boundary-contract-only]`       | `UNVERIFIED`            | `cargo metadata` graph analysis           | Pending CI script                                      |
+| `[boundary-impl-isolation]`      | `UNVERIFIED`            | `cargo metadata` graph analysis           | Pending CI script                                      |
+| `[boundary-intra-workspace]`     | `VERIFIED: agent-check` | By definition (unconstrained)             | Trivially satisfied                                    |
+| `[boundary-contract-types]`      | `UNVERIFIED`            | Manual audit                              | No current violations after lock reclassification      |
+| `[boundary-contract-dep-budget]` | `UNVERIFIED`            | `cargo metadata` dep count                | Pending CI script                                      |
+| `[boundary-no-backend-leakage]`  | `UNVERIFIED`            | Public API audit                          | Pending                                                |
+| `[boundary-L1-concerns]`         | `VERIFIED: agent-check` | Cross-referenced with ADR-0001            | Consistent                                             |
 | `[boundary-L2-concerns]`         | `UNVERIFIED`            | Cross-referenced with ADR-0005/htc-sad.md | New layer (2026-07-05); no crate workspace yet (P3/P4) |
-| `[boundary-L3-concerns]`         | `VERIFIED: agent-check` | Cross-referenced with ADR-0001      | Amended: lock file removed from L3                |
-| `[boundary-L4-concerns]`         | `VERIFIED: agent-check` | Cross-referenced with ADR-0001      | Amended: lock file format added to L4             |
-| `[boundary-L5-concerns]`         | `VERIFIED: agent-check` | Deferred                            | Minimal constraints pending plugin maturity       |
-| `[boundary-lock-ownership]`      | `VERIFIED: agent-check` | Cargo-atom test; format vs contract | §4.2 rationale                                    |
-| `[boundary-bridge-crate]`        | `VERIFIED: agent-check` | `ion-eos` Cargo.toml verified       | Conforms                                          |
-| `[boundary-store-separation]`    | `UNVERIFIED`            | Manual audit                        | New constraint; pending implementation            |
-| `[boundary-ci-enforcement]`      | `UNVERIFIED`            | Script does not yet exist           | Pending implementation                            |
-| `[boundary-crate-metadata]`      | `UNVERIFIED`            | Metadata not yet present            | Pending implementation                            |
-| `[boundary-violation-budget]`    | `UNVERIFIED`            | File does not yet exist             | Pending implementation                            |
+| `[boundary-L3-concerns]`         | `VERIFIED: agent-check` | Cross-referenced with ADR-0001            | Amended: lock file removed from L3                     |
+| `[boundary-L4-concerns]`         | `VERIFIED: agent-check` | Cross-referenced with ADR-0001            | Amended: lock file format added to L4                  |
+| `[boundary-L5-concerns]`         | `VERIFIED: agent-check` | Deferred                                  | Minimal constraints pending plugin maturity            |
+| `[boundary-lock-ownership]`      | `VERIFIED: agent-check` | Cargo-atom test; format vs contract       | §4.2 rationale                                         |
+| `[boundary-bridge-crate]`        | `VERIFIED: agent-check` | `ion-eos` Cargo.toml verified             | Conforms                                               |
+| `[boundary-store-separation]`    | `UNVERIFIED`            | Manual audit                              | New constraint; pending implementation                 |
+| `[boundary-ci-enforcement]`      | `UNVERIFIED`            | Script does not yet exist                 | Pending implementation                                 |
+| `[boundary-crate-metadata]`      | `UNVERIFIED`            | Metadata not yet present                  | Pending implementation                                 |
+| `[boundary-violation-budget]`    | `UNVERIFIED`            | File does not yet exist                   | Pending implementation                                 |
