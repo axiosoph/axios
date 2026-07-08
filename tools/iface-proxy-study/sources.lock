@@ -40,3 +40,30 @@ note = "each row carries the package's own Filename + SHA256 from the Packages i
 [tooling]
 abicompat = "libabigail 2.5.0, via `nix shell nixpkgs#libabigail`"
 objdump = "GNU binutils (system toolchain, gcc-wrapper-15.2.0 nix closure)"
+
+# --- phase 2 (execution ground truth) ---
+#
+# Phase 2 needs a real installable, bootable Debian environment pinned to
+# the same 20241101T025324Z snapshot instant as library-old above, not
+# just individual package files. That environment is built fresh by
+# scripts/phase2/fetch_snapshot_rootfs.sh + Containerfile.base rather than
+# pinned as a blob here, because it's fully reproducible FROM the pins
+# already on this page (same snapshot timestamp, same libssl3 pair) --
+# nothing new to trust, only a different consumption path (apt install of
+# whole packages + their autopkgtests, vs. objdump/abicompat on the ELF).
+#
+# See PHASE2-REPORT.md "Reproducing this run" for the exact commands.
+[phase2-container-base]
+description = "debootstrap of bookworm directly from the 20241101T025324Z snapshot instant (not a rolling docker.io/library/debian:bookworm image -- that was tried first and its already-installed packages were newer than the snapshot, which apt will not auto-downgrade; see PHASE2-REPORT.md Method for why)"
+snapshot-timestamp = "20241101T025324Z"
+apt-sources = [
+  "https://snapshot.debian.org/archive/debian/20241101T025324Z/ bookworm main",
+  "https://snapshot.debian.org/archive/debian-security/20241101T025324Z/ bookworm-security main",
+]
+
+[phase2-sample]
+description = "10 of the 97 phase-1-cleared consumers, deterministic seeded sample (same seed/order convention as phase 1), preferring real autopkgtest coverage over a bare smoke test"
+seed = 42
+size = 10
+population = 97
+note = "walked the seed-42 shuffle of the 97 B-cleared consumers in order, keeping the first 10 with real autopkgtest coverage that is not a bare --version check; 3 substitutions recorded in PHASE2-REPORT.md (ceph-osd: too heavy for the timebox; cargo-web: marginal SSL relevance + heavy Rust toolchain; icinga2-bin: its only autopkgtest is a bare `--version` invocation, explicitly disallowed by the boundary doc)"
