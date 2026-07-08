@@ -31,31 +31,45 @@ guarantees. Compromised source code has potentially infinite blast radius.
 
 An **anchor** is a cryptographic commitment that establishes the identity of
 an atom-set. All atoms within an atom-set share the same anchor. The anchor
-pins the atom-set to an immutable reference point in the source's history.
+pins the atom-set to an owned, signed declaration over the source's history.
 
-The anchor is **abstract** — its derivation is backend-specific:
-
-| Backend | Anchor derivation                                         |
-| :------ | :-------------------------------------------------------- |
-| Git     | Hash of the genesis commit (first commit in repo history) |
-| Other   | Backend-defined; MUST satisfy properties below            |
+**(Amended 2026-07-08 — the charter.)** The anchor is the coz digest of the
+set's **founding charter transaction**: `Anchor := czd(charter₀)`. This
+replaces the earlier backend-specific derivation (git: genesis-commit hash),
+and makes anchor derivation **backend-agnostic**: the charter is a coz
+object regardless of backend; only the interpretation of its `src` field is
+backend-specific. The genesis commit is not lost — a revision hash commits
+to its entire ancestry, so `charter.src` transitively pins the genesis; it
+simply stops being the identity.
 
 An anchor MUST satisfy the following properties:
 
-1. **Immutable**: The anchor for a given source MUST NOT change over time.
-   It is fixed at source creation and persists for the lifetime of the
-   atom-set.
-2. **Content-addressed**: The anchor MUST be a cryptographic digest derived
-   from content, not from metadata that can be externally manipulated.
-3. **Unique**: Two distinct sources MUST NOT produce the same anchor
-   (collision resistance of the underlying hash function).
-4. **Discoverable**: Given access to a source, a consumer MUST be able to
-   independently derive the anchor without trusting the publisher.
+1. **Immutable**: The anchor is fixed at chartering and persists for the
+   lifetime of the atom-set. Successor charters (key rotation, ownership
+   succession) chain to the founding charter and MUST NOT change the
+   anchor (`[charter-succession]`).
+2. **Content-addressed and owned**: The anchor is a coz digest of a
+   _signed_ payload — the trust chain roots at an owned object, not at
+   unowned repository metadata.
+3. **Unique**: Two distinct charters produce distinct anchors (collision
+   resistance of the coz digest; distinct `owner`/`src`/`now` inputs).
+   Two charters over the _same_ source history are two deliberately
+   distinct atom-sets — this is the fork-distinction property
+   (`[charter-fork-distinction]`), not a defect.
+4. **Resolvable**: Given a source and an anchor, a consumer MUST be able
+   to locate the charter (stored in the source's atom refs like any
+   transaction) and verify it against the anchor without trusting the
+   publisher. Given a source alone, a consumer MUST be able to enumerate
+   candidate charters; selecting among them is the consumer's trust
+   decision (the anchor in a lock or URI is that decision, recorded).
 
-**Note on git hash agility** (`[anchor-hash-agile]`): a SHA-256 re-hash of a
-SHA-1 repository history produces a **distinct anchor** and therefore a
-distinct atom-set. Such sources are never silently converted or merged —
-they are treated as two separate repos with no protocol-level relationship.
+**Note on git hash agility** (`[anchor-hash-agile]`): a SHA-256 re-hash of
+a SHA-1 repository rewrites history, so a prior charter's `src` does not
+exist in the re-hashed repository. Continuity across a re-hash is an
+explicit act: a successor charter in the new history, chaining to the
+founding charter (`[charter-succession]`). Absent succession, the
+re-hashed repository is a distinct atom-set — now by explicit rule rather
+than silent consequence.
 
 The anchor feeds into identity: `AtomId = (anchor, label)`. Because
 the anchor is immutable and the label is fixed per atom, the AtomId is
@@ -297,6 +311,23 @@ TYPE  AtomId      = { anchor: Anchor, label: Label }              (atom-id)
   -- Two atoms with the same (anchor, label) ARE the same atom.
   -- NOT a hash — this is the abstract identity pair.
 
+TYPE  CharterPayload = {
+        alg:    Alg,
+        now:    u64,
+        owner:  Vec<u8>,   -- opaque identity digest (same abstraction as claims)
+        prior:  Czd?,      -- OPTIONAL: czd of the charter this one succeeds
+        src:    Vec<u8>,   -- source revision demarking the chartering point
+        tmb:    Tmb,       -- standard Coz: signing key thumbprint
+        typ:    "atom/charter"
+      }                                                           (atom-id)
+  -- CozMessage MUST include `key` field (public key for TOFU).
+  -- The founding charter (no `prior`) DEFINES the set: Anchor :=
+  -- czd(charter₀). A successor charter (with `prior`) MUST be
+  -- authorized by the owner of the charter it succeeds; succession
+  -- preserves the anchor. `src` demarks the chartering point in
+  -- history — everything before it is unowned by this set unless
+  -- claimed after it ("orphaned unless re-claimed").
+
 TYPE  ClaimPayload = {
         alg:    Alg,
         anchor: Anchor,
@@ -309,6 +340,10 @@ TYPE  ClaimPayload = {
         typ:    "atom/claim"
       }                                                           (atom-id)
   -- CozMessage MUST include `key` field (public key for TOFU).
+  -- The `anchor` field IS the chain link to the charter: anchor ==
+  -- czd(charter₀). No separate charter field exists or is needed —
+  -- exactly as publish chains to claim by `claim: Czd`, claim chains
+  -- to charter by `anchor`.
   -- The `src` field cryptographically binds the claim to its temporal
   -- position in history via the signed payload.
   -- The `pkg` field identifies the ecosystem. Implementations SHOULD
@@ -352,6 +387,79 @@ TYPE  VersionScheme = trait {                                      (atom-id)
 ```
 
 ### Invariants
+
+**[charter-typ]**: A charter transaction's payload MUST carry
+`typ: "atom/charter"`.
+`VERIFIED: unverified (pending implementation)`
+
+**[charter-anchor]**: The atom-set's anchor MUST equal the coz digest of
+the founding charter: `Anchor == czd(charter₀)`, where the founding
+charter is the unique charter in the succession chain carrying no
+`prior` field.
+`VERIFIED: unverified (models require extension — see Verification note)`
+
+**[claim-chains-charter]**: Every claim's `anchor` field MUST equal the
+czd of a verifiable charter (founding, or reachable from the founding
+charter via `[charter-succession]`). This is the claim-level analogue of
+`[publish-chains-claim]`: charter : claim :: claim : publish.
+`VERIFIED: unverified (models require extension)`
+
+**[claim-charter-authorization]**: A claim's signing key MUST be
+authorized by the effective charter's `owner`, under the same delegated
+semantics as `[owner-authorization-delegated]`. (The effective charter is
+the latest valid charter in the succession chain at claim time.) This
+replaces unscoped first-come label TOFU with set-governed claiming; open
+or delegated claiming is expressible through the owner abstraction's
+identity frameworks, not through protocol exceptions.
+`VERIFIED: unverified (models require extension)`
+
+**[claim-replacement-authority]**: A claim MAY be replaced by a new
+claim carrying `prior: czd(replaced claim)`, under exactly two
+authorities, distinguishable by every consumer:
+
+- **owner replacement** — signing key authorized by the replaced
+  claim's `owner` (key rotation, identity-framework upgrade): the
+  ordinary path, no special marking.
+- **governance replacement** — signing key authorized by the effective
+  charter's `owner` but NOT by the replaced claim's owner: the
+  replacement payload MUST carry `governance: true`. A governance
+  replacement is a first-class, visible seizure event; consumers' trust
+  policies MUST be able to distinguish it and MAY refuse, warn, or pin
+  the prior owner. Silent seizure is structurally unexpressible.
+
+Publishes chained to a replaced claim remain verifiable history;
+new publishes MUST chain to the current claim.
+`VERIFIED: unverified (models require extension)`
+
+**[charter-ancestry]**: A claim's `src` MUST be a descendant of (or equal
+to) the effective charter's `src`. Together with the existing
+claim→publish ancestry, the temporal floor becomes
+`charter.src ⟶ claim.src ⟶ publish.src`, rooted at a signed object.
+History prior to `charter.src` is visible but unowned by the set —
+**orphaned unless re-claimed** after the chartering point.
+`VERIFIED: unverified (models require extension)`
+
+**[charter-succession]**: A successor charter (carrying `prior`) MUST be
+signed by a key authorized by the owner of the charter named in `prior`,
+and MUST NOT alter the anchor: the anchor remains `czd(charter₀)` for
+the lifetime of the set. Succession is how key rotation and ownership
+transfer occur without identity change (preserving
+`[identity-stability]`). Orphaning is keyed to ANCHOR change and
+therefore occurs only on fork: succession preserves the anchor, so no
+claim or publish is orphaned by rotation or transfer. Note further that
+merely _adding_ a key usually requires no charter at all — hierarchical
+and rooted identity frameworks (`[owner-abstract]`) authorize new keys
+under an unchanged owner digest; succession charters are needed only
+when the owner identity itself changes.
+`VERIFIED: unverified (models require extension)`
+
+**[charter-fork-distinction]**: A charter with no valid succession chain
+from another set's founding charter defines a **distinct atom-set**,
+regardless of shared source history. Forks are therefore explicit by
+construction: a fork cannot share the origin's anchor (it cannot forge
+succession), and cross-fork `(anchor, label)` collision is structurally
+impossible.
+`VERIFIED: unverified (models require extension)`
 
 **[identity-content-addressed]**: An atom's identity (`AtomId`) MUST be
 determined solely by the pair `(anchor, label)`. The `AtomId` MUST NOT
@@ -555,11 +663,29 @@ parameter.
 
 ### Transitions
 
+**[charter-transition]**: An atom-set MAY be chartered by constructing
+a `CharterPayload`, signing it, and producing a `CozMessage` that
+includes the public key.
+
+- **PRE** (founding): no `prior` field; `src` MUST be a revision that
+  exists in the source. The founding charter's czd becomes the
+  atom-set's anchor.
+- **PRE** (successor): `prior` MUST be the czd of a valid charter in
+  this set's succession chain; the signing key MUST be authorized by
+  that charter's `owner`; `now` MUST exceed the prior charter's `now`.
+- **POST**: The charter message is stored in the source's atom refs,
+  enumerable by consumers and retrievable by its czd.
+  `VERIFIED: unverified (pending implementation)`
+
 **[claim-transition]**: An atom MAY be claimed by constructing a
 `ClaimPayload`, signing it with a Coz-compatible key, and producing
 a `CozMessage` that includes the public key.
 
-- **PRE**: `anchor` MUST be a valid anchor for the atom-set.
+- **PRE**: `anchor` MUST equal the czd of the set's founding charter,
+  with a verifiable succession chain to the effective charter; the
+  signing key MUST be authorized by the effective charter's `owner`
+  (`[claim-charter-authorization]`); `src` MUST descend from the
+  effective charter's `src` (`[charter-ancestry]`).
   `label` MUST pass UAX #31 validation. The signing key MUST be
   valid for the specified `alg`. The `CozMessage` MUST include a
   `key` field with the signing public key.
@@ -570,6 +696,19 @@ a `CozMessage` that includes the public key.
 **[publish-transition]**: A version MAY be published for a claimed
 atom by constructing a `PublishPayload`, signing it, and producing
 a `CozMessage`.
+
+**[claim-replacement-transition]**: A claim MAY be replaced per
+`[claim-replacement-authority]` — owner replacement unmarked,
+governance replacement marked `governance: true` — the replacement
+carrying `prior: czd(replaced claim)`. (This defines the transition
+previously referenced by `[owner-compatibility]` but never specified.)
+
+- **PRE**: authority per `[claim-replacement-authority]`; `now` MUST
+  exceed the replaced claim's `now`; `(anchor, label)` MUST be
+  unchanged (replacement never alters identity).
+- **POST**: the replacement is stored alongside the replaced claim;
+  both remain retrievable (history is never erased).
+  `VERIFIED: unverified (pending implementation)`
 
 - **PRE**: `claim` MUST be the `czd` of a valid, non-revoked claim
   for this `(anchor, label)`. `version` MUST be a non-empty string.
@@ -726,19 +865,25 @@ The following defines the normative verification steps for consumers.
 
 ### Local Verification (zero network)
 
-A consumer who has the atom snapshot, publish transaction, and claim
-transaction MUST be able to perform all of the following locally:
+A consumer who has the atom snapshot, publish transaction, claim
+transaction, and charter chain MUST be able to perform all of the
+following locally:
 
 | Step | Check                            | Field(s)                                                             |
 | :--- | :------------------------------- | :------------------------------------------------------------------- |
 | 1    | Atom snapshot hash matches `dig` | `publish.dig`                                                        |
-| 2    | Claim signature valid            | `claim.pay`, `claim.sig`, `claim.key`                                |
-| 3    | Publish signature valid          | `publish.pay`, `publish.sig`, key                                    |
-| 4    | Key thumbprint matches           | `tmb(claim.key) == claim.pay.tmb`                                    |
-| 5    | Publish chains to claim          | `publish.claim == czd(claim)`                                        |
-| 6    | Temporal ordering                | `publish.now > claim.now`                                            |
-| 7    | Signer authorized by owner       | `publish.tmb` authorized by `claim.owner`                            |
-| 8    | AtomId matches payload fields    | extract `(anchor, label)` from payload, compare to expected `AtomId` |
+| 2    | Charter signature(s) valid       | `charter.pay`, `charter.sig`, `charter.key` (each link in the chain) |
+| 3    | Charter chain valid              | each successor's `prior` + signer authorized by prior `owner`        |
+| 4    | Claim signature valid            | `claim.pay`, `claim.sig`, `claim.key`                                |
+| 5    | Publish signature valid          | `publish.pay`, `publish.sig`, key                                    |
+| 6    | Key thumbprints match            | `tmb(x.key) == x.pay.tmb` for charter/claim                          |
+| 7    | Claim chains to charter          | `claim.anchor == czd(charter₀)`                                      |
+| 8    | Publish chains to claim          | `publish.claim == czd(claim)` (current claim per replacement chain)  |
+| 9    | Temporal ordering                | `charter.now < claim.now < publish.now`                              |
+| 10   | Claim signer authorized          | `claim.tmb` authorized by effective charter `owner`                  |
+| 11   | Publish signer authorized        | `publish.tmb` authorized by `claim.owner`                            |
+| 12   | Replacement authority (if any)   | per `[claim-replacement-authority]`; `governance` flag surfaced      |
+| 13   | AtomId matches payload fields    | extract `(anchor, label)` from payload, compare to expected `AtomId` |
 
 ### Provenance Verification (minimal network)
 
@@ -746,14 +891,25 @@ A consumer MAY additionally verify content provenance. The cost is
 backend-dependent but MUST be achievable without fetching full file
 content or the complete source history:
 
-| Step | Check                                       | Requirement                 |
-| :--- | :------------------------------------------ | :-------------------------- |
-| 9    | Fetch source revision metadata at `src`     | Revision metadata only      |
-| 10   | Walk source content tree → `path` → subtree | Content tree structure only |
-| 11   | Subtree hash equals atom content tree hash  | Local comparison            |
-| 12   | Reconstruct atom snapshot → matches `dig`   | Local computation           |
+| Step | Check                                             | Requirement                 |
+| :--- | :------------------------------------------------ | :-------------------------- |
+| 14   | Fetch source revision metadata at `src`           | Revision metadata only      |
+| 15   | Ancestry: `charter.src ⟶ claim.src ⟶ publish.src` | Commit-graph walk only      |
+| 16   | Walk source content tree → `path` → subtree       | Content tree structure only |
+| 17   | Subtree hash equals atom content tree hash        | Local comparison            |
+| 18   | Reconstruct atom snapshot → matches `dig`         | Local computation           |
 
 ## Verification
+
+> [!IMPORTANT]
+> **Charter amendment re-verification (2026-07-08).** The charter
+> transaction changes the trust chain's root and the fork semantics that
+> the TLA+ fork-scenario configuration models. All `[charter-*]`,
+> `[claim-chains-charter]`, `[claim-charter-authorization]`, and
+> `[claim-replacement-authority]` constraints are `unverified` pending
+> extension of both formal models; the existing verified rows below
+> remain valid for the claim/publish subchain but the fork scenario MUST
+> be re-modeled against charter succession before implementation.
 
 **TLA+ model**: `docs/specs/tla/AtomTransactions.tla` verified by TLC
 across two configurations (fork scenario: 31,593 states; distinct-anchor:
