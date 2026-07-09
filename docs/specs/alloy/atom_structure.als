@@ -4,7 +4,10 @@ module atom_structure
 // 1. SIGNATURES (Ontology from Model §1 Olog)
 // ============================================================================
 
-sig Anchor {}
+// [anchor-content-addressed] (amended 2026-07-08): an anchor IS a coz digest --
+// specifically czd(charter_0) -- so at the type level an Anchor is a Czd. The
+// charter facts below pin it to a founding charter's czd.
+sig Anchor in Czd {}
 sig Label {}
 sig Version {}
 sig Owner {}
@@ -62,6 +65,15 @@ sig Publish {
   src: one Src
 }
 
+-- Charter: roots the trust chain (2026-07-08 amendment). A FOUNDING charter
+-- carries no `prior`; its czd is the atom-set anchor. Succession preserves the
+-- anchor for the life of the set.
+sig Charter {
+  prior:    lone Charter,  -- succession link (none => founding charter)
+  czd:      one Czd,       -- content-addressed digest of the signed charter
+  chAnchor: one Anchor     -- the set anchor: czd of the chain's founding charter
+}
+
 -- AtomSource: Read-only trait interface (coalgebra observer)
 sig AtomSource {
   atoms: set AtomId
@@ -85,6 +97,9 @@ fun computeId[a: Anchor, l: Label]: set AtomId {
 pred after_ingest[st: AtomStore, s: AtomSource] {
   s in st.ingested
 }
+
+-- The founding charters: those with no predecessor in their succession chain.
+fun founders: set Charter { { c: Charter | no c.prior } }
 
 -- Fork Scenario: Multiple sources share the same anchor,
 -- different owners claim the same AtomId.
@@ -145,6 +160,22 @@ fact manifest_properties {
   all a: Atom | a.manifest.label = a.label
 }
 
+fact charter_properties {
+  -- Content-addressed digest: czd is injective over the signed charter.
+  all disj c1, c2: Charter | c1.czd != c2.czd
+  -- Succession is a finite chain rooted at a founding charter (acyclic).
+  all c: Charter | c not in c.^prior
+  -- [charter-anchor] / [anchor-content-addressed]: a founding charter's anchor
+  -- is its OWN czd; a successor inherits its prior's anchor, never minting one.
+  all c: Charter | no c.prior implies c.chAnchor = c.czd
+  all c: Charter | some c.prior implies c.chAnchor = c.prior.chAnchor
+  -- Every anchor in use is realized by a founding charter's czd -- content-
+  -- addressed over an owned, signed payload, never source metadata.
+  all a: Anchor | some c: founders | c.czd = a
+  -- [claim-chains-charter]: a claim's anchor is exactly czd(charter_0).
+  all cl: Claim | some c: founders | c.czd = cl.claimAnchor
+}
+
 // ============================================================================
 // 4. ASSERTIONS & VERIFICATIONS
 // ============================================================================
@@ -186,6 +217,30 @@ assert verification_chain {
       computeId[c.claimAnchor, c.claimLabel] = p.atomId
 }
 
+// [anchor-content-addressed]: every anchor resolves to EXACTLY ONE founding
+// charter -- content addressing is unambiguous. This is a joint consequence of
+// the anchor-derivation fact (existence) and czd injectivity (uniqueness); it
+// is NOT a restatement of either -- dropping injectivity yields two founders
+// sharing an anchor and refutes it. An owned, signed charter, never a free or
+// source-derived value.
+assert anchor_content_addressed {
+  all a: Anchor | one c: founders | c.czd = a
+}
+
+// [claim-chains-charter]: every claim's anchor chains to EXACTLY ONE founding
+// charter -- an unforgeable, unambiguous link from claim authority back to the
+// set's founding charter (again existence + injectivity, not a fact restated).
+assert claim_chains_charter {
+  all cl: Claim | one c: founders | c.czd = cl.claimAnchor
+}
+
+// [charter-fork-distinction]: distinct founding charters have distinct anchors
+// (czd is injective), so a cross-fork (anchor, label) collision is structurally
+// impossible -- a fork cannot forge the origin's anchor.
+assert charter_fork_distinction {
+  all disj c1, c2: founders | c1.chAnchor != c2.chAnchor
+}
+
 // ============================================================================
 // 5. RUN / CHECK BLOCKS
 // ============================================================================
@@ -195,5 +250,18 @@ check ownership_independence for 4
 check ingest_preserves_identity for 4
 check anchor_set_coherence for 4
 check verification_chain for 4
+check anchor_content_addressed for 4
+check claim_chains_charter for 4
+check charter_fork_distinction for 4
 
 run fork_scenario for 4
+
+// Charter-rooted fork (the amended fork, re-modeled against charter): two
+// claims by DIFFERENT owners chaining to the SAME founding charter -- the
+// legitimate shared-anchor fork within one set. Must be satisfiable (SAT).
+pred charter_rooted_fork {
+  some c: founders | some disj cl1, cl2: Claim |
+    cl1.claimAnchor = c.czd and cl2.claimAnchor = c.czd and
+    cl1.owner != cl2.owner
+}
+run charter_rooted_fork for 4
