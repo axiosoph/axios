@@ -5,16 +5,15 @@
 //! canonical encoder ([lock-canonical-form]) is a stubbed Phase 2
 //! deliverable — see [`LockFileV2::to_canonical`].
 //!
-//! `anchor`/`charter_head`/`publish` are Coz-signed transaction digests and
-//! use [`atom_id::Czd`] (re-exported from `coz-rs`). `snapshot` and
-//! `fetch.<name>.digest` are algorithm-prefixed content/VCS-object hashes
-//! with no Coz signing structure behind them — no typed wrapper for that
-//! shape exists anywhere in this workspace yet, so they stay `String` at
-//! the skeleton stage (Delegated, IBC N-lockv2 §Decision Rights).
+//! All five digest-shaped fields use [`atom_id::AtomDigest`], the tagged
+//! per-algorithm digest whose `<token>:<encoding>` form is byte-deterministic.
+//! `anchor`/`charter_head`/`publish` are Coz-signed transaction digests
+//! (`sha256`); `snapshot` is a git object id (`sha1`) and `fetch.<name>.digest`
+//! a content hash (`blake3`) — one type spans all three digest sources.
 
 use std::collections::HashMap;
 
-use atom_id::Czd;
+use atom_id::AtomDigest;
 
 /// The v2 lock file: schema version + sets + deps + fetch
 /// (`docs/specs/lock-file-schema.md:119-130`).
@@ -36,16 +35,16 @@ pub struct LockFileV2 {
 /// has no v2 successor — see the schema's `[sets.core]` example).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SetEntry {
-    /// `czd(charter₀)` — the founding-charter digest; immutable for the
-    /// set's lifetime (`[lock-set-anchor]`).
-    pub anchor: Czd,
-    /// Digest of the *effective* (possibly succeeded) charter; equals
+    /// `czd(charter₀)` — the founding-charter digest (`sha256`); immutable for
+    /// the set's lifetime (`[lock-set-anchor]`).
+    pub anchor: AtomDigest,
+    /// Digest of the *effective* (possibly succeeded) charter (`sha256`); equals
     /// `anchor` absent succession, MAY advance, MUST NOT regress
     /// (`[lock-set-charter-head]`).
-    pub charter_head: Czd,
-    /// Algorithm-prefixed object id of the set repository's tip commit at
-    /// discovery time (`[lock-set-snapshot]`).
-    pub snapshot: String,
+    pub charter_head: AtomDigest,
+    /// Object id of the set repository's tip commit at discovery time — a git
+    /// object id (`sha1`) (`[lock-set-snapshot]`).
+    pub snapshot: AtomDigest,
     /// Transport hints (URLs, or the `"::"` local sentinel); never identity
     /// (`[lock-set-mirrors]`).
     pub mirrors: Vec<String>,
@@ -57,8 +56,9 @@ pub struct SetEntry {
 /// the entry itself (all structurally eliminated vs v1's `AtomDep`).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct DepEntry {
-    /// The bare publish czd — this entry's identity (`[lock-dep-publish]`).
-    pub publish: Czd,
+    /// The bare publish czd (`sha256`) — this entry's identity
+    /// (`[lock-dep-publish]`).
+    pub publish: AtomDigest,
     /// Exact, non-empty published version string, byte-verbatim as
     /// published; no normalization (`[lock-dep-version]`).
     pub version: String,
@@ -74,9 +74,9 @@ pub struct DepEntry {
 /// MUST NOT exist").
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct FetchEntry {
-    /// Algorithm-prefixed content digest of the fetched payload — the
-    /// identity (`[lock-fetch-digest]`).
-    pub digest: String,
+    /// Content digest of the fetched payload — the identity; a content hash
+    /// (`blake3`) (`[lock-fetch-digest]`).
+    pub digest: AtomDigest,
     /// Transport hint; MUST NOT be treated as authoritative
     /// (`[lock-fetch-digest]`).
     pub url: String,
@@ -106,8 +106,9 @@ impl LockFileV2 {
 mod tests {
     use super::*;
 
-    fn dummy_czd(seed: u8) -> Czd {
-        Czd::from_bytes(vec![seed; 32])
+    /// A `sha256` [`AtomDigest`] (32 bytes) from a seed — a coz-style digest.
+    fn sha256(seed: u8) -> AtomDigest {
+        atom_id::Czd::from_bytes(vec![seed; 32]).into()
     }
 
     fn sample_lock() -> LockFileV2 {
@@ -115,9 +116,11 @@ mod tests {
         sets.insert(
             "core".to_string(),
             SetEntry {
-                anchor: dummy_czd(1),
-                charter_head: dummy_czd(1),
-                snapshot: "sha1:b03d55e1".to_string(),
+                anchor: sha256(1),
+                charter_head: sha256(1),
+                snapshot: "sha1:b03d55e1b03d55e1b03d55e1b03d55e1b03d55e1"
+                    .parse()
+                    .unwrap(),
                 mirrors: vec!["::".to_string()],
             },
         );
@@ -126,7 +129,7 @@ mod tests {
         core_deps.insert(
             "gcc".to_string(),
             DepEntry {
-                publish: dummy_czd(2),
+                publish: sha256(2),
                 version: "13.3.0".to_string(),
                 requires: vec![],
             },
@@ -138,7 +141,9 @@ mod tests {
         fetch.insert(
             "libfoo-vendor-models".to_string(),
             FetchEntry {
-                digest: "blake3:aa31f6c0".to_string(),
+                digest: "blake3:aa31f6c0aa31f6c0aa31f6c0aa31f6c0aa31f6c0aa31f6c0aa31f6c0aa31f6c0"
+                    .parse()
+                    .unwrap(),
                 url: "https://files.example.com/models-4.2.tar.zst".to_string(),
             },
         );
@@ -166,6 +171,36 @@ mod tests {
             parsed.fetch["libfoo-vendor-models"].url,
             sample_lock().fetch["libfoo-vendor-models"].url
         );
+
+        // c-lock-migrated: one AtomDigest type spans the three digest sources,
+        // each serializing to its tagged `<token>:<enc>` form.
+        assert!(
+            toml_str.contains("sha256:"),
+            "coz digests carry the sha256 token"
+        );
+        assert!(
+            toml_str.contains("sha1:"),
+            "snapshot is a sha1 git object id"
+        );
+        assert!(
+            toml_str.contains("blake3:"),
+            "fetch digest is a blake3 content hash"
+        );
+
+        let core = &parsed.sets["core"];
+        assert_eq!(
+            core.anchor,
+            sample_lock().sets["core"].anchor,
+            "anchor round-trips"
+        );
+        assert!(core.anchor.to_string().starts_with("sha256:"));
+        assert!(core.snapshot.to_string().starts_with("sha1:"));
+        assert!(
+            parsed.fetch["libfoo-vendor-models"]
+                .digest
+                .to_string()
+                .starts_with("blake3:")
+        );
     }
 
     /// c-charter-head-present: SetEntry MUST carry a `charter_head` field
@@ -176,9 +211,11 @@ mod tests {
     #[test]
     fn charter_head_is_distinct_from_anchor() {
         let entry = SetEntry {
-            anchor: dummy_czd(1),
-            charter_head: dummy_czd(2),
-            snapshot: "sha1:deadbeef".to_string(),
+            anchor: sha256(1),
+            charter_head: sha256(2),
+            snapshot: "sha1:deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+                .parse()
+                .unwrap(),
             mirrors: vec!["::".to_string()],
         };
         assert_ne!(entry.anchor, entry.charter_head);
