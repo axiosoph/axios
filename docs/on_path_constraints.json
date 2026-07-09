@@ -4,7 +4,7 @@
       "id": "alias-name-validated",
       "spec_file": "docs/specs/aliased-url-resolution.md",
       "line": 390,
-      "evaluator": "unit-test",
+      "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
     },
@@ -12,7 +12,7 @@
       "id": "classify-transition",
       "spec_file": "docs/specs/aliased-url-resolution.md",
       "line": 242,
-      "evaluator": "pass \u2014 spec_examples_table, empty_input_is_raw, just_plus_alone_is_invalid",
+      "verification_method": "pass \u2014 spec_examples_table, empty_input_is_raw, just_plus_alone_is_invalid",
       "residue": "",
       "spec_status": ""
     },
@@ -20,7 +20,7 @@
       "id": "error-diagnostic",
       "spec_file": "docs/specs/aliased-url-resolution.md",
       "line": 406,
-      "evaluator": "unit-test",
+      "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
     },
@@ -28,7 +28,7 @@
       "id": "expanded-preserves-alias",
       "spec_file": "docs/specs/aliased-url-resolution.md",
       "line": 398,
-      "evaluator": "unit-test",
+      "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
     },
@@ -36,7 +36,7 @@
       "id": "expansion-deterministic",
       "spec_file": "docs/specs/aliased-url-resolution.md",
       "line": 394,
-      "evaluator": "unit-test",
+      "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
     },
@@ -44,7 +44,7 @@
       "id": "host-position-only",
       "spec_file": "docs/specs/aliased-url-resolution.md",
       "line": 389,
-      "evaluator": "unit-test",
+      "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
     },
@@ -52,7 +52,7 @@
       "id": "no-alias-in-metadata",
       "spec_file": "docs/specs/aliased-url-resolution.md",
       "line": 404,
-      "evaluator": "rustc",
+      "verification_method": "rustc",
       "residue": "",
       "spec_status": ""
     },
@@ -60,7 +60,7 @@
       "id": "no-io",
       "spec_file": "docs/specs/aliased-url-resolution.md",
       "line": 400,
-      "evaluator": "rustc",
+      "verification_method": "rustc",
       "residue": "",
       "spec_status": ""
     },
@@ -68,7 +68,7 @@
       "id": "no-partial-expansion",
       "spec_file": "docs/specs/aliased-url-resolution.md",
       "line": 402,
-      "evaluator": "unit-test",
+      "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
     },
@@ -76,7 +76,7 @@
       "id": "no-scheme-injection",
       "spec_file": "docs/specs/aliased-url-resolution.md",
       "line": 403,
-      "evaluator": "unit-test",
+      "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
     },
@@ -84,7 +84,7 @@
       "id": "no-silent-fallback",
       "spec_file": "docs/specs/aliased-url-resolution.md",
       "line": 401,
-      "evaluator": "unit-test",
+      "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
     },
@@ -92,7 +92,7 @@
       "id": "raw-preserves-input",
       "spec_file": "docs/specs/aliased-url-resolution.md",
       "line": 397,
-      "evaluator": "unit-test",
+      "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
     },
@@ -100,7 +100,7 @@
       "id": "recursive-transparent",
       "spec_file": "docs/specs/aliased-url-resolution.md",
       "line": 396,
-      "evaluator": "unit-test",
+      "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
     },
@@ -108,7 +108,7 @@
       "id": "resolution-complexity",
       "spec_file": "docs/specs/aliased-url-resolution.md",
       "line": 405,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -116,7 +116,7 @@
       "id": "resolution-terminates",
       "spec_file": "docs/specs/aliased-url-resolution.md",
       "line": 395,
-      "evaluator": "unit-test",
+      "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
     },
@@ -124,7 +124,7 @@
       "id": "resolve-transition",
       "spec_file": "docs/specs/aliased-url-resolution.md",
       "line": 251,
-      "evaluator": "pass \u2014 spec_examples_table",
+      "verification_method": "pass \u2014 spec_examples_table",
       "residue": "",
       "spec_status": ""
     },
@@ -132,7 +132,7 @@
       "id": "separator-opaque-suffix",
       "spec_file": "docs/specs/aliased-url-resolution.md",
       "line": 391,
-      "evaluator": "unit-test",
+      "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
     },
@@ -140,7 +140,7 @@
       "id": "sigil-required",
       "spec_file": "docs/specs/aliased-url-resolution.md",
       "line": 388,
-      "evaluator": "unit-test",
+      "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
     },
@@ -148,7 +148,7 @@
       "id": "structure-preserving",
       "spec_file": "docs/specs/aliased-url-resolution.md",
       "line": 392,
-      "evaluator": "unit-test",
+      "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
     },
@@ -156,7 +156,7 @@
       "id": "suffix-opaque",
       "spec_file": "docs/specs/aliased-url-resolution.md",
       "line": 393,
-      "evaluator": "unit-test",
+      "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
     },
@@ -164,7 +164,7 @@
       "id": "zero-deps",
       "spec_file": "docs/specs/aliased-url-resolution.md",
       "line": 399,
-      "evaluator": "cargo-dep",
+      "verification_method": "cargo-dep",
       "residue": "",
       "spec_status": ""
     },
@@ -172,7 +172,7 @@
       "id": "aggregation-monotonic",
       "spec_file": "docs/specs/atom-sourcing.md",
       "line": 395,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -180,7 +180,7 @@
       "id": "atom-version-identity",
       "spec_file": "docs/specs/atom-sourcing.md",
       "line": 388,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -188,7 +188,7 @@
       "id": "concurrent-validation-safe",
       "spec_file": "docs/specs/atom-sourcing.md",
       "line": 397,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -196,7 +196,7 @@
       "id": "czd-divergence-handling",
       "spec_file": "docs/specs/atom-sourcing.md",
       "line": 398,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -204,7 +204,7 @@
       "id": "lock-capture",
       "spec_file": "docs/specs/atom-sourcing.md",
       "line": 189,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": "unverified"
     },
@@ -212,7 +212,7 @@
       "id": "lock-entry-sufficient",
       "spec_file": "docs/specs/atom-sourcing.md",
       "line": 391,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -220,7 +220,7 @@
       "id": "mirror-staleness-tolerance",
       "spec_file": "docs/specs/atom-sourcing.md",
       "line": 389,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -228,7 +228,7 @@
       "id": "mirror-validation",
       "spec_file": "docs/specs/atom-sourcing.md",
       "line": 177,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": "unverified"
     },
@@ -236,7 +236,7 @@
       "id": "no-conflicting-digest",
       "spec_file": "docs/specs/atom-sourcing.md",
       "line": 393,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -244,7 +244,7 @@
       "id": "no-cross-set-anchor",
       "spec_file": "docs/specs/atom-sourcing.md",
       "line": 392,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -252,7 +252,7 @@
       "id": "no-unpublished-dependency",
       "spec_file": "docs/specs/atom-sourcing.md",
       "line": 394,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -260,7 +260,7 @@
       "id": "peer-source-last-resort",
       "spec_file": "docs/specs/atom-sourcing.md",
       "line": 374,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": "unverified"
     },
@@ -268,7 +268,7 @@
       "id": "resolution-reproducible",
       "spec_file": "docs/specs/atom-sourcing.md",
       "line": 396,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -276,7 +276,7 @@
       "id": "set-anchor-bijection",
       "spec_file": "docs/specs/atom-sourcing.md",
       "line": 387,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -284,7 +284,7 @@
       "id": "source-discovery",
       "spec_file": "docs/specs/atom-sourcing.md",
       "line": 166,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": "unverified"
     },
@@ -292,7 +292,7 @@
       "id": "version-total-order",
       "spec_file": "docs/specs/atom-sourcing.md",
       "line": 390,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -300,7 +300,7 @@
       "id": "anchor-content-addressed",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1070,
-      "evaluator": "machine (Alloy)",
+      "verification_method": "machine (Alloy)",
       "residue": "",
       "spec_status": ""
     },
@@ -308,7 +308,7 @@
       "id": "anchor-immutable",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1069,
-      "evaluator": "machine (TLC)",
+      "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
     },
@@ -316,7 +316,7 @@
       "id": "anchor-resolvable",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1071,
-      "evaluator": "review-residue",
+      "verification_method": "review-residue",
       "residue": "",
       "spec_status": ""
     },
@@ -324,7 +324,7 @@
       "id": "atom-detached",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1076,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -332,7 +332,7 @@
       "id": "atom-snapshot-reproducible",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1056,
-      "evaluator": "unit-test",
+      "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
     },
@@ -340,7 +340,7 @@
       "id": "atomid-per-source-unique",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1074,
-      "evaluator": "machine (TLC)",
+      "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
     },
@@ -348,7 +348,7 @@
       "id": "backend-agnostic-protocol",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1058,
-      "evaluator": "rustc",
+      "verification_method": "rustc",
       "residue": "",
       "spec_status": ""
     },
@@ -356,7 +356,7 @@
       "id": "backend-bit-perfect",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1073,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -364,7 +364,7 @@
       "id": "chain-monotonicity",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1067,
-      "evaluator": "machine (TLC)",
+      "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
     },
@@ -372,7 +372,7 @@
       "id": "charter-ancestry",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1064,
-      "evaluator": "machine (TLC)",
+      "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
     },
@@ -380,7 +380,7 @@
       "id": "charter-anchor",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1060,
-      "evaluator": "machine (TLC)",
+      "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
     },
@@ -388,7 +388,7 @@
       "id": "charter-fork-distinction",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1068,
-      "evaluator": "machine (Alloy)",
+      "verification_method": "machine (Alloy)",
       "residue": "",
       "spec_status": ""
     },
@@ -396,7 +396,7 @@
       "id": "charter-succession",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1065,
-      "evaluator": "machine (TLC)",
+      "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
     },
@@ -404,7 +404,7 @@
       "id": "charter-succession-linear",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1066,
-      "evaluator": "machine (TLC)",
+      "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
     },
@@ -412,7 +412,7 @@
       "id": "charter-transition",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 715,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": "unverified (pending implementation)"
     },
@@ -420,7 +420,7 @@
       "id": "charter-typ",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1059,
-      "evaluator": "review-residue",
+      "verification_method": "review-residue",
       "residue": "",
       "spec_status": ""
     },
@@ -428,7 +428,7 @@
       "id": "claim-chains-charter",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1061,
-      "evaluator": "machine (Alloy)",
+      "verification_method": "machine (Alloy)",
       "residue": "",
       "spec_status": ""
     },
@@ -436,7 +436,7 @@
       "id": "claim-charter-authorization",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1062,
-      "evaluator": "machine (TLC)",
+      "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
     },
@@ -444,7 +444,7 @@
       "id": "claim-key-required",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1042,
-      "evaluator": "unit-test",
+      "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
     },
@@ -452,7 +452,7 @@
       "id": "claim-payload-extensible",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 873,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": "unverified"
     },
@@ -460,7 +460,7 @@
       "id": "claim-replacement-authority",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1063,
-      "evaluator": "machine (TLC)",
+      "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
     },
@@ -468,7 +468,7 @@
       "id": "claim-replacement-transition",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 754,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": "unverified (pending implementation)"
     },
@@ -476,7 +476,7 @@
       "id": "claim-transition",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1047,
-      "evaluator": "unit-test",
+      "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
     },
@@ -484,7 +484,7 @@
       "id": "claim-typ",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1035,
-      "evaluator": "rustc",
+      "verification_method": "rustc",
       "residue": "",
       "spec_status": ""
     },
@@ -492,7 +492,7 @@
       "id": "composite-source-concurrent",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 252,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": "unverified"
     },
@@ -500,7 +500,7 @@
       "id": "crypto-layer-separation",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1044,
-      "evaluator": "cargo-dep",
+      "verification_method": "cargo-dep",
       "residue": "",
       "spec_status": ""
     },
@@ -508,7 +508,7 @@
       "id": "crypto-via-coz",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1045,
-      "evaluator": "cargo-dep",
+      "verification_method": "cargo-dep",
       "residue": "",
       "spec_status": ""
     },
@@ -516,7 +516,7 @@
       "id": "dig-is-atom-snapshot",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1038,
-      "evaluator": "unit-test",
+      "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
     },
@@ -524,7 +524,7 @@
       "id": "fs-source-contract",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1080,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -532,7 +532,7 @@
       "id": "identity-content-addressed",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1028,
-      "evaluator": "machine (Alloy)",
+      "verification_method": "machine (Alloy)",
       "residue": "",
       "spec_status": ""
     },
@@ -540,7 +540,7 @@
       "id": "identity-stability",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1029,
-      "evaluator": "machine (TLC)",
+      "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
     },
@@ -548,7 +548,7 @@
       "id": "ingest-preserves-identity",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1057,
-      "evaluator": "machine (Alloy)",
+      "verification_method": "machine (Alloy)",
       "residue": "",
       "spec_status": ""
     },
@@ -556,7 +556,7 @@
       "id": "key-management-deferred",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1046,
-      "evaluator": "cargo-dep",
+      "verification_method": "cargo-dep",
       "residue": "",
       "spec_status": ""
     },
@@ -564,7 +564,7 @@
       "id": "manifest-minimal",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1072,
-      "evaluator": "machine (Alloy)",
+      "verification_method": "machine (Alloy)",
       "residue": "",
       "spec_status": ""
     },
@@ -572,7 +572,7 @@
       "id": "no-backdated-publish",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1053,
-      "evaluator": "machine (TLC)",
+      "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
     },
@@ -580,7 +580,7 @@
       "id": "no-cross-layer-crypto",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1052,
-      "evaluator": "cargo-dep",
+      "verification_method": "cargo-dep",
       "residue": "",
       "spec_status": ""
     },
@@ -588,7 +588,7 @@
       "id": "no-duplicate-version",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1051,
-      "evaluator": "machine (TLC)",
+      "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
     },
@@ -596,7 +596,7 @@
       "id": "no-unclaimed-publish",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1050,
-      "evaluator": "machine (TLC)",
+      "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
     },
@@ -604,7 +604,7 @@
       "id": "owner-abstract",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1030,
-      "evaluator": "machine (Alloy)",
+      "verification_method": "machine (Alloy)",
       "residue": "",
       "spec_status": ""
     },
@@ -612,7 +612,7 @@
       "id": "owner-authorization-delegated",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1032,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -620,7 +620,7 @@
       "id": "owner-compatibility",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1031,
-      "evaluator": "machine (Alloy)",
+      "verification_method": "machine (Alloy)",
       "residue": "",
       "spec_status": ""
     },
@@ -628,7 +628,7 @@
       "id": "path-is-subdir",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1040,
-      "evaluator": "rustc",
+      "verification_method": "rustc",
       "residue": "",
       "spec_status": ""
     },
@@ -636,7 +636,7 @@
       "id": "publish-chains-claim",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1034,
-      "evaluator": "machine (TLC)",
+      "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
     },
@@ -644,7 +644,7 @@
       "id": "publish-claim-coherence",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1075,
-      "evaluator": "machine (TLC)",
+      "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
     },
@@ -652,7 +652,7 @@
       "id": "publish-key-optional",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1043,
-      "evaluator": "unit-test",
+      "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
     },
@@ -660,7 +660,7 @@
       "id": "publish-payload-extensible",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1079,
-      "evaluator": "unit-test",
+      "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
     },
@@ -668,7 +668,7 @@
       "id": "publish-transition",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1048,
-      "evaluator": "unit-test",
+      "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
     },
@@ -676,7 +676,7 @@
       "id": "publish-typ",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1036,
-      "evaluator": "rustc",
+      "verification_method": "rustc",
       "residue": "",
       "spec_status": ""
     },
@@ -684,7 +684,7 @@
       "id": "rawversion-opaque",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1041,
-      "evaluator": "rustc",
+      "verification_method": "rustc",
       "residue": "",
       "spec_status": ""
     },
@@ -692,7 +692,7 @@
       "id": "session-ordering",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1049,
-      "evaluator": "machine (TLC)",
+      "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
     },
@@ -700,7 +700,7 @@
       "id": "sig-over-pay",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1037,
-      "evaluator": "unit-test",
+      "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
     },
@@ -708,7 +708,7 @@
       "id": "src-is-source-revision",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1039,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -716,7 +716,7 @@
       "id": "symmetric-payloads",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1033,
-      "evaluator": "rustc",
+      "verification_method": "rustc",
       "residue": "",
       "spec_status": ""
     },
@@ -724,7 +724,7 @@
       "id": "trait-async-io",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 196,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": "unverified"
     },
@@ -732,7 +732,7 @@
       "id": "trait-signature-pure",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1078,
-      "evaluator": "rustc",
+      "verification_method": "rustc",
       "residue": "",
       "spec_status": ""
     },
@@ -740,7 +740,7 @@
       "id": "uri-not-metadata",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1077,
-      "evaluator": "rustc",
+      "verification_method": "rustc",
       "residue": "",
       "spec_status": ""
     },
@@ -748,7 +748,7 @@
       "id": "verification-local",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1054,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -756,7 +756,7 @@
       "id": "verification-provenance",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1055,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -764,7 +764,7 @@
       "id": "action-cache-idempotency",
       "spec_file": "docs/specs/eos-build-engine.md",
       "line": 337,
-      "evaluator": "Concurrent tests",
+      "verification_method": "Concurrent tests",
       "residue": "",
       "spec_status": ""
     },
@@ -772,7 +772,7 @@
       "id": "apply-cleanup-on-abort",
       "spec_file": "docs/specs/eos-build-engine.md",
       "line": 338,
-      "evaluator": "Temporary leak check",
+      "verification_method": "Temporary leak check",
       "residue": "",
       "spec_status": ""
     },
@@ -780,7 +780,7 @@
       "id": "engine-apply",
       "spec_file": "docs/specs/eos-build-engine.md",
       "line": 333,
-      "evaluator": "Sandbox execute tests",
+      "verification_method": "Sandbox execute tests",
       "residue": "",
       "spec_status": ""
     },
@@ -788,7 +788,7 @@
       "id": "engine-plan",
       "spec_file": "docs/specs/eos-build-engine.md",
       "line": 332,
-      "evaluator": "State transition audit",
+      "verification_method": "State transition audit",
       "residue": "",
       "spec_status": ""
     },
@@ -796,7 +796,7 @@
       "id": "eos-atom-index-ingest",
       "spec_file": "docs/specs/eos-build-engine.md",
       "line": 331,
-      "evaluator": "Integration tests",
+      "verification_method": "Integration tests",
       "residue": "",
       "spec_status": ""
     },
@@ -804,7 +804,7 @@
       "id": "eos-bisimulation-equivalence",
       "spec_file": "docs/specs/eos-build-engine.md",
       "line": 327,
-      "evaluator": "Equivalence tests",
+      "verification_method": "Equivalence tests",
       "residue": "",
       "spec_status": ""
     },
@@ -812,7 +812,7 @@
       "id": "eos-cache-determinism",
       "spec_file": "docs/specs/eos-build-engine.md",
       "line": 329,
-      "evaluator": "Cache hits test",
+      "verification_method": "Cache hits test",
       "residue": "",
       "spec_status": ""
     },
@@ -820,7 +820,7 @@
       "id": "eos-immutable-store",
       "spec_file": "docs/specs/eos-build-engine.md",
       "line": 328,
-      "evaluator": "Host filesystem audit",
+      "verification_method": "Host filesystem audit",
       "residue": "",
       "spec_status": ""
     },
@@ -828,7 +828,7 @@
       "id": "eos-no-unverified-execution",
       "spec_file": "docs/specs/eos-build-engine.md",
       "line": 323,
-      "evaluator": "Sandbox integration tests",
+      "verification_method": "Sandbox integration tests",
       "residue": "",
       "spec_status": ""
     },
@@ -836,7 +836,7 @@
       "id": "eos-sandbox-host-isolation",
       "spec_file": "docs/specs/eos-build-engine.md",
       "line": 325,
-      "evaluator": "Directory permission checks",
+      "verification_method": "Directory permission checks",
       "residue": "",
       "spec_status": ""
     },
@@ -844,7 +844,7 @@
       "id": "eos-sandbox-network-containment",
       "spec_file": "docs/specs/eos-build-engine.md",
       "line": 324,
-      "evaluator": "Sandbox profile check",
+      "verification_method": "Sandbox profile check",
       "residue": "",
       "spec_status": ""
     },
@@ -852,7 +852,7 @@
       "id": "eos-sandbox-reproducibility",
       "spec_file": "docs/specs/eos-build-engine.md",
       "line": 326,
-      "evaluator": "Binary hash equivalence",
+      "verification_method": "Binary hash equivalence",
       "residue": "",
       "spec_status": ""
     },
@@ -860,7 +860,7 @@
       "id": "eos-transitive-closure",
       "spec_file": "docs/specs/eos-build-engine.md",
       "line": 330,
-      "evaluator": "Reference scanner test",
+      "verification_method": "Reference scanner test",
       "residue": "",
       "spec_status": ""
     },
@@ -868,7 +868,7 @@
       "id": "eos-verification-obligation",
       "spec_file": "docs/specs/eos-build-engine.md",
       "line": 320,
-      "evaluator": "Unit tests",
+      "verification_method": "Unit tests",
       "residue": "",
       "spec_status": ""
     },
@@ -876,7 +876,7 @@
       "id": "eos-verify-ownership",
       "spec_file": "docs/specs/eos-build-engine.md",
       "line": 321,
-      "evaluator": "Cryptographic sign check",
+      "verification_method": "Cryptographic sign check",
       "residue": "",
       "spec_status": ""
     },
@@ -884,7 +884,7 @@
       "id": "eos-verify-plugin-deps",
       "spec_file": "docs/specs/eos-build-engine.md",
       "line": 322,
-      "evaluator": "Hash verification tests",
+      "verification_method": "Hash verification tests",
       "residue": "",
       "spec_status": ""
     },
@@ -892,7 +892,7 @@
       "id": "no-dirty-store-paths",
       "spec_file": "docs/specs/eos-build-engine.md",
       "line": 336,
-      "evaluator": "Integrity validation",
+      "verification_method": "Integrity validation",
       "residue": "",
       "spec_status": ""
     },
@@ -900,7 +900,7 @@
       "id": "no-speculative-writes",
       "spec_file": "docs/specs/eos-build-engine.md",
       "line": 335,
-      "evaluator": "Aborted commit audit",
+      "verification_method": "Aborted commit audit",
       "residue": "",
       "spec_status": ""
     },
@@ -908,7 +908,7 @@
       "id": "no-undeclared-inputs",
       "spec_file": "docs/specs/eos-build-engine.md",
       "line": 334,
-      "evaluator": "Environment sanitization check",
+      "verification_method": "Environment sanitization check",
       "residue": "",
       "spec_status": ""
     },
@@ -916,7 +916,7 @@
       "id": "attach-progress",
       "spec_file": "docs/specs/eos-network-protocol.md",
       "line": 1090,
-      "evaluator": "Integration test",
+      "verification_method": "Integration test",
       "residue": "",
       "spec_status": ""
     },
@@ -924,7 +924,7 @@
       "id": "cancel-build",
       "spec_file": "docs/specs/eos-network-protocol.md",
       "line": 1092,
-      "evaluator": "Integration test",
+      "verification_method": "Integration test",
       "residue": "",
       "spec_status": ""
     },
@@ -932,7 +932,7 @@
       "id": "capability-cleanup-on-disconnect",
       "spec_file": "docs/specs/eos-network-protocol.md",
       "line": 1103,
-      "evaluator": "Stress test",
+      "verification_method": "Stress test",
       "residue": "",
       "spec_status": ""
     },
@@ -940,7 +940,7 @@
       "id": "client-connect",
       "spec_file": "docs/specs/eos-network-protocol.md",
       "line": 1088,
-      "evaluator": "Unit test",
+      "verification_method": "Unit test",
       "residue": "",
       "spec_status": ""
     },
@@ -948,7 +948,7 @@
       "id": "client-disconnect",
       "spec_file": "docs/specs/eos-network-protocol.md",
       "line": 1094,
-      "evaluator": "Integration test",
+      "verification_method": "Integration test",
       "residue": "",
       "spec_status": ""
     },
@@ -956,7 +956,7 @@
       "id": "daemon-shutdown",
       "spec_file": "docs/specs/eos-network-protocol.md",
       "line": 1095,
-      "evaluator": "Integration test",
+      "verification_method": "Integration test",
       "residue": "",
       "spec_status": ""
     },
@@ -964,7 +964,7 @@
       "id": "daemon-startup",
       "spec_file": "docs/specs/eos-network-protocol.md",
       "line": 1087,
-      "evaluator": "Integration test",
+      "verification_method": "Integration test",
       "residue": "",
       "spec_status": ""
     },
@@ -972,7 +972,7 @@
       "id": "detach-progress",
       "spec_file": "docs/specs/eos-network-protocol.md",
       "line": 1091,
-      "evaluator": "Integration test",
+      "verification_method": "Integration test",
       "residue": "",
       "spec_status": ""
     },
@@ -980,7 +980,7 @@
       "id": "eos-capability-lifecycle",
       "spec_file": "docs/specs/eos-network-protocol.md",
       "line": 1083,
-      "evaluator": "Integration test",
+      "verification_method": "Integration test",
       "residue": "",
       "spec_status": ""
     },
@@ -988,7 +988,7 @@
       "id": "eos-discovery-read-only",
       "spec_file": "docs/specs/eos-network-protocol.md",
       "line": 1104,
-      "evaluator": "API audit",
+      "verification_method": "API audit",
       "residue": "",
       "spec_status": ""
     },
@@ -996,7 +996,7 @@
       "id": "eos-network-sovereign-auth",
       "spec_file": "docs/specs/eos-network-protocol.md",
       "line": 1078,
-      "evaluator": "Unit tests",
+      "verification_method": "Unit tests",
       "residue": "",
       "spec_status": ""
     },
@@ -1004,7 +1004,7 @@
       "id": "eos-origin-attestation",
       "spec_file": "docs/specs/eos-network-protocol.md",
       "line": 1080,
-      "evaluator": "Signature check",
+      "verification_method": "Signature check",
       "residue": "",
       "spec_status": ""
     },
@@ -1012,7 +1012,7 @@
       "id": "eos-progress-multiplexing",
       "spec_file": "docs/specs/eos-network-protocol.md",
       "line": 1084,
-      "evaluator": "Integration test",
+      "verification_method": "Integration test",
       "residue": "",
       "spec_status": ""
     },
@@ -1020,7 +1020,7 @@
       "id": "eos-protocol-capability-matching",
       "spec_file": "docs/specs/eos-network-protocol.md",
       "line": 1081,
-      "evaluator": "Handshake test",
+      "verification_method": "Handshake test",
       "residue": "",
       "spec_status": ""
     },
@@ -1028,7 +1028,7 @@
       "id": "eos-signature-freshness",
       "spec_file": "docs/specs/eos-network-protocol.md",
       "line": 1082,
-      "evaluator": "Replay test",
+      "verification_method": "Replay test",
       "residue": "",
       "spec_status": ""
     },
@@ -1036,7 +1036,7 @@
       "id": "eos-transport-agnosticism",
       "spec_file": "docs/specs/eos-network-protocol.md",
       "line": 1085,
-      "evaluator": "Integration test",
+      "verification_method": "Integration test",
       "residue": "",
       "spec_status": ""
     },
@@ -1044,7 +1044,7 @@
       "id": "eos-trustless-substitution",
       "spec_file": "docs/specs/eos-network-protocol.md",
       "line": 1079,
-      "evaluator": "Integration test",
+      "verification_method": "Integration test",
       "residue": "",
       "spec_status": ""
     },
@@ -1052,7 +1052,7 @@
       "id": "eos-wot-substitution-threshold",
       "spec_file": "docs/specs/eos-network-protocol.md",
       "line": 1086,
-      "evaluator": "Policy test",
+      "verification_method": "Policy test",
       "residue": "",
       "spec_status": ""
     },
@@ -1060,7 +1060,7 @@
       "id": "eventual-cache-consistency",
       "spec_file": "docs/specs/eos-network-protocol.md",
       "line": 1101,
-      "evaluator": "Integration test",
+      "verification_method": "Integration test",
       "residue": "",
       "spec_status": ""
     },
@@ -1068,7 +1068,7 @@
       "id": "no-cancel-on-drop",
       "spec_file": "docs/specs/eos-network-protocol.md",
       "line": 1099,
-      "evaluator": "Integration test",
+      "verification_method": "Integration test",
       "residue": "",
       "spec_status": ""
     },
@@ -1076,7 +1076,7 @@
       "id": "no-unattested-substitution",
       "spec_file": "docs/specs/eos-network-protocol.md",
       "line": 1096,
-      "evaluator": "Policy audit",
+      "verification_method": "Policy audit",
       "residue": "",
       "spec_status": ""
     },
@@ -1084,7 +1084,7 @@
       "id": "no-unauthenticated-capability",
       "spec_file": "docs/specs/eos-network-protocol.md",
       "line": 1100,
-      "evaluator": "Integration test",
+      "verification_method": "Integration test",
       "residue": "",
       "spec_status": ""
     },
@@ -1092,7 +1092,7 @@
       "id": "no-unauthorized-handshake",
       "spec_file": "docs/specs/eos-network-protocol.md",
       "line": 1098,
-      "evaluator": "Signature check",
+      "verification_method": "Signature check",
       "residue": "",
       "spec_status": ""
     },
@@ -1100,7 +1100,7 @@
       "id": "no-unencrypted-secrets",
       "spec_file": "docs/specs/eos-network-protocol.md",
       "line": 1097,
-      "evaluator": "Code audit",
+      "verification_method": "Code audit",
       "residue": "",
       "spec_status": ""
     },
@@ -1108,7 +1108,7 @@
       "id": "reproducible-build-consensus",
       "spec_file": "docs/specs/eos-network-protocol.md",
       "line": 1102,
-      "evaluator": "Consensus test",
+      "verification_method": "Consensus test",
       "residue": "",
       "spec_status": ""
     },
@@ -1116,7 +1116,7 @@
       "id": "request-substitute",
       "spec_file": "docs/specs/eos-network-protocol.md",
       "line": 1093,
-      "evaluator": "Integration test",
+      "verification_method": "Integration test",
       "residue": "",
       "spec_status": ""
     },
@@ -1124,7 +1124,7 @@
       "id": "submit-build",
       "spec_file": "docs/specs/eos-network-protocol.md",
       "line": 1089,
-      "evaluator": "Integration test",
+      "verification_method": "Integration test",
       "residue": "",
       "spec_status": ""
     },
@@ -1132,7 +1132,7 @@
       "id": "eos-build-sandbox-delegation",
       "spec_file": "docs/specs/eos-sandboxing.md",
       "line": 242,
-      "evaluator": "Architecture audit",
+      "verification_method": "Architecture audit",
       "residue": "",
       "spec_status": ""
     },
@@ -1140,7 +1140,7 @@
       "id": "eos-build-sandbox-host-isolation",
       "spec_file": "docs/specs/eos-sandboxing.md",
       "line": 243,
-      "evaluator": "Filesystem probe test",
+      "verification_method": "Filesystem probe test",
       "residue": "",
       "spec_status": ""
     },
@@ -1148,7 +1148,7 @@
       "id": "eos-build-sandbox-network-containment",
       "spec_file": "docs/specs/eos-sandboxing.md",
       "line": 240,
-      "evaluator": "Build socket test",
+      "verification_method": "Build socket test",
       "residue": "",
       "spec_status": ""
     },
@@ -1156,7 +1156,7 @@
       "id": "eos-sandbox-fhs-materialization",
       "spec_file": "docs/specs/eos-sandboxing.md",
       "line": 239,
-      "evaluator": "Sandbox mount test",
+      "verification_method": "Sandbox mount test",
       "residue": "",
       "spec_status": ""
     },
@@ -1164,7 +1164,7 @@
       "id": "eos-sandbox-materialization-tiers",
       "spec_file": "docs/specs/eos-sandboxing.md",
       "line": 244,
-      "evaluator": "Tier dispatch test",
+      "verification_method": "Tier dispatch test",
       "residue": "",
       "spec_status": ""
     },
@@ -1172,7 +1172,7 @@
       "id": "eos-sandbox-read-set-capture",
       "spec_file": "docs/specs/eos-sandboxing.md",
       "line": 241,
-      "evaluator": "FUSE log inspection",
+      "verification_method": "FUSE log inspection",
       "residue": "",
       "spec_status": ""
     },
@@ -1180,7 +1180,7 @@
       "id": "no-fetch-outside-recorded-set",
       "spec_file": "docs/specs/eos-sandboxing.md",
       "line": 245,
-      "evaluator": "Replay-mode fuzz test",
+      "verification_method": "Replay-mode fuzz test",
       "residue": "",
       "spec_status": ""
     },
@@ -1188,7 +1188,7 @@
       "id": "no-read-outside-declared-closure",
       "spec_file": "docs/specs/eos-sandboxing.md",
       "line": 246,
-      "evaluator": "Sandbox escape test",
+      "verification_method": "Sandbox escape test",
       "residue": "",
       "spec_status": ""
     },
@@ -1196,7 +1196,7 @@
       "id": "no-write-outside-build-scratch",
       "spec_file": "docs/specs/eos-sandboxing.md",
       "line": 247,
-      "evaluator": "Sandbox escape test",
+      "verification_method": "Sandbox escape test",
       "residue": "",
       "spec_status": ""
     },
@@ -1204,7 +1204,7 @@
       "id": "assign-job",
       "spec_file": "docs/specs/eos-scheduler.md",
       "line": 289,
-      "evaluator": "TLA+ model check + unit test",
+      "verification_method": "TLA+ model check + unit test",
       "residue": "",
       "spec_status": ""
     },
@@ -1212,7 +1212,7 @@
       "id": "bounded-window-dispatch",
       "spec_file": "docs/specs/eos-scheduler.md",
       "line": 265,
-      "evaluator": "TLA+ WorkConservation (P9\u2032) \u2014 docs/models/tla/MultiRequestModel.tla:339-344",
+      "verification_method": "TLA+ WorkConservation (P9\u2032) \u2014 docs/models/tla/MultiRequestModel.tla:339-344",
       "residue": "",
       "spec_status": ""
     },
@@ -1220,7 +1220,7 @@
       "id": "bounded-window-dispatch` (P9\u2032)",
       "spec_file": "docs/specs/eos-scheduler.md",
       "line": 300,
-      "evaluator": "TLA+ model check",
+      "verification_method": "TLA+ model check",
       "residue": "",
       "spec_status": ""
     },
@@ -1228,7 +1228,7 @@
       "id": "complete-job",
       "spec_file": "docs/specs/eos-scheduler.md",
       "line": 291,
-      "evaluator": "TLA+ model check + unit test",
+      "verification_method": "TLA+ model check + unit test",
       "residue": "",
       "spec_status": ""
     },
@@ -1236,7 +1236,7 @@
       "id": "eos-scheduler-bounded-fair-dispatch",
       "spec_file": "docs/specs/eos-scheduler.md",
       "line": 192,
-      "evaluator": "TLA+ StarvationFreedom (P12) \u2014 docs/models/tla/StarvationModel.tla; non-vacuous (\u03b3=0 counterexample)",
+      "verification_method": "TLA+ StarvationFreedom (P12) \u2014 docs/models/tla/StarvationModel.tla; non-vacuous (\u03b3=0 counterexample)",
       "residue": "",
       "spec_status": ""
     },
@@ -1244,7 +1244,7 @@
       "id": "eos-scheduler-bounded-window",
       "spec_file": "docs/specs/eos-scheduler.md",
       "line": 183,
-      "evaluator": "TLA+ WorkConservation (P9\u2032) \u2014 docs/models/tla/MultiRequestModel.tla:339-344",
+      "verification_method": "TLA+ WorkConservation (P9\u2032) \u2014 docs/models/tla/MultiRequestModel.tla:339-344",
       "residue": "",
       "spec_status": ""
     },
@@ -1252,7 +1252,7 @@
       "id": "eos-scheduler-bounded-window` (P9\u2032)",
       "spec_file": "docs/specs/eos-scheduler.md",
       "line": 286,
-      "evaluator": "TLA+ model check",
+      "verification_method": "TLA+ model check",
       "residue": "",
       "spec_status": ""
     },
@@ -1260,7 +1260,7 @@
       "id": "eos-scheduler-cache-filter-seam",
       "spec_file": "docs/specs/eos-scheduler.md",
       "line": 287,
-      "evaluator": "Dependency audit + integration",
+      "verification_method": "Dependency audit + integration",
       "residue": "",
       "spec_status": ""
     },
@@ -1268,7 +1268,7 @@
       "id": "eos-scheduler-concurrency-limits",
       "spec_file": "docs/specs/eos-scheduler.md",
       "line": 280,
-      "evaluator": "TLA+ model check",
+      "verification_method": "TLA+ model check",
       "residue": "",
       "spec_status": ""
     },
@@ -1276,7 +1276,7 @@
       "id": "eos-scheduler-dag-intake",
       "spec_file": "docs/specs/eos-scheduler.md",
       "line": 282,
-      "evaluator": "Integration test",
+      "verification_method": "Integration test",
       "residue": "",
       "spec_status": ""
     },
@@ -1284,7 +1284,7 @@
       "id": "eos-scheduler-deduplication",
       "spec_file": "docs/specs/eos-scheduler.md",
       "line": 277,
-      "evaluator": "Integration test",
+      "verification_method": "Integration test",
       "residue": "",
       "spec_status": ""
     },
@@ -1292,7 +1292,7 @@
       "id": "eos-scheduler-frozen-stability",
       "spec_file": "docs/specs/eos-scheduler.md",
       "line": 285,
-      "evaluator": "TLA+ model check",
+      "verification_method": "TLA+ model check",
       "residue": "",
       "spec_status": ""
     },
@@ -1300,7 +1300,7 @@
       "id": "eos-scheduler-heartbeat-liveness",
       "spec_file": "docs/specs/eos-scheduler.md",
       "line": 284,
-      "evaluator": "Failure injection",
+      "verification_method": "Failure injection",
       "residue": "",
       "spec_status": ""
     },
@@ -1308,7 +1308,7 @@
       "id": "eos-scheduler-lazy-fetching",
       "spec_file": "docs/specs/eos-scheduler.md",
       "line": 276,
-      "evaluator": "Simulation test",
+      "verification_method": "Simulation test",
       "residue": "",
       "spec_status": ""
     },
@@ -1316,7 +1316,7 @@
       "id": "eos-scheduler-lease-expiry",
       "spec_file": "docs/specs/eos-scheduler.md",
       "line": 283,
-      "evaluator": "Timeout injection",
+      "verification_method": "Timeout injection",
       "residue": "",
       "spec_status": ""
     },
@@ -1324,7 +1324,7 @@
       "id": "eos-scheduler-placement",
       "spec_file": "docs/specs/eos-scheduler.md",
       "line": 278,
-      "evaluator": "Metrics audit",
+      "verification_method": "Metrics audit",
       "residue": "",
       "spec_status": ""
     },
@@ -1332,7 +1332,7 @@
       "id": "eos-scheduler-profile-store",
       "spec_file": "docs/specs/eos-scheduler.md",
       "line": 279,
-      "evaluator": "Integration test",
+      "verification_method": "Integration test",
       "residue": "",
       "spec_status": ""
     },
@@ -1340,7 +1340,7 @@
       "id": "eos-scheduler-state-isolation",
       "spec_file": "docs/specs/eos-scheduler.md",
       "line": 281,
-      "evaluator": "Dependency audit",
+      "verification_method": "Dependency audit",
       "residue": "",
       "spec_status": ""
     },
@@ -1348,7 +1348,7 @@
       "id": "eventual-progress",
       "spec_file": "docs/specs/eos-scheduler.md",
       "line": 297,
-      "evaluator": "TLA+ model check",
+      "verification_method": "TLA+ model check",
       "residue": "",
       "spec_status": ""
     },
@@ -1356,7 +1356,7 @@
       "id": "fail-job",
       "spec_file": "docs/specs/eos-scheduler.md",
       "line": 226,
-      "evaluator": "TLA+ FailureIsolation (P11) \u2014 docs/models/tla/MultiRequestModel.tla:269-275; TransientRecovery (P10) \u2014 docs/models/tla/MultiRequestModel.tla:349-353",
+      "verification_method": "TLA+ FailureIsolation (P11) \u2014 docs/models/tla/MultiRequestModel.tla:269-275; TransientRecovery (P10) \u2014 docs/models/tla/MultiRequestModel.tla:349-353",
       "residue": "",
       "spec_status": ""
     },
@@ -1364,7 +1364,7 @@
       "id": "fail-job` (deterministic)",
       "spec_file": "docs/specs/eos-scheduler.md",
       "line": 292,
-      "evaluator": "TLA+ model check + unit test",
+      "verification_method": "TLA+ model check + unit test",
       "residue": "",
       "spec_status": ""
     },
@@ -1372,7 +1372,7 @@
       "id": "fail-job` (transient)",
       "spec_file": "docs/specs/eos-scheduler.md",
       "line": 293,
-      "evaluator": "TLA+ model check + unit test",
+      "verification_method": "TLA+ model check + unit test",
       "residue": "",
       "spec_status": ""
     },
@@ -1380,7 +1380,7 @@
       "id": "head-of-line-immunity",
       "spec_file": "docs/specs/eos-scheduler.md",
       "line": 260,
-      "evaluator": "TLA+ HoLImmunity (P5\u2032) \u2014 docs/models/tla/MultiRequestModel.tla:319-328",
+      "verification_method": "TLA+ HoLImmunity (P5\u2032) \u2014 docs/models/tla/MultiRequestModel.tla:319-328",
       "residue": "",
       "spec_status": ""
     },
@@ -1388,7 +1388,7 @@
       "id": "head-of-line-immunity` (P5\u2032)",
       "spec_file": "docs/specs/eos-scheduler.md",
       "line": 299,
-      "evaluator": "TLA+ model check",
+      "verification_method": "TLA+ model check",
       "residue": "",
       "spec_status": ""
     },
@@ -1396,7 +1396,7 @@
       "id": "no-dangling-jobs",
       "spec_file": "docs/specs/eos-scheduler.md",
       "line": 294,
-      "evaluator": "Timeout audit",
+      "verification_method": "Timeout audit",
       "residue": "",
       "spec_status": ""
     },
@@ -1404,7 +1404,7 @@
       "id": "no-dispatched-ep-reassignment",
       "spec_file": "docs/specs/eos-scheduler.md",
       "line": 296,
-      "evaluator": "TLA+ model check",
+      "verification_method": "TLA+ model check",
       "residue": "",
       "spec_status": ""
     },
@@ -1412,7 +1412,7 @@
       "id": "no-duplicate-execution",
       "spec_file": "docs/specs/eos-scheduler.md",
       "line": 295,
-      "evaluator": "Mutual exclusion check",
+      "verification_method": "Mutual exclusion check",
       "residue": "",
       "spec_status": ""
     },
@@ -1420,7 +1420,7 @@
       "id": "parallel-scheduling-non-interference",
       "spec_file": "docs/specs/eos-scheduler.md",
       "line": 298,
-      "evaluator": "Parity check",
+      "verification_method": "Parity check",
       "residue": "",
       "spec_status": ""
     },
@@ -1428,7 +1428,7 @@
       "id": "renew-lease",
       "spec_file": "docs/specs/eos-scheduler.md",
       "line": 290,
-      "evaluator": "Unit test",
+      "verification_method": "Unit test",
       "residue": "",
       "spec_status": ""
     },
@@ -1436,7 +1436,7 @@
       "id": "submit-job",
       "spec_file": "docs/specs/eos-scheduler.md",
       "line": 288,
-      "evaluator": "Unit test",
+      "verification_method": "Unit test",
       "residue": "",
       "spec_status": ""
     },
@@ -1444,7 +1444,7 @@
       "id": "anchor-hash-agile",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 674,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -1452,7 +1452,7 @@
       "id": "anchor-is-genesis",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 673,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1460,7 +1460,7 @@
       "id": "anchor-oldest-root",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 704,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1468,7 +1468,7 @@
       "id": "anchor-vector-authenticity",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 706,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1476,7 +1476,7 @@
       "id": "claim-detached",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 679,
-      "evaluator": "unit-test",
+      "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1484,7 +1484,7 @@
       "id": "claim-message-is-coz",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 680,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1492,7 +1492,7 @@
       "id": "claim-replacement-transition",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 697,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1500,7 +1500,7 @@
       "id": "claim-transition-git",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 694,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1508,7 +1508,7 @@
       "id": "coz-bit-perfect",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 685,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1516,7 +1516,7 @@
       "id": "dev-atom-resolution",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 710,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1524,7 +1524,7 @@
       "id": "fs-ingest-transition",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 699,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1532,7 +1532,7 @@
       "id": "ingest-transition",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 696,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1540,7 +1540,7 @@
       "id": "ingestion-portable",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 707,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1548,7 +1548,7 @@
       "id": "no-backdated-src",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 702,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1556,7 +1556,7 @@
       "id": "no-label-collision-registry",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 703,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1564,7 +1564,7 @@
       "id": "no-missing-store-claim",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 705,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1572,7 +1572,7 @@
       "id": "no-non-empty-claim",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 700,
-      "evaluator": "unit-test",
+      "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1580,7 +1580,7 @@
       "id": "no-orphan-publish",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 701,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1588,7 +1588,7 @@
       "id": "peel-content-integrity",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 711,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1596,7 +1596,7 @@
       "id": "publish-tag-claim-binding",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 682,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1604,7 +1604,7 @@
       "id": "publish-tag-message-is-coz",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 683,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1612,7 +1612,7 @@
       "id": "publish-tag-targets-correct",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 681,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1620,7 +1620,7 @@
       "id": "publish-transition-git",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 695,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1628,7 +1628,7 @@
       "id": "publish-update-transition",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 698,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1636,7 +1636,7 @@
       "id": "registry-ref-claim",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 689,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1644,7 +1644,7 @@
       "id": "registry-ref-label-unique",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 688,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1652,7 +1652,7 @@
       "id": "registry-ref-version",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 690,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1660,7 +1660,7 @@
       "id": "single-active-claim-registry",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 686,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1668,7 +1668,7 @@
       "id": "snapshot-deterministic",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 675,
-      "evaluator": "unit-test",
+      "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1676,7 +1676,7 @@
       "id": "snapshot-parentless",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 676,
-      "evaluator": "unit-test",
+      "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1684,7 +1684,7 @@
       "id": "snapshot-src-header",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 677,
-      "evaluator": "unit-test",
+      "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1692,7 +1692,7 @@
       "id": "store-accumulates",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 709,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1700,7 +1700,7 @@
       "id": "store-claim-cleanup",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 712,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1708,7 +1708,7 @@
       "id": "store-claim-disambiguation",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 687,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1716,7 +1716,7 @@
       "id": "store-claim-ref",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 692,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1724,7 +1724,7 @@
       "id": "store-ownership-migration",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 693,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1732,7 +1732,7 @@
       "id": "store-ref-by-publish-czd",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 691,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1740,7 +1740,7 @@
       "id": "tag-chain-immutable",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 684,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1748,7 +1748,7 @@
       "id": "tag-chain-semantic-immutable",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 713,
-      "evaluator": "unit-test",
+      "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1756,7 +1756,7 @@
       "id": "temporal-vector",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 678,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1764,7 +1764,7 @@
       "id": "update-chain-auditable",
       "spec_file": "docs/specs/git-storage-format.md",
       "line": 708,
-      "evaluator": "integration-test",
+      "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
     },
@@ -1772,7 +1772,7 @@
       "id": "attach-progress",
       "spec_file": "docs/specs/ion-eos-contract.md",
       "line": 871,
-      "evaluator": "Integration test",
+      "verification_method": "Integration test",
       "residue": "",
       "spec_status": ""
     },
@@ -1780,7 +1780,7 @@
       "id": "backend-substitutability",
       "spec_file": "docs/specs/ion-eos-contract.md",
       "line": 878,
-      "evaluator": "Cross-backend test",
+      "verification_method": "Cross-backend test",
       "residue": "",
       "spec_status": ""
     },
@@ -1788,7 +1788,7 @@
       "id": "build-request",
       "spec_file": "docs/specs/ion-eos-contract.md",
       "line": 870,
-      "evaluator": "Integration test",
+      "verification_method": "Integration test",
       "residue": "",
       "spec_status": ""
     },
@@ -1796,7 +1796,7 @@
       "id": "capability-mismatch-handling",
       "spec_file": "docs/specs/ion-eos-contract.md",
       "line": 868,
-      "evaluator": "Integration test",
+      "verification_method": "Integration test",
       "residue": "",
       "spec_status": ""
     },
@@ -1804,7 +1804,7 @@
       "id": "capability-negotiation",
       "spec_file": "docs/specs/ion-eos-contract.md",
       "line": 867,
-      "evaluator": "Handshake test",
+      "verification_method": "Handshake test",
       "residue": "",
       "spec_status": ""
     },
@@ -1812,7 +1812,7 @@
       "id": "compose-args-passthrough",
       "spec_file": "docs/specs/ion-eos-contract.md",
       "line": 861,
-      "evaluator": "Unit test",
+      "verification_method": "Unit test",
       "residue": "",
       "spec_status": ""
     },
@@ -1820,7 +1820,7 @@
       "id": "compose-evaluation",
       "spec_file": "docs/specs/ion-eos-contract.md",
       "line": 873,
-      "evaluator": "Integration test",
+      "verification_method": "Integration test",
       "residue": "",
       "spec_status": ""
     },
@@ -1828,7 +1828,7 @@
       "id": "compose-handoff",
       "spec_file": "docs/specs/ion-eos-contract.md",
       "line": 860,
-      "evaluator": "Integration test",
+      "verification_method": "Integration test",
       "residue": "",
       "spec_status": ""
     },
@@ -1836,7 +1836,7 @@
       "id": "concurrent-builds",
       "spec_file": "docs/specs/ion-eos-contract.md",
       "line": 874,
-      "evaluator": "Dedup test",
+      "verification_method": "Dedup test",
       "residue": "",
       "spec_status": ""
     },
@@ -1844,7 +1844,7 @@
       "id": "content-delivery-negotiation",
       "spec_file": "docs/specs/ion-eos-contract.md",
       "line": 884,
-      "evaluator": "Integration test",
+      "verification_method": "Integration test",
       "residue": "",
       "spec_status": ""
     },
@@ -1852,7 +1852,7 @@
       "id": "daemon-connect",
       "spec_file": "docs/specs/ion-eos-contract.md",
       "line": 869,
-      "evaluator": "Integration test",
+      "verification_method": "Integration test",
       "residue": "",
       "spec_status": ""
     },
@@ -1860,7 +1860,7 @@
       "id": "daemon-connection-required",
       "spec_file": "docs/specs/ion-eos-contract.md",
       "line": 862,
-      "evaluator": "Architecture audit",
+      "verification_method": "Architecture audit",
       "residue": "",
       "spec_status": ""
     },
@@ -1868,7 +1868,7 @@
       "id": "daemon-discovery-v1",
       "spec_file": "docs/specs/ion-eos-contract.md",
       "line": 865,
-      "evaluator": "Unit test",
+      "verification_method": "Unit test",
       "residue": "",
       "spec_status": ""
     },
@@ -1876,7 +1876,7 @@
       "id": "daemon-discovery-vN",
       "spec_file": "docs/specs/ion-eos-contract.md",
       "line": 866,
-      "evaluator": "Design review",
+      "verification_method": "Design review",
       "residue": "",
       "spec_status": ""
     },
@@ -1884,7 +1884,7 @@
       "id": "discovery-read-only",
       "spec_file": "docs/specs/ion-eos-contract.md",
       "line": 882,
-      "evaluator": "Code audit",
+      "verification_method": "Code audit",
       "residue": "",
       "spec_status": ""
     },
@@ -1892,7 +1892,7 @@
       "id": "eos-backend-agnosticism",
       "spec_file": "docs/specs/ion-eos-contract.md",
       "line": 859,
-      "evaluator": "Cross-backend test",
+      "verification_method": "Cross-backend test",
       "residue": "",
       "spec_status": ""
     },
@@ -1900,7 +1900,7 @@
       "id": "eos-verification-obligation",
       "spec_file": "docs/specs/ion-eos-contract.md",
       "line": 858,
-      "evaluator": "Fault injection",
+      "verification_method": "Fault injection",
       "residue": "",
       "spec_status": ""
     },
@@ -1908,7 +1908,7 @@
       "id": "error-reporting-format",
       "spec_file": "docs/specs/ion-eos-contract.md",
       "line": 864,
-      "evaluator": "Fault injection",
+      "verification_method": "Fault injection",
       "residue": "",
       "spec_status": ""
     },
@@ -1916,7 +1916,7 @@
       "id": "fetch-verify-build",
       "spec_file": "docs/specs/ion-eos-contract.md",
       "line": 872,
-      "evaluator": "Integration test",
+      "verification_method": "Integration test",
       "residue": "",
       "spec_status": ""
     },
@@ -1924,7 +1924,7 @@
       "id": "handoff-atom-fields",
       "spec_file": "docs/specs/ion-eos-contract.md",
       "line": 856,
-      "evaluator": "Schema conformance",
+      "verification_method": "Schema conformance",
       "residue": "",
       "spec_status": ""
     },
@@ -1932,7 +1932,7 @@
       "id": "handoff-lock-sufficiency",
       "spec_file": "docs/specs/ion-eos-contract.md",
       "line": 855,
-      "evaluator": "Integration test",
+      "verification_method": "Integration test",
       "residue": "",
       "spec_status": ""
     },
@@ -1940,7 +1940,7 @@
       "id": "handoff-plugin-fields",
       "spec_file": "docs/specs/ion-eos-contract.md",
       "line": 857,
-      "evaluator": "Schema conformance",
+      "verification_method": "Schema conformance",
       "residue": "",
       "spec_status": ""
     },
@@ -1948,7 +1948,7 @@
       "id": "idempotent-submission",
       "spec_file": "docs/specs/ion-eos-contract.md",
       "line": 880,
-      "evaluator": "Repeat submission test",
+      "verification_method": "Repeat submission test",
       "residue": "",
       "spec_status": ""
     },
@@ -1956,7 +1956,7 @@
       "id": "no-daemon-bypass",
       "spec_file": "docs/specs/ion-eos-contract.md",
       "line": 877,
-      "evaluator": "Architecture audit",
+      "verification_method": "Architecture audit",
       "residue": "",
       "spec_status": ""
     },
@@ -1964,7 +1964,7 @@
       "id": "no-manifest-leakage",
       "spec_file": "docs/specs/ion-eos-contract.md",
       "line": 875,
-      "evaluator": "Code audit",
+      "verification_method": "Code audit",
       "residue": "",
       "spec_status": ""
     },
@@ -1972,7 +1972,7 @@
       "id": "no-unverified-execution",
       "spec_file": "docs/specs/ion-eos-contract.md",
       "line": 876,
-      "evaluator": "Fault injection",
+      "verification_method": "Fault injection",
       "residue": "",
       "spec_status": ""
     },
@@ -1980,7 +1980,7 @@
       "id": "plugin-type-extensibility",
       "spec_file": "docs/specs/ion-eos-contract.md",
       "line": 879,
-      "evaluator": "Extension test",
+      "verification_method": "Extension test",
       "residue": "",
       "spec_status": ""
     },
@@ -1988,7 +1988,7 @@
       "id": "progress-liveness",
       "spec_file": "docs/specs/ion-eos-contract.md",
       "line": 881,
-      "evaluator": "Integration test",
+      "verification_method": "Integration test",
       "residue": "",
       "spec_status": ""
     },
@@ -1996,7 +1996,7 @@
       "id": "query-discovery",
       "spec_file": "docs/specs/ion-eos-contract.md",
       "line": 883,
-      "evaluator": "Integration test",
+      "verification_method": "Integration test",
       "residue": "",
       "spec_status": ""
     },
@@ -2004,7 +2004,7 @@
       "id": "result-reporting",
       "spec_file": "docs/specs/ion-eos-contract.md",
       "line": 863,
-      "evaluator": "Integration test",
+      "verification_method": "Integration test",
       "residue": "",
       "spec_status": ""
     },
@@ -2012,7 +2012,7 @@
       "id": "composer-set-reference",
       "spec_file": "docs/specs/ion-manifest.md",
       "line": 359,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -2020,7 +2020,7 @@
       "id": "deny-unknown-fields",
       "spec_file": "docs/specs/ion-manifest.md",
       "line": 361,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -2028,7 +2028,7 @@
       "id": "label-version-uniqueness",
       "spec_file": "docs/specs/ion-manifest.md",
       "line": 362,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -2036,7 +2036,7 @@
       "id": "manifest-add-dep",
       "spec_file": "docs/specs/ion-manifest.md",
       "line": 243,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": "unverified"
     },
@@ -2044,7 +2044,7 @@
       "id": "manifest-add-mirror",
       "spec_file": "docs/specs/ion-manifest.md",
       "line": 254,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": "unverified"
     },
@@ -2052,7 +2052,7 @@
       "id": "manifest-parse",
       "spec_file": "docs/specs/ion-manifest.md",
       "line": 233,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": "unverified"
     },
@@ -2060,7 +2060,7 @@
       "id": "manifest-required-sections",
       "spec_file": "docs/specs/ion-manifest.md",
       "line": 355,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -2068,7 +2068,7 @@
       "id": "manifest-roundtrip",
       "spec_file": "docs/specs/ion-manifest.md",
       "line": 368,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -2076,7 +2076,7 @@
       "id": "manifest-validation-total",
       "spec_file": "docs/specs/ion-manifest.md",
       "line": 369,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -2084,7 +2084,7 @@
       "id": "no-orphaned-set",
       "spec_file": "docs/specs/ion-manifest.md",
       "line": 267,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": "unverified"
     },
@@ -2092,7 +2092,7 @@
       "id": "no-self-dependency",
       "spec_file": "docs/specs/ion-manifest.md",
       "line": 371,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -2100,7 +2100,7 @@
       "id": "no-undeclared-set-reference",
       "spec_file": "docs/specs/ion-manifest.md",
       "line": 273,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": "unverified"
     },
@@ -2108,7 +2108,7 @@
       "id": "package-identity-required",
       "spec_file": "docs/specs/ion-manifest.md",
       "line": 356,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -2116,7 +2116,7 @@
       "id": "plugin-extension-point",
       "spec_file": "docs/specs/ion-manifest.md",
       "line": 363,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -2124,7 +2124,7 @@
       "id": "plugin-isolation",
       "spec_file": "docs/specs/ion-manifest.md",
       "line": 370,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -2132,7 +2132,7 @@
       "id": "plugin-lock-contract",
       "spec_file": "docs/specs/ion-manifest.md",
       "line": 364,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -2140,7 +2140,7 @@
       "id": "plugin-lock-type-tag",
       "spec_file": "docs/specs/ion-manifest.md",
       "line": 365,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -2148,7 +2148,7 @@
       "id": "plugin-owner-tracking",
       "spec_file": "docs/specs/ion-manifest.md",
       "line": 366,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -2156,7 +2156,7 @@
       "id": "plugin-resolution-locality",
       "spec_file": "docs/specs/ion-manifest.md",
       "line": 367,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -2164,7 +2164,7 @@
       "id": "set-declaration-completeness",
       "spec_file": "docs/specs/ion-manifest.md",
       "line": 357,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -2172,7 +2172,7 @@
       "id": "set-mirror-minimum",
       "spec_file": "docs/specs/ion-manifest.md",
       "line": 358,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -2180,7 +2180,7 @@
       "id": "version-constraint-syntax",
       "spec_file": "docs/specs/ion-manifest.md",
       "line": 360,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -2188,7 +2188,7 @@
       "id": "git-tag-version-inference",
       "spec_file": "docs/specs/ion-resolution.md",
       "line": 368,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -2196,7 +2196,7 @@
       "id": "lock-atom-entry-fields",
       "spec_file": "docs/specs/ion-resolution.md",
       "line": 352,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -2204,7 +2204,7 @@
       "id": "lock-atomic-write",
       "spec_file": "docs/specs/ion-resolution.md",
       "line": 217,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": "unverified"
     },
@@ -2212,7 +2212,7 @@
       "id": "lock-compose-capture",
       "spec_file": "docs/specs/ion-resolution.md",
       "line": 355,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -2220,7 +2220,7 @@
       "id": "lock-direct-flag",
       "spec_file": "docs/specs/ion-resolution.md",
       "line": 354,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -2228,7 +2228,7 @@
       "id": "lock-freeze",
       "spec_file": "docs/specs/ion-resolution.md",
       "line": 207,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": "unverified"
     },
@@ -2236,7 +2236,7 @@
       "id": "lock-plugin-entries",
       "spec_file": "docs/specs/ion-resolution.md",
       "line": 356,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -2244,7 +2244,7 @@
       "id": "lock-reproducibility",
       "spec_file": "docs/specs/ion-resolution.md",
       "line": 365,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -2252,7 +2252,7 @@
       "id": "lock-requires-graph",
       "spec_file": "docs/specs/ion-resolution.md",
       "line": 353,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -2260,7 +2260,7 @@
       "id": "lock-schema-version",
       "spec_file": "docs/specs/ion-resolution.md",
       "line": 350,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -2268,7 +2268,7 @@
       "id": "lock-sets-capture",
       "spec_file": "docs/specs/ion-resolution.md",
       "line": 351,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -2276,7 +2276,7 @@
       "id": "no-constraint-violation",
       "spec_file": "docs/specs/ion-resolution.md",
       "line": 364,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -2284,7 +2284,7 @@
       "id": "no-partial-lock",
       "spec_file": "docs/specs/ion-resolution.md",
       "line": 362,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -2292,7 +2292,7 @@
       "id": "no-stale-lock-entry",
       "spec_file": "docs/specs/ion-resolution.md",
       "line": 363,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -2300,7 +2300,7 @@
       "id": "plugin-dep-sanitization",
       "spec_file": "docs/specs/ion-resolution.md",
       "line": 367,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -2308,7 +2308,7 @@
       "id": "reconcile",
       "spec_file": "docs/specs/ion-resolution.md",
       "line": 195,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": "unverified"
     },
@@ -2316,7 +2316,7 @@
       "id": "reconcile-idempotent",
       "spec_file": "docs/specs/ion-resolution.md",
       "line": 366,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -2324,7 +2324,7 @@
       "id": "resolution-complete",
       "spec_file": "docs/specs/ion-resolution.md",
       "line": 357,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -2332,7 +2332,7 @@
       "id": "resolution-deterministic",
       "spec_file": "docs/specs/ion-resolution.md",
       "line": 358,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -2340,7 +2340,7 @@
       "id": "resolution-highest-match",
       "spec_file": "docs/specs/ion-resolution.md",
       "line": 359,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -2348,7 +2348,7 @@
       "id": "resolution-transitive",
       "spec_file": "docs/specs/ion-resolution.md",
       "line": 361,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -2356,7 +2356,7 @@
       "id": "resolution-unsolvable-diagnostic",
       "spec_file": "docs/specs/ion-resolution.md",
       "line": 360,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -2364,7 +2364,7 @@
       "id": "version-semantics-semver",
       "spec_file": "docs/specs/ion-resolution.md",
       "line": 349,
-      "evaluator": "agent-check",
+      "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
     },
@@ -2372,7 +2372,7 @@
       "id": "boundary-bridge-crate",
       "spec_file": "docs/specs/layer-boundaries.md",
       "line": 743,
-      "evaluator": "`ion-eos` Cargo.toml verified",
+      "verification_method": "`ion-eos` Cargo.toml verified",
       "residue": "",
       "spec_status": ""
     },
@@ -2380,7 +2380,7 @@
       "id": "boundary-ci-enforcement",
       "spec_file": "docs/specs/layer-boundaries.md",
       "line": 745,
-      "evaluator": "Script does not yet exist",
+      "verification_method": "Script does not yet exist",
       "residue": "",
       "spec_status": ""
     },
@@ -2388,7 +2388,7 @@
       "id": "boundary-contract-dep-budget",
       "spec_file": "docs/specs/layer-boundaries.md",
       "line": 735,
-      "evaluator": "`cargo metadata` dep count",
+      "verification_method": "`cargo metadata` dep count",
       "residue": "",
       "spec_status": ""
     },
@@ -2396,7 +2396,7 @@
       "id": "boundary-contract-only",
       "spec_file": "docs/specs/layer-boundaries.md",
       "line": 731,
-      "evaluator": "`cargo metadata` graph analysis",
+      "verification_method": "`cargo metadata` graph analysis",
       "residue": "",
       "spec_status": ""
     },
@@ -2404,7 +2404,7 @@
       "id": "boundary-contract-types",
       "spec_file": "docs/specs/layer-boundaries.md",
       "line": 734,
-      "evaluator": "Manual audit",
+      "verification_method": "Manual audit",
       "residue": "",
       "spec_status": ""
     },
@@ -2412,7 +2412,7 @@
       "id": "boundary-crate-metadata",
       "spec_file": "docs/specs/layer-boundaries.md",
       "line": 746,
-      "evaluator": "Metadata not yet present",
+      "verification_method": "Metadata not yet present",
       "residue": "",
       "spec_status": ""
     },
@@ -2420,7 +2420,7 @@
       "id": "boundary-downward-only",
       "spec_file": "docs/specs/layer-boundaries.md",
       "line": 730,
-      "evaluator": "`cargo metadata` graph analysis",
+      "verification_method": "`cargo metadata` graph analysis",
       "residue": "",
       "spec_status": ""
     },
@@ -2428,7 +2428,7 @@
       "id": "boundary-impl-isolation",
       "spec_file": "docs/specs/layer-boundaries.md",
       "line": 732,
-      "evaluator": "`cargo metadata` graph analysis",
+      "verification_method": "`cargo metadata` graph analysis",
       "residue": "",
       "spec_status": ""
     },
@@ -2436,7 +2436,7 @@
       "id": "boundary-intra-workspace",
       "spec_file": "docs/specs/layer-boundaries.md",
       "line": 733,
-      "evaluator": "By definition (unconstrained)",
+      "verification_method": "By definition (unconstrained)",
       "residue": "",
       "spec_status": ""
     },
@@ -2444,7 +2444,7 @@
       "id": "boundary-L1-concerns",
       "spec_file": "docs/specs/layer-boundaries.md",
       "line": 737,
-      "evaluator": "Cross-referenced with ADR-0001",
+      "verification_method": "Cross-referenced with ADR-0001",
       "residue": "",
       "spec_status": ""
     },
@@ -2452,7 +2452,7 @@
       "id": "boundary-L2-concerns",
       "spec_file": "docs/specs/layer-boundaries.md",
       "line": 738,
-      "evaluator": "Cross-referenced with ADR-0005/htc-sad.md",
+      "verification_method": "Cross-referenced with ADR-0005/htc-sad.md",
       "residue": "",
       "spec_status": ""
     },
@@ -2460,7 +2460,7 @@
       "id": "boundary-L3-concerns",
       "spec_file": "docs/specs/layer-boundaries.md",
       "line": 739,
-      "evaluator": "Cross-referenced with ADR-0001",
+      "verification_method": "Cross-referenced with ADR-0001",
       "residue": "",
       "spec_status": ""
     },
@@ -2468,7 +2468,7 @@
       "id": "boundary-L4-concerns",
       "spec_file": "docs/specs/layer-boundaries.md",
       "line": 740,
-      "evaluator": "Cross-referenced with ADR-0001",
+      "verification_method": "Cross-referenced with ADR-0001",
       "residue": "",
       "spec_status": ""
     },
@@ -2476,7 +2476,7 @@
       "id": "boundary-L5-concerns",
       "spec_file": "docs/specs/layer-boundaries.md",
       "line": 741,
-      "evaluator": "Deferred",
+      "verification_method": "Deferred",
       "residue": "",
       "spec_status": ""
     },
@@ -2484,7 +2484,7 @@
       "id": "boundary-lock-ownership",
       "spec_file": "docs/specs/layer-boundaries.md",
       "line": 742,
-      "evaluator": "Cargo-atom test; format vs contract",
+      "verification_method": "Cargo-atom test; format vs contract",
       "residue": "",
       "spec_status": ""
     },
@@ -2492,7 +2492,7 @@
       "id": "boundary-no-backend-leakage",
       "spec_file": "docs/specs/layer-boundaries.md",
       "line": 736,
-      "evaluator": "Public API audit",
+      "verification_method": "Public API audit",
       "residue": "",
       "spec_status": ""
     },
@@ -2500,7 +2500,7 @@
       "id": "boundary-store-separation",
       "spec_file": "docs/specs/layer-boundaries.md",
       "line": 744,
-      "evaluator": "Manual audit",
+      "verification_method": "Manual audit",
       "residue": "",
       "spec_status": ""
     },
@@ -2508,7 +2508,7 @@
       "id": "boundary-violation-budget",
       "spec_file": "docs/specs/layer-boundaries.md",
       "line": 747,
-      "evaluator": "File does not yet exist",
+      "verification_method": "File does not yet exist",
       "residue": "",
       "spec_status": ""
     },
@@ -2516,7 +2516,7 @@
       "id": "lock-action-totality",
       "spec_file": "docs/specs/lock-file-schema.md",
       "line": 96,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": ""
     },
@@ -2524,7 +2524,7 @@
       "id": "lock-annotation-consistency",
       "spec_file": "docs/specs/lock-file-schema.md",
       "line": 217,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": ""
     },
@@ -2532,7 +2532,7 @@
       "id": "lock-atomic-write",
       "spec_file": "docs/specs/lock-file-schema.md",
       "line": 290,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": ""
     },
@@ -2540,7 +2540,7 @@
       "id": "lock-canonical-form",
       "spec_file": "docs/specs/lock-file-schema.md",
       "line": 278,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": ""
     },
@@ -2548,7 +2548,7 @@
       "id": "lock-choice-policy",
       "spec_file": "docs/specs/lock-file-schema.md",
       "line": 77,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": ""
     },
@@ -2556,7 +2556,7 @@
       "id": "lock-closure-completeness",
       "spec_file": "docs/specs/lock-file-schema.md",
       "line": 91,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": ""
     },
@@ -2564,7 +2564,7 @@
       "id": "lock-dep-liveness",
       "spec_file": "docs/specs/lock-file-schema.md",
       "line": 235,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": ""
     },
@@ -2572,7 +2572,7 @@
       "id": "lock-dep-ordering",
       "spec_file": "docs/specs/lock-file-schema.md",
       "line": 241,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": ""
     },
@@ -2580,7 +2580,7 @@
       "id": "lock-dep-publish",
       "spec_file": "docs/specs/lock-file-schema.md",
       "line": 213,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": ""
     },
@@ -2588,7 +2588,7 @@
       "id": "lock-dep-requires",
       "spec_file": "docs/specs/lock-file-schema.md",
       "line": 222,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": ""
     },
@@ -2596,7 +2596,7 @@
       "id": "lock-dep-version",
       "spec_file": "docs/specs/lock-file-schema.md",
       "line": 208,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": ""
     },
@@ -2604,7 +2604,7 @@
       "id": "lock-fetch-adopted-absent",
       "spec_file": "docs/specs/lock-file-schema.md",
       "line": 271,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": ""
     },
@@ -2612,7 +2612,7 @@
       "id": "lock-fetch-digest",
       "spec_file": "docs/specs/lock-file-schema.md",
       "line": 253,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": ""
     },
@@ -2620,7 +2620,7 @@
       "id": "lock-fetch-liveness",
       "spec_file": "docs/specs/lock-file-schema.md",
       "line": 265,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": ""
     },
@@ -2628,7 +2628,7 @@
       "id": "lock-fetch-naming",
       "spec_file": "docs/specs/lock-file-schema.md",
       "line": 258,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": ""
     },
@@ -2636,7 +2636,7 @@
       "id": "lock-groundness",
       "spec_file": "docs/specs/lock-file-schema.md",
       "line": 85,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": ""
     },
@@ -2644,7 +2644,7 @@
       "id": "lock-in-snapshot-locality",
       "spec_file": "docs/specs/lock-file-schema.md",
       "line": 108,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": ""
     },
@@ -2652,7 +2652,7 @@
       "id": "lock-no-compose",
       "spec_file": "docs/specs/lock-file-schema.md",
       "line": 301,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": ""
     },
@@ -2660,7 +2660,7 @@
       "id": "lock-no-foreign-metadata",
       "spec_file": "docs/specs/lock-file-schema.md",
       "line": 322,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": ""
     },
@@ -2668,7 +2668,7 @@
       "id": "lock-no-interfaces",
       "spec_file": "docs/specs/lock-file-schema.md",
       "line": 314,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": ""
     },
@@ -2676,7 +2676,7 @@
       "id": "lock-no-override-state",
       "spec_file": "docs/specs/lock-file-schema.md",
       "line": 318,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": ""
     },
@@ -2684,7 +2684,7 @@
       "id": "lock-no-params",
       "spec_file": "docs/specs/lock-file-schema.md",
       "line": 304,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": ""
     },
@@ -2692,7 +2692,7 @@
       "id": "lock-no-plan-digest",
       "spec_file": "docs/specs/lock-file-schema.md",
       "line": 329,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": ""
     },
@@ -2700,7 +2700,7 @@
       "id": "lock-no-toolchain-section",
       "spec_file": "docs/specs/lock-file-schema.md",
       "line": 308,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": ""
     },
@@ -2708,7 +2708,7 @@
       "id": "lock-recomputability",
       "spec_file": "docs/specs/lock-file-schema.md",
       "line": 72,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": ""
     },
@@ -2716,7 +2716,7 @@
       "id": "lock-requires-acyclic",
       "spec_file": "docs/specs/lock-file-schema.md",
       "line": 231,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": ""
     },
@@ -2724,7 +2724,7 @@
       "id": "lock-requires-resolvable",
       "spec_file": "docs/specs/lock-file-schema.md",
       "line": 228,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": ""
     },
@@ -2732,7 +2732,7 @@
       "id": "lock-schema-version",
       "spec_file": "docs/specs/lock-file-schema.md",
       "line": 121,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": ""
     },
@@ -2740,7 +2740,7 @@
       "id": "lock-set-anchor",
       "spec_file": "docs/specs/lock-file-schema.md",
       "line": 133,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": ""
     },
@@ -2748,7 +2748,7 @@
       "id": "lock-set-charter-head",
       "spec_file": "docs/specs/lock-file-schema.md",
       "line": 155,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": ""
     },
@@ -2756,7 +2756,7 @@
       "id": "lock-set-mirrors",
       "spec_file": "docs/specs/lock-file-schema.md",
       "line": 183,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": ""
     },
@@ -2764,7 +2764,7 @@
       "id": "lock-set-referenced",
       "spec_file": "docs/specs/lock-file-schema.md",
       "line": 190,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": ""
     },
@@ -2772,7 +2772,7 @@
       "id": "lock-set-snapshot",
       "spec_file": "docs/specs/lock-file-schema.md",
       "line": 176,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": ""
     },
@@ -2780,7 +2780,7 @@
       "id": "lock-single-version",
       "spec_file": "docs/specs/lock-file-schema.md",
       "line": 200,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": ""
     },
@@ -2788,7 +2788,7 @@
       "id": "lock-sufficiency",
       "spec_file": "docs/specs/lock-file-schema.md",
       "line": 65,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": ""
     },
@@ -2796,7 +2796,7 @@
       "id": "lock-tool-owned",
       "spec_file": "docs/specs/lock-file-schema.md",
       "line": 126,
-      "evaluator": "",
+      "verification_method": "",
       "residue": "",
       "spec_status": ""
     }
