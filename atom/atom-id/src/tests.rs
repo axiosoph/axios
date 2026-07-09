@@ -839,6 +839,72 @@ fn verify_claim_unknown_alg() {
     );
 }
 
+// ============================================================================
+// czd_for_alg
+// ============================================================================
+
+#[test]
+fn czd_for_alg_matches_independent_computation() {
+    use coz_rs::Ed25519;
+
+    let (prv, pub_bytes, tmb) = gen_ed25519_key();
+    let claim = crate::ClaimPayload::new(
+        crate::Alg::Ed25519,
+        test_id(),
+        1000,
+        vec![99],
+        "cargo".to_string(),
+        vec![0; 32],
+        tmb,
+    );
+    let pay_json = serde_json::to_vec(&claim).unwrap();
+    let (sig, _cad) = coz_rs::sign_json(&pay_json, "Ed25519", &prv, &pub_bytes).unwrap();
+
+    let czd = crate::czd_for_alg(&pay_json, &sig, "Ed25519").expect("valid alg computes a czd");
+
+    // Independent recomputation via a separate code path: the compile-time
+    // generic `Czd::compute`, not the runtime dispatcher under test.
+    let cad = coz_rs::canonical_hash::<Ed25519>(&pay_json, None).unwrap();
+    let expected = crate::Czd::compute::<Ed25519>(&cad, &sig);
+    assert_eq!(
+        czd, expected,
+        "czd_for_alg must match independent Czd::compute"
+    );
+}
+
+#[test]
+fn czd_for_alg_is_deterministic_and_binds_to_sig() {
+    let (prv, pub_bytes, tmb) = gen_ed25519_key();
+    let claim = crate::ClaimPayload::new(
+        crate::Alg::Ed25519,
+        test_id(),
+        1000,
+        vec![99],
+        "cargo".to_string(),
+        vec![0; 32],
+        tmb,
+    );
+    let pay_json = serde_json::to_vec(&claim).unwrap();
+    let (sig, _cad) = coz_rs::sign_json(&pay_json, "Ed25519", &prv, &pub_bytes).unwrap();
+
+    let czd1 = crate::czd_for_alg(&pay_json, &sig, "Ed25519").unwrap();
+    let czd2 = crate::czd_for_alg(&pay_json, &sig, "Ed25519").unwrap();
+    assert_eq!(czd1, czd2, "czd computation must be deterministic");
+
+    let other_sig = vec![0u8; sig.len()];
+    let czd3 = crate::czd_for_alg(&pay_json, &other_sig, "Ed25519").unwrap();
+    assert_ne!(czd1, czd3, "czd must bind to the signature, not just pay");
+}
+
+#[test]
+fn czd_for_alg_unknown_alg() {
+    let result = crate::czd_for_alg(b"{}", &[], "UNSUPPORTED");
+    assert!(
+        matches!(result, Err(crate::VerifyError::UnsupportedAlgorithm(_))),
+        "unknown alg should be UnsupportedAlgorithm: {result:?}"
+    );
+}
+
 #[cfg(test)]
 mod proptests {
     use coz_rs::SigningKey;

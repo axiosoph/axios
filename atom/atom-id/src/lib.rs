@@ -664,6 +664,30 @@ pub fn verify_claim_replacement(
     )
 }
 
+/// Compute the Coz digest (`czd`) of a signed message from its raw wire
+/// components: the canonical payload bytes and the signature.
+///
+/// Per the Coz spec, `czd` is `digest({"cad","sig"})` — a cryptographic
+/// identifier independently recomputable by any party from `pay` and `sig`
+/// alone. It refers to a particular signed message the same way `cad`
+/// refers to a particular payload, and it must never be conflated with
+/// wherever the message happens to be stored (e.g. a git object id):
+/// storage location is an implementation accident, not a property of the
+/// signed content.
+///
+/// This is the single, canonical way callers should derive a claim's or
+/// publish's identity from a `(pay_json, sig, alg)` triple; hand-rolling
+/// the algorithm dispatch at each call site risks divergence.
+///
+/// Spec constraints: `[czd-recalculatable]`, `[sig-over-pay]`.
+#[cfg(feature = "serde")]
+pub fn czd_for_alg(pay_json: &[u8], sig: &[u8], alg: &str) -> Result<Czd, VerifyError> {
+    let cad = coz_rs::canonical_hash_for_alg(pay_json, alg, None)
+        .ok_or_else(|| VerifyError::UnsupportedAlgorithm(alg.to_string()))?;
+    coz_rs::czd_for_alg(&cad, sig, alg)
+        .ok_or_else(|| VerifyError::UnsupportedAlgorithm(alg.to_string()))
+}
+
 /// Verify a Coz signature over raw JSON payload bytes.
 ///
 /// Shared logic for [`verify_claim`] and [`verify_publish`].
