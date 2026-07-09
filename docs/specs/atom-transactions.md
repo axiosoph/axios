@@ -482,10 +482,17 @@ decisions at or below that head. The effective charter is the head of
 the unique valid chain, ordered by **chain position** (`prior` links),
 never by `now`: the `now` field is untrusted for authority ordering
 (it feeds only the temporal-floor checks). Ownership transfers MUST be
-dual-signed: the successor payload is signed by a key authorized by the
-prior charter's owner, and the CozMessage MUST additionally carry a
-signature by the incoming owner's key (proof of possession) — a
-unilateral transfer naming an unwitting recipient is invalid.
+dual-signed: the successor charter is signed by a key authorized by the
+prior charter's owner, and a SECOND, independently-signed charter MUST
+follow it, chained via `prior` onto the successor's own `czd` and
+signed by the incoming owner's key (proof of possession) — the same
+succession-chain mechanism `[charter-succession]` already uses, applied
+one link further. A coz message carries exactly one signature (`czd` is
+the digest of a single `{cad, sig}` pair — Coz `README.md` "Canon"), so
+proof of possession cannot be a second signature embedded in the
+successor's own message; it is the next link in the chain. A unilateral
+transfer naming an unwitting recipient — a successor with no such
+chained possession-proof — is invalid.
 `VERIFIED: machine (TLC)`
 
 **[chain-monotonicity]**: Consumers MUST record the czd of the charter

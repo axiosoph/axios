@@ -138,6 +138,18 @@ pub fn verify_charter(
 /// seam now (without a working validator) lets later phases de-stub it
 /// without reshaping the call surface.
 ///
+/// **Dual-signed transfers are chained, not multi-signed.**
+/// `[charter-succession-linear]` requires an ownership transfer to be
+/// authorized by both the outgoing owner (the `prior` charter's signer)
+/// and the incoming owner (proof of possession). `coz_rs::Coz<A>` carries
+/// exactly one signature per message, so this is NOT expressed as multiple
+/// signatures embedded in a single Coz message — it is expressed the same
+/// way succession itself is: as a chain of independently-signed
+/// transactions linked via `prior`, each verified separately via
+/// [`verify_charter`]/`verify_signature`. A chain-walk implementation
+/// checks that the required links are present and correctly authorized,
+/// not that a single message carries two signatures.
+///
 /// Spec constraints: `[charter-succession-linear]`, `[chain-monotonicity]`.
 #[cfg(feature = "serde")]
 pub fn verify_succession_chain(_chain: &[CharterPayload]) -> Result<(), crate::VerifyError> {
@@ -162,10 +174,14 @@ pub fn verify_succession_chain(_chain: &[CharterPayload]) -> Result<(), crate::V
 pub trait CharterStore {
     /// Retrieve a charter by its czd.
     ///
+    /// Async per `[trait-async-io]`: a real store is backed by git refs
+    /// (or similar), and ref lookup is I/O — potentially over the network
+    /// for a remote source — not an in-memory lookup.
+    ///
     /// **Deliberately unimplemented — Phase 1.** The default body is an
     /// honest stub; a concrete store implementation MUST override this to
     /// provide real retrieval rather than inheriting the panic.
-    fn get_charter(&self, _czd: &Czd) -> Option<CharterPayload> {
+    async fn get_charter(&self, _czd: &Czd) -> Option<CharterPayload> {
         unimplemented!(
             "Phase 1: charter ref-storage retrieval is a specified deliverable, not a default — \
              see docs/specs/atom-transactions.md [charter-transition] POST"
@@ -308,11 +324,11 @@ mod tests {
     struct NullCharterStore;
     impl CharterStore for NullCharterStore {}
 
-    #[test]
+    #[tokio::test]
     #[should_panic(expected = "Phase 1")]
-    fn charter_store_stub_is_honest() {
+    async fn charter_store_stub_is_honest() {
         let store = NullCharterStore;
         let czd = crate::Czd::from_bytes(vec![1, 2, 3]);
-        let _ = store.get_charter(&czd);
+        let _ = store.get_charter(&czd).await;
     }
 }
