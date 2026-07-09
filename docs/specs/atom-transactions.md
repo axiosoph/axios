@@ -207,6 +207,7 @@ Data accessor traits (`AtomEntry`, `AtomVersion`, `Manifest`) MUST remain synchr
 `AtomRegistry::claim()` and `AtomRegistry::publish()` MAY remain synchronous in v1 (registries are local git repos). If remote registry write operations are added in vN, these SHOULD be made async.
 
 `VERIFIED: unverified`
+`RESIDUE: Phase 1/2 -- no AtomSource/AtomStore trait is defined anywhere in the codebase yet; nothing to check async-ness of`
 
 The critical architectural property: **a store IS a source**. The
 `AtomStore` trait extends `AtomSource`, so any component that reads
@@ -251,6 +252,7 @@ Composite sources MUST preserve the accumulation guarantee: after resolving an a
 
 **[composite-source-concurrent]**: A composite source SHOULD resolve multiple atoms concurrently. When a `BuildRequest` contains N atom dependencies, the composite source SHOULD spawn N concurrent resolution tasks (bounded by a configurable concurrency limit). This is the primary performance justification for the async trait requirement (`[trait-async-io]`).
 `VERIFIED: unverified`
+`RESIDUE: Phase 1/2 -- no CompositeAtomSource implementation exists anywhere in the codebase yet; depends on [trait-async-io]`
 
 Each role uses **associated types** to remain backend-agnostic:
 
@@ -730,6 +732,7 @@ includes the public key.
 - **POST**: The charter message is stored in the source's atom refs,
   enumerable by consumers and retrievable by its czd.
   `VERIFIED: unverified (pending implementation)`
+  `RESIDUE: Phase 1 -- construction/signature correctness is tested (atom/atom-id/tests/charter/construction.rs), but the PRE bootstrap-gate authorization check has no implementation to call: bootstrap_gate.rs's own red test states "no bootstrap-gate authorization check exists yet"; the POST storage-in-atom-refs requirement has no atom-git charter storage implementation either`
 
 **[claim-transition]**: An atom MAY be claimed by constructing a
 `ClaimPayload`, signing it with a Coz-compatible key, and producing
@@ -763,6 +766,7 @@ previously referenced by `[owner-compatibility]` but never specified.)
 - **POST**: the replacement is stored alongside the replaced claim;
   both remain retrievable (history is never erased).
   `VERIFIED: unverified (pending implementation)`
+  `RESIDUE: Phase 1 -- construction.rs::claim_replacement_transactions_verify tests replacement shape (prior linkage, governance marking, distinct signing keys) and signature validity, but its own module docstring is explicit: "construction correctness only -- no ... authorization validation runs anywhere in this corpus; that is Phase 1". No storage backend exists either.`
 
 - **PRE**: `claim` MUST be the `czd` of a valid, non-revoked claim
   for this `(anchor, label)`. `version` MUST be a non-empty string.
@@ -887,6 +891,7 @@ of the transition to consumers who may hold the old claim.
 
 - **Type**: Safety
   `VERIFIED: unverified`
+  `RESIDUE: Phase 1/2 -- ClaimPayload (atom/atom-id/src/lib.rs) has a fixed field set with no "meta" field or unknown-field-preservation mechanism; default serde deserialize silently drops fields not in the struct rather than preserving them, so this constraint is not yet satisfied by the landed type, let alone verified`
 
 **[fs-source-contract]**: An `AtomSource` implementation MAY exist
 for filesystem directories (paths without git history). Such a source:

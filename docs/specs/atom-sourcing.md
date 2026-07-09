@@ -173,6 +173,7 @@ manifest declarations.
   in a set have been queried (or a subset, per the resolver's fetch
   strategy). `[set-anchor-bijection]` holds across all sets.
   `VERIFIED: unverified`
+  `RESIDUE: Phase 1/2 -- no resolver implementation exists; no AtomSource/AtomStore/AtomRegistry trait or MirrorSet type is defined anywhere in the codebase yet`
 
 **[mirror-validation]**: Before aggregating atoms from a set's mirrors,
 the resolver MUST validate mirror consistency.
@@ -185,6 +186,7 @@ the resolver MUST validate mirror consistency.
   queried mirrors are aggregated into a single availability set
   (`[mirror-staleness-tolerance]`).
   `VERIFIED: unverified`
+  `RESIDUE: Phase 1/2 -- same reasoning as [source-discovery]; no resolver/mirror-validation implementation exists`
 
 **[lock-capture]**: After version selection, the resolver MUST capture
 the resolution in a lock entry.
@@ -199,6 +201,7 @@ the resolution in a lock entry.
   sha). The lock entry is sufficient to reproduce the fetch and verify
   integrity without re-resolving.
   `VERIFIED: unverified`
+  `RESIDUE: Phase 1/2 -- same reasoning as [source-discovery]; no resolver/lock-capture implementation exists (note: this v1-era LockEntry shape -- genesis-commit "set", "pkg" PURL -- predates and is unreconciled with the v2 lock schema)`
 
 ### Forbidden States
 
@@ -379,6 +382,7 @@ Peer-assisted resolution is a transport-level concern: the atom content enters t
 
 This ordering ensures that authoritative sources are preferred and that the peer is only consulted when all other options are exhausted.
 `VERIFIED: unverified`
+`RESIDUE: Phase 1/2 -- no AtomSource/peer-client/priority-ordering implementation exists anywhere in the codebase yet`
 
 ## Verification
 

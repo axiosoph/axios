@@ -203,6 +203,7 @@ MUST reconcile the lock with the current manifest.
   locked. Changed constraints are re-resolved. The lock file is
   written atomically.
   `VERIFIED: unverified`
+  `RESIDUE: Phase 2 -- no reconciliation pipeline exists; ion-resolve/src/lib.rs's own docstring: "A full SAT-based resolver and lock file generator are planned but not yet implemented"`
 
 **[lock-freeze]**: After reconciliation, the lock file is frozen
 for the current operation. Subsequent reads within the same operation
@@ -213,6 +214,7 @@ for the current operation. Subsequent reads within the same operation
   operation. Any further manifest changes require a new reconciliation
   cycle.
   `VERIFIED: unverified`
+  `RESIDUE: Phase 2 -- depends on the same unimplemented reconciliation pipeline as [reconcile]; no operation-scoped lock-freeze mechanism exists`
 
 **[lock-atomic-write]**: Lock file writes MUST be atomic. A crash or
 interruption during lock file writing MUST NOT corrupt the existing
@@ -222,6 +224,7 @@ lock file. Implementations SHOULD use write-to-temporary-then-rename.
 - **POST**: Either the old lock file is intact, or the new lock file
   has completely replaced it. No intermediate state is observable.
   `VERIFIED: unverified`
+  `RESIDUE: Phase 2 -- no lock-writing code exists at all; ion-lock is currently parse/validate-only (same gap as [lock-atomic-write] in lock-file-schema.md)`
 
 ### Forbidden States
 

@@ -68,11 +68,13 @@ closure by content identity, and every fetch payload not adopted from an
 ecosystem lockfile in the atom's sources. Build-time resolution or
 discovery of any kind MUST NOT be required by a consumer holding the
 atom snapshot and its lock.
+`RESIDUE: Phase 2 -- whole-closure sufficiency is a resolution-time property; no resolver exists yet (ion-resolve/src/lib.rs: "A full SAT-based resolver and lock file generator are planned but not yet implemented")`
 
 **[lock-recomputability]**: The lock MUST be the output of deterministic
 resolution: the same manifest and the same discovery snapshot (as pinned
 by [lock-set-snapshot]) MUST re-derive a byte-identical lock.
 Serialization MUST be canonical (see [lock-canonical-form]).
+`RESIDUE: Phase 2 -- depends on both the canonical encoder and resolution determinism, neither implemented (LockFileV2::to_canonical is an explicit unimplemented!() stub; no resolver exists)`
 
 **[lock-choice-policy]**: The choice function is fixed and canonical:
 among candidates satisfying the manifest's constraints, resolution MUST
@@ -81,17 +83,20 @@ deviating only through declared, manifest-side overrides. Determinism in
 [lock-recomputability] is therefore two-place — (manifest, snapshot) —
 with the choice policy a constant of this specification (Composition
 Model §6: the recorded choice).
+`RESIDUE: Phase 2 -- the choice function is part of the not-yet-implemented SAT-based resolver (ion-resolve/src/lib.rs)`
 
 **[lock-groundness]**: Every lock value MUST be ground: names bound to
 content identities and exact version strings. Version constraints,
 ranges, override declarations, and any other unresolved intent MUST NOT
 appear in the lock; they are manifest-side. The only equality relation a
 lock consumer needs is syntactic.
+`RESIDUE: Phase 2 -- a whole-schema meta-invariant; no check beyond the type shape exists, and the type shape alone does not prevent e.g. a version range being stuffed into the version String field`
 
 **[lock-closure-completeness]**: The `[deps]` section MUST contain the
 full transitive closure of the atom's dependencies as resolved. Which
 entries are direct is the manifest's knowledge and MUST NOT be
 duplicated in the lock (no root marker, no `[self]`).
+`RESIDUE: Phase 2 -- requires a manifest-driven resolution pipeline to compute the closure and know which entries are direct; no such pipeline exists`
 
 **[lock-action-totality]**: The lock, together with the manifest in the
 same atom snapshot, MUST determine — by pure elaboration, with no
@@ -104,6 +109,7 @@ MUST let a consumer identify and fetch each member's snapshot, from
 which that member's `action_id` is computed the same way. This
 discharges P7's totality gate (Execution Model §8): the toolchain pin is
 an ordinary dep entry; no dedicated entry type exists or is needed.
+`RESIDUE: Phase 2 -- action_id computation combining lock + manifest + toolchain-override propagation is not implemented anywhere in atom-core or eos`
 
 **[lock-in-snapshot-locality]**: The lock is carried inside the atom
 snapshot it serves — it is reviewed, signed intent. An edit to an atom's
@@ -115,6 +121,7 @@ action's identity derives only from its own snapshot's slice (see
 [lock-no-plan-digest]). Canonical form exists partly for this reason:
 with exactly one legal serialization and no comments, no
 semantically-inert lock edit exists to spuriously shift identity.
+`RESIDUE: Phase 2 -- cross-action leakage prevention depends on the same unimplemented action_id computation as [lock-action-totality]`
 
 ## Top level
 
@@ -122,11 +129,13 @@ semantically-inert lock edit exists to spuriously shift identity.
 field `schema`, in minimal decimal form. This document specifies
 `schema = 2`. Consumers MUST refuse locks whose schema version they do
 not implement.
+`RESIDUE: Phase 1 -- LockFileV2.schema is a typed u64 field, but no code path rejects an unrecognized schema version; no such check or test exists (ion/ion-lock/src/v2.rs)`
 
 **[lock-tool-owned]**: The lock is tool-authored; humans review lock
 diffs and never hand-edit them in supported workflows. The canonical
 form contains no comments: generator provenance belongs in VCS metadata
 and tool output, never in lock bytes.
+`RESIDUE: Phase 2 -- "no comments in canonical form" is tied to the unimplemented to_canonical encoder; "humans never hand-edit" is a workflow discipline, not machine-checkable by this repo's tooling`
 
 ## `[sets]` — set anchors and discovery snapshots
 
@@ -151,6 +160,7 @@ history rewrite is a successor charter's explicit concern
 (atom-transactions.md's `[charter-succession]`, `[anchor-hash-agile]`),
 never this field's: `anchor` is immutable for the set's lifetime
 regardless of what happens to the source repository underneath it.
+`RESIDUE: Phase 2 -- golden_digest_fields_are_byte_exact_canonical_form (ion/ion-lock/tests/v2_corpus.rs) confirms the field decodes/encodes as a well-formed AtomDigest, but not that the value genuinely equals czd(charter₀); no code computes a lock's anchor from charter machinery yet`
 
 **[lock-set-charter-head]**: Each `[sets]` entry MUST record a
 `charter_head` field: the algorithm-prefixed coz digest of the charter
@@ -172,6 +182,7 @@ ownership transfer, atom-transactions.md's `[charter-succession]`) is
 the effective charter at resolution time. Unlike `anchor`, which is
 immutable for the set's lifetime, `charter_head` MAY advance on
 re-resolution as succession proceeds; it MUST NOT regress.
+`RESIDUE: Phase 2 -- charter_head_is_distinct_from_anchor (ion/ion-lock/src/v2.rs) only shows the two fields CAN hold different values; the substantive non-regression/succession-derivation invariant depends on the chain-monotonicity machinery, which is Phase 1 unimplemented (atom/atom-id/tests/charter/chain_monotonicity.rs)`
 
 **[lock-set-snapshot]**: Each `[sets]` entry MUST record a `snapshot`
 field: the algorithm-prefixed object id of the set repository's tip
@@ -179,6 +190,7 @@ commit at discovery time. This pins the discovery snapshot (Composition
 Model §6): re-resolving the same manifest against the same set
 snapshots MUST re-derive the byte-identical lock, making
 [lock-recomputability] auditable rather than aspirational.
+`RESIDUE: Phase 2 -- same digest-format-only reasoning as [lock-set-anchor]; re-derivation determinism depends on the not-yet-implemented resolver`
 
 **[lock-set-mirrors]**: The `mirrors` field MUST be an array of
 transport hints: URLs, or the `"::"` sentinel denoting the local
@@ -186,10 +198,12 @@ workspace source (no remote). Mirrors are NEVER identity and NEVER
 trusted: content fetched from any mirror MUST verify against the
 content identities in this lock. Consumers MAY consult mirrors from any
 other source.
+`RESIDUE: Phase 1 -- SetEntry.mirrors is a raw Vec<String>; no validation of URL shape or the "::" sentinel exists`
 
 **[lock-set-referenced]**: Every set alias appearing in a `[deps]` key
 path MUST have an entry under `[sets]`, and every `[sets]` entry MUST be
 referenced by at least one dep entry.
+`VERIFIED: test (ion/ion-lock/tests/v2_corpus.rs::unreferenced_set_is_rejected, undeclared_set_is_rejected -- tests/support/mod.rs::check_closure checks both directions)`
 
 ## `[deps.<set>.<label>]` — the ground pins
 
@@ -204,44 +218,53 @@ name (Composition Model §4); diamond requirements that cannot reconcile
 are a resolution failure at this layer. Divergent-version coexistence
 is scope territory — environment certificates and co-installation —
 never package-lock state.
+`RESIDUE: Phase 2 -- the nested (set, label) keying structurally prevents two versions under one key, but the substantive claim (diamond requirements reconcile to a single shared choice) is SAT-resolution logic, not implemented (ion-resolve/src/lib.rs)`
 
 **[lock-dep-version]**: The `version` field MUST be the exact, non-empty
 version string of the resolved publish, recorded byte-verbatim as
 published (raw scheme — no normalization of any kind; scheme
 interpretation is a manifest/resolution concern, never a lock concern).
+`RESIDUE: Phase 1 -- DepEntry.version is a plain String; non-emptiness and byte-verbatim-as-published are untested and unenforced (ion/ion-lock/src/v2.rs)`
 
 **[lock-dep-publish]**: The `publish` field MUST be the content digest
 of the resolved publish transaction (the bare publish czd), prefixed
 with its hash algorithm. This is the entry's identity.
+`RESIDUE: Phase 2 -- golden_digest_fields_are_byte_exact_canonical_form (ion/ion-lock/tests/v2_corpus.rs) verifies AtomDigest format round-trip only, not that the value is genuinely the resolved publish transaction's digest`
 
 **[lock-annotation-consistency]**: `version` and the `(set, label)` key
 path MUST equal the values derivable from the entry's `publish`
 transaction. A mismatch is a hard validation error: annotations exist
 for humans and indexing, never as independent authority.
+`RESIDUE: Phase 2 -- no code cross-references version/(set, label) against the publish transaction's own payload; would require decoding the signed publish CozMessage during lock validation, not implemented`
 
 **[lock-dep-requires]**: The `requires` field MUST be an array listing
 the entry's direct dependencies as dotted key paths (`"<set>.<label>"`
 for dep entries, `"fetch.<name>"` for fetch entries), sorted bytewise.
 Requires edges are the closure's graph structure. Provider-side owner
 back-pointers MUST NOT exist.
+`RESIDUE: Phase 2 -- resolvability/acyclicity of the requires graph are separately verified ([lock-requires-resolvable], [lock-requires-acyclic]), but bytewise-sortedness of the array is a canonical-serialization concern tied to the unimplemented to_canonical encoder`
 
 **[lock-requires-resolvable]**: Every `requires` edge MUST name an entry
 that exists in this lock. Dangling edges are a hard validation error.
+`VERIFIED: test (ion/ion-lock/tests/v2_corpus.rs::dangling_requires_edge_is_rejected -- tests/support/mod.rs::edge_resolves)`
 
 **[lock-requires-acyclic]**: The requires graph MUST be acyclic — it is
 the skeleton of the action DAG, and a cyclic build dependency is
 unrealizable.
+`VERIFIED: test (ion/ion-lock/tests/v2_corpus.rs::cyclic_requires_graph_is_rejected -- tests/support/mod.rs::detect_cycle)`
 
 **[lock-dep-liveness]**: Dep-entry liveness is reachability from the
 manifest's direct dependencies — the graph's roots, which live
 manifest-side per [lock-closure-completeness]. The lock alone is
 deliberately not a self-contained GC domain: sanitization MUST take its
 roots from the manifest.
+`RESIDUE: Phase 2 -- no manifest-linkage or sanitization/GC pass exists yet; depends on the same unimplemented resolution pipeline as [lock-closure-completeness]`
 
 **[lock-dep-ordering]**: Dep entries MUST be serialized in bytewise
 lexicographic order of set alias, then label. (Fetch entries sort
 independently within `[fetch]`; no cross-section ordering relation
 exists or is needed.)
+`RESIDUE: Phase 2 -- serialization ordering is part of the canonical encoder, an explicit unimplemented!() stub (LockFileV2::to_canonical, ion/ion-lock/src/v2.rs)`
 
 ## `[fetch.<name>]` — promoted fetch pins
 
@@ -254,6 +277,7 @@ regenerable by resolution.
 the algorithm-prefixed content digest of the fetched payload. The digest
 is the identity; the `url` field is a transport hint and MUST NOT be
 treated as authoritative.
+`RESIDUE: Phase 2 -- golden_digest_fields_are_byte_exact_canonical_form (ion/ion-lock/tests/v2_corpus.rs) verifies AtomDigest format round-trip only, not that url is never treated as authoritative by any consumer (no fetch/verify path exists yet)`
 
 **[lock-fetch-naming]**: Fetch names are lock-local labels with no
 cross-lock meaning. The promoting tool MUST derive names
@@ -261,17 +285,20 @@ deterministically from the discovery context, and a promotion whose
 name collides with an existing entry carrying a different digest MUST
 fail loudly for user resolution. (TOML itself rejects duplicate keys;
 this constraint binds the promoting tool, not the parser.)
+`RESIDUE: Phase 2 -- no promotion/promoting-tool implementation exists yet (record-mode fetch proxy is unimplemented; see ion-manifest.md's P4 flag)`
 
 **[lock-fetch-liveness]**: A fetch entry is live while at least one
 `requires` edge references it. Automated sanitization MUST NOT remove a
 live fetch entry, and MUST NOT remove a dead one except under an
 explicit user-invoked purge — promoted knowledge is not regenerable and
 its removal is a user decision.
+`RESIDUE: Phase 2 -- no sanitization/purge implementation exists; ion-lock is currently parse/validate-only`
 
 **[lock-fetch-adopted-absent]**: Dependencies pinned by an **adopted**
 ecosystem lockfile (e.g. `Cargo.lock` shipped inside the atom's sources)
 MUST NOT be re-declared as fetch entries. The adopted lockfile is the
 pin payload, already inside the atom snapshot.
+`RESIDUE: Phase 2 -- cross-referencing adopted ecosystem lockfiles against fetch entries requires atom-sourcing pipeline integration, not implemented anywhere`
 
 ## Canonical form and write discipline
 
@@ -286,12 +313,14 @@ strings with TOML's minimal escaping; exactly one space on each side of
 `", "`; integers in minimal decimal form; version strings byte-verbatim
 as published (no Unicode normalization). Two locks with equal content
 MUST be byte-identical.
+`RESIDUE: Phase 2 -- LockFileV2::to_canonical is an explicit unimplemented!() stub by design (ion/ion-lock/src/v2.rs); canonical_form_is_byte_exact is a red test (#[ignore], "canonical encoder is unimplemented by design")`
 
 **[lock-atomic-write]**: Every lock mutation MUST be a whole-file
 atomic write. Write phases (resolution; later promotions) land in their
 own sections; independent promotions MUST be reorder-invariant —
 running two independent promotions in either order MUST yield the same
 bytes (Execution Model §8, P6).
+`RESIDUE: Phase 2 -- no lock-writing code exists at all; ion-lock is currently a parse/validate-only crate (no LockFileV2 writer, temp-then-rename, or promotion-merge path)`
 
 ## Deliberate absences
 
@@ -300,29 +329,35 @@ regression, not an extension.
 
 **[lock-no-compose]**: The lock MUST NOT contain a `[compose]` section,
 composer selection, or evaluator arguments of any kind (ADR-0006 §3).
+`VERIFIED: test (ion/ion-lock/tests/v2_corpus.rs::lock_no_star_violations_are_forbidden_key_errors, typed_parse_alone_silently_accepts_a_lock_no_star_violation -- corpus/v2/violations/lock-no-compose.toml)`
 
 **[lock-no-params]**: Action parameters MUST NOT appear in the lock.
 They are declared in the manifest, which ships inside the atom snapshot
 (they are declared, not resolved).
+`VERIFIED: test (ion/ion-lock/tests/v2_corpus.rs::lock_no_star_violations_are_forbidden_key_errors -- corpus/v2/violations/lock-no-params.toml)`
 
 **[lock-no-toolchain-section]**: The lock MUST NOT contain a toolchain
 section or toolchain entry type. Toolchain-role defaults are ordinary
 dependencies declared in the manifest and pinned as ordinary dep
 entries; the _effective_ toolchain after role-keyed override
 propagation is computed per [lock-action-totality], never stored.
+`VERIFIED: test (ion/ion-lock/tests/v2_corpus.rs::lock_no_star_violations_are_forbidden_key_errors -- corpus/v2/violations/lock-no-toolchain-section.toml)`
 
 **[lock-no-interfaces]**: Interface manifests MUST NOT appear in the
 lock. They are facts, not choices; they live on the atom metadata chain
 beside build records.
+`VERIFIED: test (ion/ion-lock/tests/v2_corpus.rs::lock_no_star_violations_are_forbidden_key_errors -- corpus/v2/violations/lock-no-interfaces.toml)`
 
 **[lock-no-override-state]**: Override declarations (target-keyed or
 role-keyed, forced or bounded) MUST NOT appear in the lock. The lock
 records their ground _results_; the pin-diff is the audit trail.
+`VERIFIED: test (ion/ion-lock/tests/v2_corpus.rs::lock_no_star_violations_are_forbidden_key_errors -- corpus/v2/violations/lock-no-override-state.toml)`
 
 **[lock-no-foreign-metadata]**: The lock MUST NOT contain registry
 metadata, timestamps, resolution history, environment markers, or
 conditional entries of any kind. (The `snapshot` field is a content
 identity, not a timestamp.)
+`VERIFIED: test (ion/ion-lock/tests/v2_corpus.rs::lock_no_star_violations_are_forbidden_key_errors -- corpus/v2/violations/lock-no-foreign-metadata.toml)`
 
 ## Whole-lock hashing is not an identity
 
@@ -334,6 +369,7 @@ snapshot legitimately contains the lock, per
 Execution Model §2.4): an edit in one atom's lock MUST NOT shift the
 identity of dependency actions or other atoms' actions. (This retires
 the v1-era `plan_digest` and the job-identity scheme built on it.)
+`VERIFIED: test (ion/ion-lock/tests/v2_corpus.rs::lock_no_star_violations_are_forbidden_key_errors -- corpus/v2/violations/lock-no-plan-digest.toml)`
 
 ## Example
 

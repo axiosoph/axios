@@ -171,7 +171,7 @@
     {
       "id": "aggregation-monotonic",
       "spec_file": "docs/specs/atom-sourcing.md",
-      "line": 395,
+      "line": 399,
       "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
@@ -179,7 +179,7 @@
     {
       "id": "atom-version-identity",
       "spec_file": "docs/specs/atom-sourcing.md",
-      "line": 388,
+      "line": 392,
       "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
@@ -187,7 +187,7 @@
     {
       "id": "concurrent-validation-safe",
       "spec_file": "docs/specs/atom-sourcing.md",
-      "line": 397,
+      "line": 401,
       "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
@@ -195,7 +195,7 @@
     {
       "id": "czd-divergence-handling",
       "spec_file": "docs/specs/atom-sourcing.md",
-      "line": 398,
+      "line": 402,
       "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
@@ -203,15 +203,15 @@
     {
       "id": "lock-capture",
       "spec_file": "docs/specs/atom-sourcing.md",
-      "line": 189,
+      "line": 191,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 1/2 -- same reasoning as [source-discovery]; no resolver/lock-capture implementation exists (note: this v1-era LockEntry shape -- genesis-commit \"set\", \"pkg\" PURL -- predates and is unreconciled with the v2 lock schema)",
       "spec_status": "unverified"
     },
     {
       "id": "lock-entry-sufficient",
       "spec_file": "docs/specs/atom-sourcing.md",
-      "line": 391,
+      "line": 395,
       "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
@@ -219,7 +219,7 @@
     {
       "id": "mirror-staleness-tolerance",
       "spec_file": "docs/specs/atom-sourcing.md",
-      "line": 389,
+      "line": 393,
       "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
@@ -227,15 +227,15 @@
     {
       "id": "mirror-validation",
       "spec_file": "docs/specs/atom-sourcing.md",
-      "line": 177,
+      "line": 178,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 1/2 -- same reasoning as [source-discovery]; no resolver/mirror-validation implementation exists",
       "spec_status": "unverified"
     },
     {
       "id": "no-conflicting-digest",
       "spec_file": "docs/specs/atom-sourcing.md",
-      "line": 393,
+      "line": 397,
       "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
@@ -243,7 +243,7 @@
     {
       "id": "no-cross-set-anchor",
       "spec_file": "docs/specs/atom-sourcing.md",
-      "line": 392,
+      "line": 396,
       "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
@@ -251,7 +251,7 @@
     {
       "id": "no-unpublished-dependency",
       "spec_file": "docs/specs/atom-sourcing.md",
-      "line": 394,
+      "line": 398,
       "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
@@ -259,15 +259,15 @@
     {
       "id": "peer-source-last-resort",
       "spec_file": "docs/specs/atom-sourcing.md",
-      "line": 374,
+      "line": 377,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 1/2 -- no AtomSource/peer-client/priority-ordering implementation exists anywhere in the codebase yet",
       "spec_status": "unverified"
     },
     {
       "id": "resolution-reproducible",
       "spec_file": "docs/specs/atom-sourcing.md",
-      "line": 396,
+      "line": 400,
       "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
@@ -275,7 +275,7 @@
     {
       "id": "set-anchor-bijection",
       "spec_file": "docs/specs/atom-sourcing.md",
-      "line": 387,
+      "line": 391,
       "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
@@ -285,13 +285,13 @@
       "spec_file": "docs/specs/atom-sourcing.md",
       "line": 166,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 1/2 -- no resolver implementation exists; no AtomSource/AtomStore/AtomRegistry trait or MirrorSet type is defined anywhere in the codebase yet",
       "spec_status": "unverified"
     },
     {
       "id": "version-total-order",
       "spec_file": "docs/specs/atom-sourcing.md",
-      "line": 390,
+      "line": 394,
       "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
@@ -299,7 +299,7 @@
     {
       "id": "anchor-content-addressed",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1070,
+      "line": 1075,
       "verification_method": "machine (Alloy)",
       "residue": "",
       "spec_status": ""
@@ -307,7 +307,7 @@
     {
       "id": "anchor-immutable",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1069,
+      "line": 1074,
       "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -315,7 +315,7 @@
     {
       "id": "anchor-resolvable",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1071,
+      "line": 1076,
       "verification_method": "review-residue",
       "residue": "",
       "spec_status": ""
@@ -323,7 +323,7 @@
     {
       "id": "atom-detached",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1076,
+      "line": 1081,
       "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
@@ -331,7 +331,7 @@
     {
       "id": "atom-snapshot-reproducible",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1056,
+      "line": 1061,
       "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
@@ -339,7 +339,7 @@
     {
       "id": "atomid-per-source-unique",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1074,
+      "line": 1079,
       "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -347,7 +347,7 @@
     {
       "id": "backend-agnostic-protocol",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1058,
+      "line": 1063,
       "verification_method": "rustc",
       "residue": "",
       "spec_status": ""
@@ -355,7 +355,7 @@
     {
       "id": "backend-bit-perfect",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1073,
+      "line": 1078,
       "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
@@ -363,7 +363,7 @@
     {
       "id": "chain-monotonicity",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1067,
+      "line": 1072,
       "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -371,7 +371,7 @@
     {
       "id": "charter-ancestry",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1064,
+      "line": 1069,
       "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -379,7 +379,7 @@
     {
       "id": "charter-anchor",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1060,
+      "line": 1065,
       "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -387,7 +387,7 @@
     {
       "id": "charter-fork-distinction",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1068,
+      "line": 1073,
       "verification_method": "machine (Alloy)",
       "residue": "",
       "spec_status": ""
@@ -395,7 +395,7 @@
     {
       "id": "charter-succession",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1065,
+      "line": 1070,
       "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -403,7 +403,7 @@
     {
       "id": "charter-succession-linear",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1066,
+      "line": 1071,
       "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -411,15 +411,15 @@
     {
       "id": "charter-transition",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 715,
+      "line": 717,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 1 -- construction/signature correctness is tested (atom/atom-id/tests/charter/construction.rs), but the PRE bootstrap-gate authorization check has no implementation to call: bootstrap_gate.rs's own red test states \"no bootstrap-gate authorization check exists yet\"; the POST storage-in-atom-refs requirement has no atom-git charter storage implementation either",
       "spec_status": "unverified (pending implementation)"
     },
     {
       "id": "charter-typ",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1059,
+      "line": 1064,
       "verification_method": "review-residue",
       "residue": "",
       "spec_status": ""
@@ -427,7 +427,7 @@
     {
       "id": "claim-chains-charter",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1061,
+      "line": 1066,
       "verification_method": "machine (Alloy)",
       "residue": "",
       "spec_status": ""
@@ -435,7 +435,7 @@
     {
       "id": "claim-charter-authorization",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1062,
+      "line": 1067,
       "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -443,7 +443,7 @@
     {
       "id": "claim-key-required",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1042,
+      "line": 1047,
       "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
@@ -451,15 +451,15 @@
     {
       "id": "claim-payload-extensible",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 873,
+      "line": 877,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 1/2 -- ClaimPayload (atom/atom-id/src/lib.rs) has a fixed field set with no \"meta\" field or unknown-field-preservation mechanism; default serde deserialize silently drops fields not in the struct rather than preserving them, so this constraint is not yet satisfied by the landed type, let alone verified",
       "spec_status": "unverified"
     },
     {
       "id": "claim-replacement-authority",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1063,
+      "line": 1068,
       "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -467,15 +467,15 @@
     {
       "id": "claim-replacement-transition",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 754,
+      "line": 757,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 1 -- construction.rs::claim_replacement_transactions_verify tests replacement shape (prior linkage, governance marking, distinct signing keys) and signature validity, but its own module docstring is explicit: \"construction correctness only -- no ... authorization validation runs anywhere in this corpus; that is Phase 1\". No storage backend exists either.",
       "spec_status": "unverified (pending implementation)"
     },
     {
       "id": "claim-transition",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1047,
+      "line": 1052,
       "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
@@ -483,7 +483,7 @@
     {
       "id": "claim-typ",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1035,
+      "line": 1040,
       "verification_method": "rustc",
       "residue": "",
       "spec_status": ""
@@ -491,15 +491,15 @@
     {
       "id": "composite-source-concurrent",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 252,
+      "line": 253,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 1/2 -- no CompositeAtomSource implementation exists anywhere in the codebase yet; depends on [trait-async-io]",
       "spec_status": "unverified"
     },
     {
       "id": "crypto-layer-separation",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1044,
+      "line": 1049,
       "verification_method": "cargo-dep",
       "residue": "",
       "spec_status": ""
@@ -507,7 +507,7 @@
     {
       "id": "crypto-via-coz",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1045,
+      "line": 1050,
       "verification_method": "cargo-dep",
       "residue": "",
       "spec_status": ""
@@ -515,7 +515,7 @@
     {
       "id": "dig-is-atom-snapshot",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1038,
+      "line": 1043,
       "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
@@ -523,7 +523,7 @@
     {
       "id": "fs-source-contract",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1080,
+      "line": 1085,
       "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
@@ -531,7 +531,7 @@
     {
       "id": "identity-content-addressed",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1028,
+      "line": 1033,
       "verification_method": "machine (Alloy)",
       "residue": "",
       "spec_status": ""
@@ -539,7 +539,7 @@
     {
       "id": "identity-stability",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1029,
+      "line": 1034,
       "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -547,7 +547,7 @@
     {
       "id": "ingest-preserves-identity",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1057,
+      "line": 1062,
       "verification_method": "machine (Alloy)",
       "residue": "",
       "spec_status": ""
@@ -555,7 +555,7 @@
     {
       "id": "key-management-deferred",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1046,
+      "line": 1051,
       "verification_method": "cargo-dep",
       "residue": "",
       "spec_status": ""
@@ -563,7 +563,7 @@
     {
       "id": "manifest-minimal",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1072,
+      "line": 1077,
       "verification_method": "machine (Alloy)",
       "residue": "",
       "spec_status": ""
@@ -571,7 +571,7 @@
     {
       "id": "no-backdated-publish",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1053,
+      "line": 1058,
       "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -579,7 +579,7 @@
     {
       "id": "no-cross-layer-crypto",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1052,
+      "line": 1057,
       "verification_method": "cargo-dep",
       "residue": "",
       "spec_status": ""
@@ -587,7 +587,7 @@
     {
       "id": "no-duplicate-version",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1051,
+      "line": 1056,
       "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -595,7 +595,7 @@
     {
       "id": "no-unclaimed-publish",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1050,
+      "line": 1055,
       "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -603,7 +603,7 @@
     {
       "id": "owner-abstract",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1030,
+      "line": 1035,
       "verification_method": "machine (Alloy)",
       "residue": "",
       "spec_status": ""
@@ -611,7 +611,7 @@
     {
       "id": "owner-authorization-delegated",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1032,
+      "line": 1037,
       "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
@@ -619,7 +619,7 @@
     {
       "id": "owner-compatibility",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1031,
+      "line": 1036,
       "verification_method": "machine (Alloy)",
       "residue": "",
       "spec_status": ""
@@ -627,7 +627,7 @@
     {
       "id": "path-is-subdir",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1040,
+      "line": 1045,
       "verification_method": "rustc",
       "residue": "",
       "spec_status": ""
@@ -635,7 +635,7 @@
     {
       "id": "publish-chains-claim",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1034,
+      "line": 1039,
       "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -643,7 +643,7 @@
     {
       "id": "publish-claim-coherence",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1075,
+      "line": 1080,
       "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -651,7 +651,7 @@
     {
       "id": "publish-key-optional",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1043,
+      "line": 1048,
       "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
@@ -659,7 +659,7 @@
     {
       "id": "publish-payload-extensible",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1079,
+      "line": 1084,
       "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
@@ -667,7 +667,7 @@
     {
       "id": "publish-transition",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1048,
+      "line": 1053,
       "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
@@ -675,7 +675,7 @@
     {
       "id": "publish-typ",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1036,
+      "line": 1041,
       "verification_method": "rustc",
       "residue": "",
       "spec_status": ""
@@ -683,7 +683,7 @@
     {
       "id": "rawversion-opaque",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1041,
+      "line": 1046,
       "verification_method": "rustc",
       "residue": "",
       "spec_status": ""
@@ -691,7 +691,7 @@
     {
       "id": "session-ordering",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1049,
+      "line": 1054,
       "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -699,7 +699,7 @@
     {
       "id": "sig-over-pay",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1037,
+      "line": 1042,
       "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
@@ -707,7 +707,7 @@
     {
       "id": "src-is-source-revision",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1039,
+      "line": 1044,
       "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
@@ -715,7 +715,7 @@
     {
       "id": "symmetric-payloads",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1033,
+      "line": 1038,
       "verification_method": "rustc",
       "residue": "",
       "spec_status": ""
@@ -725,13 +725,13 @@
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 196,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 1/2 -- no AtomSource/AtomStore trait is defined anywhere in the codebase yet; nothing to check async-ness of",
       "spec_status": "unverified"
     },
     {
       "id": "trait-signature-pure",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1078,
+      "line": 1083,
       "verification_method": "rustc",
       "residue": "",
       "spec_status": ""
@@ -739,7 +739,7 @@
     {
       "id": "uri-not-metadata",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1077,
+      "line": 1082,
       "verification_method": "rustc",
       "residue": "",
       "spec_status": ""
@@ -747,7 +747,7 @@
     {
       "id": "verification-local",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1054,
+      "line": 1059,
       "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
@@ -755,7 +755,7 @@
     {
       "id": "verification-provenance",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1055,
+      "line": 1060,
       "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
@@ -2011,7 +2011,7 @@
     {
       "id": "composer-set-reference",
       "spec_file": "docs/specs/ion-manifest.md",
-      "line": 359,
+      "line": 362,
       "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
@@ -2019,7 +2019,7 @@
     {
       "id": "deny-unknown-fields",
       "spec_file": "docs/specs/ion-manifest.md",
-      "line": 361,
+      "line": 364,
       "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
@@ -2027,7 +2027,7 @@
     {
       "id": "label-version-uniqueness",
       "spec_file": "docs/specs/ion-manifest.md",
-      "line": 362,
+      "line": 365,
       "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
@@ -2037,139 +2037,27 @@
       "spec_file": "docs/specs/ion-manifest.md",
       "line": 243,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 1/2 -- no CLI \"add\" command or re-resolution pipeline exists; ion-manifest only parses/validates a manifest already on disk",
       "spec_status": "unverified"
     },
     {
       "id": "manifest-add-mirror",
       "spec_file": "docs/specs/ion-manifest.md",
-      "line": 254,
+      "line": 255,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 1/2 -- no mirror-add or anchor-bijection-validation logic exists anywhere in the codebase",
       "spec_status": "unverified"
     },
     {
       "id": "manifest-parse",
       "spec_file": "docs/specs/ion-manifest.md",
       "line": 233,
-      "verification_method": "",
+      "verification_method": "test (ion/ion-manifest/src/lib.rs::IonManifest::parse -- test_valid_manifest_parsing, test_manifest_missing_required_sections, test_manifest_deny_unknown_fields, test_set_declaration_completeness, ion_manifest_invalid_rejected property test)",
       "residue": "",
-      "spec_status": "unverified"
+      "spec_status": ""
     },
     {
       "id": "manifest-required-sections",
-      "spec_file": "docs/specs/ion-manifest.md",
-      "line": 355,
-      "verification_method": "agent-check",
-      "residue": "",
-      "spec_status": ""
-    },
-    {
-      "id": "manifest-roundtrip",
-      "spec_file": "docs/specs/ion-manifest.md",
-      "line": 368,
-      "verification_method": "agent-check",
-      "residue": "",
-      "spec_status": ""
-    },
-    {
-      "id": "manifest-validation-total",
-      "spec_file": "docs/specs/ion-manifest.md",
-      "line": 369,
-      "verification_method": "agent-check",
-      "residue": "",
-      "spec_status": ""
-    },
-    {
-      "id": "no-orphaned-set",
-      "spec_file": "docs/specs/ion-manifest.md",
-      "line": 267,
-      "verification_method": "",
-      "residue": "",
-      "spec_status": "unverified"
-    },
-    {
-      "id": "no-self-dependency",
-      "spec_file": "docs/specs/ion-manifest.md",
-      "line": 371,
-      "verification_method": "agent-check",
-      "residue": "",
-      "spec_status": ""
-    },
-    {
-      "id": "no-undeclared-set-reference",
-      "spec_file": "docs/specs/ion-manifest.md",
-      "line": 273,
-      "verification_method": "",
-      "residue": "",
-      "spec_status": "unverified"
-    },
-    {
-      "id": "package-identity-required",
-      "spec_file": "docs/specs/ion-manifest.md",
-      "line": 356,
-      "verification_method": "agent-check",
-      "residue": "",
-      "spec_status": ""
-    },
-    {
-      "id": "plugin-extension-point",
-      "spec_file": "docs/specs/ion-manifest.md",
-      "line": 363,
-      "verification_method": "agent-check",
-      "residue": "",
-      "spec_status": ""
-    },
-    {
-      "id": "plugin-isolation",
-      "spec_file": "docs/specs/ion-manifest.md",
-      "line": 370,
-      "verification_method": "agent-check",
-      "residue": "",
-      "spec_status": ""
-    },
-    {
-      "id": "plugin-lock-contract",
-      "spec_file": "docs/specs/ion-manifest.md",
-      "line": 364,
-      "verification_method": "agent-check",
-      "residue": "",
-      "spec_status": ""
-    },
-    {
-      "id": "plugin-lock-type-tag",
-      "spec_file": "docs/specs/ion-manifest.md",
-      "line": 365,
-      "verification_method": "agent-check",
-      "residue": "",
-      "spec_status": ""
-    },
-    {
-      "id": "plugin-owner-tracking",
-      "spec_file": "docs/specs/ion-manifest.md",
-      "line": 366,
-      "verification_method": "agent-check",
-      "residue": "",
-      "spec_status": ""
-    },
-    {
-      "id": "plugin-resolution-locality",
-      "spec_file": "docs/specs/ion-manifest.md",
-      "line": 367,
-      "verification_method": "agent-check",
-      "residue": "",
-      "spec_status": ""
-    },
-    {
-      "id": "set-declaration-completeness",
-      "spec_file": "docs/specs/ion-manifest.md",
-      "line": 357,
-      "verification_method": "agent-check",
-      "residue": "",
-      "spec_status": ""
-    },
-    {
-      "id": "set-mirror-minimum",
       "spec_file": "docs/specs/ion-manifest.md",
       "line": 358,
       "verification_method": "agent-check",
@@ -2177,7 +2065,103 @@
       "spec_status": ""
     },
     {
-      "id": "version-constraint-syntax",
+      "id": "manifest-roundtrip",
+      "spec_file": "docs/specs/ion-manifest.md",
+      "line": 371,
+      "verification_method": "agent-check",
+      "residue": "",
+      "spec_status": ""
+    },
+    {
+      "id": "manifest-validation-total",
+      "spec_file": "docs/specs/ion-manifest.md",
+      "line": 372,
+      "verification_method": "agent-check",
+      "residue": "",
+      "spec_status": ""
+    },
+    {
+      "id": "no-orphaned-set",
+      "spec_file": "docs/specs/ion-manifest.md",
+      "line": 269,
+      "verification_method": "",
+      "residue": "Uncertain, flagged for review -- IonManifest::parse (ion/ion-manifest/src/lib.rs) never checks the sets-to-deps direction, so an orphaned set is accepted by construction (satisfying this permissive constraint), but no dedicated test asserts that case; the property-based roundtrip test can generate it incidentally but does not name it as the behavior under test. Conservative RESIDUE pending a dedicated positive test.",
+      "spec_status": "unverified"
+    },
+    {
+      "id": "no-self-dependency",
+      "spec_file": "docs/specs/ion-manifest.md",
+      "line": 374,
+      "verification_method": "agent-check",
+      "residue": "",
+      "spec_status": ""
+    },
+    {
+      "id": "no-undeclared-set-reference",
+      "spec_file": "docs/specs/ion-manifest.md",
+      "line": 276,
+      "verification_method": "test (ion/ion-manifest/src/lib.rs::IonManifest::parse set-declaration-completeness check -- test_set_declaration_completeness, ion_manifest_invalid_rejected case 1 \"undeclared-set-name\")",
+      "residue": "",
+      "spec_status": ""
+    },
+    {
+      "id": "package-identity-required",
+      "spec_file": "docs/specs/ion-manifest.md",
+      "line": 359,
+      "verification_method": "agent-check",
+      "residue": "",
+      "spec_status": ""
+    },
+    {
+      "id": "plugin-extension-point",
+      "spec_file": "docs/specs/ion-manifest.md",
+      "line": 366,
+      "verification_method": "agent-check",
+      "residue": "",
+      "spec_status": ""
+    },
+    {
+      "id": "plugin-isolation",
+      "spec_file": "docs/specs/ion-manifest.md",
+      "line": 373,
+      "verification_method": "agent-check",
+      "residue": "",
+      "spec_status": ""
+    },
+    {
+      "id": "plugin-lock-contract",
+      "spec_file": "docs/specs/ion-manifest.md",
+      "line": 367,
+      "verification_method": "agent-check",
+      "residue": "",
+      "spec_status": ""
+    },
+    {
+      "id": "plugin-lock-type-tag",
+      "spec_file": "docs/specs/ion-manifest.md",
+      "line": 368,
+      "verification_method": "agent-check",
+      "residue": "",
+      "spec_status": ""
+    },
+    {
+      "id": "plugin-owner-tracking",
+      "spec_file": "docs/specs/ion-manifest.md",
+      "line": 369,
+      "verification_method": "agent-check",
+      "residue": "",
+      "spec_status": ""
+    },
+    {
+      "id": "plugin-resolution-locality",
+      "spec_file": "docs/specs/ion-manifest.md",
+      "line": 370,
+      "verification_method": "agent-check",
+      "residue": "",
+      "spec_status": ""
+    },
+    {
+      "id": "set-declaration-completeness",
       "spec_file": "docs/specs/ion-manifest.md",
       "line": 360,
       "verification_method": "agent-check",
@@ -2185,9 +2169,25 @@
       "spec_status": ""
     },
     {
+      "id": "set-mirror-minimum",
+      "spec_file": "docs/specs/ion-manifest.md",
+      "line": 361,
+      "verification_method": "agent-check",
+      "residue": "",
+      "spec_status": ""
+    },
+    {
+      "id": "version-constraint-syntax",
+      "spec_file": "docs/specs/ion-manifest.md",
+      "line": 363,
+      "verification_method": "agent-check",
+      "residue": "",
+      "spec_status": ""
+    },
+    {
       "id": "git-tag-version-inference",
       "spec_file": "docs/specs/ion-resolution.md",
-      "line": 368,
+      "line": 371,
       "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
@@ -2195,7 +2195,7 @@
     {
       "id": "lock-atom-entry-fields",
       "spec_file": "docs/specs/ion-resolution.md",
-      "line": 352,
+      "line": 355,
       "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
@@ -2203,15 +2203,15 @@
     {
       "id": "lock-atomic-write",
       "spec_file": "docs/specs/ion-resolution.md",
-      "line": 217,
+      "line": 219,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 2 -- no lock-writing code exists at all; ion-lock is currently parse/validate-only (same gap as [lock-atomic-write] in lock-file-schema.md)",
       "spec_status": "unverified"
     },
     {
       "id": "lock-compose-capture",
       "spec_file": "docs/specs/ion-resolution.md",
-      "line": 355,
+      "line": 358,
       "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
@@ -2219,7 +2219,7 @@
     {
       "id": "lock-direct-flag",
       "spec_file": "docs/specs/ion-resolution.md",
-      "line": 354,
+      "line": 357,
       "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
@@ -2227,15 +2227,15 @@
     {
       "id": "lock-freeze",
       "spec_file": "docs/specs/ion-resolution.md",
-      "line": 207,
+      "line": 208,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 2 -- depends on the same unimplemented reconciliation pipeline as [reconcile]; no operation-scoped lock-freeze mechanism exists",
       "spec_status": "unverified"
     },
     {
       "id": "lock-plugin-entries",
       "spec_file": "docs/specs/ion-resolution.md",
-      "line": 356,
+      "line": 359,
       "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
@@ -2243,7 +2243,7 @@
     {
       "id": "lock-reproducibility",
       "spec_file": "docs/specs/ion-resolution.md",
-      "line": 365,
+      "line": 368,
       "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
@@ -2251,7 +2251,7 @@
     {
       "id": "lock-requires-graph",
       "spec_file": "docs/specs/ion-resolution.md",
-      "line": 353,
+      "line": 356,
       "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
@@ -2259,7 +2259,7 @@
     {
       "id": "lock-schema-version",
       "spec_file": "docs/specs/ion-resolution.md",
-      "line": 350,
+      "line": 353,
       "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
@@ -2267,7 +2267,7 @@
     {
       "id": "lock-sets-capture",
       "spec_file": "docs/specs/ion-resolution.md",
-      "line": 351,
+      "line": 354,
       "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
@@ -2275,7 +2275,7 @@
     {
       "id": "no-constraint-violation",
       "spec_file": "docs/specs/ion-resolution.md",
-      "line": 364,
+      "line": 367,
       "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
@@ -2283,7 +2283,7 @@
     {
       "id": "no-partial-lock",
       "spec_file": "docs/specs/ion-resolution.md",
-      "line": 362,
+      "line": 365,
       "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
@@ -2291,7 +2291,7 @@
     {
       "id": "no-stale-lock-entry",
       "spec_file": "docs/specs/ion-resolution.md",
-      "line": 363,
+      "line": 366,
       "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
@@ -2299,7 +2299,7 @@
     {
       "id": "plugin-dep-sanitization",
       "spec_file": "docs/specs/ion-resolution.md",
-      "line": 367,
+      "line": 370,
       "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
@@ -2309,13 +2309,13 @@
       "spec_file": "docs/specs/ion-resolution.md",
       "line": 195,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 2 -- no reconciliation pipeline exists; ion-resolve/src/lib.rs's own docstring: \"A full SAT-based resolver and lock file generator are planned but not yet implemented\"",
       "spec_status": "unverified"
     },
     {
       "id": "reconcile-idempotent",
       "spec_file": "docs/specs/ion-resolution.md",
-      "line": 366,
+      "line": 369,
       "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
@@ -2323,7 +2323,7 @@
     {
       "id": "resolution-complete",
       "spec_file": "docs/specs/ion-resolution.md",
-      "line": 357,
+      "line": 360,
       "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
@@ -2331,7 +2331,7 @@
     {
       "id": "resolution-deterministic",
       "spec_file": "docs/specs/ion-resolution.md",
-      "line": 358,
+      "line": 361,
       "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
@@ -2339,7 +2339,7 @@
     {
       "id": "resolution-highest-match",
       "spec_file": "docs/specs/ion-resolution.md",
-      "line": 359,
+      "line": 362,
       "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
@@ -2347,7 +2347,7 @@
     {
       "id": "resolution-transitive",
       "spec_file": "docs/specs/ion-resolution.md",
-      "line": 361,
+      "line": 364,
       "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
@@ -2355,7 +2355,7 @@
     {
       "id": "resolution-unsolvable-diagnostic",
       "spec_file": "docs/specs/ion-resolution.md",
-      "line": 360,
+      "line": 363,
       "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
@@ -2363,7 +2363,7 @@
     {
       "id": "version-semantics-semver",
       "spec_file": "docs/specs/ion-resolution.md",
-      "line": 349,
+      "line": 352,
       "verification_method": "agent-check",
       "residue": "",
       "spec_status": ""
@@ -2515,273 +2515,273 @@
     {
       "id": "lock-action-totality",
       "spec_file": "docs/specs/lock-file-schema.md",
-      "line": 96,
+      "line": 101,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 2 -- action_id computation combining lock + manifest + toolchain-override propagation is not implemented anywhere in atom-core or eos",
       "spec_status": ""
     },
     {
       "id": "lock-annotation-consistency",
       "spec_file": "docs/specs/lock-file-schema.md",
-      "line": 217,
+      "line": 234,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 2 -- no code cross-references version/(set, label) against the publish transaction's own payload; would require decoding the signed publish CozMessage during lock validation, not implemented",
       "spec_status": ""
     },
     {
       "id": "lock-atomic-write",
       "spec_file": "docs/specs/lock-file-schema.md",
-      "line": 290,
+      "line": 318,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 2 -- no lock-writing code exists at all; ion-lock is currently a parse/validate-only crate (no LockFileV2 writer, temp-then-rename, or promotion-merge path)",
       "spec_status": ""
     },
     {
       "id": "lock-canonical-form",
       "spec_file": "docs/specs/lock-file-schema.md",
-      "line": 278,
+      "line": 305,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 2 -- LockFileV2::to_canonical is an explicit unimplemented!() stub by design (ion/ion-lock/src/v2.rs); canonical_form_is_byte_exact is a red test (#[ignore], \"canonical encoder is unimplemented by design\")",
       "spec_status": ""
     },
     {
       "id": "lock-choice-policy",
       "spec_file": "docs/specs/lock-file-schema.md",
-      "line": 77,
+      "line": 79,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 2 -- the choice function is part of the not-yet-implemented SAT-based resolver (ion-resolve/src/lib.rs)",
       "spec_status": ""
     },
     {
       "id": "lock-closure-completeness",
       "spec_file": "docs/specs/lock-file-schema.md",
-      "line": 91,
+      "line": 95,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 2 -- requires a manifest-driven resolution pipeline to compute the closure and know which entries are direct; no such pipeline exists",
       "spec_status": ""
     },
     {
       "id": "lock-dep-liveness",
       "spec_file": "docs/specs/lock-file-schema.md",
-      "line": 235,
+      "line": 256,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 2 -- no manifest-linkage or sanitization/GC pass exists yet; depends on the same unimplemented resolution pipeline as [lock-closure-completeness]",
       "spec_status": ""
     },
     {
       "id": "lock-dep-ordering",
       "spec_file": "docs/specs/lock-file-schema.md",
-      "line": 241,
+      "line": 263,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 2 -- serialization ordering is part of the canonical encoder, an explicit unimplemented!() stub (LockFileV2::to_canonical, ion/ion-lock/src/v2.rs)",
       "spec_status": ""
     },
     {
       "id": "lock-dep-publish",
       "spec_file": "docs/specs/lock-file-schema.md",
-      "line": 213,
+      "line": 229,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 2 -- golden_digest_fields_are_byte_exact_canonical_form (ion/ion-lock/tests/v2_corpus.rs) verifies AtomDigest format round-trip only, not that the value is genuinely the resolved publish transaction's digest",
       "spec_status": ""
     },
     {
       "id": "lock-dep-requires",
       "spec_file": "docs/specs/lock-file-schema.md",
-      "line": 222,
+      "line": 240,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 2 -- resolvability/acyclicity of the requires graph are separately verified ([lock-requires-resolvable], [lock-requires-acyclic]), but bytewise-sortedness of the array is a canonical-serialization concern tied to the unimplemented to_canonical encoder",
       "spec_status": ""
     },
     {
       "id": "lock-dep-version",
       "spec_file": "docs/specs/lock-file-schema.md",
-      "line": 208,
+      "line": 223,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 1 -- DepEntry.version is a plain String; non-emptiness and byte-verbatim-as-published are untested and unenforced (ion/ion-lock/src/v2.rs)",
       "spec_status": ""
     },
     {
       "id": "lock-fetch-adopted-absent",
       "spec_file": "docs/specs/lock-file-schema.md",
-      "line": 271,
+      "line": 297,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 2 -- cross-referencing adopted ecosystem lockfiles against fetch entries requires atom-sourcing pipeline integration, not implemented anywhere",
       "spec_status": ""
     },
     {
       "id": "lock-fetch-digest",
       "spec_file": "docs/specs/lock-file-schema.md",
-      "line": 253,
+      "line": 276,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 2 -- golden_digest_fields_are_byte_exact_canonical_form (ion/ion-lock/tests/v2_corpus.rs) verifies AtomDigest format round-trip only, not that url is never treated as authoritative by any consumer (no fetch/verify path exists yet)",
       "spec_status": ""
     },
     {
       "id": "lock-fetch-liveness",
       "spec_file": "docs/specs/lock-file-schema.md",
-      "line": 265,
+      "line": 290,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 2 -- no sanitization/purge implementation exists; ion-lock is currently parse/validate-only",
       "spec_status": ""
     },
     {
       "id": "lock-fetch-naming",
       "spec_file": "docs/specs/lock-file-schema.md",
-      "line": 258,
+      "line": 282,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 2 -- no promotion/promoting-tool implementation exists yet (record-mode fetch proxy is unimplemented; see ion-manifest.md's P4 flag)",
       "spec_status": ""
     },
     {
       "id": "lock-groundness",
       "spec_file": "docs/specs/lock-file-schema.md",
-      "line": 85,
+      "line": 88,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 2 -- a whole-schema meta-invariant; no check beyond the type shape exists, and the type shape alone does not prevent e.g. a version range being stuffed into the version String field",
       "spec_status": ""
     },
     {
       "id": "lock-in-snapshot-locality",
       "spec_file": "docs/specs/lock-file-schema.md",
-      "line": 108,
+      "line": 114,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 2 -- cross-action leakage prevention depends on the same unimplemented action_id computation as [lock-action-totality]",
       "spec_status": ""
     },
     {
       "id": "lock-no-compose",
       "spec_file": "docs/specs/lock-file-schema.md",
-      "line": 301,
-      "verification_method": "",
+      "line": 330,
+      "verification_method": "test (ion/ion-lock/tests/v2_corpus.rs::lock_no_star_violations_are_forbidden_key_errors, typed_parse_alone_silently_accepts_a_lock_no_star_violation -- corpus/v2/violations/lock-no-compose.toml)",
       "residue": "",
       "spec_status": ""
     },
     {
       "id": "lock-no-foreign-metadata",
       "spec_file": "docs/specs/lock-file-schema.md",
-      "line": 322,
-      "verification_method": "",
+      "line": 356,
+      "verification_method": "test (ion/ion-lock/tests/v2_corpus.rs::lock_no_star_violations_are_forbidden_key_errors -- corpus/v2/violations/lock-no-foreign-metadata.toml)",
       "residue": "",
       "spec_status": ""
     },
     {
       "id": "lock-no-interfaces",
       "spec_file": "docs/specs/lock-file-schema.md",
-      "line": 314,
-      "verification_method": "",
+      "line": 346,
+      "verification_method": "test (ion/ion-lock/tests/v2_corpus.rs::lock_no_star_violations_are_forbidden_key_errors -- corpus/v2/violations/lock-no-interfaces.toml)",
       "residue": "",
       "spec_status": ""
     },
     {
       "id": "lock-no-override-state",
       "spec_file": "docs/specs/lock-file-schema.md",
-      "line": 318,
-      "verification_method": "",
+      "line": 351,
+      "verification_method": "test (ion/ion-lock/tests/v2_corpus.rs::lock_no_star_violations_are_forbidden_key_errors -- corpus/v2/violations/lock-no-override-state.toml)",
       "residue": "",
       "spec_status": ""
     },
     {
       "id": "lock-no-params",
       "spec_file": "docs/specs/lock-file-schema.md",
-      "line": 304,
-      "verification_method": "",
+      "line": 334,
+      "verification_method": "test (ion/ion-lock/tests/v2_corpus.rs::lock_no_star_violations_are_forbidden_key_errors -- corpus/v2/violations/lock-no-params.toml)",
       "residue": "",
       "spec_status": ""
     },
     {
       "id": "lock-no-plan-digest",
       "spec_file": "docs/specs/lock-file-schema.md",
-      "line": 329,
-      "verification_method": "",
+      "line": 364,
+      "verification_method": "test (ion/ion-lock/tests/v2_corpus.rs::lock_no_star_violations_are_forbidden_key_errors -- corpus/v2/violations/lock-no-plan-digest.toml)",
       "residue": "",
       "spec_status": ""
     },
     {
       "id": "lock-no-toolchain-section",
       "spec_file": "docs/specs/lock-file-schema.md",
-      "line": 308,
-      "verification_method": "",
+      "line": 339,
+      "verification_method": "test (ion/ion-lock/tests/v2_corpus.rs::lock_no_star_violations_are_forbidden_key_errors -- corpus/v2/violations/lock-no-toolchain-section.toml)",
       "residue": "",
       "spec_status": ""
     },
     {
       "id": "lock-recomputability",
       "spec_file": "docs/specs/lock-file-schema.md",
-      "line": 72,
+      "line": 73,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 2 -- depends on both the canonical encoder and resolution determinism, neither implemented (LockFileV2::to_canonical is an explicit unimplemented!() stub; no resolver exists)",
       "spec_status": ""
     },
     {
       "id": "lock-requires-acyclic",
       "spec_file": "docs/specs/lock-file-schema.md",
-      "line": 231,
-      "verification_method": "",
+      "line": 251,
+      "verification_method": "test (ion/ion-lock/tests/v2_corpus.rs::cyclic_requires_graph_is_rejected -- tests/support/mod.rs::detect_cycle)",
       "residue": "",
       "spec_status": ""
     },
     {
       "id": "lock-requires-resolvable",
       "spec_file": "docs/specs/lock-file-schema.md",
-      "line": 228,
-      "verification_method": "",
+      "line": 247,
+      "verification_method": "test (ion/ion-lock/tests/v2_corpus.rs::dangling_requires_edge_is_rejected -- tests/support/mod.rs::edge_resolves)",
       "residue": "",
       "spec_status": ""
     },
     {
       "id": "lock-schema-version",
       "spec_file": "docs/specs/lock-file-schema.md",
-      "line": 121,
+      "line": 128,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 1 -- LockFileV2.schema is a typed u64 field, but no code path rejects an unrecognized schema version; no such check or test exists (ion/ion-lock/src/v2.rs)",
       "spec_status": ""
     },
     {
       "id": "lock-set-anchor",
       "spec_file": "docs/specs/lock-file-schema.md",
-      "line": 133,
+      "line": 142,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 2 -- golden_digest_fields_are_byte_exact_canonical_form (ion/ion-lock/tests/v2_corpus.rs) confirms the field decodes/encodes as a well-formed AtomDigest, but not that the value genuinely equals czd(charter\u2080); no code computes a lock's anchor from charter machinery yet",
       "spec_status": ""
     },
     {
       "id": "lock-set-charter-head",
       "spec_file": "docs/specs/lock-file-schema.md",
-      "line": 155,
+      "line": 165,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 2 -- charter_head_is_distinct_from_anchor (ion/ion-lock/src/v2.rs) only shows the two fields CAN hold different values; the substantive non-regression/succession-derivation invariant depends on the chain-monotonicity machinery, which is Phase 1 unimplemented (atom/atom-id/tests/charter/chain_monotonicity.rs)",
       "spec_status": ""
     },
     {
       "id": "lock-set-mirrors",
       "spec_file": "docs/specs/lock-file-schema.md",
-      "line": 183,
+      "line": 195,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 1 -- SetEntry.mirrors is a raw Vec<String>; no validation of URL shape or the \"::\" sentinel exists",
       "spec_status": ""
     },
     {
       "id": "lock-set-referenced",
       "spec_file": "docs/specs/lock-file-schema.md",
-      "line": 190,
-      "verification_method": "",
+      "line": 203,
+      "verification_method": "test (ion/ion-lock/tests/v2_corpus.rs::unreferenced_set_is_rejected, undeclared_set_is_rejected -- tests/support/mod.rs::check_closure checks both directions)",
       "residue": "",
       "spec_status": ""
     },
     {
       "id": "lock-set-snapshot",
       "spec_file": "docs/specs/lock-file-schema.md",
-      "line": 176,
+      "line": 187,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 2 -- same digest-format-only reasoning as [lock-set-anchor]; re-derivation determinism depends on the not-yet-implemented resolver",
       "spec_status": ""
     },
     {
       "id": "lock-single-version",
       "spec_file": "docs/specs/lock-file-schema.md",
-      "line": 200,
+      "line": 214,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 2 -- the nested (set, label) keying structurally prevents two versions under one key, but the substantive claim (diamond requirements reconcile to a single shared choice) is SAT-resolution logic, not implemented (ion-resolve/src/lib.rs)",
       "spec_status": ""
     },
     {
@@ -2789,15 +2789,15 @@
       "spec_file": "docs/specs/lock-file-schema.md",
       "line": 65,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 2 -- whole-closure sufficiency is a resolution-time property; no resolver exists yet (ion-resolve/src/lib.rs: \"A full SAT-based resolver and lock file generator are planned but not yet implemented\")",
       "spec_status": ""
     },
     {
       "id": "lock-tool-owned",
       "spec_file": "docs/specs/lock-file-schema.md",
-      "line": 126,
+      "line": 134,
       "verification_method": "",
-      "residue": "",
+      "residue": "Phase 2 -- \"no comments in canonical form\" is tied to the unimplemented to_canonical encoder; \"humans never hand-edit\" is a workflow discipline, not machine-checkable by this repo's tooling",
       "spec_status": ""
     }
   ]
