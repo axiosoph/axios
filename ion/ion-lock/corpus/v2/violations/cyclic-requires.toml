@@ -1,0 +1,23 @@
+# Violates [lock-requires-acyclic] (lock-file-schema.md:231-233): the
+# requires graph MUST be acyclic. `a` requires `b` and `b` requires `a` —
+# a 2-cycle, unrealizable as a build DAG. Both entries resolve (no dangling
+# edge), so only the acyclicity check catches this.
+schema = 2
+
+[sets.core]
+anchor       = "sha256:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+charter_head = "sha256:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+mirrors      = ["::"]
+snapshot     = "sha1:808182838485868788898a8b8c8d8e8f90919293"
+
+[deps.core.a]
+publish  = "sha256:ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8"
+requires = ["core.b"]
+version  = "1.0.0"
+
+[deps.core.b]
+publish  = "sha256:QEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFlaW1xdXl8"
+requires = ["core.a"]
+version  = "1.0.0"
+
+[fetch]

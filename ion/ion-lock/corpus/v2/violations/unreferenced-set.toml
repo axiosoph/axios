@@ -1,0 +1,23 @@
+# Violates [lock-set-referenced] (lock-file-schema.md:190-192): every
+# `[sets]` entry MUST be referenced by at least one dep entry. `orphan` has
+# a `[sets.orphan]` entry but no `[deps.orphan.*]` entry references it.
+schema = 2
+
+[sets.core]
+anchor       = "sha256:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+charter_head = "sha256:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+mirrors      = ["::"]
+snapshot     = "sha1:808182838485868788898a8b8c8d8e8f90919293"
+
+[sets.orphan]
+anchor       = "sha256:YGFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6e3x9fn8"
+charter_head = "sha256:YGFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6e3x9fn8"
+mirrors      = ["::"]
+snapshot     = "sha1:909192939495969798999a9b9c9d9e9fa0a1a2a3"
+
+[deps.core.gcc]
+publish  = "sha256:ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8"
+requires = []
+version  = "13.3.0"
+
+[fetch]

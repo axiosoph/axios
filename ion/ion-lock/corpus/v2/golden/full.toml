@@ -1,0 +1,37 @@
+# Golden v2 lock: multi-dep closure with a succeeded charter and a promoted
+# fetch entry. Shape mirrors docs/specs/lock-file-schema.md:340-372, but with
+# hand-authored digest bytes (the spec's example is an illustrative
+# placeholder — see N-lock-corpus IBC premise p-golden) encoded per their
+# per-algorithm token form (atom/atom-id/src/digest.rs:197-226): sha256 ->
+# base64url-unpadded, sha1/blake3 -> lowercase hex.
+schema = 2
+
+[sets.core]
+anchor       = "sha256:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+charter_head = "sha256:EBESExQVFhcYGRobHB0eHyAhIiMkJSYnKCkqKywtLi8"
+mirrors      = ["::", "https://mirror.example.org/core"]
+snapshot     = "sha1:808182838485868788898a8b8c8d8e8f90919293"
+
+[deps.core.gcc]
+publish  = "sha256:ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8"
+requires = []
+version  = "13.3.0"
+
+[deps.core.libfoo]
+publish  = "sha256:MDEyMzQ1Njc4OTo7PD0-P0BBQkNERUZHSElKS0xNTk8"
+requires = ["core.openssl", "core.zlib-ng", "fetch.libfoo-vendor-models"]
+version  = "2.1.4"
+
+[deps.core.openssl]
+publish  = "sha256:QEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFlaW1xdXl8"
+requires = []
+version  = "3.0.16"
+
+[deps.core.zlib-ng]
+publish  = "sha256:UFFSU1RVVldYWVpbXF1eX2BhYmNkZWZnaGlqa2xtbm8"
+requires = []
+version  = "2.2.1"
+
+[fetch.libfoo-vendor-models]
+digest = "blake3:a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf"
+url    = "https://files.example.com/models-4.2.tar.zst"

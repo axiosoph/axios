@@ -1,0 +1,18 @@
+# Violates [lock-no-plan-digest] (lock-file-schema.md:329-336): a whole-lock
+# digest MUST NOT be used as any action's identity; the retired v1-era
+# `plan_digest` field MUST NOT reappear at the top level.
+plan_digest = "sha256:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+schema      = 2
+
+[sets.core]
+anchor       = "sha256:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+charter_head = "sha256:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+mirrors      = ["::"]
+snapshot     = "sha1:808182838485868788898a8b8c8d8e8f90919293"
+
+[deps.core.gcc]
+publish  = "sha256:ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8"
+requires = []
+version  = "13.3.0"
+
+[fetch]

@@ -1,0 +1,19 @@
+# Violates [lock-no-override-state] (lock-file-schema.md:318-320): override
+# declarations MUST NOT appear in the lock — only their ground results.
+schema = 2
+
+[overrides.core]
+target = "gcc"
+
+[sets.core]
+anchor       = "sha256:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+charter_head = "sha256:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+mirrors      = ["::"]
+snapshot     = "sha1:808182838485868788898a8b8c8d8e8f90919293"
+
+[deps.core.gcc]
+publish  = "sha256:ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8"
+requires = []
+version  = "13.3.0"
+
+[fetch]

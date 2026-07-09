@@ -1,0 +1,21 @@
+# Violates [lock-no-compose] (lock-file-schema.md:301-302): a `[compose]`
+# section MUST NOT appear in the lock. `LockFileV2`'s Deserialize would
+# silently ignore this extra top-level table (no deny_unknown_fields); only
+# the validator's raw-key check catches it.
+schema = 2
+
+[compose]
+use = "nix"
+
+[sets.core]
+anchor       = "sha256:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+charter_head = "sha256:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+mirrors      = ["::"]
+snapshot     = "sha1:808182838485868788898a8b8c8d8e8f90919293"
+
+[deps.core.gcc]
+publish  = "sha256:ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8"
+requires = []
+version  = "13.3.0"
+
+[fetch]
