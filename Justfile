@@ -14,10 +14,31 @@ test:
     cargo test --manifest-path atom/Cargo.toml
     @echo "Running tests in 'eos' workspace..."
     cargo test --manifest-path eos/Cargo.toml
+    @echo "Running tests in 'htc' workspace..."
+    cargo test --manifest-path htc/Cargo.toml
     @echo "Running tests in 'ion' workspace..."
     cargo test --manifest-path ion/Cargo.toml
     @echo "Running tests in 'alurl' crate..."
     cargo test --manifest-path alurl/Cargo.toml
+
+# Run the doctrine-trap lints (self-test, then scan the tree)
+lint:
+    @echo "Self-testing the doctrine lints..."
+    python3 tools/lints/doctrine_lint.py --self-test
+    @echo "Scanning the tree for doctrine-trap violations..."
+    python3 tools/lints/doctrine_lint.py
+
+# Composes lints, the compliance tracker (regenerates the on-path manifest),
+# and the coverage check around the full test target. Exits non-zero on any
+# failure; the coverage step reflects tracker/rekey-owned annotation coverage.
+# Single-entry CI gate: lints + all workspace tests + spec-compliance coverage
+gate:
+    just lint
+    just test
+    @echo "Regenerating the compliance manifest..."
+    python3 docs/compliance_tracker.py
+    @echo "Checking on-path constraint coverage..."
+    python3 docs/check_constraint_coverage.py
 
 
 # Run all Bolero fuzzers sequentially (defaults to 10 seconds each)
