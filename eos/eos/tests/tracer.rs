@@ -226,11 +226,17 @@ fn action_id_stub_is_visibly_not_a_closure_identity() {
         executions: AtomicUsize::new(0),
     };
     let a = fixture(3);
-    let b = fixture(3);
-    // Two fixtures with the same seed byte collide under the stub, even
-    // though a real `H(atom_czd_closure_root, ...)` would only collide on
-    // an actual closure-root match. That's the point: this is a placeholder,
-    // not a real identity function, and the test says so.
+    let b = LockFixtureEntry {
+        set: a.set.clone(),
+        label: "clang".to_string(),
+        publish: a.publish, // same publish[0] == 3 — the stub's only input
+        version: "18.1.0".to_string(),
+    };
+    // `a` and `b` differ in fields a real `H(atom_czd_closure_root, ...)`
+    // would incorporate (label, version) but share the stub's one input
+    // (`publish[0]`). A real hash would NOT collide here; the stub does —
+    // that's the point: this is a placeholder, not a real identity function,
+    // and the test says so.
     assert_eq!(engine.action_id(&a), engine.action_id(&b));
     assert_eq!(engine.action_id(&a), ActionId([3; 32]));
 }
