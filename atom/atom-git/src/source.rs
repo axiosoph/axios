@@ -286,7 +286,11 @@ impl AtomSource for GitSource {
                         }
                     }
 
-                    let czd = Czd::from_bytes(claim_oid.as_bytes().to_vec());
+                    // The claim's identity is the spec-defined czd — the
+                    // digest of (cad, sig) — recomputed from the active
+                    // claim's own signed bytes, never the git object id it
+                    // happens to be stored at.
+                    let czd = atom_id::czd_for_alg(&claim_pay_bytes, &claim_envelope.sig, alg_str)?;
 
                     let pub_payload = prev_publish_payload.ok_or_else(|| {
                         GitError::Validation(format!(
@@ -479,9 +483,11 @@ impl AtomSource for GitSource {
                         }
                     }
 
-                    let claim_czd_oid = ObjectId::from_hex(claim_czd_hex.as_bytes())
-                        .map_err(|e| GitError::Validation(e.to_string()))?;
-                    let czd = Czd::from_bytes(claim_czd_oid.as_bytes().to_vec());
+                    // As above: the claim's identity is the spec-defined
+                    // czd recomputed from its own signed bytes. The
+                    // `claim_czd_hex` ref-path segment is a store-internal
+                    // addressing key, not a substitute for this.
+                    let czd = atom_id::czd_for_alg(&claim_pay_bytes, &claim_envelope.sig, alg_str)?;
 
                     let pub_payload = prev_publish_payload.ok_or_else(|| {
                         GitError::Validation(format!(
