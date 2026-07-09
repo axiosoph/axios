@@ -641,8 +641,8 @@ async fn test_resolve_store_branch_returns_real_czd() {
 /// `verify_publish`'s cryptographic checks plus the (now-real) czd equality
 /// check as the correctness guarantee, instead of exact-oid reconstruction
 /// — which is a genuine AtomStore-level design decision outside this node's
-/// scope (fixing `GitRegistry`/`GitSource`'s czd computation). See the
-/// dispatch report for this node.
+/// scope (fixing `GitRegistry`/`GitSource`'s czd computation). Tracked at
+/// <https://github.com/axiosoph/axios/issues/64>.
 #[tokio::test]
 #[ignore = "GitStore::ingest's claim reconstruction assumes czd == git oid; pre-existing defect \
             unmasked by the czd fix, needs its own follow-up node — see doc comment"]
