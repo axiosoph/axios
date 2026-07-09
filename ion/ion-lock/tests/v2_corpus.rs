@@ -98,8 +98,8 @@ fn lock_no_star_violations_are_forbidden_key_errors() {
 /// p-no-deny-unknown: `LockFileV2`'s `Deserialize` alone (bypassing the raw
 /// forbidden-key check) silently accepts an injected `[compose]` section —
 /// the exact defect the raw check exists to close. This is the "at least
-/// one violation that typed-parse alone would accept" case c1a's evaluator
-/// requires.
+/// one violation that typed-parse alone would accept" case c1a's acceptance
+/// test requires.
 #[test]
 fn typed_parse_alone_silently_accepts_a_lock_no_star_violation() {
     let content = fixture("violations", "lock-no-compose");
@@ -140,6 +140,17 @@ fn unreferenced_set_is_rejected() {
     match validate(&content) {
         Err(ValidationError::SetNotReferenced(_)) => {},
         other => panic!("expected SetNotReferenced, got {other:?}"),
+    }
+}
+
+/// [lock-set-referenced], the other direction: a `[deps]` key naming a set
+/// alias absent from `[sets]` is rejected.
+#[test]
+fn undeclared_set_is_rejected() {
+    let content = fixture("violations", "undeclared-set");
+    match validate(&content) {
+        Err(ValidationError::SetUndeclared(_)) => {},
+        other => panic!("expected SetUndeclared, got {other:?}"),
     }
 }
 

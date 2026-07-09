@@ -1,0 +1,23 @@
+# Violates [lock-set-referenced] (lock-file-schema.md:190-192), the other
+# direction from unreferenced-set.toml: every set alias appearing in a
+# `[deps]` key path MUST have a `[sets]` entry. `[deps.undeclared.x]` names
+# the alias `undeclared`, which has no `[sets.undeclared]` entry.
+schema = 2
+
+[sets.core]
+anchor       = "sha256:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+charter_head = "sha256:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+mirrors      = ["::"]
+snapshot     = "sha1:808182838485868788898a8b8c8d8e8f90919293"
+
+[deps.core.gcc]
+publish  = "sha256:ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8"
+requires = []
+version  = "13.3.0"
+
+[deps.undeclared.x]
+publish  = "sha256:QEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFlaW1xdXl8"
+requires = []
+version  = "1.0.0"
+
+[fetch]
