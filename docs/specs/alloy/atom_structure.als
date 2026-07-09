@@ -217,16 +217,21 @@ assert verification_chain {
       computeId[c.claimAnchor, c.claimLabel] = p.atomId
 }
 
-// [anchor-content-addressed]: every anchor is the czd of a founding charter --
-// an owned, signed payload -- never a free or source-derived value.
+// [anchor-content-addressed]: every anchor resolves to EXACTLY ONE founding
+// charter -- content addressing is unambiguous. This is a joint consequence of
+// the anchor-derivation fact (existence) and czd injectivity (uniqueness); it
+// is NOT a restatement of either -- dropping injectivity yields two founders
+// sharing an anchor and refutes it. An owned, signed charter, never a free or
+// source-derived value.
 assert anchor_content_addressed {
-  all a: Anchor | a in founders.czd
+  all a: Anchor | one c: founders | c.czd = a
 }
 
-// [claim-chains-charter]: every claim's anchor is exactly a founding charter's
-// czd, chaining claim authority back to the set's founding charter.
+// [claim-chains-charter]: every claim's anchor chains to EXACTLY ONE founding
+// charter -- an unforgeable, unambiguous link from claim authority back to the
+// set's founding charter (again existence + injectivity, not a fact restated).
 assert claim_chains_charter {
-  all cl: Claim | cl.claimAnchor in founders.czd
+  all cl: Claim | one c: founders | c.czd = cl.claimAnchor
 }
 
 // [charter-fork-distinction]: distinct founding charters have distinct anchors
