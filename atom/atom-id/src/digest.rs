@@ -178,7 +178,6 @@ impl AtomDigest {
     }
 
     /// The raw digest bytes.
-    #[must_use]
     pub fn cad(&self) -> &Cad {
         &self.cad
     }
