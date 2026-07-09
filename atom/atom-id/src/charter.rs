@@ -181,11 +181,16 @@ pub trait CharterStore {
     /// **Deliberately unimplemented — Phase 1.** The default body is an
     /// honest stub; a concrete store implementation MUST override this to
     /// provide real retrieval rather than inheriting the panic.
-    async fn get_charter(&self, _czd: &Czd) -> Option<CharterPayload> {
-        unimplemented!(
-            "Phase 1: charter ref-storage retrieval is a specified deliverable, not a default — \
-             see docs/specs/atom-transactions.md [charter-transition] POST"
-        )
+    fn get_charter(
+        &self,
+        _czd: &Czd,
+    ) -> impl std::future::Future<Output = Option<CharterPayload>> + Send {
+        async move {
+            unimplemented!(
+                "Phase 1: charter ref-storage retrieval is a specified deliverable, not a default \
+                 — see docs/specs/atom-transactions.md [charter-transition] POST"
+            )
+        }
     }
 }
 
