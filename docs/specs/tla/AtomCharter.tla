@@ -43,12 +43,10 @@ vars == <<charters, claims, recordedHead, clock>>
 
 \* Sentinels. The prior/head sentinels are 1-tuples so that TLC compares them
 \* against czd tuples structurally (different length => not equal) instead of
-\* raising on a string-vs-tuple equality. NoKey is only ever read through
-\* Authorized, which gates on `k \in KEYS` first, so a string is safe there.
+\* raising on a string-vs-tuple equality.
 NoPrior      == <<"NONE">>    \* a founding charter's `prior`
 NoClaimPrior == <<"FRESH">>   \* a fresh (non-replacement) claim's `prior`
 NoHead       == <<"NOHEAD">>  \* consumer has recorded no head yet
-NoKey        == "NOKEY"       \* no incoming-owner signature (non-transfer succession)
 
 -----------------------------------------------------------------------------
 \* DEFINITIONS
@@ -119,33 +117,69 @@ CharterFound(owner, key, src) ==
     /\ ~\E c \in charters : c.czd = czd
     /\ charters' = charters \cup {[
            czd |-> czd, prior |-> NoPrior, anchor |-> czd,
-           owner |-> owner, key |-> key, incomingKey |-> NoKey,
+           owner |-> owner, key |-> key,
            src |-> src, now |-> clock ]}
     /\ UNCHANGED <<claims, recordedHead>>
     /\ clock' = clock + 1
 
-\* [charter-succession] / [charter-succession-linear] (dual-sign transfer).
-\* PRE: signing key authorized by the PRIOR charter's owner; now > prior.now;
-\*      an ownership transfer (owner # prior.owner) MUST carry a second
-\*      signature by the incoming owner's key (proof of possession).
+\* [charter-succession] non-transfer succession (rotation): owner unchanged.
+\* PRE: signing key authorized by the PRIOR charter's owner; now > prior.now.
 \* The action does NOT forbid a second successor of the same prior -- that is
 \* how a set-authority fork becomes constructible; fail-closed is enforced at
 \* the consumer/claim decision points, not by preventing the signing.
-CharterSucceed(prior, owner, key, incomingKey, src) ==
+\* Ownership-changing succession is a distinct action, CharterTransfer below --
+\* see its comment for why a transfer cannot be this same one-charter step.
+CharterSucceed(prior, owner, key, src) ==
     LET czd == CharterCzd(owner, key, src, clock) IN
     /\ clock < MAX_CLOCK
     /\ prior \in charters
+    /\ owner = prior.owner
     /\ Authorized(key, prior.owner)
     /\ clock > prior.now
     /\ Descends(src, prior.src)
-    /\ (owner # prior.owner => Authorized(incomingKey, owner))
     /\ ~\E c \in charters : c.czd = czd
     /\ charters' = charters \cup {[
            czd |-> czd, prior |-> prior.czd, anchor |-> prior.anchor,
-           owner |-> owner, key |-> key, incomingKey |-> incomingKey,
+           owner |-> owner, key |-> key,
            src |-> src, now |-> clock ]}
     /\ UNCHANGED <<claims, recordedHead>>
     /\ clock' = clock + 1
+
+\* [charter-succession-linear] (chained transfer, dual-signed). A coz message
+\* carries exactly one signature (`czd` digests a single {cad,sig} pair --
+\* Coz README.md "Canon"), so proof of possession for an ownership transfer
+\* cannot be a second signature embedded in one charter. It is instead a
+\* SECOND, independently-signed charter `d` chained onto the successor `c`
+\* (d.prior = c.czd), signed by the incoming owner's key -- the same
+\* succession-chain mechanism [charter-succession] already uses, one link
+\* further. The two charters are submitted together as one atomic step,
+\* mirroring how they are pushed as one logical transfer in practice (nrd:
+\* "two chained payloads ... conceptually a single Metadata transaction") --
+\* an ownership-changing successor is never observable without its
+\* possession-proof link, so TransferDualSigned (below) holds at every
+\* reachable state rather than only eventually.
+CharterTransfer(prior, owner, key, possessionKey, src, possessionSrc) ==
+    LET czd  == CharterCzd(owner, key, src, clock)
+        dczd == CharterCzd(owner, possessionKey, possessionSrc, clock + 1)
+    IN
+    /\ clock + 1 < MAX_CLOCK
+    /\ prior \in charters
+    /\ owner # prior.owner
+    /\ Authorized(key, prior.owner)
+    /\ Authorized(possessionKey, owner)
+    /\ clock > prior.now
+    /\ Descends(src, prior.src)
+    /\ Descends(possessionSrc, src)
+    /\ ~\E c \in charters : c.czd = czd
+    /\ ~\E c \in charters : c.czd = dczd
+    /\ charters' = charters \cup {
+           [ czd |-> czd, prior |-> prior.czd, anchor |-> prior.anchor,
+             owner |-> owner, key |-> key, src |-> src, now |-> clock ],
+           [ czd |-> dczd, prior |-> czd, anchor |-> prior.anchor,
+             owner |-> owner, key |-> possessionKey,
+             src |-> possessionSrc, now |-> clock + 1 ] }
+    /\ UNCHANGED <<claims, recordedHead>>
+    /\ clock' = clock + 2
 
 \* [claim-transition] fresh claim.
 \* PRE: the set has a well-defined effective charter; signing key authorized
@@ -226,9 +260,11 @@ Terminating ==
 Next ==
     \/ \E owner \in OWNERS, key \in KEYS, src \in SRCS :
            CharterFound(owner, key, src)
+    \/ \E prior \in charters, owner \in OWNERS, key \in KEYS, src \in SRCS :
+           CharterSucceed(prior, owner, key, src)
     \/ \E prior \in charters, owner \in OWNERS, key \in KEYS,
-          ikey \in (KEYS \cup {NoKey}), src \in SRCS :
-           CharterSucceed(prior, owner, key, ikey, src)
+          possessionKey \in KEYS, src \in SRCS, possessionSrc \in SRCS :
+           CharterTransfer(prior, owner, key, possessionKey, src, possessionSrc)
     \/ \E anchor \in {c.anchor : c \in charters}, label \in LABELS,
           owner \in OWNERS, key \in KEYS, src \in SRCS :
            Claim(anchor, label, owner, key, src)
@@ -286,13 +322,16 @@ SuccessionAuthorized ==
                 /\ Authorized(c.key, p.owner)
                 /\ c.anchor = p.anchor
 
-\* [charter-succession-linear] (dual-sign): an ownership transfer carries a
-\* signature by the incoming owner's key.
+\* [charter-succession-linear] (chained proof of possession): an ownership
+\* transfer at charter c (successor of p, p.owner # c.owner) is followed by
+\* a SEPARATE charter d chained onto c (d.prior = c.czd) signed by a key
+\* authorized by the incoming owner -- proof of possession expressed as the
+\* next chain link, never as a second signature embedded in c's own message.
 TransferDualSigned ==
     \A c \in charters :
         (c.prior # NoPrior /\ \E p \in charters :
             p.czd = c.prior /\ p.owner # c.owner)
-        => Authorized(c.incomingKey, c.owner)
+        => \E d \in charters : d.prior = c.czd /\ Authorized(d.key, c.owner)
 
 \* [claim-replacement-authority]: every replacement is validly authorized and
 \* its governance flag is set iff (and only iff) it is a governance seizure.
