@@ -497,6 +497,136 @@ fn claim_payload_serde_roundtrip() {
     assert_eq!(back, claim);
 }
 
+// ============================================================================
+// ClaimPayload replacement (`[claim-replacement-authority]`)
+// ============================================================================
+
+#[test]
+fn claim_payload_ordinary_has_no_replacement() {
+    let claim = crate::ClaimPayload::new(
+        crate::Alg::ES256,
+        test_id(),
+        1000,
+        vec![99],
+        "cargo".to_string(),
+        vec![0; 32],
+        test_tmb(),
+    );
+    assert_eq!(claim.prior, None);
+    assert!(!claim.governance);
+
+    let json = serde_json::to_string(&claim).unwrap();
+    let back: crate::ClaimPayload = serde_json::from_str(&json).unwrap();
+    assert_eq!(back, claim);
+}
+
+#[test]
+fn claim_payload_owner_replacement_construct_and_roundtrip() {
+    let claim = crate::ClaimPayload::new_replacement(
+        crate::Alg::ES256,
+        test_id(),
+        2000,
+        vec![99],
+        "cargo".to_string(),
+        crate::Czd::from_bytes(vec![1, 2, 3]),
+        false,
+        vec![1; 32],
+        test_tmb(),
+    );
+    assert_eq!(claim.prior, Some(crate::Czd::from_bytes(vec![1, 2, 3])));
+    assert!(!claim.governance);
+
+    let json = serde_json::to_string(&claim).unwrap();
+    let back: crate::ClaimPayload = serde_json::from_str(&json).unwrap();
+    assert_eq!(back, claim);
+}
+
+#[test]
+fn claim_payload_governance_replacement_construct_and_roundtrip() {
+    let claim = crate::ClaimPayload::new_replacement(
+        crate::Alg::ES256,
+        test_id(),
+        2000,
+        vec![99],
+        "cargo".to_string(),
+        crate::Czd::from_bytes(vec![4, 5, 6]),
+        true,
+        vec![1; 32],
+        test_tmb(),
+    );
+    assert_eq!(claim.prior, Some(crate::Czd::from_bytes(vec![4, 5, 6])));
+    assert!(claim.governance);
+
+    let json = serde_json::to_string(&claim).unwrap();
+    let back: crate::ClaimPayload = serde_json::from_str(&json).unwrap();
+    assert_eq!(back, claim);
+}
+
+#[test]
+#[should_panic(expected = "Phase 1")]
+fn verify_claim_replacement_stub_is_honest() {
+    let replacement = crate::ClaimPayload::new_replacement(
+        crate::Alg::ES256,
+        test_id(),
+        2000,
+        vec![99],
+        "cargo".to_string(),
+        crate::Czd::from_bytes(vec![1, 2, 3]),
+        false,
+        vec![1; 32],
+        test_tmb(),
+    );
+    let prior = crate::ClaimPayload::new(
+        crate::Alg::ES256,
+        test_id(),
+        1000,
+        vec![99],
+        "cargo".to_string(),
+        vec![0; 32],
+        test_tmb(),
+    );
+    let _ = crate::verify_claim_replacement(&replacement, &prior, &[]);
+}
+
+#[test]
+#[ignore = "Phase 1: claim-replacement two-authority verification unimplemented — \
+            [claim-replacement-authority]/[claim-replacement-transition]"]
+fn verify_claim_replacement_rejects_third_authority() {
+    // Once implemented: `[claim-replacement-authority]` names exactly two
+    // authorities — owner replacement (signed by the replaced claim's
+    // owner) and governance replacement (signed by the effective
+    // charter's owner, MUST carry `governance: true`). A replacement
+    // signed by neither is a third, unauthorized path and MUST fail
+    // closed rather than be admitted.
+    let prior = crate::ClaimPayload::new(
+        crate::Alg::ES256,
+        test_id(),
+        1000,
+        vec![1], // prior claim's owner
+        "cargo".to_string(),
+        vec![0; 32],
+        test_tmb(),
+    );
+    let prior_czd = crate::Czd::from_bytes(vec![9, 9, 9]); // stand-in for czd(prior)
+    let charter_owner = vec![2]; // effective charter's owner (unrelated to prior.owner)
+
+    // Unmarked replacement signed by neither prior.owner nor charter_owner.
+    let replacement = crate::ClaimPayload::new_replacement(
+        crate::Alg::ES256,
+        test_id(),
+        2000,
+        vec![3], // third-party owner — authorized by neither authority
+        "cargo".to_string(),
+        prior_czd,
+        false,
+        vec![1; 32],
+        test_tmb(),
+    );
+
+    let result = crate::verify_claim_replacement(&replacement, &prior, &charter_owner);
+    assert!(result.is_err(), "third-party replacement must fail closed");
+}
+
 #[test]
 fn publish_payload_serde_roundtrip() {
     let publish = crate::PublishPayload::new(

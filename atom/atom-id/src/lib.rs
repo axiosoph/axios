@@ -256,7 +256,14 @@ impl<'de> Deserialize<'de> for AtomId {
 /// to an owner. The resulting signed Coz message becomes the atom's
 /// identity claim.
 ///
-/// Spec constraints: `[claim-typ]`, `[symmetric-payloads]`, `[owner-abstract]`.
+/// A claim may also be a *replacement* of a prior claim for the same
+/// `(anchor, label)`, per `[claim-replacement-authority]`: `prior` names
+/// the czd of the replaced claim, and `governance` marks the replacement
+/// as a governance seizure (signed by the effective charter's owner
+/// rather than the replaced claim's owner).
+///
+/// Spec constraints: `[claim-typ]`, `[symmetric-payloads]`,
+/// `[owner-abstract]`, `[claim-replacement-authority]`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ClaimPayload {
@@ -265,6 +272,13 @@ pub struct ClaimPayload {
     pub alg: Alg,
     /// The atom-set anchor.
     pub anchor: Anchor,
+    /// Mandatory marking for a governance replacement — a replacement
+    /// signed by the effective charter's owner rather than the replaced
+    /// claim's owner. `false` for a founding/ordinary claim or an owner
+    /// replacement.
+    ///
+    /// Spec constraint: `[claim-replacement-authority]`.
+    pub governance: bool,
     /// The atom label.
     pub label: Label,
     /// Timestamp (seconds since Unix epoch) for fork disambiguation.
@@ -276,6 +290,11 @@ pub struct ClaimPayload {
     pub owner: Vec<u8>,
     /// PURL type identifying the package ecosystem (e.g., "cargo").
     pub pkg: String,
+    /// The czd of the claim this one replaces. `None` for a
+    /// founding/ordinary claim.
+    ///
+    /// Spec constraint: `[claim-replacement-authority]`.
+    pub prior: Option<Czd>,
     /// Source revision hash at claim time (temporal floor).
     #[cfg_attr(feature = "serde", serde(with = "serde_b64"))]
     pub src: Vec<u8>,
@@ -286,10 +305,12 @@ pub struct ClaimPayload {
 }
 
 impl ClaimPayload {
-    /// Construct a new claim payload.
+    /// Construct a new (non-replacement) claim payload.
     ///
     /// Takes an [`AtomId`] to ensure that the anchor and label come from
-    /// a validated identity pair. Sets `typ` to [`TYP_CLAIM`] automatically.
+    /// a validated identity pair. Sets `typ` to [`TYP_CLAIM`], `prior` to
+    /// `None`, and `governance` to `false` automatically. Use
+    /// [`ClaimPayload::new_replacement`] to construct a replacement claim.
     pub fn new(
         alg: Alg,
         id: AtomId,
@@ -302,10 +323,49 @@ impl ClaimPayload {
         Self {
             alg,
             anchor: id.anchor,
+            governance: false,
             label: id.label,
             now,
             owner,
             pkg,
+            prior: None,
+            src,
+            tmb,
+            typ: TYP_CLAIM.to_owned(),
+        }
+    }
+
+    /// Construct a new claim-replacement payload.
+    ///
+    /// Mirrors [`ClaimPayload::new`] but sets `prior` to the czd of the
+    /// claim being replaced. Pass `governance: false` for an owner
+    /// replacement (the ordinary, unmarked path) or `governance: true`
+    /// for a governance replacement (a first-class, visible seizure
+    /// event) — see `[claim-replacement-authority]`. Which authority
+    /// actually justifies the replacement is a verification-time concern
+    /// ([`verify_claim_replacement`], deliberately unimplemented —
+    /// Phase 1), not something this constructor checks.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_replacement(
+        alg: Alg,
+        id: AtomId,
+        now: u64,
+        owner: Vec<u8>,
+        pkg: String,
+        prior: Czd,
+        governance: bool,
+        src: Vec<u8>,
+        tmb: Thumbprint,
+    ) -> Self {
+        Self {
+            alg,
+            anchor: id.anchor,
+            governance,
+            label: id.label,
+            now,
+            owner,
+            pkg,
+            prior: Some(prior),
             src,
             tmb,
             typ: TYP_CLAIM.to_owned(),
@@ -575,6 +635,33 @@ pub fn verify_publish(
         });
     }
     Ok(payload)
+}
+
+/// Verify a claim-replacement's two-authority requirement.
+///
+/// **Deliberately unimplemented — Phase 1.** A replacement claim's
+/// authority is a materially new kind of verification beyond the
+/// single-message check [`verify_claim`] performs: checking that the
+/// signing key is authorized by EITHER `prior`'s `owner` (the ordinary,
+/// unmarked owner-replacement path) OR `charter_owner` (the
+/// governance-replacement path, which additionally MUST carry
+/// `governance: true` on `replacement`) — and rejecting any signer
+/// outside both. Declaring this seam now (without a working validator)
+/// lets later phases de-stub it without reshaping the call surface.
+///
+/// Spec constraints: `[claim-replacement-authority]`,
+/// `[claim-replacement-transition]`.
+#[cfg(feature = "serde")]
+pub fn verify_claim_replacement(
+    _replacement: &ClaimPayload,
+    _prior: &ClaimPayload,
+    _charter_owner: &[u8],
+) -> Result<(), VerifyError> {
+    unimplemented!(
+        "Phase 1: claim-replacement two-authority verification is a specified deliverable, not a \
+         default — see docs/specs/atom-transactions.md [claim-replacement-authority] and \
+         [claim-replacement-transition]"
+    )
 }
 
 /// Verify a Coz signature over raw JSON payload bytes.
