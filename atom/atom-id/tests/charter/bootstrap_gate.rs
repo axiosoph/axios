@@ -37,7 +37,6 @@ fn bootstrap_seizure_requires_incumbent_authorization() {
     unimplemented!(
         "Phase 1: charter bootstrap-seizure authorization check — see \
          docs/specs/atom-transactions.md [charter-transition] PRE (bootstrap gate). No \
-         CharterStore/ClaimStore ancestry lookup or authorization check ships in this corpus; see \
-         N-charter-corpus Non-Goals."
+         CharterStore/ClaimStore ancestry lookup or authorization check ships in this test corpus."
     );
 }

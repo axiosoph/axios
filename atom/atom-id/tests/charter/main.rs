@@ -1,4 +1,4 @@
-//! Charter attack corpus (N-charter-corpus).
+//! Charter attack corpus.
 //!
 //! Four named attack scenarios against the landed `CharterPayload` /
 //! `ClaimPayload` seam, built as real signed-and-verified transactions:
@@ -21,16 +21,21 @@
 //! ## Red-test inventory
 //!
 //! This module adds the two red tests the corpus is missing:
-//! [`chain_monotonicity::verify_succession_chain_rejects_prefix_rollback`]
+//! [`chain_monotonicity::chain_monotonicity_requires_recorded_head_check`]
 //! (attack #2) and
 //! [`bootstrap_gate::bootstrap_seizure_requires_incumbent_authorization`]
-//! (attack #4). The other two attacks already have a landed red test
-//! elsewhere and are NOT duplicated here:
+//! (attack #4). Both document a missing obligation directly (via
+//! `unimplemented!()` in the test body) rather than calling a declared
+//! seam stub, and so will need EDITING — not just un-ignoring — once
+//! Phase 1 introduces the real check and its call signature. The other
+//! two attacks already have a landed red test elsewhere, calling the
+//! already-declared (stateless) seam stub directly, and are NOT
+//! duplicated here:
 //!
 //! | Attack | Spec tag | Red test | Location |
 //! |---|---|---|---|
 //! | #1 divergent succession | `[charter-succession-linear]` | `verify_succession_chain_rejects_divergent_successors` | `atom/atom-id/src/charter.rs` |
-//! | #2 prefix rollback | `[chain-monotonicity]` | `verify_succession_chain_rejects_prefix_rollback` | here, `chain_monotonicity` |
+//! | #2 prefix rollback | `[chain-monotonicity]` | `chain_monotonicity_requires_recorded_head_check` | here, `chain_monotonicity` |
 //! | #3 claim-replacement marking | `[claim-replacement-authority]` | `verify_claim_replacement_rejects_third_authority` | `atom/atom-id/src/tests.rs` |
 //! | #4 bootstrap seizure | `[charter-transition]` PRE | `bootstrap_seizure_requires_incumbent_authorization` | here, `bootstrap_gate` |
 
