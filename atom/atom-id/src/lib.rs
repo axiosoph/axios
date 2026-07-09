@@ -82,8 +82,10 @@ pub type Tmb = Thumbprint;
 /// An opaque anchor establishing atom-set identity.
 ///
 /// The anchor pins an atom-set to an immutable reference point in the
-/// source's history. Its derivation is backend-specific (e.g., the hash
-/// of the genesis commit for git backends).
+/// source's history. Its derivation is fixed by charter: `Anchor ==
+/// czd(charter₀)`, the coz digest of the atom-set's founding charter
+/// (spec `[charter-anchor]`) — backend-agnostic, since the charter is a
+/// coz object regardless of backend.
 ///
 /// Displayed and serialized as a base64url-unpadded string.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
