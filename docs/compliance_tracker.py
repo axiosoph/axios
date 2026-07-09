@@ -10,8 +10,9 @@ from their verification tables AND from inline `**[id]**:` prose definitions,
 scans the codebase for compliance annotations, matches them, and outputs
 compliance status to docs/compliance.json and www/content/compliance.md. It also
 emits docs/on_path_constraints.json, an on-path constraint manifest recording
-each constraint's spec-stated verification method (or a residue explaining why
-none is named), checked by check_constraint_coverage.py.
+each constraint's spec-stated verification method where one exists, leaving a
+gap genuinely open (not auto-justified) otherwise, checked by
+check_constraint_coverage.py.
 """
 
 import os
@@ -179,8 +180,21 @@ def extract_constraints_from_spec(file_path):
 
 def build_constraint_manifest(repo_root):
     """Build the on-path constraint manifest: one entry per (spec_file, id)
-    pair across docs/specs/*.md, each carrying either a spec-stated named
-    evaluator or a residue explaining why none is named.
+    pair across docs/specs/*.md.
+
+    Each entry carries a spec-stated named evaluator when one exists.
+    `residue` is NEVER auto-generated: it is a reserved slot for a
+    deliberate, reviewed justification of why a *specific* constraint
+    needs no machine evaluator (mirrors findings_apply's
+    resolved-requires-evaluator rule) — manufacturing one here for every
+    unnamed-evaluator constraint would make check_constraint_coverage.py
+    unable to ever fail on real output, which defeats the coverage check
+    entirely. A constraint with neither is left with both fields empty so
+    the coverage-check surfaces it as a genuine, uncovered gap rather than
+    silently laundering it into "covered". `spec_status` is purely
+    informational context (whatever verification-status text, if any, the
+    spec itself states — even the bare word "unverified") for a human
+    triaging the gap; it is never consulted by the coverage-check.
 
     Disambiguation rule: entries are keyed by (spec_file, id), never by id
     alone — a genuine cross-file same-name ID (e.g. lock-schema-version,
@@ -214,18 +228,16 @@ def build_constraint_manifest(repo_root):
                     "line": r["line_number"],
                     "evaluator": evaluator_text,
                     "residue": "",
+                    "spec_status": "",
                 })
             else:
-                if evaluator_text:
-                    residue = f"spec names no evaluator, only status {evaluator_text!r}"
-                else:
-                    residue = "no VERIFIED annotation found in spec prose"
                 manifest.append({
                     "id": r["display_id"],
                     "spec_file": rel_spec_path,
                     "line": r["line_number"],
                     "evaluator": "",
-                    "residue": residue,
+                    "residue": "",
+                    "spec_status": evaluator_text or "",
                 })
 
     return manifest
