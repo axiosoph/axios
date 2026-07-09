@@ -989,8 +989,9 @@ satisfiable (SAT), confirming the charter facts are consistent.
 - `machine (TLC)` / `machine (Alloy)` — formal model checker
 - `review-residue` — a constraint whose nature is NOT a state-space property
   (a payload schema literal, or a procedural capability); discharged by a
-  decorrelated review of its classification and deferred evaluator, not by a
-  model checker, for which a machine discharge would be vacuous
+  decorrelated review of its classification and of the mechanism that will
+  eventually check it, not by a model checker, for which a machine discharge
+  would be vacuous
 - `rustc` — Rust type system; if code compiles, constraint holds
 - `cargo-dep` — Cargo.toml dependency audit; verified by `cargo check`
 - `unit-test` — deterministic test in isolation
