@@ -138,6 +138,18 @@ pub fn verify_charter(
 /// seam now (without a working validator) lets later phases de-stub it
 /// without reshaping the call surface.
 ///
+/// **Dual-signed transfers are chained, not multi-signed.**
+/// `[charter-succession-linear]` requires an ownership transfer to be
+/// authorized by both the outgoing owner (the `prior` charter's signer)
+/// and the incoming owner (proof of possession). `coz_rs::Coz<A>` carries
+/// exactly one signature per message, so this is NOT expressed as multiple
+/// signatures embedded in a single Coz message — it is expressed the same
+/// way succession itself is: as a chain of independently-signed
+/// transactions linked via `prior`, each verified separately via
+/// [`verify_charter`]/`verify_signature`. A chain-walk implementation
+/// checks that the required links are present and correctly authorized,
+/// not that a single message carries two signatures.
+///
 /// Spec constraints: `[charter-succession-linear]`, `[chain-monotonicity]`.
 #[cfg(feature = "serde")]
 pub fn verify_succession_chain(_chain: &[CharterPayload]) -> Result<(), crate::VerifyError> {
