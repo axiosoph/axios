@@ -1022,61 +1022,61 @@ _The rows added or amended for the charter constraints are marked (amended)._
 > Phase 1 items promoted to **pass** on 2026-02-28 based on atom-id
 > implementation review (59 tests, clippy clean).
 
-| Constraint                    | Method           | Result   | Detail                                             | Phase |
-| :---------------------------- | :--------------- | :------- | :------------------------------------------------- | :---- |
-| identity-content-addressed    | machine (Alloy)  | **pass** | Alloy `identity_content_addressed`                 | —     |
-| identity-stability            | machine (TLC)    | **pass** | TLA+ `IdentityStability` — 2 configs               | —     |
-| owner-abstract                | machine (Alloy)  | **pass** | Alloy `ownership_independence`                     | —     |
-| owner-compatibility           | machine (Alloy)  | **pass** | Alloy `ownership_independence`                     | —     |
-| owner-authorization-delegated | integration-test | pending  | Signing key auth varies by identity system         | 4     |
-| symmetric-payloads            | rustc            | **pass** | Both structs have `anchor` + `label`               | 1     |
-| publish-chains-claim          | machine (TLC)    | **pass** | TLA+ `PublishChainsClaim` — 2 configs              | —     |
-| claim-typ                     | rustc            | **pass** | `TYP_CLAIM` const = `"atom/claim"`                 | 1     |
-| publish-typ                   | rustc            | **pass** | `TYP_PUBLISH` const = `"atom/publish"`             | 1     |
-| sig-over-pay                  | unit-test        | **pass** | sign→verify roundtrip in atom-id tests             | 1     |
-| dig-is-atom-snapshot          | unit-test        | pending  | Snapshot hash matches `dig` field                  | 4     |
-| src-is-source-revision        | integration-test | pending  | Git revision hash matches `src` field              | 4     |
-| path-is-subdir                | rustc            | **pass** | `path` field type constrains to subdir             | 1     |
-| rawversion-opaque             | rustc            | **pass** | Newtype, no `Deref`/`AsRef`/`Into`                 | 1     |
-| claim-key-required            | unit-test        | **pass** | CozMessage key — tested in claim roundtrip         | 1     |
-| publish-key-optional          | unit-test        | **pass** | CozMessage key — optional per Coz format           | 1     |
-| crypto-layer-separation       | cargo-dep        | pending  | atom-core Cargo.toml has no coz-rs                 | 3     |
-| crypto-via-coz                | cargo-dep        | **pass** | atom-id Cargo.toml depends on coz-rs               | 1     |
-| key-management-deferred       | cargo-dep        | pending  | No key storage crate in atom workspace             | 3     |
-| claim-transition              | unit-test        | **pass** | `verify_claim_roundtrip` sign→verify               | 1     |
-| publish-transition            | unit-test        | **pass** | `verify_publish_roundtrip` sign→verify             | 1     |
-| session-ordering              | machine (TLC)    | **pass** | TLA+ `SessionOrdering` — 2 configs                 | —     |
-| no-unclaimed-publish          | machine (TLC)    | **pass** | TLA+ `NoUnclaimedPublish` — 2 configs              | —     |
-| no-duplicate-version          | machine (TLC)    | **pass** | TLA+ `NoDuplicateVersion` — 2 configs              | —     |
-| no-cross-layer-crypto         | cargo-dep        | pending  | atom-core has zero crypto deps                     | 3     |
-| no-backdated-publish          | machine (TLC)    | **pass** | TLA+ `NoBackdatedPublish` — 2 configs              | —     |
-| verification-local            | integration-test | pending  | Pipeline steps 1–13 offline                        | 4     |
-| verification-provenance       | integration-test | pending  | Pipeline steps 14–18 with source access            | 4     |
-| atom-snapshot-reproducible    | unit-test        | pending  | Same inputs → same snapshot hash                   | 4     |
-| ingest-preserves-identity     | machine (Alloy)  | **pass** | Alloy `ingest_preserves_identity`                  | —     |
-| backend-agnostic-protocol     | rustc            | pending  | Trait sigs use only associated types               | 3     |
-| charter-typ                   | review-residue   | **pass** | Schema literal; rustc at impl (cf. claim-typ)      | —     |
-| charter-anchor                | machine (TLC)    | **pass** | AtomCharter `AnchorIsFoundingCzd`/`FoundingUnique` | —     |
-| claim-chains-charter          | machine (Alloy)  | **pass** | Alloy `claim_chains_charter`                       | —     |
-| claim-charter-authorization   | machine (TLC)    | **pass** | AtomCharter `ClaimAuthorized`                      | —     |
-| claim-replacement-authority   | machine (TLC)    | **pass** | AtomCharter `ReplacementAuthority`                 | —     |
-| charter-ancestry              | machine (TLC)    | **pass** | AtomCharter `ClaimAncestry`                        | —     |
-| charter-succession            | machine (TLC)    | **pass** | AtomCharter `SuccessionAuthorized`                 | —     |
-| charter-succession-linear     | machine (TLC)    | **pass** | AtomCharter `TransferDualSigned`/`ForkFailClosed`  | —     |
-| chain-monotonicity            | machine (TLC)    | **pass** | AtomCharter `MonotonicHead` property               | —     |
-| charter-fork-distinction      | machine (Alloy)  | **pass** | Alloy `charter_fork_distinction`                   | —     |
-| anchor-immutable              | machine (TLC)    | **pass** | AtomCharter `AnchorImmutable` (amended)            | —     |
-| anchor-content-addressed      | machine (Alloy)  | **pass** | Alloy `anchor_content_addressed` (amended)         | —     |
-| anchor-resolvable             | review-residue   | **pass** | Procedural; enumeration + local verify (amended)   | —     |
-| manifest-minimal              | machine (Alloy)  | **pass** | Alloy `manifest_properties` fact                   | —     |
-| backend-bit-perfect           | integration-test | pending  | CozMessage bytes unchanged after store             | 4     |
-| atomid-per-source-unique      | machine (TLC)    | **pass** | TLA+ `AtomIdPerSourceUnique` — 2 configs           | —     |
-| publish-claim-coherence       | machine (TLC)    | **pass** | TLA+ `PublishClaimCoherence` — 2 configs           | —     |
-| atom-detached                 | integration-test | pending  | Atom subtree has no parent refs                    | 4     |
-| uri-not-metadata              | rustc            | **pass** | URI type absent from payload structs               | 1     |
-| trait-signature-pure          | rustc            | pending  | No backend types in trait signatures               | 3     |
-| publish-payload-extensible    | unit-test        | pending  | Extra fields in payload round-trip                 | 3     |
-| fs-source-contract            | integration-test | pending  | FsSource discover+resolve, no claim/pub            | 4     |
+| Constraint                    | Method           | Result   | Detail                                                                    | Phase |
+| :---------------------------- | :--------------- | :------- | :------------------------------------------------------------------------ | :---- |
+| identity-content-addressed    | machine (Alloy)  | **pass** | Alloy `identity_content_addressed`                                        | —     |
+| identity-stability            | machine (TLC)    | **pass** | TLA+ `IdentityStability` — 2 configs                                      | —     |
+| owner-abstract                | machine (Alloy)  | **pass** | Alloy `ownership_independence`                                            | —     |
+| owner-compatibility           | machine (Alloy)  | **pass** | Alloy `ownership_independence`                                            | —     |
+| owner-authorization-delegated | integration-test | pending  | Signing key auth varies by identity system                                | 4     |
+| symmetric-payloads            | rustc            | **pass** | Both structs have `anchor` + `label`                                      | 1     |
+| publish-chains-claim          | machine (TLC)    | **pass** | TLA+ `PublishChainsClaim` — 2 configs                                     | —     |
+| claim-typ                     | rustc            | **pass** | `TYP_CLAIM` const = `"atom/claim"`                                        | 1     |
+| publish-typ                   | rustc            | **pass** | `TYP_PUBLISH` const = `"atom/publish"`                                    | 1     |
+| sig-over-pay                  | unit-test        | **pass** | sign→verify roundtrip in atom-id tests                                    | 1     |
+| dig-is-atom-snapshot          | unit-test        | pending  | Snapshot hash matches `dig` field                                         | 4     |
+| src-is-source-revision        | integration-test | pending  | Git revision hash matches `src` field                                     | 4     |
+| path-is-subdir                | rustc            | **pass** | `path` field type constrains to subdir                                    | 1     |
+| rawversion-opaque             | rustc            | **pass** | Newtype, no `Deref`/`AsRef`/`Into`                                        | 1     |
+| claim-key-required            | unit-test        | **pass** | CozMessage key — tested in claim roundtrip                                | 1     |
+| publish-key-optional          | unit-test        | **pass** | CozMessage key — optional per Coz format                                  | 1     |
+| crypto-layer-separation       | cargo-dep        | pending  | atom-core Cargo.toml has no coz-rs                                        | 3     |
+| crypto-via-coz                | cargo-dep        | **pass** | atom-id Cargo.toml depends on coz-rs                                      | 1     |
+| key-management-deferred       | cargo-dep        | pending  | No key storage crate in atom workspace                                    | 3     |
+| claim-transition              | unit-test        | **pass** | `verify_claim_roundtrip` sign→verify                                      | 1     |
+| publish-transition            | unit-test        | **pass** | `verify_publish_roundtrip` sign→verify                                    | 1     |
+| session-ordering              | machine (TLC)    | **pass** | TLA+ `SessionOrdering` — 2 configs                                        | —     |
+| no-unclaimed-publish          | machine (TLC)    | **pass** | TLA+ `NoUnclaimedPublish` — 2 configs                                     | —     |
+| no-duplicate-version          | machine (TLC)    | **pass** | TLA+ `NoDuplicateVersion` — 2 configs                                     | —     |
+| no-cross-layer-crypto         | cargo-dep        | pending  | atom-core has zero crypto deps                                            | 3     |
+| no-backdated-publish          | machine (TLC)    | **pass** | TLA+ `NoBackdatedPublish` — 2 configs                                     | —     |
+| verification-local            | integration-test | pending  | Pipeline steps 1–13 offline                                               | 4     |
+| verification-provenance       | integration-test | pending  | Pipeline steps 14–18 with source access                                   | 4     |
+| atom-snapshot-reproducible    | unit-test        | pending  | Same inputs → same snapshot hash                                          | 4     |
+| ingest-preserves-identity     | machine (Alloy)  | **pass** | Alloy `ingest_preserves_identity`                                         | —     |
+| backend-agnostic-protocol     | rustc            | pending  | Trait sigs use only associated types                                      | 3     |
+| charter-typ                   | review-residue   | **pass** | Schema literal; rustc at impl (cf. claim-typ)                             | —     |
+| charter-anchor                | machine (TLC)    | **pass** | AtomCharter `AnchorIsFoundingCzd`/`FoundingUnique`                        | —     |
+| claim-chains-charter          | machine (Alloy)  | **pass** | Alloy `claim_chains_charter`                                              | —     |
+| claim-charter-authorization   | machine (TLC)    | **pass** | AtomCharter `ClaimAuthorized`                                             | —     |
+| claim-replacement-authority   | machine (TLC)    | **pass** | AtomCharter `ReplacementAuthority`                                        | —     |
+| charter-ancestry              | machine (TLC)    | **pass** | AtomCharter `ClaimAncestry`                                               | —     |
+| charter-succession            | machine (TLC)    | **pass** | AtomCharter `SuccessionAuthorized`                                        | —     |
+| charter-succession-linear     | machine (TLC)    | **pass** | AtomCharter `TransferDualSigned`/`ForkFailClosed`                         | —     |
+| chain-monotonicity            | machine (TLC)    | **pass** | AtomCharter `MonotonicHead` property                                      | —     |
+| charter-fork-distinction      | machine (Alloy)  | **pass** | Alloy `charter_fork_distinction`                                          | —     |
+| anchor-immutable              | machine (TLC)    | **pass** | AtomCharter `AnchorIsFoundingCzd` — succession preserves anchor (amended) | —     |
+| anchor-content-addressed      | machine (Alloy)  | **pass** | Alloy `anchor_content_addressed` (amended)                                | —     |
+| anchor-resolvable             | review-residue   | **pass** | Procedural; enumeration + local verify (amended)                          | —     |
+| manifest-minimal              | machine (Alloy)  | **pass** | Alloy `manifest_properties` fact                                          | —     |
+| backend-bit-perfect           | integration-test | pending  | CozMessage bytes unchanged after store                                    | 4     |
+| atomid-per-source-unique      | machine (TLC)    | **pass** | TLA+ `AtomIdPerSourceUnique` — 2 configs                                  | —     |
+| publish-claim-coherence       | machine (TLC)    | **pass** | TLA+ `PublishClaimCoherence` — 2 configs                                  | —     |
+| atom-detached                 | integration-test | pending  | Atom subtree has no parent refs                                           | 4     |
+| uri-not-metadata              | rustc            | **pass** | URI type absent from payload structs                                      | 1     |
+| trait-signature-pure          | rustc            | pending  | No backend types in trait signatures                                      | 3     |
+| publish-payload-extensible    | unit-test        | pending  | Extra fields in payload round-trip                                        | 3     |
+| fs-source-contract            | integration-test | pending  | FsSource discover+resolve, no claim/pub                                   | 4     |
 
 ## Implications
 
