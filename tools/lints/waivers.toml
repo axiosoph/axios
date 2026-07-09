@@ -1,0 +1,116 @@
+# Doctrine-lint waiver inventory + glossary scoping config.
+#
+# Consumed by tools/lints/doctrine_lint.py. This file is BOTH the machine-read
+# config and the human-readable registry of pre-existing doctrine debt.
+#
+# POLICY — the waiver list may only SHRINK. Each [[waiver]] names a pre-existing
+# legacy site scheduled for removal, phase-tagged with the workstream that owns
+# its deletion. A waiver that no longer matches a real violation is a lint
+# FAILURE (remove it). New violations are never added as waivers without an
+# explicit, reviewed decision — the lint fails, and that is the point.
+#
+# Scope is set by SCOPING, never by silently narrowing a lint to skip a site:
+# every exemption below is recorded in the open.
+
+# --------------------------------------------------------------------------- #
+# Glossary lint scoping (AGENTS.md CAUTION table). Diff-scoped against
+# LINT_DIFF_BASE (default: master): only lines ADDED since the stable line are
+# examined, so the ~40 legitimate `nix_compat::derivation::Derivation`
+# identifiers in eos-snix, the git "genesis commit" vocabulary in atom-git, and
+# the closure-`root` senses are out of scope by construction.
+# --------------------------------------------------------------------------- #
+[glossary]
+# Ambiguous aliases (common English / external-crate identifiers) enforced ONLY
+# as NEW Rust type declarations — `struct Derivation`/`enum Genesis` is an
+# unambiguous doctrine violation; a USE of the same word is not.
+decl_terms = ["Genesis", "Root", "Derivation", "Drv", "Name"]
+# Unambiguous tokens with zero legitimate use — enforced as whole words anywhere
+# on an added line.
+tokens = ["Blake3Hash"]
+# Exact banned phrases.
+phrases = ["hashed atom id", "atom_id-as-digest"]
+
+# Deprecated aliases deliberately NOT enforced, with the reason. These are
+# surfaced findings, not silent exemptions.
+[[glossary.excluded]]
+reason = """
+GLOSSARY/CODE CONTRADICTION surfaced to the composer: AGENTS.md lists AtomDigest
+as a deprecated alias for `Digest`, but atom-core/src/lib.rs:64 defines a live,
+actively-used `pub struct AtomDigest` (the multihash of an AtomId, used across
+atom-git). Enforcing the alias would fire on legitimate committed code; the
+struct is not slated for removal. Resolution (rename struct vs. amend glossary)
+is an architect decision, out of scope for this node (Non-Goals: no doctrine
+change). Excluded until reconciled."""
+term = "AtomDigest"
+
+[[glossary.excluded]]
+reason = """
+Irreducibly ambiguous with legitimate vocabulary: git "genesis commit"
+(atom-git), closure/merkle "root", `nix_compat::derivation::Derivation` in the
+eos-snix bridge, and "name" everywhere. Enforced only as NEW type declarations
+(see glossary.decl_terms), never as bare-word prose or uses."""
+term = "genesis / root / Name / derivation / drv (bare word)"
+
+# --------------------------------------------------------------------------- #
+# Active waivers — pre-existing legacy sites the lints WOULD fire on.
+# --------------------------------------------------------------------------- #
+
+# `NeedsEvaluation`: the retired third BuildPlan variant (ADR-0006 §3). Live
+# code-identifier sites in the eos engine model + the eos-snix legacy crate.
+# Removed when the two-variant coproduct (Cached | NeedsBuild) lands and eos-snix
+# is deleted. (The doc-comment narrations at eos-core/src/executor.rs:17 and
+# eos-snix/src/lib.rs:286 are prose, not identifiers — exempt, not waived.)
+[[waiver]]
+lint   = "needs-evaluation"
+owner  = "eos-snix / evaluator eradication (ADR-0006 §3)"
+path   = "eos/eos-core/src/engine.rs"
+phase  = "P4"
+symbol = "NeedsEvaluation"
+
+[[waiver]]
+lint   = "needs-evaluation"
+owner  = "eos-snix / evaluator eradication (ADR-0006 §3)"
+path   = "eos/eos-core/tests/traits.rs"
+phase  = "P4"
+symbol = "NeedsEvaluation"
+
+[[waiver]]
+lint   = "needs-evaluation"
+owner  = "eos-snix / evaluator eradication (ADR-0006 §3)"
+path   = "eos/eos-snix/src/lib.rs"
+phase  = "P4"
+symbol = "NeedsEvaluation"
+
+[[waiver]]
+lint   = "needs-evaluation"
+owner  = "eos-snix / evaluator eradication (ADR-0006 §3)"
+path   = "eos/eos/src/orchestrator.rs"
+phase  = "P4"
+symbol = "NeedsEvaluation"
+
+# `ComposeConfig`: the v1 lock compose model (3 sites), coexisting with the
+# landed v2 module. `[lock-no-compose]` forbids it; removed with the v1 lock.
+[[waiver]]
+lint   = "compose-config"
+owner  = "ion-lock v1 removal (v2 already landed)"
+path   = "ion/ion-lock/src/lib.rs"
+phase  = "P2"
+symbol = "ComposeConfig"
+
+# --------------------------------------------------------------------------- #
+# Registry — documented debt for AC2 completeness that no ACTIVE lint fires on
+# (spec prose narrating the removed [compose] section is exempt as narration;
+# the eos-snix crate as a whole). Recorded here so the removal owners are named.
+# Informational only (not read by the linter).
+# --------------------------------------------------------------------------- #
+[[registry]]
+note  = "Specs still describe the removed [compose] section; reconciled with the manifest redesign, not this node."
+owner = "manifest/lock redesign — successor intent schema (ADR-0006 §3, F9)"
+phase = "P2"
+site  = "docs/specs/ion-eos-contract.md, docs/specs/ion-manifest.md — [compose]/composer prose"
+
+[[registry]]
+note  = "Slated for removal; hosts the waived NeedsEvaluation + Derivation legacy identifiers."
+owner = "eos-snix deletion (ADR-0006 §3)"
+phase = "P4"
+site  = "eos/eos-snix (whole crate) — evaluator-shaped passthrough executor"
