@@ -29,7 +29,8 @@
 //! ## Anchor
 //!
 //! An [`Anchor`] is an opaque byte vector establishing atom-set identity.
-//! Its derivation is backend-specific (e.g., genesis commit hash for git).
+//! Its derivation is fixed by charter: `Anchor == czd(charter₀)`, the coz
+//! digest of the atom-set's founding charter (spec `[charter-anchor]`).
 //!
 //! [Coz]: https://github.com/Cyphrme/Coz
 
