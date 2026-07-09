@@ -299,31 +299,31 @@
     {
       "id": "anchor-content-addressed",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1036,
-      "evaluator": "integration-test",
+      "line": 1070,
+      "evaluator": "machine (Alloy)",
       "residue": "",
       "spec_status": ""
     },
     {
       "id": "anchor-immutable",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1035,
-      "evaluator": "integration-test",
+      "line": 1069,
+      "evaluator": "machine (TLC)",
       "residue": "",
       "spec_status": ""
     },
     {
       "id": "anchor-resolvable",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1037,
-      "evaluator": "integration-test",
+      "line": 1071,
+      "evaluator": "review-residue",
       "residue": "",
       "spec_status": ""
     },
     {
       "id": "atom-detached",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1042,
+      "line": 1076,
       "evaluator": "integration-test",
       "residue": "",
       "spec_status": ""
@@ -331,7 +331,7 @@
     {
       "id": "atom-snapshot-reproducible",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1032,
+      "line": 1056,
       "evaluator": "unit-test",
       "residue": "",
       "spec_status": ""
@@ -339,7 +339,7 @@
     {
       "id": "atomid-per-source-unique",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1040,
+      "line": 1074,
       "evaluator": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -347,7 +347,7 @@
     {
       "id": "backend-agnostic-protocol",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1034,
+      "line": 1058,
       "evaluator": "rustc",
       "residue": "",
       "spec_status": ""
@@ -355,7 +355,7 @@
     {
       "id": "backend-bit-perfect",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1039,
+      "line": 1073,
       "evaluator": "integration-test",
       "residue": "",
       "spec_status": ""
@@ -363,55 +363,55 @@
     {
       "id": "chain-monotonicity",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 490,
-      "evaluator": "",
+      "line": 1067,
+      "evaluator": "machine (TLC)",
       "residue": "",
-      "spec_status": "unverified (models require extension)"
+      "spec_status": ""
     },
     {
       "id": "charter-ancestry",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 446,
-      "evaluator": "",
+      "line": 1064,
+      "evaluator": "machine (TLC)",
       "residue": "",
-      "spec_status": "unverified (models require extension)"
+      "spec_status": ""
     },
     {
       "id": "charter-anchor",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 399,
-      "evaluator": "",
+      "line": 1060,
+      "evaluator": "machine (TLC)",
       "residue": "",
-      "spec_status": "unverified (models require extension \u2014 see Verification note)"
+      "spec_status": ""
     },
     {
       "id": "charter-fork-distinction",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 500,
-      "evaluator": "",
+      "line": 1068,
+      "evaluator": "machine (Alloy)",
       "residue": "",
-      "spec_status": "unverified (models require extension)"
+      "spec_status": ""
     },
     {
       "id": "charter-succession",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 458,
-      "evaluator": "",
+      "line": 1065,
+      "evaluator": "machine (TLC)",
       "residue": "",
-      "spec_status": "unverified (models require extension)"
+      "spec_status": ""
     },
     {
       "id": "charter-succession-linear",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 472,
-      "evaluator": "",
+      "line": 1066,
+      "evaluator": "machine (TLC)",
       "residue": "",
-      "spec_status": "unverified (models require extension)"
+      "spec_status": ""
     },
     {
       "id": "charter-transition",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 716,
+      "line": 715,
       "evaluator": "",
       "residue": "",
       "spec_status": "unverified (pending implementation)"
@@ -419,31 +419,31 @@
     {
       "id": "charter-typ",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 395,
-      "evaluator": "",
+      "line": 1059,
+      "evaluator": "review-residue",
       "residue": "",
-      "spec_status": "unverified (pending implementation)"
+      "spec_status": ""
     },
     {
       "id": "claim-chains-charter",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 405,
-      "evaluator": "",
+      "line": 1061,
+      "evaluator": "machine (Alloy)",
       "residue": "",
-      "spec_status": "unverified (models require extension)"
+      "spec_status": ""
     },
     {
       "id": "claim-charter-authorization",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 413,
-      "evaluator": "",
+      "line": 1062,
+      "evaluator": "machine (TLC)",
       "residue": "",
-      "spec_status": "unverified (models require extension)"
+      "spec_status": ""
     },
     {
       "id": "claim-key-required",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1018,
+      "line": 1042,
       "evaluator": "unit-test",
       "residue": "",
       "spec_status": ""
@@ -451,7 +451,7 @@
     {
       "id": "claim-payload-extensible",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 874,
+      "line": 873,
       "evaluator": "",
       "residue": "",
       "spec_status": "unverified"
@@ -459,15 +459,15 @@
     {
       "id": "claim-replacement-authority",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 422,
-      "evaluator": "",
+      "line": 1063,
+      "evaluator": "machine (TLC)",
       "residue": "",
-      "spec_status": "unverified (models require extension)"
+      "spec_status": ""
     },
     {
       "id": "claim-replacement-transition",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 755,
+      "line": 754,
       "evaluator": "",
       "residue": "",
       "spec_status": "unverified (pending implementation)"
@@ -475,7 +475,7 @@
     {
       "id": "claim-transition",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1023,
+      "line": 1047,
       "evaluator": "unit-test",
       "residue": "",
       "spec_status": ""
@@ -483,7 +483,7 @@
     {
       "id": "claim-typ",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1011,
+      "line": 1035,
       "evaluator": "rustc",
       "residue": "",
       "spec_status": ""
@@ -499,7 +499,7 @@
     {
       "id": "crypto-layer-separation",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1020,
+      "line": 1044,
       "evaluator": "cargo-dep",
       "residue": "",
       "spec_status": ""
@@ -507,7 +507,7 @@
     {
       "id": "crypto-via-coz",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1021,
+      "line": 1045,
       "evaluator": "cargo-dep",
       "residue": "",
       "spec_status": ""
@@ -515,7 +515,7 @@
     {
       "id": "dig-is-atom-snapshot",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1014,
+      "line": 1038,
       "evaluator": "unit-test",
       "residue": "",
       "spec_status": ""
@@ -523,7 +523,7 @@
     {
       "id": "fs-source-contract",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1046,
+      "line": 1080,
       "evaluator": "integration-test",
       "residue": "",
       "spec_status": ""
@@ -531,7 +531,7 @@
     {
       "id": "identity-content-addressed",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1004,
+      "line": 1028,
       "evaluator": "machine (Alloy)",
       "residue": "",
       "spec_status": ""
@@ -539,7 +539,7 @@
     {
       "id": "identity-stability",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1005,
+      "line": 1029,
       "evaluator": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -547,7 +547,7 @@
     {
       "id": "ingest-preserves-identity",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1033,
+      "line": 1057,
       "evaluator": "machine (Alloy)",
       "residue": "",
       "spec_status": ""
@@ -555,7 +555,7 @@
     {
       "id": "key-management-deferred",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1022,
+      "line": 1046,
       "evaluator": "cargo-dep",
       "residue": "",
       "spec_status": ""
@@ -563,7 +563,7 @@
     {
       "id": "manifest-minimal",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1038,
+      "line": 1072,
       "evaluator": "machine (Alloy)",
       "residue": "",
       "spec_status": ""
@@ -571,7 +571,7 @@
     {
       "id": "no-backdated-publish",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1029,
+      "line": 1053,
       "evaluator": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -579,7 +579,7 @@
     {
       "id": "no-cross-layer-crypto",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1028,
+      "line": 1052,
       "evaluator": "cargo-dep",
       "residue": "",
       "spec_status": ""
@@ -587,7 +587,7 @@
     {
       "id": "no-duplicate-version",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1027,
+      "line": 1051,
       "evaluator": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -595,7 +595,7 @@
     {
       "id": "no-unclaimed-publish",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1026,
+      "line": 1050,
       "evaluator": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -603,7 +603,7 @@
     {
       "id": "owner-abstract",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1006,
+      "line": 1030,
       "evaluator": "machine (Alloy)",
       "residue": "",
       "spec_status": ""
@@ -611,7 +611,7 @@
     {
       "id": "owner-authorization-delegated",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1008,
+      "line": 1032,
       "evaluator": "integration-test",
       "residue": "",
       "spec_status": ""
@@ -619,7 +619,7 @@
     {
       "id": "owner-compatibility",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1007,
+      "line": 1031,
       "evaluator": "machine (Alloy)",
       "residue": "",
       "spec_status": ""
@@ -627,7 +627,7 @@
     {
       "id": "path-is-subdir",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1016,
+      "line": 1040,
       "evaluator": "rustc",
       "residue": "",
       "spec_status": ""
@@ -635,7 +635,7 @@
     {
       "id": "publish-chains-claim",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1010,
+      "line": 1034,
       "evaluator": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -643,7 +643,7 @@
     {
       "id": "publish-claim-coherence",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1041,
+      "line": 1075,
       "evaluator": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -651,7 +651,7 @@
     {
       "id": "publish-key-optional",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1019,
+      "line": 1043,
       "evaluator": "unit-test",
       "residue": "",
       "spec_status": ""
@@ -659,7 +659,7 @@
     {
       "id": "publish-payload-extensible",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1045,
+      "line": 1079,
       "evaluator": "unit-test",
       "residue": "",
       "spec_status": ""
@@ -667,7 +667,7 @@
     {
       "id": "publish-transition",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1024,
+      "line": 1048,
       "evaluator": "unit-test",
       "residue": "",
       "spec_status": ""
@@ -675,7 +675,7 @@
     {
       "id": "publish-typ",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1012,
+      "line": 1036,
       "evaluator": "rustc",
       "residue": "",
       "spec_status": ""
@@ -683,7 +683,7 @@
     {
       "id": "rawversion-opaque",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1017,
+      "line": 1041,
       "evaluator": "rustc",
       "residue": "",
       "spec_status": ""
@@ -691,7 +691,7 @@
     {
       "id": "session-ordering",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1025,
+      "line": 1049,
       "evaluator": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -699,7 +699,7 @@
     {
       "id": "sig-over-pay",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1013,
+      "line": 1037,
       "evaluator": "unit-test",
       "residue": "",
       "spec_status": ""
@@ -707,7 +707,7 @@
     {
       "id": "src-is-source-revision",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1015,
+      "line": 1039,
       "evaluator": "integration-test",
       "residue": "",
       "spec_status": ""
@@ -715,7 +715,7 @@
     {
       "id": "symmetric-payloads",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1009,
+      "line": 1033,
       "evaluator": "rustc",
       "residue": "",
       "spec_status": ""
@@ -731,7 +731,7 @@
     {
       "id": "trait-signature-pure",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1044,
+      "line": 1078,
       "evaluator": "rustc",
       "residue": "",
       "spec_status": ""
@@ -739,7 +739,7 @@
     {
       "id": "uri-not-metadata",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1043,
+      "line": 1077,
       "evaluator": "rustc",
       "residue": "",
       "spec_status": ""
@@ -747,7 +747,7 @@
     {
       "id": "verification-local",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1030,
+      "line": 1054,
       "evaluator": "integration-test",
       "residue": "",
       "spec_status": ""
@@ -755,7 +755,7 @@
     {
       "id": "verification-provenance",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1031,
+      "line": 1055,
       "evaluator": "integration-test",
       "residue": "",
       "spec_status": ""
