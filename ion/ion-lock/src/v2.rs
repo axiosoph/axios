@@ -108,7 +108,9 @@ mod tests {
 
     /// A `sha256` [`AtomDigest`] (32 bytes) from a seed — a coz-style digest.
     fn sha256(seed: u8) -> AtomDigest {
-        atom_id::Czd::from_bytes(vec![seed; 32]).into()
+        atom_id::Czd::from_bytes(vec![seed; 32])
+            .try_into()
+            .expect("32-byte seed is a valid coz digest length")
     }
 
     fn sample_lock() -> LockFileV2 {
