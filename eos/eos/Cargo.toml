@@ -5,10 +5,14 @@ version = "0.1.0"
 
 [dependencies]
 atom-core = { path = "../../atom/atom-core" }
-atom-git = { path = "../../atom/atom-git" }
-atom-id = { path = "../../atom/atom-id" }
-base64 = "0.22"
-blake3 = "1"
+atom-git  = { path = "../../atom/atom-git" }
+atom-id   = { path = "../../atom/atom-id" }
+base64    = "0.22"
+# Pinned: snix-castore requires blake3's "traits-preview" digest::Digest impl,
+# whose trait-bound shape is incompatible with blake3 >=1.8 (digest crate
+# version drift upstream). Same rationale as eos-snix's pin; unpin only after
+# snix-castore's own blake3 constraint moves.
+blake3 = "=1.5.5"
 eos-core = { path = "../eos-core" }
 futures = "0.3"
 hex = "0.4"

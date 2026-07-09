@@ -7,7 +7,13 @@ version = "0.1.0"
 atom-id  = { path = "../../atom/atom-id" }
 eos-core = { path = "../eos-core" }
 # Snix crates — path deps to local checkout
-blake3       = "1"
+# Pinned: snix-castore requires blake3's "traits-preview" digest::Digest impl,
+# whose trait-bound shape is incompatible with blake3 >=1.8 (digest crate
+# version drift upstream). Unpin only after snix-castore's own blake3
+# constraint moves — this crate is slated for deletion anyway (ADR-0006 §3,
+# eos-snix Phase-4 removal), so this pin is not expected to need revisiting
+# before then.
+blake3       = "=1.5.5"
 bstr         = "1"
 bytes        = "1"
 clap         = { version = "4", features = ["derive"] }

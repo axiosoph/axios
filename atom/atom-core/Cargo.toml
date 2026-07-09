@@ -9,5 +9,4 @@ default = ["serde"]
 serde   = ["atom-id/serde"]
 
 [dependencies]
-atom-id       = { path = "../atom-id" }
-trait-variant = "0.1"
+atom-id = { path = "../atom-id" }

@@ -109,7 +109,6 @@ pub trait AtomVersion {
 ///
 /// Observations are wrapped in `Result` to distinguish "not found"
 /// (`Ok(None)`) from backend failure (`Err`).
-#[trait_variant::make(Send)]
 pub trait AtomSource: Send + Sync + 'static {
     /// Backend-defined observation type returned by [`resolve`](Self::resolve).
     type Entry: AtomEntry;
@@ -121,13 +120,19 @@ pub trait AtomSource: Send + Sync + 'static {
     ///
     /// Returns `Ok(None)` if the atom is not present in this source.
     /// Returns `Err` on backend failure (network, disk, permission, etc.).
-    async fn resolve(&self, id: &AtomId) -> Result<Option<Self::Entry>, Self::Error>;
+    fn resolve(
+        &self,
+        id: &AtomId,
+    ) -> impl std::future::Future<Output = Result<Option<Self::Entry>, Self::Error>> + Send;
 
     /// Search for atoms matching a query string.
     ///
     /// Returns atom identities, not full entries — use
     /// [`resolve`](Self::resolve) for observation data.
-    async fn discover(&self, query: &str) -> Result<Vec<AtomId>, Self::Error>;
+    fn discover(
+        &self,
+        query: &str,
+    ) -> impl std::future::Future<Output = Result<Vec<AtomId>, Self::Error>> + Send;
 }
 
 /// A single entry in an atom's content tree.
@@ -175,7 +180,6 @@ pub enum ContentEntry {
 /// Consumers (e.g., [`AtomStore::ingest`], eos bridge) use this
 /// trait to transfer content across backend boundaries without
 /// runtime downcasting.
-#[trait_variant::make(Send)]
 pub trait AtomContent: AtomSource {
     /// Yield the content tree for a specific atom version.
     ///
@@ -188,11 +192,11 @@ pub trait AtomContent: AtomSource {
     /// * `dig` — backend-specific content snapshot digest (e.g., 20-byte git tree OID)
     ///
     /// Returns `None` if the content is not found.
-    async fn content(
+    fn content(
         &self,
         id: &AtomId,
         dig: &[u8],
-    ) -> Result<Option<Vec<ContentEntry>>, Self::Error>;
+    ) -> impl std::future::Future<Output = Result<Option<Vec<ContentEntry>>, Self::Error>> + Send;
 }
 
 /// Claiming and publishing interface (source-side).
@@ -241,14 +245,19 @@ pub trait AtomRegistry: AtomSource {
 /// [`resolve`](AtomSource::resolve) on this store MUST return at least
 /// what the source's `resolve` returns. The store accumulates — it never
 /// loses atoms through ingestion.
-#[trait_variant::make(Send)]
 pub trait AtomStore: AtomContent {
     /// Import atoms from a source into this store.
     ///
     /// After completion, this store contains at least every atom
     /// that was in `source` (⊇ condition).
-    async fn ingest<S: AtomContent>(&self, source: &S) -> Result<(), Self::Error>;
+    fn ingest<S: AtomContent>(
+        &self,
+        source: &S,
+    ) -> impl std::future::Future<Output = Result<(), Self::Error>> + Send;
 
     /// Check whether an atom is present in this store.
-    async fn contains(&self, id: &AtomId) -> Result<bool, Self::Error>;
+    fn contains(
+        &self,
+        id: &AtomId,
+    ) -> impl std::future::Future<Output = Result<bool, Self::Error>> + Send;
 }
