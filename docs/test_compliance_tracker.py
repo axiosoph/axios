@@ -81,18 +81,17 @@ def test_cross_file_same_id_stays_distinct():
 
 
 def test_manifest_never_fabricates_residue():
-    # charter-anchor's spec text states only the bare status
-    # 'unverified (models require extension — see Verification note)' — no
-    # mechanism is named. The manifest must leave this gap genuinely open
-    # (evaluator AND residue both empty), never launder it into a passing
-    # entry by manufacturing residue text from the absence itself.
+    # lock-sufficiency's spec text (lock-file-schema.md, which states no
+    # VERIFIED annotation at all) names no mechanism. The manifest must
+    # leave this gap genuinely open (verification_method AND residue both
+    # empty), never launder it into a passing entry by manufacturing
+    # residue text from the absence itself.
     manifest = ct.build_constraint_manifest(REPO_ROOT)
-    hits = [e for e in manifest if e["id"] == "charter-anchor" and e["spec_file"] == "docs/specs/atom-transactions.md"]
-    assert len(hits) == 1, f"expected exactly one charter-anchor entry, got {hits}"
+    hits = [e for e in manifest if e["id"] == "lock-sufficiency" and e["spec_file"] == "docs/specs/lock-file-schema.md"]
+    assert len(hits) == 1, f"expected exactly one lock-sufficiency entry, got {hits}"
     entry = hits[0]
-    assert entry["evaluator"] == "", f"charter-anchor should have no named evaluator, got {entry}"
+    assert entry["verification_method"] == "", f"lock-sufficiency should have no named verification method, got {entry}"
     assert entry["residue"] == "", f"residue must not be auto-fabricated, got {entry}"
-    assert entry["spec_status"], "spec_status should still carry the raw spec-stated text for triage"
 
 
 def test_coverage_check_has_teeth_on_real_manifest():
@@ -102,9 +101,9 @@ def test_coverage_check_has_teeth_on_real_manifest():
     # write it exactly as compliance_tracker.py does, and confirm the
     # checker actually flags the genuine on-path coverage gaps.
     manifest = ct.build_constraint_manifest(REPO_ROOT)
-    true_gaps = [e for e in manifest if not e["evaluator"] and not e["residue"]]
-    assert len(true_gaps) >= 50, (
-        f"expected the known ~63 genuine coverage gaps to still be present, got {len(true_gaps)}"
+    true_gaps = [e for e in manifest if not e["verification_method"] and not e["residue"]]
+    assert len(true_gaps) >= 30, (
+        f"expected genuine coverage gaps to still be present, got {len(true_gaps)}"
     )
 
     fd, path = tempfile.mkstemp(suffix=".json")

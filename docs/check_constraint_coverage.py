@@ -6,9 +6,9 @@ Axios On-Path Constraint Coverage Check
 - Audience: Axios developers and the campaign coverage gate
 
 Reads docs/on_path_constraints.json (produced by compliance_tracker.py) and
-fails if any on-path constraint entry lacks BOTH a named evaluator and a
-residue justification. This is the coverage-check overlay for AC1: it makes
-the on-path constraint join real by refusing to pass silently over any
+fails if any on-path constraint entry lacks BOTH a named verification method
+and a residue justification. This is the coverage-check overlay for AC1: it
+makes the on-path constraint join real by refusing to pass silently over any
 constraint the widened extractor discovered.
 
 Usage: python3 docs/check_constraint_coverage.py [manifest_path]
@@ -27,9 +27,9 @@ def check_coverage(manifest_path):
     entries = data.get("constraints", [])
     violations = []
     for entry in entries:
-        evaluator = entry.get("evaluator", "")
+        verification_method = entry.get("verification_method", "")
         residue = entry.get("residue", "")
-        if not evaluator and not residue:
+        if not verification_method and not residue:
             violations.append(entry)
 
     return entries, violations
@@ -43,12 +43,12 @@ def main():
     entries, violations = check_coverage(manifest_path)
 
     if violations:
-        print(f"FAIL: {len(violations)}/{len(entries)} on-path constraints lack both a named evaluator and a residue justification:")
+        print(f"FAIL: {len(violations)}/{len(entries)} on-path constraints lack both a named verification method and a residue justification:")
         for v in violations:
             print(f"  - {v.get('id')} ({v.get('spec_file')}:{v.get('line')})")
         return 1
 
-    print(f"PASS: all {len(entries)} on-path constraints have a named evaluator or a residue justification.")
+    print(f"PASS: all {len(entries)} on-path constraints have a named verification method or a residue justification.")
     return 0
 
 

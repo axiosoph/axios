@@ -38,27 +38,28 @@ def normalize_id(cid):
 _INLINE_DEF_RE = re.compile(r'^\*\*\[([^\]]+)\]\*\*')
 _VERIFIED_RE = re.compile(r'`VERIFIED:\s*([^`]*)`')
 _HEADING_RE = re.compile(r'^#')
-# A spec-stated evaluator counts as "unnamed" only when the text is the bare
-# status word "unverified" (with or without a parenthetical explanation) —
-# every other observed form (`machine (TLC)`, `rustc (...)`, `agent-check`,
-# `pass — some_test`, `TLA+ ModelName — ...`) names a concrete mechanism.
+# A spec-stated verification method counts as "unnamed" only when the text
+# is the bare status word "unverified" (with or without a parenthetical
+# explanation) — every other observed form (`machine (TLC)`, `rustc (...)`,
+# `agent-check`, `pass — some_test`, `TLA+ ModelName — ...`) names a
+# concrete mechanism.
 _BARE_UNVERIFIED_RE = re.compile(r'^unverified\b', re.IGNORECASE)
 
-def _has_named_evaluator(evaluator_text):
-    if not evaluator_text:
+def _has_named_verification_method(method_text):
+    if not method_text:
         return False
-    return not _BARE_UNVERIFIED_RE.match(evaluator_text.strip())
+    return not _BARE_UNVERIFIED_RE.match(method_text.strip())
 
 def extract_constraint_records_from_spec(file_path):
     """Extract every on-path constraint occurrence from a spec file.
 
-    Returns a list of dicts: {norm_id, display_id, line_number, evaluator,
-    source}, covering both markdown-table rows (pre-existing style) and
-    inline `**[id]**:` prose definitions (widened style). `evaluator` is the
-    verification-method text the spec itself states for that occurrence — a
-    table's `Method`-like column value, or the nearest inline
-    `` `VERIFIED: ...` `` trailer found before the next definition, heading,
-    or table — or None if the spec names none.
+    Returns a list of dicts: {norm_id, display_id, line_number,
+    verification_method, source}, covering both markdown-table rows
+    (pre-existing style) and inline `**[id]**:` prose definitions (widened
+    style). `verification_method` is the text the spec itself states for
+    that occurrence — a table's `Method`-like column value, or the nearest
+    inline `` `VERIFIED: ...` `` trailer found before the next definition,
+    heading, or table — or None if the spec names none.
     """
     records = []
     try:
@@ -111,16 +112,16 @@ def extract_constraint_records_from_spec(file_path):
             # Find the display ID (remove brackets/backticks/spaces, keep casing)
             cid_display = cell_val.strip("[]` \t")
             if cid_normalized:
-                evaluator = None
+                verification_method = None
                 if 0 <= method_col_idx < len(cells):
                     method_val = cells[method_col_idx].strip()
                     if method_val and not all(ch in '-: \t' for ch in method_val):
-                        evaluator = method_val
+                        verification_method = method_val
                 records.append({
                     "norm_id": cid_normalized,
                     "display_id": cid_display,
                     "line_number": i + 1,
-                    "evaluator": evaluator,
+                    "verification_method": verification_method,
                     "source": "table",
                 })
 
@@ -140,7 +141,7 @@ def extract_constraint_records_from_spec(file_path):
         # Scan forward for the nearest VERIFIED trailer, stopping at the
         # next definition, a heading, or a table — never borrowing a
         # trailer that belongs to a later, different definition.
-        evaluator = None
+        verification_method = None
         j = idx + 1
         while j < n:
             nxt_stripped = lines[j].strip()
@@ -148,7 +149,7 @@ def extract_constraint_records_from_spec(file_path):
                 break
             vm = _VERIFIED_RE.search(nxt_stripped)
             if vm:
-                evaluator = vm.group(1).strip()
+                verification_method = vm.group(1).strip()
                 break
             j += 1
 
@@ -156,7 +157,7 @@ def extract_constraint_records_from_spec(file_path):
             "norm_id": cid_normalized,
             "display_id": cid_display,
             "line_number": idx + 1,
-            "evaluator": evaluator,
+            "verification_method": verification_method,
             "source": "inline",
         })
 
@@ -182,19 +183,20 @@ def build_constraint_manifest(repo_root):
     """Build the on-path constraint manifest: one entry per (spec_file, id)
     pair across docs/specs/*.md.
 
-    Each entry carries a spec-stated named evaluator when one exists.
-    `residue` is NEVER auto-generated: it is a reserved slot for a
-    deliberate, reviewed justification of why a *specific* constraint
-    needs no machine evaluator (mirrors findings_apply's
-    resolved-requires-evaluator rule) — manufacturing one here for every
-    unnamed-evaluator constraint would make check_constraint_coverage.py
-    unable to ever fail on real output, which defeats the coverage check
-    entirely. A constraint with neither is left with both fields empty so
-    the coverage-check surfaces it as a genuine, uncovered gap rather than
-    silently laundering it into "covered". `spec_status` is purely
-    informational context (whatever verification-status text, if any, the
-    spec itself states — even the bare word "unverified") for a human
-    triaging the gap; it is never consulted by the coverage-check.
+    Each entry carries a spec-stated named verification method when one
+    exists. `residue` is NEVER auto-generated: it is a reserved slot for a
+    deliberate, reviewed justification of why a *specific* constraint needs
+    no machine check (mirroring the findings-review precedent of requiring
+    either a real check or a recorded justification) — manufacturing one
+    here for every constraint with no named method would make
+    check_constraint_coverage.py unable to ever fail on real output, which
+    defeats the coverage check entirely. A constraint with neither is left
+    with both fields empty so the coverage-check surfaces it as a genuine,
+    uncovered gap rather than silently laundering it into "covered".
+    `spec_status` is purely informational context (whatever
+    verification-status text, if any, the spec itself states — even the
+    bare word "unverified") for a human triaging the gap; it is never
+    consulted by the coverage-check.
 
     Disambiguation rule: entries are keyed by (spec_file, id), never by id
     alone — a genuine cross-file same-name ID (e.g. lock-schema-version,
@@ -202,7 +204,7 @@ def build_constraint_manifest(repo_root):
     ion-resolution.md) surfaces as two distinct entries, one per defining
     spec, rather than being silently collapsed into one. Within a single
     file, an id repeated across styles (table + inline) is merged into one
-    entry, preferring whichever occurrence names a real evaluator.
+    entry, preferring whichever occurrence names a real method.
     """
     spec_dir = os.path.join(repo_root, "docs", "specs")
     spec_files = glob.glob(os.path.join(spec_dir, "*.md"))
@@ -215,18 +217,18 @@ def build_constraint_manifest(repo_root):
             existing = by_id.get(r["norm_id"])
             if existing is None:
                 by_id[r["norm_id"]] = r
-            elif not _has_named_evaluator(existing["evaluator"]) and _has_named_evaluator(r["evaluator"]):
+            elif not _has_named_verification_method(existing["verification_method"]) and _has_named_verification_method(r["verification_method"]):
                 by_id[r["norm_id"]] = r
 
         for norm_id in sorted(by_id):
             r = by_id[norm_id]
-            evaluator_text = r["evaluator"]
-            if _has_named_evaluator(evaluator_text):
+            method_text = r["verification_method"]
+            if _has_named_verification_method(method_text):
                 manifest.append({
                     "id": r["display_id"],
                     "spec_file": rel_spec_path,
                     "line": r["line_number"],
-                    "evaluator": evaluator_text,
+                    "verification_method": method_text,
                     "residue": "",
                     "spec_status": "",
                 })
@@ -235,9 +237,9 @@ def build_constraint_manifest(repo_root):
                     "id": r["display_id"],
                     "spec_file": rel_spec_path,
                     "line": r["line_number"],
-                    "evaluator": "",
+                    "verification_method": "",
                     "residue": "",
-                    "spec_status": evaluator_text or "",
+                    "spec_status": method_text or "",
                 })
 
     return manifest
@@ -411,8 +413,8 @@ def main():
     with open(manifest_path, "w", encoding="utf-8") as f:
         json.dump({"constraints": manifest}, f, indent=2)
         f.write("\n")
-    unnamed = sum(1 for e in manifest if not e["evaluator"] and not e["residue"])
-    print(f"Wrote on-path constraint manifest ({len(manifest)} entries, {unnamed} unnamed-evaluator) to {manifest_path}")
+    uncovered = sum(1 for e in manifest if not e["verification_method"] and not e["residue"])
+    print(f"Wrote on-path constraint manifest ({len(manifest)} entries, {uncovered} with no named verification method) to {manifest_path}")
 
     # Step 5: Compile markdown compliance matrix at www/content/compliance.md
     verified_count = sum(1 for c in compliance_data["constraints"].values() if c["status"] == "VERIFIED")

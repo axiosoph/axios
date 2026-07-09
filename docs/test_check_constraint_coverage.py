@@ -8,8 +8,8 @@ Axios On-Path Constraint Coverage Check — tests
 Standalone assertion-based tests (no pytest dependency in this environment):
 run directly with `python3 docs/test_check_constraint_coverage.py`. Exits
 non-zero if any test fails. Demonstrates the required red/green pair: a
-manifest entry with neither evaluator nor residue fails; removing it (or
-supplying either field) passes.
+manifest entry with neither a verification method nor residue fails;
+removing it (or supplying either field) passes.
 """
 
 import json
@@ -34,8 +34,8 @@ def _write_manifest(entries):
 
 def test_all_covered_passes():
     path = _write_manifest([
-        {"id": "a", "spec_file": "x.md", "line": 1, "evaluator": "unit-test", "residue": ""},
-        {"id": "b", "spec_file": "x.md", "line": 2, "evaluator": "", "residue": "no VERIFIED annotation found in spec prose"},
+        {"id": "a", "spec_file": "x.md", "line": 1, "verification_method": "unit-test", "residue": ""},
+        {"id": "b", "spec_file": "x.md", "line": 2, "verification_method": "", "residue": "no VERIFIED annotation found in spec prose"},
     ])
     try:
         entries, violations = cc.check_coverage(path)
@@ -45,10 +45,10 @@ def test_all_covered_passes():
         os.remove(path)
 
 
-def test_unnamed_evaluator_entry_fails():
+def test_unnamed_method_entry_fails():
     path = _write_manifest([
-        {"id": "a", "spec_file": "x.md", "line": 1, "evaluator": "unit-test", "residue": ""},
-        {"id": "seeded-bad", "spec_file": "x.md", "line": 3, "evaluator": "", "residue": ""},
+        {"id": "a", "spec_file": "x.md", "line": 1, "verification_method": "unit-test", "residue": ""},
+        {"id": "seeded-bad", "spec_file": "x.md", "line": 3, "verification_method": "", "residue": ""},
     ])
     try:
         entries, violations = cc.check_coverage(path)
@@ -61,10 +61,10 @@ def test_unnamed_evaluator_entry_fails():
 
 def test_cli_exit_codes_red_then_green():
     bad_path = _write_manifest([
-        {"id": "seeded-bad", "spec_file": "x.md", "line": 3, "evaluator": "", "residue": ""},
+        {"id": "seeded-bad", "spec_file": "x.md", "line": 3, "verification_method": "", "residue": ""},
     ])
     good_path = _write_manifest([
-        {"id": "a", "spec_file": "x.md", "line": 1, "evaluator": "unit-test", "residue": ""},
+        {"id": "a", "spec_file": "x.md", "line": 1, "verification_method": "unit-test", "residue": ""},
     ])
     try:
         bad_result = subprocess.run([sys.executable, CHECKER, bad_path], capture_output=True, text=True)
