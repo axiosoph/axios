@@ -183,14 +183,35 @@ impl AtomDigest {
     }
 }
 
-/// A [`Czd`] is a sha256 coz digest, so it is a `sha256` [`AtomDigest`]; the
-/// bytes coincide.
-impl From<Czd> for AtomDigest {
-    fn from(czd: Czd) -> Self {
-        Self {
-            alg: HashAlg::Sha256,
+/// Within the coz signing family, a [`Czd`]'s byte length unambiguously
+/// identifies its hash algorithm: 32 bytes is `ES256` (SHA-256), 48 is
+/// `ES384` (SHA-384), and 64 is `ES512`/`Ed25519` (SHA-512) — see
+/// `coz_rs::Alg::hash_alg` and `coz_rs::Czd::compute`, which hashes with the
+/// *signing* algorithm's hasher, not always SHA-256.
+///
+/// [`Czd`] is also reused elsewhere in this codebase as an opaque byte
+/// carrier for values that are *not* coz-signed digests at all — e.g.
+/// `atom-git` wraps a 20-byte SHA-1 git object id in a `Czd`
+/// (`Czd::from_bytes(oid.as_bytes().to_vec())`). This conversion does not
+/// assume every `Czd` it receives is coz-signed: a 20-byte git-OID `Czd`
+/// falls outside {32, 48, 64} and hits the rejection arm below, so it is
+/// refused rather than mislabeled. The conversion is sound for whatever
+/// `Czd` reaches it precisely because length is checked against the coz set
+/// on every call, not because the type is guaranteed coz-only.
+impl TryFrom<Czd> for AtomDigest {
+    type Error = DigestParseError;
+
+    fn try_from(czd: Czd) -> Result<Self, Self::Error> {
+        let alg = match czd.as_bytes().len() {
+            32 => HashAlg::Sha256,
+            48 => HashAlg::Sha384,
+            64 => HashAlg::Sha512,
+            got => return Err(DigestParseError::UnknownCzdLength(got)),
+        };
+        Ok(Self {
+            alg,
             cad: Cad::from_bytes(czd.as_bytes().to_vec()),
-        }
+        })
     }
 }
 
@@ -251,6 +272,10 @@ pub enum DigestParseError {
         /// The length actually decoded.
         got: usize,
     },
+    /// A [`Czd`]'s byte length matches no coz-family hash algorithm
+    /// (32/48/64 — see `TryFrom<Czd> for AtomDigest`).
+    #[error("byte length {0} is not a valid coz-family digest length (expected 32, 48, or 64)")]
+    UnknownCzdLength(usize),
 }
 
 #[cfg(feature = "serde")]
@@ -405,15 +430,107 @@ mod tests {
         assert_eq!(e.alg(), HashAlg::Sha512);
     }
 
-    // A Czd converts to a byte-identical sha256 AtomDigest.
+    // A 32-byte Czd (ES256) converts to a byte-identical sha256 AtomDigest.
     #[test]
-    fn from_czd_is_sha256_bytes() {
+    fn from_czd_32_bytes_is_sha256() {
         let czd = Czd::from_bytes(vec![7u8; 32]);
-        let d = AtomDigest::from(czd.clone());
+        let d = AtomDigest::try_from(czd.clone()).expect("32 bytes is a valid coz digest length");
         assert_eq!(d.alg(), HashAlg::Sha256);
         assert_eq!(d.cad().as_bytes(), czd.as_bytes());
         let parsed: AtomDigest = d.to_string().parse().expect("round-trip");
         assert_eq!(d, parsed);
+    }
+
+    // A 48-byte Czd (ES384) converts to a byte-identical sha384 AtomDigest —
+    // this is the length the original hardcoded-Sha256 `From<Czd>` mislabeled
+    // (declared 32-byte length, actual 48 bytes) and failed to round-trip.
+    #[test]
+    fn from_czd_48_bytes_is_sha384() {
+        let czd = Czd::from_bytes(vec![7u8; 48]);
+        let d = AtomDigest::try_from(czd.clone()).expect("48 bytes is a valid coz digest length");
+        assert_eq!(d.alg(), HashAlg::Sha384);
+        assert_eq!(d.cad().as_bytes(), czd.as_bytes());
+        let parsed: AtomDigest = d.to_string().parse().expect("round-trip");
+        assert_eq!(d, parsed);
+    }
+
+    // A 64-byte Czd (ES512/Ed25519) converts to a byte-identical sha512
+    // AtomDigest — same mislabeling class as the 48-byte case above.
+    #[test]
+    fn from_czd_64_bytes_is_sha512() {
+        let czd = Czd::from_bytes(vec![7u8; 64]);
+        let d = AtomDigest::try_from(czd.clone()).expect("64 bytes is a valid coz digest length");
+        assert_eq!(d.alg(), HashAlg::Sha512);
+        assert_eq!(d.cad().as_bytes(), czd.as_bytes());
+        let parsed: AtomDigest = d.to_string().parse().expect("round-trip");
+        assert_eq!(d, parsed);
+    }
+
+    // A Czd whose length matches no coz-family hash algorithm is rejected,
+    // never silently mislabeled.
+    #[test]
+    fn from_czd_rejects_non_coz_lengths() {
+        for bad_len in [0, 1, 20, 31, 33, 47, 49, 63, 65, 100] {
+            let czd = Czd::from_bytes(vec![7u8; bad_len]);
+            match AtomDigest::try_from(czd) {
+                Err(DigestParseError::UnknownCzdLength(got)) => assert_eq!(got, bad_len),
+                other => panic!("length {bad_len} must be rejected, got {other:?}"),
+            }
+        }
+    }
+
+    // Property: every valid coz-family length (32/48/64) dispatches to its
+    // implied algorithm and round-trips losslessly through both Display and
+    // a second TryFrom, across arbitrary byte content.
+    #[test]
+    fn try_from_czd_dispatches_by_length_and_round_trips() {
+        bolero::check!()
+            .with_type::<(u8, Vec<u8>)>()
+            .for_each(|(choice, seed)| {
+                let (len, expected_alg) = match choice % 3 {
+                    0 => (32, HashAlg::Sha256),
+                    1 => (48, HashAlg::Sha384),
+                    _ => (64, HashAlg::Sha512),
+                };
+                // Stretch the generated seed to exactly `len` bytes of
+                // arbitrary content (bolero may hand us an empty Vec, so
+                // fall back to a fixed non-empty base to cycle from).
+                let base: Vec<u8> = if seed.is_empty() {
+                    vec![0]
+                } else {
+                    seed.clone()
+                };
+                let bytes: Vec<u8> = base.iter().copied().cycle().take(len).collect();
+
+                let czd = Czd::from_bytes(bytes);
+                let digest = AtomDigest::try_from(czd.clone()).expect("valid coz digest length");
+                assert_eq!(digest.alg(), expected_alg);
+                assert_eq!(digest.cad().as_bytes(), czd.as_bytes());
+
+                // Round-trips through Display/FromStr.
+                let parsed: AtomDigest = digest.to_string().parse().expect("round-trip parse");
+                assert_eq!(digest, parsed);
+
+                // Round-trips through a second TryFrom (idempotent conversion).
+                let digest2 = AtomDigest::try_from(czd).expect("valid coz digest length");
+                assert_eq!(digest, digest2);
+            });
+    }
+
+    // Property: any length outside {32, 48, 64} is rejected with an error,
+    // never silently mislabeled as some other algorithm.
+    #[test]
+    fn try_from_czd_rejects_arbitrary_non_coz_lengths() {
+        bolero::check!().with_type::<Vec<u8>>().for_each(|bytes| {
+            if ![32, 48, 64].contains(&bytes.len()) {
+                let czd = Czd::from_bytes(bytes.clone());
+                assert!(
+                    AtomDigest::try_from(czd).is_err(),
+                    "length {} must be rejected",
+                    bytes.len()
+                );
+            }
+        });
     }
 
     #[cfg(feature = "serde")]
