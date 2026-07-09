@@ -174,10 +174,14 @@ pub fn verify_succession_chain(_chain: &[CharterPayload]) -> Result<(), crate::V
 pub trait CharterStore {
     /// Retrieve a charter by its czd.
     ///
+    /// Async per `[trait-async-io]`: a real store is backed by git refs
+    /// (or similar), and ref lookup is I/O — potentially over the network
+    /// for a remote source — not an in-memory lookup.
+    ///
     /// **Deliberately unimplemented — Phase 1.** The default body is an
     /// honest stub; a concrete store implementation MUST override this to
     /// provide real retrieval rather than inheriting the panic.
-    fn get_charter(&self, _czd: &Czd) -> Option<CharterPayload> {
+    async fn get_charter(&self, _czd: &Czd) -> Option<CharterPayload> {
         unimplemented!(
             "Phase 1: charter ref-storage retrieval is a specified deliverable, not a default — \
              see docs/specs/atom-transactions.md [charter-transition] POST"
@@ -320,11 +324,11 @@ mod tests {
     struct NullCharterStore;
     impl CharterStore for NullCharterStore {}
 
-    #[test]
+    #[tokio::test]
     #[should_panic(expected = "Phase 1")]
-    fn charter_store_stub_is_honest() {
+    async fn charter_store_stub_is_honest() {
         let store = NullCharterStore;
         let czd = crate::Czd::from_bytes(vec![1, 2, 3]);
-        let _ = store.get_charter(&czd);
+        let _ = store.get_charter(&czd).await;
     }
 }
