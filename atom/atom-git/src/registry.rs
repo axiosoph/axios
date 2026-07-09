@@ -131,6 +131,13 @@ impl AtomRegistry for GitRegistry {
         )
         .ok_or_else(|| GitError::Coz("Failed to sign claim JSON".into()))?;
 
+        // The claim's identity is the spec-defined `czd`: the digest of
+        // (cad, sig), independently recomputable by any party from the
+        // signed message alone. It must never be the git object id the
+        // claim commit happens to be stored at — that is a storage
+        // accident, not a property of the signed content.
+        let czd = atom_id::czd_for_alg(&pay_bytes, &sig, self.alg.name())?;
+
         let envelope = CozMessageEnvelope {
             pay: pay_map,
             sig,
@@ -183,7 +190,7 @@ impl AtomRegistry for GitRegistry {
 
         repo.edit_references(edits)?;
 
-        Ok(Czd::from_bytes(new_claim_oid.as_bytes().to_vec()))
+        Ok(czd)
     }
 
     fn publish(
@@ -203,16 +210,6 @@ impl AtomRegistry for GitRegistry {
             .try_find_reference(&claim_ref_name)?
             .ok_or_else(|| GitError::NoActiveClaim(id.label().to_string()))?;
         let claim_oid = claim_ref.id().detach();
-
-        let expected_claim_oid = ObjectId::try_from(claim.as_bytes())
-            .map_err(|e| GitError::Validation(format!("Invalid claim object ID: {}", e)))?;
-        if claim_oid != expected_claim_oid {
-            return Err(GitError::Validation(format!(
-                "Active claim mismatch: active is {} but expected {}",
-                claim_oid.to_hex(),
-                expected_claim_oid.to_hex()
-            )));
-        }
 
         // 2. Parse claim payload to obtain claim source revision
         let claim_obj = repo.find_object(claim_oid)?;
@@ -237,6 +234,20 @@ impl AtomRegistry for GitRegistry {
             claim_alg_str,
             claim_pub_key,
         )?;
+
+        // The caller must name the active claim by its spec-defined czd —
+        // the digest of (cad, sig) — never by the git object id the claim
+        // commit happens to be stored at. Recompute it from the active
+        // claim's own signed bytes and compare.
+        let active_czd =
+            atom_id::czd_for_alg(&claim_pay_bytes, &claim_envelope.sig, claim_alg_str)?;
+        if active_czd != *claim {
+            return Err(GitError::Validation(format!(
+                "Active claim mismatch: active is {} but expected {}",
+                active_czd.to_b64(),
+                claim.to_b64()
+            )));
+        }
 
         // 3. Verify temporal vector (publish src must be a descendant of claim src)
         let publish_src_oid = ObjectId::try_from(src)
