@@ -1,0 +1,90 @@
+{
+  "attack": "claim-replacement-marking",
+  "spec": "[claim-replacement-authority]",
+  "description": "An ordinary claim plus its two replacement authorities: an unmarked owner replacement (signed by the replaced claim's own owner) and a `governance: true` replacement (signed by the effective charter's owner instead). All three verify individually; the two-authority check itself is `verify_claim_replacement`, landed as an honest Phase-1 stub (`atom/atom-id/src/lib.rs`, `#[should_panic]`-pinned) — not re-declared here.",
+  "charters": [],
+  "claims": [
+    {
+      "alg": "Ed25519",
+      "pub_key": [
+        234, 74, 108, 99, 226, 156, 82, 10, 190, 245, 80, 123, 19, 46, 197, 249,
+        149, 71, 118, 174, 190, 190, 123, 146, 66, 30, 234, 105, 20, 70, 210, 44
+      ],
+      "sig": [
+        209, 194, 64, 237, 155, 37, 174, 194, 185, 29, 170, 20, 248, 32, 50,
+        239, 93, 101, 38, 12, 33, 255, 138, 167, 227, 107, 187, 88, 235, 199,
+        100, 105, 22, 136, 88, 234, 218, 88, 149, 109, 243, 247, 216, 212, 98,
+        119, 116, 13, 130, 198, 59, 86, 6, 222, 64, 165, 171, 94, 107, 204, 40,
+        113, 254, 5
+      ],
+      "payload": {
+        "alg": "Ed25519",
+        "anchor": "oKCgoA",
+        "governance": false,
+        "label": "corpus-atom",
+        "now": 1000,
+        "owner": "6kpsY-KcUgq-9VB7Ey7F-ZVHdq6-vnuSQh7qaRRG0iw",
+        "pkg": "cargo",
+        "prior": null,
+        "src": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "tmb": "YY6vjQa71uTnqFCv-Lq0woxc5jcZjt9Fz8bqd8mm4RCbe3Cx-ouNB5kX5fxHBB8xpFZAUwWD7LIik5mfPCZP1A",
+        "typ": "atom/claim"
+      }
+    },
+    {
+      "alg": "Ed25519",
+      "pub_key": [
+        234, 74, 108, 99, 226, 156, 82, 10, 190, 245, 80, 123, 19, 46, 197, 249,
+        149, 71, 118, 174, 190, 190, 123, 146, 66, 30, 234, 105, 20, 70, 210, 44
+      ],
+      "sig": [
+        253, 109, 62, 6, 175, 20, 139, 83, 188, 42, 223, 45, 96, 149, 242, 5,
+        237, 144, 243, 251, 115, 146, 192, 91, 225, 56, 79, 254, 188, 32, 146,
+        168, 250, 142, 75, 2, 20, 42, 26, 144, 189, 194, 232, 28, 144, 253, 77,
+        210, 222, 107, 101, 141, 209, 65, 49, 217, 179, 43, 112, 111, 169, 212,
+        223, 14
+      ],
+      "payload": {
+        "alg": "Ed25519",
+        "anchor": "oKCgoA",
+        "governance": false,
+        "label": "corpus-atom",
+        "now": 2000,
+        "owner": "E5j2LG0aRXxRumpLXz29L2n8qTIWIY3ImX5Ba9F9k8o",
+        "pkg": "cargo",
+        "prior": "ulBrILB_haULd8JAeaiYPCsnk2oB0xFWlnYieXtBxWxTL48XJo0hhuJK5CB7sNU5zCNo1Uuc2iq0n8nBgLlNYA",
+        "src": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+        "tmb": "2IGCmP1SniOAL0EUMwxlzJs2XCTRxMZxqOo0UgSUKNAlUFUg99EPWbOwxDJ6gWzIzHgN3F-0papqarKNC8Js8Q",
+        "typ": "atom/claim"
+      }
+    },
+    {
+      "alg": "Ed25519",
+      "pub_key": [
+        253, 23, 36, 56, 90, 160, 199, 91, 100, 251, 120, 205, 96, 47, 161, 217,
+        145, 253, 235, 247, 107, 19, 197, 142, 215, 2, 234, 200, 53, 233, 246,
+        24
+      ],
+      "sig": [
+        91, 251, 185, 196, 33, 209, 222, 160, 129, 214, 203, 157, 166, 211, 165,
+        93, 133, 174, 95, 116, 138, 237, 101, 147, 74, 83, 74, 56, 161, 97, 24,
+        230, 145, 8, 9, 57, 108, 217, 92, 79, 207, 209, 152, 108, 14, 108, 17,
+        17, 114, 236, 250, 187, 153, 75, 12, 131, 128, 46, 132, 122, 174, 79,
+        214, 10
+      ],
+      "payload": {
+        "alg": "Ed25519",
+        "anchor": "oKCgoA",
+        "governance": true,
+        "label": "corpus-atom",
+        "now": 2001,
+        "owner": "_RckOFqgx1tk-3jNYC-h2ZH96_drE8WO1wLqyDXp9hg",
+        "pkg": "cargo",
+        "prior": "ulBrILB_haULd8JAeaiYPCsnk2oB0xFWlnYieXtBxWxTL48XJo0hhuJK5CB7sNU5zCNo1Uuc2iq0n8nBgLlNYA",
+        "src": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+        "tmb": "cP1jcNtoCB3jh29d9wj72sYmlnJWEStjUJCSS4u6dj-v-ttPaBDd07sruuFkVaWVuX6FFrwa07PHCuVGL3zKIg",
+        "typ": "atom/claim"
+      }
+    }
+  ]
+}

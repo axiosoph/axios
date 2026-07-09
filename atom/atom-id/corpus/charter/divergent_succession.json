@@ -1,0 +1,77 @@
+{
+  "attack": "divergent-succession",
+  "spec": "[charter-succession-linear]",
+  "description": "Two successor charters name the same `prior` czd — a set-authority fork. Individually each charter verifies (construction-correctness); no validator ships to reject the fork itself (Phase 1).",
+  "charters": [
+    {
+      "alg": "Ed25519",
+      "pub_key": [
+        138, 136, 227, 221, 116, 9, 241, 149, 253, 82, 219, 45, 60, 186, 93,
+        114, 202, 103, 9, 191, 29, 148, 18, 27, 243, 116, 136, 1, 180, 15, 111,
+        92
+      ],
+      "sig": [
+        184, 91, 159, 187, 52, 136, 191, 66, 218, 185, 11, 62, 17, 229, 65, 14,
+        67, 166, 161, 25, 186, 12, 35, 159, 121, 44, 173, 90, 57, 101, 135, 173,
+        142, 4, 24, 90, 130, 45, 134, 187, 93, 87, 224, 144, 214, 135, 99, 219,
+        184, 27, 41, 230, 149, 98, 31, 181, 127, 126, 14, 232, 204, 146, 73, 3
+      ],
+      "payload": {
+        "alg": "Ed25519",
+        "now": 1000,
+        "owner": "iojj3XQJ8ZX9UtstPLpdcspnCb8dlBIb83SIAbQPb1w",
+        "prior": null,
+        "src": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "tmb": "JMNFtcMsjAtHcsWE2R46kRJIE32L7avCy5OvDpK4rL9An_BX-SbME6Q6YVG3e6qgkJew40cIhEgHfigBeSP_EQ",
+        "typ": "atom/charter"
+      }
+    },
+    {
+      "alg": "Ed25519",
+      "pub_key": [
+        138, 136, 227, 221, 116, 9, 241, 149, 253, 82, 219, 45, 60, 186, 93,
+        114, 202, 103, 9, 191, 29, 148, 18, 27, 243, 116, 136, 1, 180, 15, 111,
+        92
+      ],
+      "sig": [
+        242, 255, 156, 22, 93, 223, 242, 31, 141, 148, 89, 38, 56, 143, 50, 19,
+        124, 30, 134, 77, 235, 121, 128, 204, 228, 6, 230, 67, 88, 66, 130, 49,
+        57, 237, 90, 191, 218, 227, 224, 0, 146, 230, 161, 219, 57, 217, 54, 42,
+        159, 204, 8, 105, 128, 196, 203, 182, 117, 146, 3, 6, 84, 186, 73, 8
+      ],
+      "payload": {
+        "alg": "Ed25519",
+        "now": 2000,
+        "owner": "gTl3Dqh9F19Wo1Rmw0x-zMuNipG07jeiXfYPW4_Js5Q",
+        "prior": "cLmyRhGXUsmRxg1UDEg_b6W9cDtWiyz23lUsooAfo3vZt8S-cvbwPaUuW9at_s7doSEkuA6oi-0LTWwRSVgHOA",
+        "src": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+        "tmb": "McKyVjMQjaA2rPOU70zbvTHclK1amECoSnZsUzxeEvVIIrX_7UZBh4PKYKV-dSK_TTI-p381hC1qTb3yi5NMxQ",
+        "typ": "atom/charter"
+      }
+    },
+    {
+      "alg": "Ed25519",
+      "pub_key": [
+        138, 136, 227, 221, 116, 9, 241, 149, 253, 82, 219, 45, 60, 186, 93,
+        114, 202, 103, 9, 191, 29, 148, 18, 27, 243, 116, 136, 1, 180, 15, 111,
+        92
+      ],
+      "sig": [
+        168, 139, 149, 53, 43, 68, 11, 141, 107, 192, 162, 220, 81, 144, 39, 49,
+        40, 243, 114, 130, 113, 39, 99, 8, 74, 51, 90, 213, 57, 84, 107, 130,
+        220, 38, 120, 117, 236, 169, 79, 66, 72, 194, 129, 38, 195, 5, 51, 98,
+        187, 37, 195, 230, 17, 139, 245, 76, 97, 166, 124, 169, 226, 233, 165, 0
+      ],
+      "payload": {
+        "alg": "Ed25519",
+        "now": 2001,
+        "owner": "7UkoxijRwsbq6QM4kFmVYSlZJzpcY_k2NsFGFKyHN9E",
+        "prior": "cLmyRhGXUsmRxg1UDEg_b6W9cDtWiyz23lUsooAfo3vZt8S-cvbwPaUuW9at_s7doSEkuA6oi-0LTWwRSVgHOA",
+        "src": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+        "tmb": "1Jp1qAWAsALS9yEmV1YXNeib44Ibxm-762SjV3PE8TJaPTNDa4zdsiXrrRn8VypwCwqStkqo6K6SVEgzO0JUBQ",
+        "typ": "atom/charter"
+      }
+    }
+  ],
+  "claims": []
+}
