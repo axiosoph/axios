@@ -1027,6 +1027,16 @@ _The rows added or amended for the charter constraints are marked (amended)._
 > Phase 1 items promoted to **pass** on 2026-02-28 based on atom-id
 > implementation review (59 tests, clippy clean).
 
+> [!NOTE]
+> A `machine (TLC)`/`machine (Alloy)` **pass** on a charter constraint means
+> the abstract protocol satisfies that property under model checking — it
+> does NOT mean a Rust-level validator exists yet. As of this table's
+> current state, no chain/succession/ancestry/authorization validator is
+> implemented anywhere in the codebase for any charter constraint
+> (`verify_succession_chain`, `verify_claim_replacement`, and `CharterStore`
+> are all explicit Phase 1 stubs). See `atom/atom-id/tests/charter/` for the
+> corresponding red-test inventory tracking that implementation gap.
+
 | Constraint                    | Method           | Result   | Detail                                                                    | Phase |
 | :---------------------------- | :--------------- | :------- | :------------------------------------------------------------------------ | :---- |
 | identity-content-addressed    | machine (Alloy)  | **pass** | Alloy `identity_content_addressed`                                        | —     |

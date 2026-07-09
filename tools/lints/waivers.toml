@@ -34,17 +34,6 @@ phrases = ["hashed atom id", "atom_id-as-digest"]
 # surfaced findings, not silent exemptions.
 [[glossary.excluded]]
 reason = """
-GLOSSARY/CODE CONTRADICTION surfaced to the composer: AGENTS.md lists AtomDigest
-as a deprecated alias for `Digest`, but atom-core/src/lib.rs:64 defines a live,
-actively-used `pub struct AtomDigest` (the multihash of an AtomId, used across
-atom-git). Enforcing the alias would fire on legitimate committed code; the
-struct is not slated for removal. Resolution (rename struct vs. amend glossary)
-is an architect decision, out of scope for this node (Non-Goals: no doctrine
-change). Excluded until reconciled."""
-term = "AtomDigest"
-
-[[glossary.excluded]]
-reason = """
 Irreducibly ambiguous with legitimate vocabulary: git "genesis commit"
 (atom-git), closure/merkle "root", `nix_compat::derivation::Derivation` in the
 eos-snix bridge, and "name" everywhere. Enforced only as NEW type declarations
