@@ -6,8 +6,13 @@ Axios Specification Compliance Tracker
 - Audience: Axios developers and compliance auditors
 
 This script parses all specifications in docs/specs/*.md to extract constraint IDs
-from their verification tables, scans the codebase for compliance annotations,
-matches them, and outputs compliance status to docs/compliance.json and www/content/compliance.md.
+from their verification tables AND from inline `**[id]**:` prose definitions,
+scans the codebase for compliance annotations, matches them, and outputs
+compliance status to docs/compliance.json and www/content/compliance.md. It also
+emits docs/on_path_constraints.json, an on-path constraint manifest recording
+each constraint's spec-stated verification method where one exists, leaving a
+gap genuinely open (not auto-justified) otherwise, checked by
+check_constraint_coverage.py.
 """
 
 import os
@@ -22,24 +27,60 @@ def normalize_id(cid):
     cid = cid.strip("[]` \t\r\n:*")
     return cid.lower()
 
-def extract_constraints_from_spec(file_path):
-    constraints = []
+# An inline prose definition site: a line beginning with a bold-bracketed ID,
+# e.g. `**[charter-typ]**: ...` or `**[anchor-immutable]** _(amended ...)_: ...`.
+# Bracketed IDs referenced (not defined) elsewhere in prose use single
+# backticks (`` `[id]` ``), never this bold form, so matching at line-start is
+# unambiguous across the corpus (verified by survey: the sole non-definition
+# occurrence, atom-sourcing.md's bulleted `- **[no-unpublished-dependency]**`,
+# restates an ID already defined by its own `**[id]**:` paragraph elsewhere in
+# the same file, so re-discovering it here is harmless).
+_INLINE_DEF_RE = re.compile(r'^\*\*\[([^\]]+)\]\*\*')
+_VERIFIED_RE = re.compile(r'`VERIFIED:\s*([^`]*)`')
+_HEADING_RE = re.compile(r'^#')
+# A spec-stated evaluator counts as "unnamed" only when the text is the bare
+# status word "unverified" (with or without a parenthetical explanation) —
+# every other observed form (`machine (TLC)`, `rustc (...)`, `agent-check`,
+# `pass — some_test`, `TLA+ ModelName — ...`) names a concrete mechanism.
+_BARE_UNVERIFIED_RE = re.compile(r'^unverified\b', re.IGNORECASE)
+
+def _has_named_evaluator(evaluator_text):
+    if not evaluator_text:
+        return False
+    return not _BARE_UNVERIFIED_RE.match(evaluator_text.strip())
+
+def extract_constraint_records_from_spec(file_path):
+    """Extract every on-path constraint occurrence from a spec file.
+
+    Returns a list of dicts: {norm_id, display_id, line_number, evaluator,
+    source}, covering both markdown-table rows (pre-existing style) and
+    inline `**[id]**:` prose definitions (widened style). `evaluator` is the
+    verification-method text the spec itself states for that occurrence — a
+    table's `Method`-like column value, or the nearest inline
+    `` `VERIFIED: ...` `` trailer found before the next definition, heading,
+    or table — or None if the spec names none.
+    """
+    records = []
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             lines = f.readlines()
     except Exception as e:
         print(f"Error reading spec file {file_path}: {e}")
-        return constraints
+        return records
 
+    # ---- table-style extraction (pre-existing "Constraint" column state
+    # machine), widened to also capture a "Method"-like column when present ----
     in_table = False
     constraint_col_idx = -1
+    method_col_idx = -1
     skip_next = False
 
-    for line in lines:
+    for i, line in enumerate(lines):
         line_stripped = line.strip()
         if not line_stripped.startswith('|'):
             in_table = False
             constraint_col_idx = -1
+            method_col_idx = -1
             continue
 
         # Split row by '|' and strip spaces
@@ -51,6 +92,7 @@ def extract_constraints_from_spec(file_path):
             if 'constraint' in normalized_cells:
                 in_table = True
                 constraint_col_idx = normalized_cells.index('constraint')
+                method_col_idx = normalized_cells.index('method') if 'method' in normalized_cells else -1
                 skip_next = True
             continue
 
@@ -69,9 +111,136 @@ def extract_constraints_from_spec(file_path):
             # Find the display ID (remove brackets/backticks/spaces, keep casing)
             cid_display = cell_val.strip("[]` \t")
             if cid_normalized:
-                constraints.append((cid_normalized, cid_display))
+                evaluator = None
+                if 0 <= method_col_idx < len(cells):
+                    method_val = cells[method_col_idx].strip()
+                    if method_val and not all(ch in '-: \t' for ch in method_val):
+                        evaluator = method_val
+                records.append({
+                    "norm_id": cid_normalized,
+                    "display_id": cid_display,
+                    "line_number": i + 1,
+                    "evaluator": evaluator,
+                    "source": "table",
+                })
 
+    # ---- inline `**[id]**:` prose-style extraction (widened) ----
+    n = len(lines)
+    for idx in range(n):
+        line_stripped = lines[idx].strip()
+        m = _INLINE_DEF_RE.match(line_stripped)
+        if not m:
+            continue
+        cell_val = m.group(1)
+        cid_normalized = normalize_id(cell_val)
+        cid_display = cell_val.strip("[]` \t")
+        if not cid_normalized:
+            continue
+
+        # Scan forward for the nearest VERIFIED trailer, stopping at the
+        # next definition, a heading, or a table — never borrowing a
+        # trailer that belongs to a later, different definition.
+        evaluator = None
+        j = idx + 1
+        while j < n:
+            nxt_stripped = lines[j].strip()
+            if _INLINE_DEF_RE.match(nxt_stripped) or _HEADING_RE.match(nxt_stripped) or nxt_stripped.startswith('|'):
+                break
+            vm = _VERIFIED_RE.search(nxt_stripped)
+            if vm:
+                evaluator = vm.group(1).strip()
+                break
+            j += 1
+
+        records.append({
+            "norm_id": cid_normalized,
+            "display_id": cid_display,
+            "line_number": idx + 1,
+            "evaluator": evaluator,
+            "source": "inline",
+        })
+
+    return records
+
+def extract_constraints_from_spec(file_path):
+    """Backward-compatible (norm_id, display_id) view used by main() to
+    build docs/compliance.json. Deduped per spec file — a constraint
+    surfaced by both a table row and its own inline definition (e.g.
+    atom-sourcing.md's no-unpublished-dependency) must contribute exactly
+    one row, not a doubled entry in the compliance matrix.
+    """
+    seen = set()
+    constraints = []
+    for r in extract_constraint_records_from_spec(file_path):
+        if r["norm_id"] in seen:
+            continue
+        seen.add(r["norm_id"])
+        constraints.append((r["norm_id"], r["display_id"]))
     return constraints
+
+def build_constraint_manifest(repo_root):
+    """Build the on-path constraint manifest: one entry per (spec_file, id)
+    pair across docs/specs/*.md.
+
+    Each entry carries a spec-stated named evaluator when one exists.
+    `residue` is NEVER auto-generated: it is a reserved slot for a
+    deliberate, reviewed justification of why a *specific* constraint
+    needs no machine evaluator (mirrors findings_apply's
+    resolved-requires-evaluator rule) — manufacturing one here for every
+    unnamed-evaluator constraint would make check_constraint_coverage.py
+    unable to ever fail on real output, which defeats the coverage check
+    entirely. A constraint with neither is left with both fields empty so
+    the coverage-check surfaces it as a genuine, uncovered gap rather than
+    silently laundering it into "covered". `spec_status` is purely
+    informational context (whatever verification-status text, if any, the
+    spec itself states — even the bare word "unverified") for a human
+    triaging the gap; it is never consulted by the coverage-check.
+
+    Disambiguation rule: entries are keyed by (spec_file, id), never by id
+    alone — a genuine cross-file same-name ID (e.g. lock-schema-version,
+    independently defined in both lock-file-schema.md and
+    ion-resolution.md) surfaces as two distinct entries, one per defining
+    spec, rather than being silently collapsed into one. Within a single
+    file, an id repeated across styles (table + inline) is merged into one
+    entry, preferring whichever occurrence names a real evaluator.
+    """
+    spec_dir = os.path.join(repo_root, "docs", "specs")
+    spec_files = glob.glob(os.path.join(spec_dir, "*.md"))
+
+    manifest = []
+    for spec_file in sorted(spec_files):
+        rel_spec_path = os.path.relpath(spec_file, repo_root).replace(os.sep, '/')
+        by_id = {}
+        for r in extract_constraint_records_from_spec(spec_file):
+            existing = by_id.get(r["norm_id"])
+            if existing is None:
+                by_id[r["norm_id"]] = r
+            elif not _has_named_evaluator(existing["evaluator"]) and _has_named_evaluator(r["evaluator"]):
+                by_id[r["norm_id"]] = r
+
+        for norm_id in sorted(by_id):
+            r = by_id[norm_id]
+            evaluator_text = r["evaluator"]
+            if _has_named_evaluator(evaluator_text):
+                manifest.append({
+                    "id": r["display_id"],
+                    "spec_file": rel_spec_path,
+                    "line": r["line_number"],
+                    "evaluator": evaluator_text,
+                    "residue": "",
+                    "spec_status": "",
+                })
+            else:
+                manifest.append({
+                    "id": r["display_id"],
+                    "spec_file": rel_spec_path,
+                    "line": r["line_number"],
+                    "evaluator": "",
+                    "residue": "",
+                    "spec_status": evaluator_text or "",
+                })
+
+    return manifest
 
 def scan_codebase_for_annotations(repo_root):
     annotations = {}
@@ -235,6 +404,15 @@ def main():
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(compliance_data, f, indent=2)
     print(f"Wrote compliance JSON to {json_path}")
+
+    # Step 4b: Write the on-path constraint manifest (coverage-check input)
+    manifest = build_constraint_manifest(repo_root)
+    manifest_path = os.path.join(repo_root, "docs", "on_path_constraints.json")
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump({"constraints": manifest}, f, indent=2)
+        f.write("\n")
+    unnamed = sum(1 for e in manifest if not e["evaluator"] and not e["residue"])
+    print(f"Wrote on-path constraint manifest ({len(manifest)} entries, {unnamed} unnamed-evaluator) to {manifest_path}")
 
     # Step 5: Compile markdown compliance matrix at www/content/compliance.md
     verified_count = sum(1 for c in compliance_data["constraints"].values() if c["status"] == "VERIFIED")
