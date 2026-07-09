@@ -221,9 +221,6 @@ impl LockFile {
             if set_details.mirrors.is_empty() {
                 return Err(format!("Set '{}' has no mirrors", anchor));
             }
-            // @spec-compliance[lock-set-mirrors]
-            // Mechanism: Validates that if local sentinel '::' is present, it must be the sole
-            // mirror. Verified-By: ion/ion-lock/src/lib.rs:test_lock_file_roundtrip
             let has_local = set_details.mirrors.iter().any(|m| m == "::");
             if has_local && set_details.mirrors.len() > 1 {
                 return Err(format!(
@@ -251,6 +248,9 @@ impl LockFile {
                     ));
                 }
 
+                // @spec-compliance[lock-set-referenced]
+                // Mechanism: Ensures that every atom's referenced set exists in sets.
+                // Verified-By: ion/ion-lock/src/lib.rs:test_lock_file_roundtrip
                 let set_details = self.sets.get(&atom_dep.set).ok_or_else(|| {
                     format!(
                         "Atom {} references undeclared set: {}",
