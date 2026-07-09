@@ -4,6 +4,9 @@ use std::collections::{HashMap, HashSet};
 
 use atom_id::AtomId;
 
+mod v2;
+pub use v2::*;
+
 /// Represents a parsed lock file.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
