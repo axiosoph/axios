@@ -22,6 +22,17 @@ use crate::source::{CozMessageEnvelope, GitEntry, GitSource};
 /// Opaque sentinel bytes indicating a filesystem-sourced anchor.
 pub const FS_SENTINEL_ANCHOR: &[u8] = b"fs-sentinel-anchor";
 
+/// Render an [`AtomDigest`](atom_core::AtomDigest) into a git-ref-safe segment.
+///
+/// The canonical digest form is `<token>:<encoding>`, but git forbids `:` in
+/// reference names. Dev refs live at `refs/atom/dev/{segment}/{version}`, so the
+/// `:` separator is rendered as `.` — a single dot-joined segment, as the former
+/// signing-alg form was. The token and both encodings (base64url, lowercase hex)
+/// contain no `.`, so the substitution is unambiguous.
+pub fn dev_ref_digest(digest: &atom_core::AtomDigest) -> String {
+    digest.to_string().replace(':', ".")
+}
+
 /// Write-enabled Git store.
 ///
 /// Implements [`AtomStore`] to accumulate package versions, verify coz
@@ -56,10 +67,9 @@ impl GitStore {
         let anchor = atom_id::Anchor::new(FS_SENTINEL_ANCHOR.to_vec());
         let id = AtomId::new(anchor, label.clone());
 
-        // 2. Compute the ES256 atom digest
-        let digest = atom_core::AtomDigest::compute(&id, coz_rs::Alg::ES256)
-            .ok_or_else(|| GitError::Validation("Failed to compute atom digest".into()))?;
-        let digest_str = digest.to_string();
+        // 2. Compute the sha256 store-index digest of the atom id
+        let digest = atom_core::AtomDigest::compute(&id, coz_rs::Alg::ES256.hash_alg());
+        let digest_str = dev_ref_digest(&digest);
 
         // 3. Recursively write tree from filesystem path
         let tree_oid = write_tree_recursive(&repo, path)?;
@@ -488,12 +498,9 @@ impl AtomStore for GitStore {
                         ));
                     }
 
-                    // Compute dev digest using ES256
-                    let digest = atom_core::AtomDigest::compute(&id, coz_rs::Alg::ES256)
-                        .ok_or_else(|| {
-                            GitError::Validation("Failed to compute atom digest".into())
-                        })?;
-                    let digest_str = digest.to_string();
+                    // Compute the sha256 store-index digest of the atom id
+                    let digest = atom_core::AtomDigest::compute(&id, coz_rs::Alg::ES256.hash_alg());
+                    let digest_str = dev_ref_digest(&digest);
 
                     let dev_ref_name = format!("refs/atom/dev/{}/{}", digest_str, version.as_str());
                     let dev_ref_fullname = FullName::try_from(dev_ref_name.as_str())

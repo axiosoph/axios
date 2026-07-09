@@ -378,8 +378,8 @@ fn test_fs_dev_ingest() {
     // Verify dev namespace reference exists (Step 6)
     let anchor = atom_core::Anchor::new(atom_git::store::FS_SENTINEL_ANCHOR.to_vec());
     let dev_id = AtomId::new(anchor, label.clone());
-    let digest = atom_core::AtomDigest::compute(&dev_id, coz_rs::Alg::ES256).unwrap();
-    let digest_str = digest.to_string();
+    let digest = atom_core::AtomDigest::compute(&dev_id, coz_rs::Alg::ES256.hash_alg());
+    let digest_str = atom_git::store::dev_ref_digest(&digest);
     let dev_ref_name = format!("refs/atom/dev/{}/0.1.0-dev", digest_str);
     let repo = store.source.repo();
     let dev_ref = repo.try_find_reference(&dev_ref_name).unwrap().unwrap();

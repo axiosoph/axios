@@ -515,35 +515,34 @@ impl AtomSource for GitSource {
             coz_rs::Alg::ES512,
             coz_rs::Alg::Ed25519,
         ] {
-            if let Some(digest) = atom_core::AtomDigest::compute(id, alg) {
-                let digest_str = digest.to_string();
-                let dev_prefix = format!("refs/atom/dev/{}/", digest_str);
-                let refs_iter = repo.references()?;
-                for dev_ref_res in refs_iter.prefixed(dev_prefix.as_str())? {
-                    let dev_ref = dev_ref_res.map_err(|e| GitError::Validation(e.to_string()))?;
-                    let dev_ref_name = dev_ref.name().as_bstr().to_string();
-                    let dev_version_str = dev_ref_name.strip_prefix(&dev_prefix).unwrap_or("");
-                    if dev_version_str.is_empty() {
-                        continue;
-                    }
-
-                    // Dev refs point directly to atom commit
-                    let atom_oid = dev_ref.id().detach();
-
-                    versions.push(GitVersionEntry {
-                        version: RawVersion::new(dev_version_str.to_string()),
-                        dig: atom_oid.as_bytes().to_vec(),
-                        czd: None,
-                        claim_payload: None,
-                        claim_msg: None,
-                        claim_sig: None,
-                        claim_pubkey: None,
-                        publish_payload: None,
-                        publish_msg: None,
-                        publish_sig: None,
-                        publish_pubkey: None,
-                    });
+            let digest = atom_core::AtomDigest::compute(id, alg.hash_alg());
+            let digest_str = crate::store::dev_ref_digest(&digest);
+            let dev_prefix = format!("refs/atom/dev/{}/", digest_str);
+            let refs_iter = repo.references()?;
+            for dev_ref_res in refs_iter.prefixed(dev_prefix.as_str())? {
+                let dev_ref = dev_ref_res.map_err(|e| GitError::Validation(e.to_string()))?;
+                let dev_ref_name = dev_ref.name().as_bstr().to_string();
+                let dev_version_str = dev_ref_name.strip_prefix(&dev_prefix).unwrap_or("");
+                if dev_version_str.is_empty() {
+                    continue;
                 }
+
+                // Dev refs point directly to atom commit
+                let atom_oid = dev_ref.id().detach();
+
+                versions.push(GitVersionEntry {
+                    version: RawVersion::new(dev_version_str.to_string()),
+                    dig: atom_oid.as_bytes().to_vec(),
+                    czd: None,
+                    claim_payload: None,
+                    claim_msg: None,
+                    claim_sig: None,
+                    claim_pubkey: None,
+                    publish_payload: None,
+                    publish_msg: None,
+                    publish_sig: None,
+                    publish_pubkey: None,
+                });
             }
         }
 

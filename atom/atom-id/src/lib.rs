@@ -39,6 +39,7 @@
 #![forbid(unsafe_code)]
 
 mod charter;
+mod digest;
 mod name;
 #[cfg(feature = "serde")]
 mod serde_alg;
@@ -52,6 +53,7 @@ pub use charter::{CharterPayload, CharterStore, TYP_CHARTER};
 #[cfg(feature = "serde")]
 pub use charter::{verify_charter, verify_succession_chain};
 pub use coz_rs::{Alg, Cad, Czd, Thumbprint, canonical, canonical_hash_for_alg};
+pub use digest::{AtomDigest, DigestParseError, HashAlg};
 pub use name::{Identifier, Label, Name, Tag};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
