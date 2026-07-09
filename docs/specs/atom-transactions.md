@@ -302,7 +302,7 @@ TYPE  Label       = String  { UAX #31 validated }                 (atom-id)
 TYPE  RawVersion  = String  { opaque, unparsed }                  (atom-id)
 
 TYPE  Anchor      = Vec<u8>                                        (atom-id)
-  -- Opaque digest. Derivation is backend-specific.
+  -- Opaque digest. Anchor := czd(charter₀), backend-agnostic.
   -- See §Anchor for required properties.
 
 TYPE  AtomId      = { anchor: Anchor, label: Label }              (atom-id)
