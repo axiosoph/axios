@@ -37,6 +37,7 @@
 #![warn(rust_2018_idioms)]
 #![forbid(unsafe_code)]
 
+mod charter;
 mod name;
 #[cfg(feature = "serde")]
 mod serde_alg;
@@ -46,6 +47,9 @@ mod serde_b64;
 use std::fmt;
 use std::str::FromStr;
 
+pub use charter::{CharterPayload, CharterStore, TYP_CHARTER};
+#[cfg(feature = "serde")]
+pub use charter::{verify_charter, verify_succession_chain};
 pub use coz_rs::{Alg, Cad, Czd, Thumbprint, canonical, canonical_hash_for_alg};
 pub use name::{Identifier, Label, Name, Tag};
 #[cfg(feature = "serde")]
