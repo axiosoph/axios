@@ -1091,5 +1091,7 @@ This specification explicitly does NOT define:
 - **Build integration**: how atoms are consumed by build systems.
 - **Network transport**: HTTP, SSH, native protocols — implementation details.
 - **Key/identity management**: deferred to Cyphr.
-- **Anchor derivation**: backend-specific (properties constrained, not
-  mechanism).
+- **Charter `src` interpretation**: the founding charter's derivation
+  (`Anchor := czd(charter₀)`) is now fixed and backend-agnostic; only
+  how a backend interprets the charter's `src` field remains
+  backend-specific.
