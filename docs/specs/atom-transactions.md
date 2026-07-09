@@ -206,8 +206,7 @@ Data accessor traits (`AtomEntry`, `AtomVersion`, `Manifest`) MUST remain synchr
 
 `AtomRegistry::claim()` and `AtomRegistry::publish()` MAY remain synchronous in v1 (registries are local git repos). If remote registry write operations are added in vN, these SHOULD be made async.
 
-`VERIFIED: unverified`
-`RESIDUE: Phase 1/2 -- no AtomSource/AtomStore trait is defined anywhere in the codebase yet; nothing to check async-ness of`
+`VERIFIED: type (atom/atom-core/src/lib.rs -- AtomSource::resolve/discover are async fn (lines 124, 130); AtomStore::ingest/contains are async fn (lines 250, 253); the accessor traits AtomEntry/AtomVersion/Manifest are sync fn (lines 70, 87, 54); AtomRegistry::claim/publish are sync fn (lines 210, 223) -- the async/sync split is type-enforced: six real implementations compile against these exact signatures (atom-git's GitSource, GitRegistry, GitStore; eos-daemon/src/scheduler.rs's test-only RecordingSource), and an impl violating the split would fail to compile)`
 
 The critical architectural property: **a store IS a source**. The
 `AtomStore` trait extends `AtomSource`, so any component that reads

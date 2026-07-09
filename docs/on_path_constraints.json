@@ -205,7 +205,7 @@
       "spec_file": "docs/specs/atom-sourcing.md",
       "line": 191,
       "verification_method": "",
-      "residue": "Phase 1/2 -- same reasoning as [source-discovery]; no resolver/lock-capture implementation exists (note: this v1-era LockEntry shape -- genesis-commit \"set\", \"pkg\" PURL -- predates and is unreconciled with the v2 lock schema)",
+      "residue": "Phase 1/2 -- same reasoning as [source-discovery]; the source traits exist and are implemented, but no lock-capture pipeline exists (note: this v1-era LockEntry shape -- genesis-commit \"set\", \"pkg\" PURL -- predates and is unreconciled with the v2 lock schema)",
       "spec_status": "unverified"
     },
     {
@@ -229,7 +229,7 @@
       "spec_file": "docs/specs/atom-sourcing.md",
       "line": 178,
       "verification_method": "",
-      "residue": "Phase 1/2 -- same reasoning as [source-discovery]; no resolver/mirror-validation implementation exists",
+      "residue": "Phase 1/2 -- same reasoning as [source-discovery]; the source traits exist and are implemented, but no mirror-validation/aggregation pipeline exists",
       "spec_status": "unverified"
     },
     {
@@ -261,7 +261,7 @@
       "spec_file": "docs/specs/atom-sourcing.md",
       "line": 377,
       "verification_method": "",
-      "residue": "Phase 1/2 -- no AtomSource/peer-client/priority-ordering implementation exists anywhere in the codebase yet",
+      "residue": "Phase 1/2 -- AtomSource itself is defined and implemented (atom/atom-core/src/lib.rs; atom-git's GitSource), but no peer-specific AtomSource implementation exists, and no priority-ordering/fallback logic (local store -> mirrors -> peer) is implemented anywhere in the codebase",
       "spec_status": "unverified"
     },
     {
@@ -285,7 +285,7 @@
       "spec_file": "docs/specs/atom-sourcing.md",
       "line": 166,
       "verification_method": "",
-      "residue": "Phase 1/2 -- no resolver implementation exists; no AtomSource/AtomStore/AtomRegistry trait or MirrorSet type is defined anywhere in the codebase yet",
+      "residue": "Phase 1/2 -- AtomSource/AtomStore/AtomRegistry are defined and implemented (atom/atom-core/src/lib.rs; atom-git's GitSource/GitRegistry/GitStore), but no source-discovery pipeline reading manifest declarations into a MirrorSet exists; the MirrorSet type itself is not defined anywhere in the codebase",
       "spec_status": "unverified"
     },
     {
@@ -299,7 +299,7 @@
     {
       "id": "anchor-content-addressed",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1075,
+      "line": 1074,
       "verification_method": "machine (Alloy)",
       "residue": "",
       "spec_status": ""
@@ -307,7 +307,7 @@
     {
       "id": "anchor-immutable",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1074,
+      "line": 1073,
       "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -315,7 +315,7 @@
     {
       "id": "anchor-resolvable",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1076,
+      "line": 1075,
       "verification_method": "review-residue",
       "residue": "",
       "spec_status": ""
@@ -323,7 +323,7 @@
     {
       "id": "atom-detached",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1081,
+      "line": 1080,
       "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
@@ -331,7 +331,7 @@
     {
       "id": "atom-snapshot-reproducible",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1061,
+      "line": 1060,
       "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
@@ -339,7 +339,7 @@
     {
       "id": "atomid-per-source-unique",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1079,
+      "line": 1078,
       "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -347,7 +347,7 @@
     {
       "id": "backend-agnostic-protocol",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1063,
+      "line": 1062,
       "verification_method": "rustc",
       "residue": "",
       "spec_status": ""
@@ -355,7 +355,7 @@
     {
       "id": "backend-bit-perfect",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1078,
+      "line": 1077,
       "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
@@ -363,7 +363,7 @@
     {
       "id": "chain-monotonicity",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1072,
+      "line": 1071,
       "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -371,7 +371,7 @@
     {
       "id": "charter-ancestry",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1069,
+      "line": 1068,
       "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -379,7 +379,7 @@
     {
       "id": "charter-anchor",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1065,
+      "line": 1064,
       "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -387,7 +387,7 @@
     {
       "id": "charter-fork-distinction",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1073,
+      "line": 1072,
       "verification_method": "machine (Alloy)",
       "residue": "",
       "spec_status": ""
@@ -395,7 +395,7 @@
     {
       "id": "charter-succession",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1070,
+      "line": 1069,
       "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -403,7 +403,7 @@
     {
       "id": "charter-succession-linear",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1071,
+      "line": 1070,
       "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -411,7 +411,7 @@
     {
       "id": "charter-transition",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 717,
+      "line": 716,
       "verification_method": "",
       "residue": "Phase 1 -- construction/signature correctness is tested (atom/atom-id/tests/charter/construction.rs), but the PRE bootstrap-gate authorization check has no implementation to call: bootstrap_gate.rs's own red test states \"no bootstrap-gate authorization check exists yet\"; the POST storage-in-atom-refs requirement has no atom-git charter storage implementation either",
       "spec_status": "unverified (pending implementation)"
@@ -419,7 +419,7 @@
     {
       "id": "charter-typ",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1064,
+      "line": 1063,
       "verification_method": "review-residue",
       "residue": "",
       "spec_status": ""
@@ -427,7 +427,7 @@
     {
       "id": "claim-chains-charter",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1066,
+      "line": 1065,
       "verification_method": "machine (Alloy)",
       "residue": "",
       "spec_status": ""
@@ -435,7 +435,7 @@
     {
       "id": "claim-charter-authorization",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1067,
+      "line": 1066,
       "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -443,7 +443,7 @@
     {
       "id": "claim-key-required",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1047,
+      "line": 1046,
       "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
@@ -451,7 +451,7 @@
     {
       "id": "claim-payload-extensible",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 877,
+      "line": 876,
       "verification_method": "",
       "residue": "Phase 1/2 -- ClaimPayload (atom/atom-id/src/lib.rs) has a fixed field set with no \"meta\" field or unknown-field-preservation mechanism; default serde deserialize silently drops fields not in the struct rather than preserving them, so this constraint is not yet satisfied by the landed type, let alone verified",
       "spec_status": "unverified"
@@ -459,7 +459,7 @@
     {
       "id": "claim-replacement-authority",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1068,
+      "line": 1067,
       "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -467,7 +467,7 @@
     {
       "id": "claim-replacement-transition",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 757,
+      "line": 756,
       "verification_method": "",
       "residue": "Phase 1 -- construction.rs::claim_replacement_transactions_verify tests replacement shape (prior linkage, governance marking, distinct signing keys) and signature validity, but its own module docstring is explicit: \"construction correctness only -- no ... authorization validation runs anywhere in this corpus; that is Phase 1\". No storage backend exists either.",
       "spec_status": "unverified (pending implementation)"
@@ -475,7 +475,7 @@
     {
       "id": "claim-transition",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1052,
+      "line": 1051,
       "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
@@ -483,7 +483,7 @@
     {
       "id": "claim-typ",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1040,
+      "line": 1039,
       "verification_method": "rustc",
       "residue": "",
       "spec_status": ""
@@ -491,7 +491,7 @@
     {
       "id": "composite-source-concurrent",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 253,
+      "line": 252,
       "verification_method": "",
       "residue": "Phase 1/2 -- no CompositeAtomSource implementation exists anywhere in the codebase yet; depends on [trait-async-io]",
       "spec_status": "unverified"
@@ -499,7 +499,7 @@
     {
       "id": "crypto-layer-separation",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1049,
+      "line": 1048,
       "verification_method": "cargo-dep",
       "residue": "",
       "spec_status": ""
@@ -507,7 +507,7 @@
     {
       "id": "crypto-via-coz",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1050,
+      "line": 1049,
       "verification_method": "cargo-dep",
       "residue": "",
       "spec_status": ""
@@ -515,7 +515,7 @@
     {
       "id": "dig-is-atom-snapshot",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1043,
+      "line": 1042,
       "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
@@ -523,7 +523,7 @@
     {
       "id": "fs-source-contract",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1085,
+      "line": 1084,
       "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
@@ -531,7 +531,7 @@
     {
       "id": "identity-content-addressed",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1033,
+      "line": 1032,
       "verification_method": "machine (Alloy)",
       "residue": "",
       "spec_status": ""
@@ -539,7 +539,7 @@
     {
       "id": "identity-stability",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1034,
+      "line": 1033,
       "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -547,7 +547,7 @@
     {
       "id": "ingest-preserves-identity",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1062,
+      "line": 1061,
       "verification_method": "machine (Alloy)",
       "residue": "",
       "spec_status": ""
@@ -555,7 +555,7 @@
     {
       "id": "key-management-deferred",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1051,
+      "line": 1050,
       "verification_method": "cargo-dep",
       "residue": "",
       "spec_status": ""
@@ -563,7 +563,7 @@
     {
       "id": "manifest-minimal",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1077,
+      "line": 1076,
       "verification_method": "machine (Alloy)",
       "residue": "",
       "spec_status": ""
@@ -571,7 +571,7 @@
     {
       "id": "no-backdated-publish",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1058,
+      "line": 1057,
       "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -579,7 +579,7 @@
     {
       "id": "no-cross-layer-crypto",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1057,
+      "line": 1056,
       "verification_method": "cargo-dep",
       "residue": "",
       "spec_status": ""
@@ -587,7 +587,7 @@
     {
       "id": "no-duplicate-version",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1056,
+      "line": 1055,
       "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -595,7 +595,7 @@
     {
       "id": "no-unclaimed-publish",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1055,
+      "line": 1054,
       "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -603,7 +603,7 @@
     {
       "id": "owner-abstract",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1035,
+      "line": 1034,
       "verification_method": "machine (Alloy)",
       "residue": "",
       "spec_status": ""
@@ -611,7 +611,7 @@
     {
       "id": "owner-authorization-delegated",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1037,
+      "line": 1036,
       "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
@@ -619,7 +619,7 @@
     {
       "id": "owner-compatibility",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1036,
+      "line": 1035,
       "verification_method": "machine (Alloy)",
       "residue": "",
       "spec_status": ""
@@ -627,7 +627,7 @@
     {
       "id": "path-is-subdir",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1045,
+      "line": 1044,
       "verification_method": "rustc",
       "residue": "",
       "spec_status": ""
@@ -635,7 +635,7 @@
     {
       "id": "publish-chains-claim",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1039,
+      "line": 1038,
       "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -643,7 +643,7 @@
     {
       "id": "publish-claim-coherence",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1080,
+      "line": 1079,
       "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -651,7 +651,7 @@
     {
       "id": "publish-key-optional",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1048,
+      "line": 1047,
       "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
@@ -659,7 +659,7 @@
     {
       "id": "publish-payload-extensible",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1084,
+      "line": 1083,
       "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
@@ -667,7 +667,7 @@
     {
       "id": "publish-transition",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1053,
+      "line": 1052,
       "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
@@ -675,7 +675,7 @@
     {
       "id": "publish-typ",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1041,
+      "line": 1040,
       "verification_method": "rustc",
       "residue": "",
       "spec_status": ""
@@ -683,7 +683,7 @@
     {
       "id": "rawversion-opaque",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1046,
+      "line": 1045,
       "verification_method": "rustc",
       "residue": "",
       "spec_status": ""
@@ -691,7 +691,7 @@
     {
       "id": "session-ordering",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1054,
+      "line": 1053,
       "verification_method": "machine (TLC)",
       "residue": "",
       "spec_status": ""
@@ -699,7 +699,7 @@
     {
       "id": "sig-over-pay",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1042,
+      "line": 1041,
       "verification_method": "unit-test",
       "residue": "",
       "spec_status": ""
@@ -707,7 +707,7 @@
     {
       "id": "src-is-source-revision",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1044,
+      "line": 1043,
       "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
@@ -715,7 +715,7 @@
     {
       "id": "symmetric-payloads",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1038,
+      "line": 1037,
       "verification_method": "rustc",
       "residue": "",
       "spec_status": ""
@@ -724,20 +724,12 @@
       "id": "trait-async-io",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 196,
-      "verification_method": "",
-      "residue": "Phase 1/2 -- no AtomSource/AtomStore trait is defined anywhere in the codebase yet; nothing to check async-ness of",
-      "spec_status": "unverified"
-    },
-    {
-      "id": "trait-signature-pure",
-      "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1083,
-      "verification_method": "rustc",
+      "verification_method": "type (atom/atom-core/src/lib.rs -- AtomSource::resolve/discover are async fn (lines 124, 130); AtomStore::ingest/contains are async fn (lines 250, 253); the accessor traits AtomEntry/AtomVersion/Manifest are sync fn (lines 70, 87, 54); AtomRegistry::claim/publish are sync fn (lines 210, 223) -- the async/sync split is type-enforced: six real implementations compile against these exact signatures (atom-git's GitSource, GitRegistry, GitStore; eos-daemon/src/scheduler.rs's test-only RecordingSource), and an impl violating the split would fail to compile)",
       "residue": "",
       "spec_status": ""
     },
     {
-      "id": "uri-not-metadata",
+      "id": "trait-signature-pure",
       "spec_file": "docs/specs/atom-transactions.md",
       "line": 1082,
       "verification_method": "rustc",
@@ -745,9 +737,17 @@
       "spec_status": ""
     },
     {
+      "id": "uri-not-metadata",
+      "spec_file": "docs/specs/atom-transactions.md",
+      "line": 1081,
+      "verification_method": "rustc",
+      "residue": "",
+      "spec_status": ""
+    },
+    {
       "id": "verification-local",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1059,
+      "line": 1058,
       "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
@@ -755,7 +755,7 @@
     {
       "id": "verification-provenance",
       "spec_file": "docs/specs/atom-transactions.md",
-      "line": 1060,
+      "line": 1059,
       "verification_method": "integration-test",
       "residue": "",
       "spec_status": ""
