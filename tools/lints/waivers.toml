@@ -64,28 +64,28 @@ term = "genesis / root / Name / derivation / drv (bare word)"
 lint   = "needs-evaluation"
 owner  = "eos-snix / evaluator eradication (ADR-0006 §3)"
 path   = "eos/eos-core/src/engine.rs"
-phase  = "P4"
+phase  = "Phase-4"
 symbol = "NeedsEvaluation"
 
 [[waiver]]
 lint   = "needs-evaluation"
 owner  = "eos-snix / evaluator eradication (ADR-0006 §3)"
 path   = "eos/eos-core/tests/traits.rs"
-phase  = "P4"
+phase  = "Phase-4"
 symbol = "NeedsEvaluation"
 
 [[waiver]]
 lint   = "needs-evaluation"
 owner  = "eos-snix / evaluator eradication (ADR-0006 §3)"
 path   = "eos/eos-snix/src/lib.rs"
-phase  = "P4"
+phase  = "Phase-4"
 symbol = "NeedsEvaluation"
 
 [[waiver]]
 lint   = "needs-evaluation"
 owner  = "eos-snix / evaluator eradication (ADR-0006 §3)"
 path   = "eos/eos/src/orchestrator.rs"
-phase  = "P4"
+phase  = "Phase-4"
 symbol = "NeedsEvaluation"
 
 # `ComposeConfig`: the v1 lock compose model (3 sites), coexisting with the
@@ -94,7 +94,7 @@ symbol = "NeedsEvaluation"
 lint   = "compose-config"
 owner  = "ion-lock v1 removal (v2 already landed)"
 path   = "ion/ion-lock/src/lib.rs"
-phase  = "P2"
+phase  = "Phase-2"
 symbol = "ComposeConfig"
 
 # --------------------------------------------------------------------------- #
@@ -106,11 +106,11 @@ symbol = "ComposeConfig"
 [[registry]]
 note  = "Specs still describe the removed [compose] section; reconciled with the manifest redesign, not this node."
 owner = "manifest/lock redesign — successor intent schema (ADR-0006 §3, F9)"
-phase = "P2"
+phase = "Phase-2"
 site  = "docs/specs/ion-eos-contract.md, docs/specs/ion-manifest.md — [compose]/composer prose"
 
 [[registry]]
 note  = "Slated for removal; hosts the waived NeedsEvaluation + Derivation legacy identifiers."
 owner = "eos-snix deletion (ADR-0006 §3)"
-phase = "P4"
+phase = "Phase-4"
 site  = "eos/eos-snix (whole crate) — evaluator-shaped passthrough executor"
