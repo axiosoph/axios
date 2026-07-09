@@ -238,7 +238,7 @@ any resolution or publish operation.
   (`[manifest-required-sections]`, `[set-declaration-completeness]`,
   `[composer-set-reference]`, `[deny-unknown-fields]`) hold. Invalid
   manifests MUST be rejected with a diagnostic error.
-  `VERIFIED: unverified`
+  `VERIFIED: test (ion/ion-manifest/src/lib.rs::IonManifest::parse -- test_valid_manifest_parsing, test_manifest_missing_required_sections, test_manifest_deny_unknown_fields, test_set_declaration_completeness, ion_manifest_invalid_rejected property test)`
 
 **[manifest-add-dep]**: Adding a dependency via CLI (e.g., `eka add`)
 MUST update the manifest and trigger re-resolution.
@@ -250,6 +250,7 @@ MUST update the manifest and trigger re-resolution.
   `[package.sets]`. The lock file is updated via the resolution
   pipeline. The manifest is re-validated after modification.
   `VERIFIED: unverified`
+  `RESIDUE: Phase 1/2 -- no CLI "add" command or re-resolution pipeline exists; ion-manifest only parses/validates a manifest already on disk`
 
 **[manifest-add-mirror]**: Adding a mirror to an existing set MUST
 validate the mirror's anchor against the set's established anchor.
@@ -261,6 +262,7 @@ validate the mirror's anchor against the set's established anchor.
   anchor of the new mirror has been verified consistent with existing
   mirrors per atom-sourcing.md `[set-anchor-bijection]`.
   `VERIFIED: unverified`
+  `RESIDUE: Phase 1/2 -- no mirror-add or anchor-bijection-validation logic exists anywhere in the codebase`
 
 ### Forbidden States
 
@@ -269,11 +271,12 @@ referenced by NEITHER `[deps.from]` NOR `[compose.with]` is NOT an
 error — sets MAY be declared for future use or for mirror management.
 This is explicitly NOT forbidden.
 `VERIFIED: unverified`
+`RESIDUE: Uncertain, flagged for review -- IonManifest::parse (ion/ion-manifest/src/lib.rs) never checks the sets-to-deps direction, so an orphaned set is accepted by construction (satisfying this permissive constraint), but no dedicated test asserts that case; the property-based roundtrip test can generate it incidentally but does not name it as the behavior under test. Conservative RESIDUE pending a dedicated positive test.`
 
 **[no-undeclared-set-reference]**: A `[deps.from.<set>]` section MUST
 NOT reference a set not declared in `[package.sets]`. Corollary of
 `[set-declaration-completeness]`.
-`VERIFIED: unverified`
+`VERIFIED: test (ion/ion-manifest/src/lib.rs::IonManifest::parse set-declaration-completeness check -- test_set_declaration_completeness, ion_manifest_invalid_rejected case 1 "undeclared-set-name")`
 
 **[no-self-dependency]**: An atom MUST NOT declare a dependency on
 itself (same label from the local set). Implementations MUST detect

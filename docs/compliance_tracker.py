@@ -10,9 +10,10 @@ from their verification tables AND from inline `**[id]**:` prose definitions,
 scans the codebase for compliance annotations, matches them, and outputs
 compliance status to docs/compliance.json and www/content/compliance.md. It also
 emits docs/on_path_constraints.json, an on-path constraint manifest recording
-each constraint's spec-stated verification method where one exists, leaving a
-gap genuinely open (not auto-justified) otherwise, checked by
-check_constraint_coverage.py.
+each constraint's spec-stated verification method where one exists, or a
+spec-authored `` `RESIDUE: ...` `` justification where the constraint is
+deliberately not yet machine-checked, leaving a gap genuinely open (neither
+trailer present) otherwise — checked by check_constraint_coverage.py.
 """
 
 import os
@@ -37,6 +38,7 @@ def normalize_id(cid):
 # the same file, so re-discovering it here is harmless).
 _INLINE_DEF_RE = re.compile(r'^\*\*\[([^\]]+)\]\*\*')
 _VERIFIED_RE = re.compile(r'`VERIFIED:\s*([^`]*)`')
+_RESIDUE_RE = re.compile(r'`RESIDUE:\s*([^`]*)`')
 _HEADING_RE = re.compile(r'^#')
 # A spec-stated verification method counts as "unnamed" only when the text
 # is the bare status word "unverified" (with or without a parenthetical
@@ -54,12 +56,19 @@ def extract_constraint_records_from_spec(file_path):
     """Extract every on-path constraint occurrence from a spec file.
 
     Returns a list of dicts: {norm_id, display_id, line_number,
-    verification_method, source}, covering both markdown-table rows
+    verification_method, residue, source}, covering both markdown-table rows
     (pre-existing style) and inline `**[id]**:` prose definitions (widened
     style). `verification_method` is the text the spec itself states for
     that occurrence — a table's `Method`-like column value, or the nearest
     inline `` `VERIFIED: ...` `` trailer found before the next definition,
-    heading, or table — or None if the spec names none.
+    heading, or table — or None if the spec names none. `residue` is the
+    nearest inline `` `RESIDUE: ...` `` trailer found in that same window,
+    or None — a deliberate, human-authored justification for why the
+    constraint needs no machine check (see `build_constraint_manifest`).
+    Table-style rows carry no residue column and always report `residue`
+    as None; every on-path constraint currently missing a named
+    verification method is inline-defined (confirmed by inspection), so
+    this asymmetry is not a live gap.
     """
     records = []
     try:
@@ -122,6 +131,7 @@ def extract_constraint_records_from_spec(file_path):
                     "display_id": cid_display,
                     "line_number": i + 1,
                     "verification_method": verification_method,
+                    "residue": None,
                     "source": "table",
                 })
 
@@ -138,18 +148,29 @@ def extract_constraint_records_from_spec(file_path):
         if not cid_normalized:
             continue
 
-        # Scan forward for the nearest VERIFIED trailer, stopping at the
-        # next definition, a heading, or a table — never borrowing a
-        # trailer that belongs to a later, different definition.
+        # Scan forward for the nearest VERIFIED and RESIDUE trailers,
+        # stopping at the next definition, a heading, or a table — never
+        # borrowing a trailer that belongs to a later, different
+        # definition. The two trailers are independent markers (a
+        # constraint carries one or the other, never both in practice,
+        # but nothing here assumes that): keep scanning the same window
+        # until both are found or the boundary is reached.
         verification_method = None
+        residue = None
         j = idx + 1
         while j < n:
             nxt_stripped = lines[j].strip()
             if _INLINE_DEF_RE.match(nxt_stripped) or _HEADING_RE.match(nxt_stripped) or nxt_stripped.startswith('|'):
                 break
-            vm = _VERIFIED_RE.search(nxt_stripped)
-            if vm:
-                verification_method = vm.group(1).strip()
+            if verification_method is None:
+                vm = _VERIFIED_RE.search(nxt_stripped)
+                if vm:
+                    verification_method = vm.group(1).strip()
+            if residue is None:
+                rm = _RESIDUE_RE.search(nxt_stripped)
+                if rm:
+                    residue = rm.group(1).strip()
+            if verification_method is not None and residue is not None:
                 break
             j += 1
 
@@ -158,6 +179,7 @@ def extract_constraint_records_from_spec(file_path):
             "display_id": cid_display,
             "line_number": idx + 1,
             "verification_method": verification_method,
+            "residue": residue,
             "source": "inline",
         })
 
@@ -184,19 +206,21 @@ def build_constraint_manifest(repo_root):
     pair across docs/specs/*.md.
 
     Each entry carries a spec-stated named verification method when one
-    exists. `residue` is NEVER auto-generated: it is a reserved slot for a
-    deliberate, reviewed justification of why a *specific* constraint needs
-    no machine check (mirroring the findings-review precedent of requiring
-    either a real check or a recorded justification) — manufacturing one
-    here for every constraint with no named method would make
-    check_constraint_coverage.py unable to ever fail on real output, which
-    defeats the coverage check entirely. A constraint with neither is left
-    with both fields empty so the coverage-check surfaces it as a genuine,
-    uncovered gap rather than silently laundering it into "covered".
-    `spec_status` is purely informational context (whatever
-    verification-status text, if any, the spec itself states — even the
-    bare word "unverified") for a human triaging the gap; it is never
-    consulted by the coverage-check.
+    exists. `residue` is NEVER auto-generated: it is populated only from a
+    spec-authored `` `RESIDUE: ...` `` trailer (harvested by
+    `extract_constraint_records_from_spec`, symmetric to how `VERIFIED:` is
+    harvested) — a deliberate, reviewed justification of why a *specific*
+    constraint needs no machine check yet (mirroring the findings-review
+    precedent of requiring either a real check or a recorded justification).
+    Manufacturing a justification here for every constraint with no named
+    method would make check_constraint_coverage.py unable to ever fail on
+    real output, which defeats the coverage check entirely — so a
+    constraint with neither trailer is left with both fields empty and the
+    coverage-check surfaces it as a genuine, uncovered gap rather than
+    silently laundering it into "covered". `spec_status` is purely
+    informational context (whatever verification-status text, if any, the
+    spec itself states — even the bare word "unverified") for a human
+    triaging the gap; it is never consulted by the coverage-check.
 
     Disambiguation rule: entries are keyed by (spec_file, id), never by id
     alone — a genuine cross-file same-name ID (e.g. lock-schema-version,
@@ -204,7 +228,9 @@ def build_constraint_manifest(repo_root):
     ion-resolution.md) surfaces as two distinct entries, one per defining
     spec, rather than being silently collapsed into one. Within a single
     file, an id repeated across styles (table + inline) is merged into one
-    entry, preferring whichever occurrence names a real method.
+    entry, preferring whichever occurrence names a real method, then
+    (absent a named method on either side) whichever occurrence carries a
+    residue justification.
     """
     spec_dir = os.path.join(repo_root, "docs", "specs")
     spec_files = glob.glob(os.path.join(spec_dir, "*.md"))
@@ -218,6 +244,12 @@ def build_constraint_manifest(repo_root):
             if existing is None:
                 by_id[r["norm_id"]] = r
             elif not _has_named_verification_method(existing["verification_method"]) and _has_named_verification_method(r["verification_method"]):
+                by_id[r["norm_id"]] = r
+            elif (
+                not _has_named_verification_method(existing["verification_method"])
+                and not existing.get("residue")
+                and r.get("residue")
+            ):
                 by_id[r["norm_id"]] = r
 
         for norm_id in sorted(by_id):
@@ -238,7 +270,7 @@ def build_constraint_manifest(repo_root):
                     "spec_file": rel_spec_path,
                     "line": r["line_number"],
                     "verification_method": "",
-                    "residue": "",
+                    "residue": r["residue"] or "",
                     "spec_status": method_text or "",
                 })
 
