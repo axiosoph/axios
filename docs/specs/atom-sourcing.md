@@ -52,9 +52,10 @@ set is the unit of consistency checking.
 repository. Identified by `::` in manifest declarations (by convention).
 Support for local sets is OPTIONAL but enables development workflows.
 
-**Anchor**: The genesis commit hash of an atom-set. It cryptographically
-pins a set of atoms to a single source history. Defined in
-atom-transactions.md §Anchor.
+**Anchor**: The coz digest of an atom-set's founding charter transaction
+(`czd(charter₀)`), backend-agnostic. It cryptographically pins a set of
+atoms to an owned, signed declaration over a single source history.
+Defined in atom-transactions.md §Anchor (`[charter-anchor]`).
 
 **Publish digest** (`publish_czd`): The canonical Coz digest (`czd`) of
 the **publish `CozMessage`**. Stored **bare** (original algorithm) in the
@@ -92,7 +93,7 @@ TYPE  AtomRef = {
       }
 
 TYPE  LockEntry = {
-        set:         Anchor,                  -- atom-set identity = the genesis anchor; keys into anchor → mirrors
+        set:         Anchor,                  -- atom-set identity = czd(charter₀); keys into anchor → mirrors
         label:       Label,                   -- which atom
         version:     Version,                 -- which version (opaque)
         publish_czd: Czd,                     -- bare publish digest (actual crypto security)
@@ -322,7 +323,7 @@ resolved atom, the fields defined in the `LockEntry` type:
 
 | Field         | Purpose                                             | Required    |
 | :------------ | :-------------------------------------------------- | :---------- |
-| `set`         | Atom-set identity (genesis commit hash)             | MUST        |
+| `set`         | Atom-set identity (`czd(charter₀)`)                 | MUST        |
 | `label`       | Atom label within the set                           | MUST        |
 | `version`     | Resolved version (opaque string)                    | MUST        |
 | `publish_czd` | Bare publish digest (cryptographic security anchor) | MUST        |

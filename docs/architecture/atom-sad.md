@@ -71,13 +71,13 @@ graph TB
 
 ### 1.3 System Boundaries
 
-| Boundary      | Inside Atom                                                              | Outside Atom                                                                    |
-| :------------ | :----------------------------------------------------------------------- | :------------------------------------------------------------------------------ |
-| **Identity**  | `AtomId = (anchor, label)`; anchor derivation from the genesis commit    | Key material, signature primitives (Coz/Cyphr)                                  |
-| **Ownership** | claim/publish protocol; claim/publish chains; the owner→identity binding | Owner identity _systems_ (Coz `tmb`, Cyphr `PR`) — `Owner` is opaque            |
-| **Storage**   | git-object encoding; registry + store ref layout; ingest                 | Build execution, artifact store (L3)                                            |
-| **Discovery** | object-free ref advertisement; set→mirrors indirection                   | Version _semantics_ (`VersionScheme` is a trait; ecosystem adapters live above) |
-| **Lock**      | the atom-required lock contribution (`[lock-entry-sufficient]`)          | The lock file as a whole, resolution, plugin/non-atom deps (L4)                 |
+| Boundary      | Inside Atom                                                                             | Outside Atom                                                                    |
+| :------------ | :-------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------ |
+| **Identity**  | `AtomId = (anchor, label)`; anchor = `czd(charter₀)`, the founding charter's coz digest | Key material, signature primitives (Coz/Cyphr)                                  |
+| **Ownership** | claim/publish protocol; claim/publish chains; the owner→identity binding                | Owner identity _systems_ (Coz `tmb`, Cyphr `PR`) — `Owner` is opaque            |
+| **Storage**   | git-object encoding; registry + store ref layout; ingest                                | Build execution, artifact store (L3)                                            |
+| **Discovery** | object-free ref advertisement; set→mirrors indirection                                  | Version _semantics_ (`VersionScheme` is a trait; ecosystem adapters live above) |
+| **Lock**      | the atom-required lock contribution (`[lock-entry-sufficient]`)                         | The lock file as a whole, resolution, plugin/non-atom deps (L4)                 |
 
 ### 1.4 Layer Discipline
 
@@ -146,9 +146,9 @@ resolution cache: an atom fetched once is content-addressed for reuse.
 ### 2.3 AtomSource (Git Backend)
 
 `atom-git` implements `AtomContent`/`AtomStore` over a git repository: it reads atom
-commits, walks publish tag chains and claim chains, and derives the anchor from the
-genesis commit. The git object DB is the substrate; the registry/store refs are views
-over it.
+commits, walks publish tag chains and claim chains, and verifies the anchor against
+the set's founding charter (`Anchor := czd(charter₀)`). The git object DB is the
+substrate; the registry/store refs are views over it.
 
 ### 2.4 Mirrors
 
@@ -206,8 +206,8 @@ The URI is a locator, not the identity (`[uri-not-metadata]`).
 ### 3.4 atom-git — Git Bridge
 
 Implements `AtomContent`/`AtomStore` over git objects per `git-storage-format.md`:
-anchor derivation (oldest parentless commit), atom-commit snapshots, publish tag
-chains, claim chains, and the registry/store ref layouts.
+charter-based anchor verification (`Anchor := czd(charter₀)`), atom-commit
+snapshots, publish tag chains, claim chains, and the registry/store ref layouts.
 
 ## 4. Core Lifecycles
 
@@ -312,12 +312,25 @@ versions, ownership transfers, or key rotations.
 
 ### 6.2 The Anchor
 
-The anchor is the genesis (oldest parentless) commit's ObjectId: **immutable**
-(`[anchor-immutable]`), **content-addressed** (`[anchor-content-addressed]`),
-**unique**, and **independently discoverable** without trusting the publisher
-(`[anchor-discoverable]`). Git hash agility is handled by _not_ handling it: a
-SHA-256 re-hash of a SHA-1 history is a **distinct repo** with a distinct anchor
-(`[anchor-hash-agile]`), never silently converted.
+**(Amended 2026-07-08 — the charter.)** The anchor is the coz digest of the
+atom-set's founding charter transaction: `Anchor := czd(charter₀)`
+(atom-transactions.md `[charter-anchor]`) — backend-agnostic, since a charter
+is a coz object regardless of backend. This replaces the earlier
+genesis-commit derivation; the genesis commit is not lost — the charter's
+`src` transitively pins it (a revision hash commits to its entire ancestry) —
+but it no longer _is_ the anchor. The anchor is: **immutable**
+(`[anchor-immutable]` — successor charters chain without changing it),
+**content-addressed over a signed, owned payload**
+(`[anchor-content-addressed]`), **unique** (distinct charters yield distinct
+anchors; two charters over the same history are two deliberately distinct
+sets, `[charter-fork-distinction]`), and **resolvable** — a consumer locates
+and verifies the founding charter from the source without trusting the
+publisher; selecting among candidate charters is the consumer's recorded
+trust decision (`[anchor-resolvable]`, supersedes `[anchor-discoverable]`).
+Git hash agility is handled by the charter, not by silence: a SHA-256 re-hash
+rewrites history, so continuity across it is an explicit successor charter
+(`[anchor-hash-agile]`, `[charter-succession]`); absent succession, the
+re-hashed repository is a distinct atom-set.
 
 ### 6.3 Ownership: Claim Before Publish
 
@@ -444,19 +457,19 @@ Out of scope for the atom layer:
 
 ## Appendix A: Terminology
 
-| Term           | Definition                                                          |
-| :------------- | :------------------------------------------------------------------ |
-| Anchor         | Genesis commit ObjectId; cryptographic, immutable atom-set identity |
-| AtomId         | The abstract pair `(anchor, label)` — the identity, not a hash      |
-| Atom-set       | Atoms sharing a common anchor                                       |
-| Label          | Human-readable atom name (UAX #31)                                  |
-| Owner          | Opaque identity digest (Coz `tmb`, Cyphr `PR`)                      |
-| Claim          | Signed `CozMessage` binding `Owner` → `(anchor, label)`             |
-| Publish        | Signed `CozMessage` recording a version; references a claim `czd`   |
-| czd            | Coz message digest (multihash); `publish_czd`, `claim_czd`          |
-| dig            | Hash of the reproducible atom snapshot (in the publish payload)     |
-| Revision (rev) | A specific commit in source history (peelable from the tag chain)   |
-| Version        | Abstract version via `VersionScheme` (ecosystem-agnostic)           |
+| Term           | Definition                                                                       |
+| :------------- | :------------------------------------------------------------------------------- |
+| Anchor         | `czd(charter₀)` — the founding charter's coz digest; immutable atom-set identity |
+| AtomId         | The abstract pair `(anchor, label)` — the identity, not a hash                   |
+| Atom-set       | Atoms sharing a common anchor                                                    |
+| Label          | Human-readable atom name (UAX #31)                                               |
+| Owner          | Opaque identity digest (Coz `tmb`, Cyphr `PR`)                                   |
+| Claim          | Signed `CozMessage` binding `Owner` → `(anchor, label)`                          |
+| Publish        | Signed `CozMessage` recording a version; references a claim `czd`                |
+| czd            | Coz message digest (multihash); `publish_czd`, `claim_czd`                       |
+| dig            | Hash of the reproducible atom snapshot (in the publish payload)                  |
+| Revision (rev) | A specific commit in source history (peelable from the tag chain)                |
+| Version        | Abstract version via `VersionScheme` (ecosystem-agnostic)                        |
 
 ## Appendix B: Crate Map
 
@@ -487,12 +500,17 @@ Out of scope for the atom layer:
 
 ## Appendix D: Known Specification Drift
 
-None at the atom layer. The keystone realignment — pair-only `AtomId` (no
+The keystone realignment — pair-only `AtomId` (no
 `AtomDigest`/`[digest-algorithm-agile]`), the 2-value name-anchored lock, the flat
 `blake3(publish_czd)` store, and name-anchored acquisition — has been applied across
 `atom-transactions.md`, `atom-sourcing.md`, and `git-storage-format.md`, which are
-aligned to this SAD. (The L4 consequences — the ion lock cross-references and the eos
-handoff — are tracked by `ion-sad.md`.)
+aligned to this SAD. The 2026-07-08 charter amendment (`Anchor := czd(charter₀)`,
+atom-transactions.md `[charter-anchor]`) has likewise been propagated across those
+specifications and this SAD (§6.2). One deliberate, explicitly marked gap remains:
+the git backend's storage encoding and ref layout for charter transactions is not
+yet specified (`git-storage-format.md` Open Questions #6) — tracked as
+atom-milestone design work, not silent drift. (The L4 consequences — the ion lock
+cross-references and the eos handoff — are tracked by `ion-sad.md`.)
 
 ## Appendix E: Stale Documentation
 

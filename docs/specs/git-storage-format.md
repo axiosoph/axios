@@ -54,7 +54,7 @@ schemes, ref layouts, and invariants:
 | Scope          | Single source repository        | Many sources, many registries                 |
 | Collision-free | Labels unique per registry      | publish_czd cryptographically unique globally |
 | Claim per atom | Exactly one active              | Multiple (from different sources/forks)       |
-| Anchor         | One anchor (genesis commit)     | Many anchors (one per ingested source)        |
+| Anchor         | One anchor (`czd(charter₀)`)    | Many anchors (one per ingested source)        |
 | Ref prefix     | `refs/atom/{pub,claims/pub}/..` | `refs/atom/{d,dev,claims/d}/...`              |
 
 A repository MAY serve as both a registry and a store simultaneously
@@ -64,12 +64,15 @@ A repository MAY serve as both a registry and a store simultaneously
 
 The git backend uses four categories of git objects:
 
-1. **Genesis commit** — the oldest parentless commit in the
-   repository's history (by committer timestamp). Its ObjectId is the
-   anchor. Discoverable by walking the commit graph to find all
-   parentless commits and selecting the oldest. If multiple parentless
-   commits exist (e.g., merged independent histories, orphan branches),
-   the oldest is authoritative.
+1. **Charter transactions** — the anchor is `czd(charter₀)`, the coz
+   digest of the atom-set's founding charter transaction
+   (atom-transactions.md `[charter-anchor]`), not a property of any git
+   object. The genesis commit is no longer the anchor; it remains
+   transitively pinned by the founding charter's `src` (a revision hash
+   commits to its entire ancestry), but nothing selects or derives it.
+   The git object encoding and ref layout for storing and retrieving
+   charter transactions (analogous to the claim commit format below) is
+   **not yet specified** — see Open Questions #6.
 
 2. **Claim commits** — commits with an empty tree whose `message`
    field contains a claim `CozMessage` (JSON). The first claim for an
@@ -112,8 +115,7 @@ Unsigned dev atoms are stored under `refs/atom/dev/{anchor}/{label}`
 ### Type Declarations
 
 ```
-TYPE  Anchor         = Vec<u8>                    -- opaque bytes from genesis ObjectId
-TYPE  Root           = ObjectId                   -- newtype: genesis commit's ObjectId
+TYPE  Anchor         = Vec<u8>                    -- opaque bytes: czd(charter₀), backend-agnostic
 TYPE  ClaimCommit    = ObjectId                   -- commit with CozMessage in message
 TYPE  AtomCommit     = ObjectId                   -- deterministic, parentless commit
 TYPE  PublishTag     = ObjectId                   -- annotated tag → AtomCommit or prev tag
@@ -179,32 +181,25 @@ EMPTY_TREE     = 4b825dc...             -- well-known empty tree ObjectId
 
 ### Invariants
 
-**[anchor-is-genesis]**: The anchor for a git-backed atom-set MUST be the
-raw bytes of the repository's genesis commit ObjectId. The genesis commit
-is the unique commit with no parents reachable from the current history.
+**[anchor-is-genesis]** _(retired 2026-07-08 — superseded by the charter
+amendment)_: The former rule (anchor = raw bytes of the repository's
+genesis commit ObjectId, discovered by walking the claim's lineage to
+its oldest parentless root) is retired. The anchor is backend-agnostic:
+`Anchor := czd(charter₀)` per atom-transactions.md `[charter-anchor]`.
+No graph-walking anchor discovery exists; the backend resolves and
+verifies the founding charter instead (storage encoding: Open
+Questions #6). The genesis commit survives only transitively — the
+charter's `src` commits to its entire ancestry.
 
-**Discovery algorithm:** To derive the anchor, walk the commit graph from
-the claim's payload `src` commit. The anchor must be the root
-of the claim's specific lineage, since a repository may have divergent
-branches with different roots. Follow all parent edges to find all
-parentless commits reachable from the claim's `src`. If multiple exist,
-the oldest by committer timestamp is authoritative per
-`[anchor-oldest-root]`. The ObjectId's byte representation (20 bytes
-for SHA-1, 32 bytes for SHA-256) is used directly as the `Anchor` value.
-
-**Verification frequency:** Anchor discovery MUST be performed per-claim,
-not cached per-registry. There is no cryptographic guarantee that all
-claims share the same anchor (e.g., grafted or replaced histories on
-specific branches). Per-claim verification is cheap with treeless
-fetching (`tree:0`) — if anchors are genuinely identical, the commit
-objects are already in the ODB from the first verification.
-`VERIFIED: unverified`
-
-**[anchor-hash-agile]**: The anchor MUST carry the bytes produced by
-whatever object hash algorithm the git repository uses. The backend
-MUST NOT rehash, truncate, or transform the ObjectId bytes. Hash
-algorithm agility is handled by git itself (SHA-1 → SHA-256 transition);
-the atom protocol treats the anchor as opaque bytes.
+**[anchor-hash-agile]**: The anchor is a coz digest (`czd(charter₀)`),
+not a git ObjectId, so the anchor does not inherit the repository's
+object hash algorithm at all. Git hash agility (SHA-1 → SHA-256) is
+handled by the charter, not by the backend: a re-hash rewrites history,
+so continuity across it is an explicit successor charter chaining to
+the founding charter (atom-transactions.md `[charter-succession]`);
+absent succession, the re-hashed repository is a distinct atom-set. The
+backend MUST treat the anchor as opaque bytes and MUST NOT rehash,
+truncate, or transform them.
 `VERIFIED: unverified`
 
 **[snapshot-deterministic]**: An atom commit MUST be deterministic given
@@ -234,18 +229,21 @@ integrity check before performing full Coz signature verification.
 `VERIFIED: unverified`
 
 **[temporal-vector]**: The atom protocol's git backend enforces a
-three-point temporal ordering — the **authenticity vector**:
+three-point temporal ordering — the **authenticity vector**
+(atom-transactions.md `[charter-ancestry]`):
 
 ```
-genesis commit (anchor) → claim src → publish src
+charter src → claim src → publish src
 ```
 
 Specifically: (1) the claim's payload `src` MUST point to a commit that
-is a descendant of the genesis commit (verifiable by walking the DAG
-from the claim's `src` to genesis), AND (2) the source revision
-referenced by `src` in the publish payload MUST be at or after the
-claim's `src` in the repository's history (i.e., publish `src` is a
-descendant of, or equal to, the claim's `src`).
+is a descendant of (or equal to) the effective charter's `src`
+(verifiable by walking the DAG from the claim's `src`), AND (2) the
+source revision referenced by `src` in the publish payload MUST be at
+or after the claim's `src` in the repository's history (i.e., publish
+`src` is a descendant of, or equal to, the claim's `src`). History
+prior to `charter.src` is visible but unowned by the set — orphaned
+unless re-claimed after the chartering point.
 
 An atom MAY be published from the claim's `src` commit itself (when no
 code changes are needed), but MUST NOT be published from a commit that
@@ -433,8 +431,10 @@ cleanup is the backend's responsibility.
 **[claim-transition-git]**: An atom MAY be claimed by creating a
 detached claim commit.
 
-- **PRE**: The repository MUST have at least one commit. The genesis
-  commit (parentless commit) MUST be derivable. No active claim for
+- **PRE**: The repository MUST have at least one commit. The atom-set's
+  founding charter MUST be resolvable and verified — the claim's
+  `anchor` field is its czd (atom-transactions.md
+  `[claim-chains-charter]`). No active claim for
   this label MUST exist (or the existing claim is being explicitly
   replaced). The claim `CozMessage` MUST be valid and include a
   `key` field. A source revision (`src`) for the claim point MUST
@@ -541,10 +541,11 @@ be ingested into a git `AtomStore` without claims or publishes.
   tags or claim refs exist for dev atoms. The store MUST treat dev atoms
   as unsigned/unclaimed. The dev version string SHOULD incorporate the
   tree object hash to prevent clobbering across concurrent evaluations.
-  Every atom has an AtomId — git-sourced dev atoms use the source
-  repository's genesis commit as anchor; filesystem-sourced atoms use
+  Every atom has an AtomId — git-sourced dev atoms use the set's
+  charter anchor (`czd(charter₀)`); filesystem-sourced atoms use
   a well-known constant sentinel anchor (see atom-transactions.md
-  `[fs-source-contract]`). Note: the dev atom's `dig` will inherently
+  `[fs-source-contract]`). Dev-atom behavior in a repository that has
+  no charter yet is unspecified (Open Questions #6). Note: the dev atom's `dig` will inherently
   differ from the published `dig` because published atoms include a
   real `src` extra header — this is by design.
   `VERIFIED: unverified`
@@ -592,13 +593,12 @@ MUST NOT share a label. This is enforced by the ref layout — two
 claim refs for the same label would conflict.
 `VERIFIED: unverified`
 
-**[anchor-oldest-root]**: If multiple parentless commits exist in the
-repository's history (e.g., merged independent histories, orphan
-branches like `gh-pages`), the **oldest** parentless commit by
-committer timestamp MUST be selected as the anchor. This matches the
-POC implementation and ensures deterministic anchor discovery without
-rejecting repositories with legitimate orphan branches.
-`VERIFIED: unverified`
+**[anchor-oldest-root]** _(retired 2026-07-08 — superseded by the
+charter amendment)_: The oldest-parentless-commit selection rule
+existed only to make genesis-based anchor discovery deterministic.
+With `Anchor := czd(charter₀)` there is no anchor discovery to
+disambiguate; the constraint is retired along with
+`[anchor-is-genesis]`.
 
 **[no-missing-store-claim]**: In a store, if a publish tag's payload
 references a claim czd, the corresponding claim commit MUST exist in
@@ -610,13 +610,15 @@ ingestion corruption.
 ### Behavioral Properties
 
 **[anchor-vector-authenticity]**: Given a publish tag in a registry,
-the atom MUST be verifiable as authentic by checking the three-point
-vector: (1) the genesis commit (anchor) is derivable from the claim's
-payload `src`, (2) the publish payload's `claim` czd resolves to a
-claim commit whose payload `src` is a descendant of the genesis commit,
+the atom MUST be verifiable as authentic by checking the vector:
+(1) the claim's `anchor` field equals `czd(charter₀)` of the effective,
+verified charter (atom-transactions.md `[charter-anchor]`,
+`[claim-charter-authorization]`), (2) the publish payload's `claim` czd
+resolves to a claim commit whose payload `src` is a descendant of (or
+equal to) the effective charter's `src` (`[charter-ancestry]`),
 (3) the claim `CozMessage` in that commit's message is valid, AND
 (4) the publish's `src` is at or after the claim's `src`. This creates
-a "vector of authenticity": anchor → claim src → publish src.
+a "vector of authenticity": charter src → claim src → publish src.
 
 - **Type**: Safety
   `VERIFIED: unverified`
@@ -668,49 +670,49 @@ ingested atom. (Model §2.3, ⊇ condition.)
 
 ## Verification
 
-| Constraint                   | Method           | Result  | Detail                                            |
-| :--------------------------- | :--------------- | :------ | :------------------------------------------------ |
-| anchor-is-genesis            | integration-test | pending | Root from genesis ObjectId bytes                  |
-| anchor-hash-agile            | agent-check      | pending | gix ObjectId handles both SHA-1/SHA-256           |
-| snapshot-deterministic       | unit-test        | pending | Same (tree, src) → same commit hash               |
-| snapshot-parentless          | unit-test        | pending | Atom commit has zero parents                      |
-| snapshot-src-header          | unit-test        | pending | Atom commit has exactly one extra header `src`    |
-| temporal-vector              | integration-test | pending | anchor → claim src → publish src enforced         |
-| claim-detached               | unit-test        | pending | Claim: empty tree, chains to prev if exists       |
-| claim-message-is-coz         | integration-test | pending | Parse claim from commit message, verify           |
-| publish-tag-targets-correct  | integration-test | pending | Tag target is atom commit or previous tag         |
-| publish-tag-claim-binding    | integration-test | pending | Payload `claim` czd resolves to valid claim       |
-| publish-tag-message-is-coz   | integration-test | pending | Tag message is valid CozMessage JSON              |
-| tag-chain-immutable          | integration-test | pending | Update creates chain, old tags persist            |
-| coz-bit-perfect              | integration-test | pending | Store → retrieve → byte-compare                   |
-| single-active-claim-registry | integration-test | pending | Second claim for same label replaces ref          |
-| store-claim-disambiguation   | integration-test | pending | Two publishes, same AtomId, distinct blake3 keys  |
-| registry-ref-label-unique    | integration-test | pending | Conflicting labels rejected                       |
-| registry-ref-claim           | integration-test | pending | Ref points to active claim commit                 |
-| registry-ref-version         | integration-test | pending | Ref points to publish tag tip                     |
-| store-ref-by-publish-czd     | integration-test | pending | Store refs keyed by blake3(publish_czd)           |
-| store-claim-ref              | integration-test | pending | Claim commit ref exists, GC-protected             |
-| store-ownership-migration    | integration-test | pending | New claim → new ref path                          |
-| claim-transition-git         | integration-test | pending | Claim creates commit + 2 refs, chains if needed   |
-| publish-transition-git       | integration-test | pending | Publish creates atom commit + tag + src ref       |
-| ingest-transition            | integration-test | pending | Full ingest cycle preserves identity              |
-| claim-replacement-transition | integration-test | pending | New claim replaces ref, old commit stays          |
-| publish-update-transition    | integration-test | pending | New tag chains to old tag, ref updated            |
-| fs-ingest-transition         | integration-test | pending | FS atoms ingested unsigned into store             |
-| no-non-empty-claim           | unit-test        | pending | Validation rejects non-empty-tree claim           |
-| no-orphan-publish            | integration-test | pending | Publish without claim rejected                    |
-| no-backdated-src             | integration-test | pending | publish src before claim src rejected             |
-| no-label-collision-registry  | integration-test | pending | Duplicate label rejected                          |
-| anchor-oldest-root           | integration-test | pending | Oldest parentless commit selected as anchor       |
-| no-missing-store-claim       | integration-test | pending | Missing claim for payload czd detected            |
-| anchor-vector-authenticity   | integration-test | pending | Full 3-point vector: genesis → claim src → src    |
-| ingestion-portable           | integration-test | pending | git fetch transfers all objects correctly         |
-| update-chain-auditable       | integration-test | pending | Tag chain walkable, all CozMessages retrievable   |
-| store-accumulates            | integration-test | pending | Post-ingest resolve ⊇ source resolve              |
-| dev-atom-resolution          | integration-test | pending | Local → dev/{anchor}/{label}/{ver}, remote → d/   |
-| peel-content-integrity       | integration-test | pending | Peeled sha == payload.dig; mismatch → reject      |
-| store-claim-cleanup          | integration-test | pending | Orphaned claim ref cleaned on version eviction    |
-| tag-chain-semantic-immutable | unit-test        | pending | Update tags preserve (label,version,dig,src,path) |
+| Constraint                   | Method           | Result  | Detail                                                 |
+| :--------------------------- | :--------------- | :------ | :----------------------------------------------------- |
+| anchor-is-genesis            | retired          | n/a     | Superseded by `czd(charter₀)`; see Open Questions #6   |
+| anchor-hash-agile            | agent-check      | pending | Anchor is a czd, not an ObjectId; re-hash = succession |
+| snapshot-deterministic       | unit-test        | pending | Same (tree, src) → same commit hash                    |
+| snapshot-parentless          | unit-test        | pending | Atom commit has zero parents                           |
+| snapshot-src-header          | unit-test        | pending | Atom commit has exactly one extra header `src`         |
+| temporal-vector              | integration-test | pending | charter src → claim src → publish src enforced         |
+| claim-detached               | unit-test        | pending | Claim: empty tree, chains to prev if exists            |
+| claim-message-is-coz         | integration-test | pending | Parse claim from commit message, verify                |
+| publish-tag-targets-correct  | integration-test | pending | Tag target is atom commit or previous tag              |
+| publish-tag-claim-binding    | integration-test | pending | Payload `claim` czd resolves to valid claim            |
+| publish-tag-message-is-coz   | integration-test | pending | Tag message is valid CozMessage JSON                   |
+| tag-chain-immutable          | integration-test | pending | Update creates chain, old tags persist                 |
+| coz-bit-perfect              | integration-test | pending | Store → retrieve → byte-compare                        |
+| single-active-claim-registry | integration-test | pending | Second claim for same label replaces ref               |
+| store-claim-disambiguation   | integration-test | pending | Two publishes, same AtomId, distinct blake3 keys       |
+| registry-ref-label-unique    | integration-test | pending | Conflicting labels rejected                            |
+| registry-ref-claim           | integration-test | pending | Ref points to active claim commit                      |
+| registry-ref-version         | integration-test | pending | Ref points to publish tag tip                          |
+| store-ref-by-publish-czd     | integration-test | pending | Store refs keyed by blake3(publish_czd)                |
+| store-claim-ref              | integration-test | pending | Claim commit ref exists, GC-protected                  |
+| store-ownership-migration    | integration-test | pending | New claim → new ref path                               |
+| claim-transition-git         | integration-test | pending | Claim creates commit + 2 refs, chains if needed        |
+| publish-transition-git       | integration-test | pending | Publish creates atom commit + tag + src ref            |
+| ingest-transition            | integration-test | pending | Full ingest cycle preserves identity                   |
+| claim-replacement-transition | integration-test | pending | New claim replaces ref, old commit stays               |
+| publish-update-transition    | integration-test | pending | New tag chains to old tag, ref updated                 |
+| fs-ingest-transition         | integration-test | pending | FS atoms ingested unsigned into store                  |
+| no-non-empty-claim           | unit-test        | pending | Validation rejects non-empty-tree claim                |
+| no-orphan-publish            | integration-test | pending | Publish without claim rejected                         |
+| no-backdated-src             | integration-test | pending | publish src before claim src rejected                  |
+| no-label-collision-registry  | integration-test | pending | Duplicate label rejected                               |
+| anchor-oldest-root           | retired          | n/a     | Retired with anchor-is-genesis (no anchor discovery)   |
+| no-missing-store-claim       | integration-test | pending | Missing claim for payload czd detected                 |
+| anchor-vector-authenticity   | integration-test | pending | Full vector: charter src → claim src → publish src     |
+| ingestion-portable           | integration-test | pending | git fetch transfers all objects correctly              |
+| update-chain-auditable       | integration-test | pending | Tag chain walkable, all CozMessages retrievable        |
+| store-accumulates            | integration-test | pending | Post-ingest resolve ⊇ source resolve                   |
+| dev-atom-resolution          | integration-test | pending | Local → dev/{anchor}/{label}/{ver}, remote → d/        |
+| peel-content-integrity       | integration-test | pending | Peeled sha == payload.dig; mismatch → reject           |
+| store-claim-cleanup          | integration-test | pending | Orphaned claim ref cleaned on version eviction         |
+| tag-chain-semantic-immutable | unit-test        | pending | Update tags preserve (label,version,dig,src,path)      |
 
 ## Implications
 
@@ -803,15 +805,15 @@ ingested atom. (Model §2.3, ⊇ condition.)
   tags, no claims, no verification ceremony. Dev version SHOULD include
   tree hash (e.g., `1.0.0.dev-{tree_hash_prefix}`) to avoid clobbering
   across concurrent evaluations. AtomId is derivable for all atoms
-  (git atoms use genesis anchor, FS atoms use sentinel anchor).
+  (git atoms use the set's `czd(charter₀)` anchor, FS atoms use the
+  sentinel anchor).
 
-- **Anchor discovery**: Walk the commit graph from the claim's payload
-  `src` to find all parentless commits reachable from that lineage.
-  Select the oldest by committer timestamp as the anchor. Multiple
-  roots are permitted — the oldest is authoritative per
-  `[anchor-oldest-root]`. Always walk from the claim's `src`, not
-  HEAD, to verify the anchor is the root of the claim's specific
-  lineage.
+- **Anchor verification**: The anchor is not discovered from the commit
+  graph — it is the founding charter's czd. The backend resolves the
+  charter from the source's atom refs (storage encoding: Open
+  Questions #6), verifies it, and checks `Anchor == czd(charter₀)`.
+  Ancestry checks (`[temporal-vector]`) walk the DAG from the claim's
+  `src` to the effective charter's `src`, not to a parentless root.
 
 - **Atomicity**: Multi-ref operations (claim + publish, ingestion of
   many versions) MUST use `gix::refs::Transaction` to batch all
@@ -880,3 +882,17 @@ ingested atom. (Model §2.3, ⊇ condition.)
    constant like the CozMessage `typ` value (e.g., `"atom/publish"`).
    The choice does not affect protocol correctness — only git tooling
    ergonomics.
+
+6. **Charter storage representation**: The 2026-07-08 charter amendment
+   (`Anchor := czd(charter₀)`, atom-transactions.md `[charter-anchor]`)
+   makes the founding charter the root of every set's trust chain, and
+   `[anchor-resolvable]` requires that a consumer can locate and verify
+   it from the source's atom refs — but this spec does not yet define
+   the git object encoding or ref layout for charter transactions
+   (a claim-commit-analogous encoding is the obvious candidate).
+   Until it does, the following are unspecified on the git backend:
+   how a charter transaction is stored and enumerated, how
+   `[temporal-vector]` obtains the effective charter's `src`, and what
+   anchor (if any) dev atoms carry in a repository that has no charter
+   yet. This is atom-milestone design work
+   (see the repository's ROADMAP), not an editorial gap.
