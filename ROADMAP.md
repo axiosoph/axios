@@ -1,10 +1,12 @@
 # Roadmap
 
-Axios builds software the way upstream already builds it, inside a
-cryptographic closure — see [README.md](README.md) for the full pitch and
-current architecture. This document tracks the plan to a working MVP: what
-each milestone delivers, what depends on what, and what is deliberately out
-of scope.
+Axios is building a decentralized publishing and build substrate around
+composition-addressing: signed, content-addressed bindings of names to
+content, applied recursively from published sources to runtime closures —
+see [README.md](README.md) for what that means and the current
+architecture. This document tracks the plan to a working MVP: what each
+milestone delivers, what depends on what, and what is deliberately out of
+scope.
 
 This is a living document. See [Document maintenance](#document-maintenance)
 for how it stays current.
@@ -124,13 +126,11 @@ milestone consumes directly:
   closure) or treat it as a named downstream obligation handled later — both
   are the same class of identity problem at different scales, and deciding
   which milestone owns it is unresolved.
-- Two committed documents — [docs/specs/git-storage-format.md](docs/specs/git-storage-format.md)
-  and [docs/architecture/atom-sad.md](docs/architecture/atom-sad.md) — still
-  define the atom anchor by the older genesis-commit convention. The current
-  definition (the anchor is the content digest of the atom-set's signed
-  founding charter transaction) is already reflected in the specification's
-  formal models and needs to be propagated into these two documents. This is
-  cheap and should not wait for the rest of the milestone.
+- The git backend's storage encoding and ref layout for charter
+  transactions — the signed founding declaration whose content digest is
+  the atom-set's anchor — is not yet specified
+  ([docs/specs/git-storage-format.md](docs/specs/git-storage-format.md),
+  Open Questions #6). This is design work this milestone owns.
 - Conformance test fixtures must span the digest algorithm-length axis
   (32/48/64-byte digests, i.e. ES256 vs. ES384 vs. ES512/Ed25519) rather than
   only the 32-byte case — a prior digest bug survived specifically because
@@ -157,6 +157,13 @@ resolution and locking algorithm itself into the `ion-manifest`,
   plugin type to prove the mechanism out.
 - Validate that the `ion-eos` handoff to the build engine matches the
   minimal-pointer design in the Ion Software Architecture Document.
+- Begin the manifest/lock intent redesign that
+  [ADR-0006](docs/adr/0006-execution-as-the-primitive.md) names the
+  substrate's most important open design surface: build-action and test
+  parameters, an intent-kind discriminator, generalized fetch entries,
+  and adopted upstream lockfiles all need a schema home after the removal
+  of the evaluator-era composition surface. Full resolution spans M4/M5;
+  the schema seam is owned here.
 
 **Open item:** Ion's remaining open questions are mostly resolved by the
 lock-file formalization work above, but its user-facing design — CLI

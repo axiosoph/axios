@@ -1,29 +1,48 @@
 # axios
 
-Axios builds software the way upstream already builds it — upstream's own
-build, inside a cryptographic closure. An **atom** is a signed,
-content-addressed snapshot of sources, manifest, and lock: build _intent_.
-A **composition** binds conventional names to content digests, Merkle-rooted
-and signed — the closure object, successor to a derivation's output closure.
-A **view** is a composition mounted at runtime. The one function is
-`build(atom closure, toolchain composition, action params) → output tree`,
-executed by upstream's own, unmodified build process inside a materialized
-FHS view; its result is analyzed into an **interface manifest**
-(provides/requires) rather than trusted by convention. There is no
-interpreted expression language, no `nixpkgs`-equivalent package corpus, and
-no world-rebuild distro.
+Axios is building a decentralized publishing and build substrate on a
+single primitive: the signed, content-addressed binding of names to
+content, applied recursively from published sources to runtime closures.
+We call it **composition-addressing**. The goal is software you can verify
+instead of trust: anyone can check what was published, what it depends on,
+what built it, and what it runs against, with no central registry, build
+farm, or naming convention vouching for any of it.
+
+The reason this is a new substrate rather than an incremental improvement
+is structural. Store-path systems like Nix embed hash-pointers _inside_
+artifacts, and a collision-resistant hash has no accessible fixed point —
+an artifact cannot point at its own digest, which is why fully
+content-addressing that model has been stuck upstream for years. Axios
+moves the pointers _beside_ the artifact, into signed binding objects, and
+the obstruction dissolves by construction. The design's vocabulary is
+small: an **atom** is signed build intent (sources, manifest, lock); a
+**composition** is a signed, Merkle-rooted binding of names to content
+digests — the closure object; a **view** is a composition mounted at
+runtime. Build outputs are analyzed into **interface manifests**
+(provides/requires) and verified against them, so a runtime closure is
+_justified_ — every entry is present because a named requirement binds to
+it, not because a hash-scan guessed.
+
+The price of entry is deliberately low: builds run upstream's own,
+unmodified build process inside a hermetic view. There is no interpreted
+expression language to learn, no world-rebuild distribution to maintain,
+and existing ecosystem artifacts can be ingested as they are.
 
 > [!IMPORTANT]
-> **Early-stage, pre-1.0, spec-first work.** Specifications and formal
-> models (TLA+, Alloy, Lean) lead the implementation, not the other way
-> around. Expect churn. Concretely, as of this writing: the atom protocol
-> workspace is substantially real but not yet conformance-tested against its
-> own specification; the composition substrate (HTC) is architecture and
-> formal models with a skeleton implementation; the current `eos` Rust
-> implementation is a throwaway scaffold pending re-scope to the atom-DAG
-> architecture; the `ion` frontend has not been extracted from prototype
-> code yet. See [ROADMAP.md](ROADMAP.md) for what's done, what's in
-> progress, and what's planned.
+> **Axios is early-stage and pre-1.0.** It is a specification-first
+> project, and the design is much further along than the code: the
+> scheduler's dispatch theory is mechanically proven in Lean, the atom
+> charter transaction protocol is modeled in TLA+ and Alloy, and the
+> execution-primitive choice
+> ([ADR-0006](docs/adr/0006-execution-as-the-primitive.md)) was settled by
+> measurement rather than preference. The implementation deliberately
+> trails that design: the atom protocol workspace is substantially real
+> but not yet conformance-tested against its own specification; the
+> composition substrate (HTC) is architecture and formal models over a
+> skeleton workspace; the current `eos` code is a scaffold pending
+> re-scope to the atom-DAG architecture; the `ion` frontend has not been
+> extracted from prototype code. [ROADMAP.md](ROADMAP.md) tracks what is
+> done, what is in progress, and what is planned.
 
 ## Architecture
 
