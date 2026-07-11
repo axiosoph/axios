@@ -28,13 +28,14 @@ unmodified build process inside a hermetic view. There is no interpreted
 expression language to learn, no world-rebuild distribution to maintain,
 and existing ecosystem artifacts can be ingested as they are.
 
-The day-to-day tool of the stack, ion, is a **system compositor**, not a
-package manager. A package manager cares about its own ecosystem; a
-compositor cares about the entire formal closure a build needs. Package is
-only the first boundary — then environments, then whole systems — so the
-tool is named by its upper bound. Nix was arguably the first system
-compositor; it never named the category. Axios claims the territory
-deliberately.
+The stack's day-to-day tool, ion, is a **system compositor**, not a
+package manager, and not a rival to one. A package manager cares about its
+own ecosystem; a compositor cares about the entire formal closure a build
+needs. Package is only the first boundary, then environments, then whole
+systems, so the tool is named by its upper bound. It works a layer above
+the package managers it meets, not in their place: a `Cargo.lock` is still
+useful, just not complete, and the compositor adopts it as one piece of
+the whole.
 
 > [!IMPORTANT]
 > **Axios is early-stage and pre-1.0.** It is a specification-first
@@ -56,7 +57,7 @@ deliberately.
 
 ```
 L5  Plugins    Plugin crates extending ion (future)
-L4  ion/       Frontend: CLI, manifests, resolution
+L4  ion/       System compositor: CLI, manifests, resolution
 L3  eos/       Engine: builds, stores, scheduling
 L2  HTC        Build-execution & composition substrate: CAS, compositions,
                 interface manifests, build records, fetch-proxy execution,
@@ -82,7 +83,7 @@ and [ADR-0006](docs/adr/0006-execution-as-the-primitive.md) for the current
 composition-substrate and execution-model decisions, and the
 [formal layer model](docs/models/publishing-stack-layers.md) for validated
 trait-boundary properties. [ROADMAP.md](ROADMAP.md) is the authoritative
-source for what each layer's current implementation status is.
+source for each layer's current implementation status.
 
 ## Where to go deeper
 
@@ -116,9 +117,8 @@ monorepo:
   implemented by eos's executor trait today; the substrate itself (hermetic
   builder, analyzers, composer) is planned work — see
   [ROADMAP.md](ROADMAP.md).
-- **[ion/](ion/)** — the reference frontend (L4, not yet extracted from
-  prototype code). The system compositor a user actually drives: CLI,
-  dependency resolution, the concrete `atom.toml`
+- **[ion/](ion/)** — the system compositor (L4, not yet extracted from
+  prototype code): CLI, dependency resolution, the concrete `atom.toml`
   manifest, and dev workspace management.
 - **`alurl`** (standalone crate) — structure-preserving URL alias detection
   and expansion.
