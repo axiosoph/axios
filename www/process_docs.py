@@ -18,7 +18,7 @@ def rewrite_links(text, section):
             return match.group(0)
 
         # Map uncompiled directories to GitHub to avoid broken links
-        if "charters/" in url_part or "models/tla/" in url_part or "models/lean/" in url_part:
+        if "models/tla/" in url_part or "models/lean/" in url_part:
             clean_part = url_part
             while clean_part.startswith("../"):
                 clean_part = clean_part[3:]
