@@ -4,23 +4,28 @@ Axios builds software the way upstream already builds it — upstream's own
 build, inside a cryptographic closure. An **atom** is a signed,
 content-addressed snapshot of sources, manifest, and lock: build _intent_.
 A **composition** binds conventional names to content digests, Merkle-rooted
-and signed — the closure object, and the successor to a derivation's output
-closure. A **view** is a composition mounted at runtime. The one function is
+and signed — the closure object, successor to a derivation's output closure.
+A **view** is a composition mounted at runtime. The one function is
 `build(atom closure, toolchain composition, action params) → output tree`,
 executed by upstream's own, unmodified build process inside a materialized
 FHS view; its result is analyzed into an **interface manifest**
 (provides/requires) rather than trusted by convention. There is no
-interpreted expression language and no world-rebuild distro. See
-[ADR-0005](docs/adr/0005-hermetic-transactional-composition.md) and
-[htc-sad.md](docs/architecture/htc-sad.md) for the full architecture — this
-is the target design; the crate inventory below reflects what is actually
-implemented today.
+interpreted expression language, no `nixpkgs`-equivalent package corpus, and
+no world-rebuild distro.
 
-Concretely, today's implementation is organized as three independent Cargo
-workspaces (plus one small standalone utility crate) inside a shared
-monorepo.
+> [!IMPORTANT]
+> **Early-stage, pre-1.0, spec-first work.** Specifications and formal
+> models (TLA+, Alloy, Lean) lead the implementation, not the other way
+> around. Expect churn. Concretely, as of this writing: the atom protocol
+> workspace is substantially real but not yet conformance-tested against its
+> own specification; the composition substrate (HTC) is architecture and
+> formal models with a skeleton implementation; the current `eos` Rust
+> implementation is a throwaway scaffold pending re-scope to the atom-DAG
+> architecture; the `ion` frontend has not been extracted from prototype
+> code yet. See [ROADMAP.md](ROADMAP.md) for what's done, what's in
+> progress, and what's planned.
 
-## Layer model
+## Architecture
 
 ```
 L5  Plugins    Plugin crates extending ion (future)
@@ -33,56 +38,67 @@ L1  atom/      Protocol: identity, addressing, publishing
 L0  Cyphr      Cryptographic substrate (external; future)
 ```
 
-Each layer depends only on the layers below it. See
-[ADR-0001](docs/adr/0001-monorepo-workspace-architecture.md) for the
-original architectural rationale, [ADR-0005](docs/adr/0005-hermetic-transactional-composition.md)
-for the L2/HTC layer insertion and renumbering, and the
-[formal model](docs/models/publishing-stack-layers.md) for validated
-trait boundary properties.
+Each layer depends only on the layers below it; a higher layer never imports
+a lower layer's implementation. L2 (HTC) replaces the traditional
+evaluator-and-derivation pipeline entirely: there is no evaluation stage,
+and eos schedules a DAG of atoms read directly off dependency locks, not a
+DAG of expressions an evaluator produced. Execution itself — not build
+specifically — is the substrate's dynamic primitive: build, test,
+fetch-discovery, and runtime-closure capture are policy variants of one
+underlying execute operation, detailed in
+[ADR-0006](docs/adr/0006-execution-as-the-primitive.md).
 
-## Workspaces
+See [ADR-0001](docs/adr/0001-monorepo-workspace-architecture.md) for the
+original workspace rationale, [ADR-0005](docs/adr/0005-hermetic-transactional-composition.md)
+and [ADR-0006](docs/adr/0006-execution-as-the-primitive.md) for the current
+composition-substrate and execution-model decisions, and the
+[formal layer model](docs/models/publishing-stack-layers.md) for validated
+trait-boundary properties. [ROADMAP.md](ROADMAP.md) is the authoritative
+source for what each layer's current implementation status is.
 
-**[atom/](atom/)** — The protocol library. Identity, addressing,
-publishing, and the abstract trait surface. Ecosystem-agnostic.
+## Where to go deeper
 
-**[eos/](eos/)** — The build-scheduling engine. Reads a pre-coarsened
-atom-DAG off locks and dispatches build actions to executor workers
-implementing HTC's build-execution contract; maintains the action-id
-cache and the shared artifact store. Receives locked dependencies from
-ion; does not perform resolution.
+- **[ROADMAP.md](ROADMAP.md)** — the plan to a working MVP, milestone by
+  milestone, with status and dependencies.
+- **[docs/adr/](docs/adr/)** — Architecture Decision Records: the "why"
+  behind each major design turn.
+- **[docs/architecture/](docs/architecture/)** — Software Architecture
+  Documents (SADs) per layer: the full elaboration of each ADR's decisions.
+- **[docs/specs/](docs/specs/)** — normative specifications (BCP 14
+  constraint language) for the atom protocol, eos scheduler, ion resolution,
+  and related surfaces.
+- **[docs/models/](docs/models/)** — formal models: TLA+ (temporal safety),
+  Alloy (structural assertions), and Lean (mechanically verified scheduling
+  theorems).
 
-**[ion/](ion/)** — The reference frontend. CLI, dependency resolution,
-the concrete `ion.toml` manifest, and dev workspace management.
+## Repository layout
 
-## Crates
+Three independent Cargo workspaces, one skeleton workspace, one standalone
+utility crate, and development tooling under `tools/`, inside a shared
+monorepo:
 
-| Crate          | Workspace    | Responsibility                                                          |
-| :------------- | :----------- | :---------------------------------------------------------------------- |
-| `atom-id`      | atom         | Identity primitives: Anchor, Label, AtomId (the `(anchor, label)` pair) |
-| `atom-uri`     | atom         | URI parsing, alias-aware resolution                                     |
-| `atom-core`    | atom         | Protocol traits: AtomSource, AtomStore, Manifest, etc.                  |
-| `atom-git`     | atom         | Git backend: implements AtomRegistry + AtomStore                        |
-| `eos-core`     | eos          | BuildEngine trait with plan/apply + associated types                    |
-| `eos-proto`    | eos          | Cap'n Proto wire schema and generated bindings                          |
-| `eos-snix`     | eos          | Slated for removal (evaluator eradicated, ADR-0006 §3)                  |
-| `eos-daemon`   | eos          | Scheduler, executor worker pool, RPC server                             |
-| `eos`          | eos          | Orchestration: scheduling, action-id cache, artifact store              |
-| `ion-manifest` | ion          | Concrete ion.toml format, Compose system                                |
-| `ion-resolve`  | ion          | SAT resolver, dependency graph                                          |
-| `ion-lock`     | ion          | Lock schema and (de)serialization; `DepMap` keyed by `AtomId`           |
-| `ion-eos`      | ion          | Bridge: client interface to the eos daemon over Cap'n Proto             |
-| `htc-comp`     | htc          | Composition primitive types + law-tested merge monoid (skeleton)        |
-| `htc-exec`     | htc          | Execution primitive types + executor trait (skeleton)                   |
-| `ion-cli`      | ion          | CLI, build dispatch, dev workspace management                           |
-| `alurl`        | (standalone) | Structure-preserving URL alias detection and expansion                  |
+- **[atom/](atom/)** — the protocol library (L1). Identity, addressing,
+  publishing, and the abstract trait surface. Ecosystem-agnostic.
+- **[eos/](eos/)** — the build-scheduling engine (L3). Reads a
+  pre-coarsened atom-DAG off locks and dispatches build actions to executor
+  workers implementing HTC's build-execution contract. Receives locked
+  dependencies from ion; does not perform resolution itself.
+- **[htc/](htc/)** — the composition substrate (L2), currently a skeleton
+  workspace carrying model-derived types. Its build-execution contract is
+  implemented by eos's executor trait today; the substrate itself (hermetic
+  builder, analyzers, composer) is planned work — see
+  [ROADMAP.md](ROADMAP.md).
+- **[ion/](ion/)** — the reference frontend (L4, not yet extracted from
+  prototype code). CLI, dependency resolution, the concrete `ion.toml`
+  manifest, and dev workspace management.
+- **`alurl`** (standalone crate) — structure-preserving URL alias detection
+  and expansion.
 
-L2/HTC has a landed ADR, SAD, and formal models, plus a skeleton
-workspace (`htc/`) carrying the model-derived types (see the layer
-model above); its build-execution contract is implemented by `eos`'s
-executor trait today.
+Crates and dependency layouts evolve; use `cargo metadata` or the root
+`Cargo.toml` to see the live set rather than relying on a static list here.
 
 ## License
 
-This project is currently under an interim restrictive license while
-the final open licensing terms are being determined. See [LICENSE](LICENSE)
-for details.
+This project is currently under an interim restrictive license while the
+final open licensing terms are being determined. See [LICENSE](LICENSE) for
+details.
