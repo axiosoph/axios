@@ -332,7 +332,7 @@ manual invocation, or a future `eos daemon start` command).
 
 **[daemon-discovery-vN]**: In future versions, ion MAY support
 additional discovery mechanisms: DNS-SD for local network daemons,
-explicit configuration in `ion.toml`, or mDNS for ad-hoc clusters.
+explicit configuration in `atom.toml`, or mDNS for ad-hoc clusters.
 These mechanisms are NOT constrained by this spec; they will be
 specified when implemented. The v1 Unix socket path MUST remain
 supported as the default fallback.
@@ -621,7 +621,7 @@ scheduling semantics.
 ### Forbidden States
 
 **[no-manifest-leakage]**: Eos MUST NOT read or depend on the
-`ion.toml` manifest of the root atom. All information eos needs is
+`atom.toml` manifest of the root atom. All information eos needs is
 derived from the lock file and transmitted as structured `eos-core`
 types. If eos needs data not present in the structured build request,
 that is a signal that either the lock schema or the `eos-core`
@@ -780,7 +780,7 @@ The `[compose.args]` table flows from the manifest through the lock
 file and protocol to the backend evaluator:
 
 ```
-ion.toml              atom.lock             ion-eos (bridge)            EosDaemon.submitBuild()     EvalRequest
+atom.toml              atom.lock             ion-eos (bridge)            EosDaemon.submitBuild()     EvalRequest
 ─────────             ─────────             ────────────────            ───────────────────────     ───────────
 [compose]             [compose.args]        ComposerConfig +            evalArgs: List(KeyValue)    eval_args: Vec<(String,String)>
   args.system =  ──▸  system = "x86_64" ──▸ eval_args translation  ──▸ {key:"system",           ──▸ [("system","x86_64-linux")]

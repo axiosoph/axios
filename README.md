@@ -28,6 +28,14 @@ unmodified build process inside a hermetic view. There is no interpreted
 expression language to learn, no world-rebuild distribution to maintain,
 and existing ecosystem artifacts can be ingested as they are.
 
+The day-to-day tool of the stack, ion, is a **system compositor**, not a
+package manager. A package manager cares about its own ecosystem; a
+compositor cares about the entire formal closure a build needs. Package is
+only the first boundary — then environments, then whole systems — so the
+tool is named by its upper bound. Nix was arguably the first system
+compositor; it never named the category. Axios claims the territory
+deliberately.
+
 > [!IMPORTANT]
 > **Axios is early-stage and pre-1.0.** It is a specification-first
 > project, and the design is much further along than the code: the
@@ -58,7 +66,8 @@ L0  Cyphr      Cryptographic substrate (external; future)
 ```
 
 Each layer depends only on the layers below it; a higher layer never imports
-a lower layer's implementation. L2 (HTC) replaces the traditional
+a lower layer's implementation. L2 — **Hermetic Transactional
+Composition** (HTC) — replaces the traditional
 evaluator-and-derivation pipeline entirely: there is no evaluation stage,
 and eos schedules a DAG of atoms read directly off dependency locks, not a
 DAG of expressions an evaluator produced. Execution itself — not build
@@ -108,7 +117,8 @@ monorepo:
   builder, analyzers, composer) is planned work — see
   [ROADMAP.md](ROADMAP.md).
 - **[ion/](ion/)** — the reference frontend (L4, not yet extracted from
-  prototype code). CLI, dependency resolution, the concrete `ion.toml`
+  prototype code). The system compositor a user actually drives: CLI,
+  dependency resolution, the concrete `atom.toml`
   manifest, and dev workspace management.
 - **`alurl`** (standalone crate) — structure-preserving URL alias detection
   and expansion.

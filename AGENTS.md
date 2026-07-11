@@ -151,7 +151,7 @@ Each workspace is independent — run commands from the workspace root:
 
 | Crate          | Purpose                                                     |
 | :------------- | :---------------------------------------------------------- |
-| `ion-manifest` | `ion.toml` manifest parsing                                 |
+| `ion-manifest` | `atom.toml` manifest parsing                                |
 | `ion-resolve`  | Dependency resolution (SAT solver)                          |
 | `ion-lock`     | Lock schema and (de)serialization                           |
 | `ion-eos`      | Bridge: client interface to the eos daemon over Cap'n Proto |

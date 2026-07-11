@@ -47,7 +47,7 @@ pub use atom_id::{
 /// Minimal package metadata.
 ///
 /// Every package format defines its own manifest (e.g., `Cargo.toml`,
-/// `package.json`, `ion.toml`). The atom protocol requires exactly
+/// `package.json`, `atom.toml`). The atom protocol requires exactly
 /// two properties — everything else is ecosystem-specific.
 ///
 /// Spec constraint: `[manifest-minimal]`.

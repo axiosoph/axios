@@ -37,7 +37,7 @@ protocol ordering, and implementation interchangeability.
 | Concurrency model (parallel builds)       | Git object internals (atom-git impl)                                 |
 | Error recovery asymmetry (plan vs apply)  | Nix/snix evaluation internals (removed with the evaluator, ADR-0006) |
 | Static ontology (olog)                    | Dependency resolution (SAT solver, locks)                            |
-| Scheduling correctness (bisimulation)     | Manifest format (ion.toml parsing)                                   |
+| Scheduling correctness (bisimulation)     | Manifest format (atom.toml parsing)                                  |
 |                                           | Network topology (distributed eos, peers)                            |
 
 The model's coalgebras treat trait invocations as abstract observations

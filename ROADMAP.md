@@ -142,7 +142,9 @@ existing specification is comparatively low risk.
 ## M2 — Ion extraction
 
 **Goal:** Lift the dependency-resolution and lock-file code proven out in
-earlier prototype work into clean, specification-conformant crates.
+earlier prototype work into clean, specification-conformant crates. Ion is
+the stack's user-facing **system compositor** (see
+[README.md](README.md)); this milestone gives it a real body.
 
 **Status: Partial.** Lock schema v2 types and a canonical encoder stub are
 defined, along with a conformance corpus and validator. Extraction of the
