@@ -58,7 +58,7 @@ independent Cargo workspace with path-based inter-workspace deps.
 For architecture details, see:
 
 - [ADR-0001](docs/adr/0001-monorepo-workspace-architecture.md)
-- [Charter](docs/charters/decentralized-publishing-stack.md)
+- [Roadmap](ROADMAP.md)
 - [Formal Model](docs/models/publishing-stack-layers.md)
 
 ---
@@ -76,7 +76,7 @@ For architecture details, see:
 | **AtomId**             | The abstract pair `(anchor, label)` — the identity, not a hash of it. Atoms are referenced by `publish_czd`; lock entries are `(set, label) → {version, publish_czd}`. There is no hashed atom id.                     | hashed atom id, atom_id-as-digest |
 | **Atom-set**           | Collection of atoms sharing a common anchor (a single repository)                                                                                                                                                      | (none)                            |
 | **Label**              | Human-readable name for an atom within an atom-set                                                                                                                                                                     | Name                              |
-| **AtomDigest**         | Hash-algorithm-tagged content digest (`{alg, cad}`); wire form `<token>:<encoding>`, per-algorithm-conventional encoding (base64url-unpadded for the coz-native SHA family, lowercase hex for git SHA-1 and BLAKE3)      | Digest, Blake3Hash                |
+| **AtomDigest**         | Hash-algorithm-tagged content digest (`{alg, cad}`); wire form `<token>:<encoding>`, per-algorithm-conventional encoding (base64url-unpadded for the coz-native SHA family, lowercase hex for git SHA-1 and BLAKE3)    | Digest, Blake3Hash                |
 | **Plan**               | Engine-specific build recipe (`BuildEngine::Plan` associated type); for the primary executor this is the atom action — `(atom_czd_closure_root, toolchain_composition_root, action_params)`, identified by `action_id` | derivation, drv                   |
 | **Output**             | Engine-specific build result (`BuildEngine::Output` associated type)                                                                                                                                                   | build result                      |
 | **Artifact**           | Content-addressed blob in an artifact store                                                                                                                                                                            | (none)                            |
