@@ -114,7 +114,7 @@ graph TB
 | **Identity**  | `AtomId = (anchor, label)`; anchor = `czd(charter₀)`, the founding charter's coz digest | Key material, signature primitives (Coz/Cyphr)                                  |
 | **Ownership** | claim/publish protocol; claim/publish chains; the owner→identity binding                | Owner identity _systems_ (Coz `tmb`, Cyphr `PR`) — `Owner` is opaque            |
 | **Storage**   | git-object encoding; registry + store ref layout; ingest                                | Build execution, artifact store (L3)                                            |
-| **Discovery** | object-free ref advertisement; set→mirrors indirection                                  | Version _semantics_ (`VersionScheme` is a trait; ecosystem adapters live above) |
+| **Discovery** | object-free ref advertisement; set→mirrors indirection                                  | Version _semantics_ (`VersionScheme` is a trait; its per-ecosystem dialects are internal plugins above L1, §1.1) |
 | **Lock**      | the atom-required lock contribution (`[lock-entry-sufficient]`)                         | The lock file as a whole, resolution, plugin/non-atom deps (L4)                 |
 
 ### 1.4 Layer Discipline
@@ -508,8 +508,8 @@ Out of scope for the atom layer:
 - **Dependency resolution, the lock file as a whole, plugin/non-atom deps** (L4/ion).
 - **Key management and signing primitives** (Cyphr/Coz) — `Owner` and `czd` are
   opaque to atom.
-- **Concrete version semantics** — `VersionScheme` is a trait; ecosystem adapters are
-  above L1.
+- **Concrete version semantics** — `VersionScheme` is a trait; its per-ecosystem
+  dialects are internal plugins of the single implementation, above L1 (§1.1).
 
 ## Appendix A: Terminology
 
