@@ -93,9 +93,15 @@ own content digests with the storage backend's content identifiers (for
 example, a git object ID). That review produced concrete groundwork this
 milestone consumes directly:
 
-- A formal statement of the boundary between protocol identity and backend
-  identity (a "typed seam" law), to be encoded in the atom backend contract
-  before or during this milestone's conformance work.
+- The atom layer's formal foundations, since landed as committed documents
+  this milestone consumes directly: the atom protocol-plane model
+  ([docs/models/atom-model.md](docs/models/atom-model.md) — identity,
+  metadata placement, signature anchoring, and the declared reproducibility
+  mode) and the atom backend contract
+  ([docs/specs/atom-backend-contract.md](docs/specs/atom-backend-contract.md)
+  — the "typed seam" law and thirteen further obligations any storage
+  backend must satisfy, with an honest per-obligation gap table for the
+  git backend).
 - Charter conformance test corpora with a documented violation inventory
   (the lock schema v2 work from the same review belongs to the ion
   milestone below).
@@ -106,8 +112,24 @@ milestone consumes directly:
 
 - Conformance-test the `atom-git` and `atom-core` crates against the current
   specifications: the pair-only `AtomId`, two-value lock entries, blake3-of-
-  publish-digest store keying, and name-anchored acquisition with moved-tip
-  warning semantics.
+  publish-digest store keying, name-anchored acquisition with moved-tip
+  warning semantics, and the publish-time reproducibility mode field.
+- Build the backend-conformance battery: an executable test suite that
+  checks a storage backend against every obligation of the
+  [atom backend contract](docs/specs/atom-backend-contract.md), turning the
+  contract's per-obligation discharge claims into machine-checked verdicts.
+  Its first and primary subject is the git backend itself — the contract's
+  gap table enumerates exactly the rows it must close. This battery is an
+  MVP acceptance artifact, and it is what a future non-git backend runs to
+  earn conformance.
+- Design the trust-model / acceptance-policy specification: trust-anchor
+  configuration, standing divergence findings and their adjudication exits,
+  and cache-service refusal hooks. Deliberately promoted from post-MVP to
+  MVP scope — trust is a first-class part of the model, not an afterthought,
+  and the MVP must demonstrate it. The atom-side semantics (the declared
+  reproducibility mode and its violation classification) are already fixed
+  by the protocol-plane model; this spec supplies the consumer-side policy
+  language the execution model delegates.
 - Open the storage/ingest layer early rather than late — the identity/backend
   conflation above was systemic, and `GitStore::ingest`'s current fix is
   known-incomplete (tracked in [issue #64](https://github.com/axiosoph/axios/issues/64)).
@@ -121,11 +143,13 @@ milestone consumes directly:
 
 **Open items:**
 
-- Whether this milestone's formalization scope should explicitly include
-  closure-root identity (the digest that anchors an atom's dependency
-  closure) or treat it as a named downstream obligation handled later — both
-  are the same class of identity problem at different scales, and deciding
-  which milestone owns it is unresolved.
+- ~~Whether this milestone's formalization scope should explicitly include
+  closure-root identity~~ — resolved by the protocol-plane model: an atom's
+  dependency closure is a *projection* of its signed content (the lock
+  determines it), not an independent identity-bearing object, so there is
+  no separate closure-root identity to formalize; the closure root exists
+  only as an input to action identity, exactly as the execution model
+  already defines it.
 - The git backend's storage encoding and ref layout for charter
   transactions — the signed founding declaration whose content digest is
   the atom-set's anchor — is not yet specified
@@ -136,8 +160,10 @@ milestone consumes directly:
   only the 32-byte case — a prior digest bug survived specifically because
   every existing fixture was 32 bytes.
 
-**Estimated effort:** 2–4 weeks once started; conformance work against an
-existing specification is comparatively low risk.
+**Estimated effort:** 3–6 weeks once started; conformance work against an
+existing specification is comparatively low risk, and the added
+trust-model specification is design work with its atom-side semantics
+already fixed.
 
 ## M2 — Ion extraction
 
@@ -280,14 +306,27 @@ milestone, but guided throughout by an existing proof.
 - The complete flow: `add` → resolve → lock → build → analyze → compose →
   `run`, exercised against a small real project with a handful of upstream
   dependencies.
+- The trust story, demonstrated end to end — the MVP is a substantial
+  representation of the model, and trust is deliberately first-class in it:
+  - A zero-trust round trip: publish an atom, then resolve and fully verify
+    it (charter → claim → publish chain) from nothing but the source and
+    the consumer's own trust anchors.
+  - The backend-conformance battery (from the atom-stabilization milestone)
+    green against the git backend.
+  - A divergence alarm: an atom published under the declared-reproducible
+    mode receives a conflicting build record from a trusted builder; the
+    contradiction stands as a visible finding, cache service for the
+    affected action is refusable by policy, and the adjudication exits are
+    observable on the atom's own chain.
 - Seed one upstream toolchain so the pipeline has something concrete to
   build with.
 - Golden-path documentation written for a reader with no prior context on
   this project, and tested against that claim directly.
 
-**Estimated effort:** 3–5 weeks; the seams it integrates are already typed
+**Estimated effort:** 4–6 weeks; the seams it integrates are already typed
 by the time this milestone starts, which is what keeps the risk low-to-
-medium rather than high.
+medium rather than high. The trust demonstrations add scope but not
+novelty — they exercise machinery the earlier milestones build.
 
 ## Post-MVP horizon
 
@@ -329,10 +368,14 @@ Strategic exclusions — deliberate, and each for a stated reason:
   reimplementation of exploratory code that preceded the current
   architecture, and some earlier functionality may not survive the
   restructuring.
-- **A backend-agnostic transport specification beyond trait signatures.**
-  The atom protocol is backend-agnostic by design, but specifying abstract
-  transport or storage semantics beyond what the traits already require is
-  deferred until a second (non-git) backend surfaces concrete requirements.
+- **A second (non-git) backend, and transport specification beyond it.**
+  The storage-semantics half of backend agnosticism is no longer deferred:
+  the [atom backend contract](docs/specs/atom-backend-contract.md) now
+  specifies what any backend must provide, and the conformance battery
+  makes it checkable. What remains deferred is *building* a second backend,
+  and any wire/transport-protocol specification beyond what the contract
+  and traits already require — both wait until a concrete non-git backend
+  effort surfaces real requirements.
 - **Cross-ecosystem adapters beyond the extension traits.** Concrete
   adapters for Cargo, npm, or other package ecosystems arrive when a
   concrete ecosystem needs one; the manifest and version-scheme traits are

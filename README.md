@@ -41,8 +41,11 @@ the whole.
 > **Axios is early-stage and pre-1.0.** It is a specification-first
 > project, and the design is much further along than the code: the
 > scheduler's dispatch theory is mechanically proven in Lean, the atom
-> charter transaction protocol is modeled in TLA+ and Alloy, and the
-> execution-primitive choice
+> charter transaction protocol is modeled in TLA+ and Alloy, the atom
+> layer's semantics and its storage-backend obligations now have their
+> own formal treatments ([docs/models/atom-model.md](docs/models/atom-model.md),
+> [docs/specs/atom-backend-contract.md](docs/specs/atom-backend-contract.md)),
+> and the execution-primitive choice
 > ([ADR-0006](docs/adr/0006-execution-as-the-primitive.md)) was settled by
 > measurement rather than preference. The implementation deliberately
 > trails that design: the atom protocol workspace is substantially real
