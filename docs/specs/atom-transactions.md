@@ -81,9 +81,13 @@ in the Coz `czd`.
 
 The atom protocol is intentionally agnostic to package formats, versioning
 schemes, and build systems. These concerns are the responsibility of
-**ecosystem adapters** — implementations that bridge between the abstract
-protocol and concrete package ecosystems (e.g., Cargo crates, npm packages,
-ion recipes).
+**ecosystem adapters** — internal plugins of the single atom
+implementation that read a wrapped ecosystem's conventions (e.g., Cargo
+crates, npm packages) for version dialects and fetch enumeration. Atom
+sits ABOVE language package managers as the composition-unit layer
+(atom-sad.md §1.1); adapters are not peer integrations that ecosystems
+implement — they are how the one implementation understands what it
+wraps.
 
 ### Manifest
 
@@ -110,11 +114,18 @@ Backend implementations handle storage and retrieval of claims, publishes,
 and atom content. The atom protocol defines what MUST be stored and
 retrieved, not how.
 
+The formal elaboration of these lists — the algebraic signature, laws,
+and typed seam any conforming backend must provide — is
+[atom-backend-contract.md](atom-backend-contract.md); the lists below
+are the protocol-facing summary.
+
 A backend MUST:
 
 1. Store and retrieve claim `CozMessage`s by `AtomId`.
 2. Store and retrieve publish `CozMessage`s by `(AtomId, version)`.
-3. Derive the anchor from the source (backend-specific).
+3. Resolve and verify the founding charter from the source, so the
+   consumer can check `anchor == czd(charter₀)` (`[anchor-resolvable]`;
+   the anchor is never derived from backend state).
 4. Enforce version uniqueness per `(AtomId, claim czd)` pair.
 5. Support multiple claims for the same `AtomId` by different owners.
 
@@ -356,9 +367,12 @@ TYPE  ClaimPayload = {
   -- where a matching type exists (e.g., "cargo", "npm", "pypi") for
   -- interoperability with SBOM and supply-chain tooling. Custom type
   -- strings MAY be used for ecosystems not yet in the PURL registry.
-  -- Manifest discovery is implicit — the ecosystem adapter infers it
-  -- from `pkg` (e.g., "cargo" → Cargo.toml at tree root). The
-  -- protocol does not prescribe manifest format or location.
+  -- `pkg` names which upstream ecosystem this atom WRAPS: it selects
+  -- the version dialect (VersionScheme) and the fetch adapter for the
+  -- wrapped ecosystem's lockfile. The atom's own manifest is the atom
+  -- manifest; ecosystem files (Cargo.toml, Cargo.lock, ...) are build
+  -- inputs inside the atom's content, not protocol surfaces. The
+  -- protocol does not prescribe their format or location.
 
 TYPE  PublishPayload = {
         alg:     Alg,
@@ -366,6 +380,8 @@ TYPE  PublishPayload = {
         claim:   Czd,       -- czd of authorizing claim
         dig:     Vec<u8>,   -- atom snapshot hash (the published artifact)
         label:   Label,
+        mode?:   "reproducible" | "witnessed",  -- reproducibility mode
+                            -- ([publish-mode]; absent = "witnessed")
         now:     u64,
         path:    String,    -- subdir in source content tree
         src:     Vec<u8>,   -- source revision hash (provenance)
@@ -617,6 +633,23 @@ atom's content resides. This MUST be the exact path needed to
 navigate from the source revision's root to the atom's subtree.
 `VERIFIED: rustc (path: String field in PublishPayload)`
 
+**[publish-mode]**: The OPTIONAL root-level `mode` field of a
+`PublishPayload` declares the atom's reproducibility mode
+(atom-model.md §6): `"reproducible"` asserts that every action the
+publish denotes yields `record_core`-equal records at fixed
+`action_id`; `"witnessed"` (the default — an absent field MUST be
+read as `"witnessed"`) asserts nothing beyond witness accumulation.
+The mode is a protocol field and MUST NOT be nested under `meta`
+(root keys are reserved for protocol fields,
+`[publish-payload-extensible]`). Mode transitions — promotion or
+demotion, both signed — occur ONLY as new tags appended to the
+existing publish chain (`[publish-update-transition]` in the
+backend spec), NEVER as a new version: a mode transition changes
+no immutable payload field, so `[no-duplicate-version]`'s
+same-version rejection does not apply to it and MUST NOT be
+weakened to permit it — the chain append is the lawful path.
+`VERIFIED: unverified`
+
 **[rawversion-opaque]**: `RawVersion` MUST be treated as an opaque
 string by the protocol layer. Semantic interpretation MUST be
 deferred to a `VersionScheme` implementor.
@@ -863,7 +896,8 @@ associated types on traits.
 
 **[publish-payload-extensible]**: The publish `CozMessage` payload
 MAY contain additional user-defined fields beyond the required set
-(`anchor`, `label`, `claim`, `dig`, `src`, `path`, `version`). For
+(`anchor`, `label`, `claim`, `dig`, `src`, `path`, `version`) and
+the optional protocol field `mode` (`[publish-mode]`). For
 example, a reproducible-build artifact hash MAY be included to
 cryptographically tie the final build artifact to the source.
 Additional fields are signed as part of the `CozMessage` and
@@ -1098,6 +1132,7 @@ _The rows added or amended for the charter constraints are marked (amended)._
 | uri-not-metadata              | rustc            | **pass** | URI type absent from payload structs                                      | 1     |
 | trait-signature-pure          | rustc            | pending  | No backend types in trait signatures                                      | 3     |
 | publish-payload-extensible    | unit-test        | pending  | Extra fields in payload round-trip                                        | 3     |
+| publish-mode                  | unit-test        | pending  | Absent mode reads witnessed; transition = chain append, never new version | 3     |
 | fs-source-contract            | integration-test | pending  | FsSource discover+resolve, no claim/pub                                   | 4     |
 
 ## Implications
@@ -1116,3 +1151,10 @@ This specification explicitly does NOT define:
   (`Anchor := czd(charter₀)`) is now fixed and backend-agnostic; only
   how a backend interprets the charter's `src` field remains
   backend-specific.
+- **Fact-append mechanics**: atom-model.md §4 states the governing
+  laws for post-publish facts on the metadata chain — builder≠owner
+  signer authorization for appended facts, and the fact-append
+  carve-out (routine fact appends must not present as
+  ownership-relevant events). The concrete fact-kind encoding and
+  authorization mechanism remain registered design work (atom-sad.md
+  §9 gap 5), not defined here.
