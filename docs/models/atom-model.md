@@ -411,30 +411,34 @@ redesign concern, not a law of this plane.
 Recorded here so the reconciliation sweep has a manifest; none are
 performed by this document:
 
-- **execution-model.md §9**: item 10 (environments-as-atoms) →
-  RATIFIED yes, per §7; item 7 → note that the atom-side acceptance
-  semantics (mode, violation, promotion) is specified by this model;
-  item 13 → note §7's axis separation (kinds vs the two stratum axes);
-  register a new open question — constraint _authoring_ for declared
-  runtime dependencies (§2), directed at the ion UX design pass that
-  precedes ion implementation.
-- **atom-transactions.md**: the reproducibility mode as a
-  protocol-defined publish field (§6) — root-level protocol namespace,
-  not `meta.*` (root keys are reserved for protocol fields; the mode
-  is one), default `witnessed`, with its own invariant and its
-  `[no-duplicate-version]` interaction stated (a mode transition is a
-  new tag on the existing chain, never a new version); the fact-append
-  signer-authorization and carve-out obligations (§4).
-- **git-storage-format.md**: `[tag-chain-semantic-immutable]` — the
-  mode joins the chain-_variable_ class (it is promotable/demotable
-  per §6), which the constraint's variance list must name explicitly;
+- **execution-model.md §9** _(landed 2026-07-12)_: item 10
+  (environments-as-atoms) → RATIFIED yes, per §7; item 7 → note that
+  the atom-side acceptance semantics (mode, violation, promotion) is
+  specified by this model; item 13 → note §7's axis separation (kinds
+  vs the two stratum axes); register a new open question — constraint
+  _authoring_ for declared runtime dependencies (§2), directed at the
+  ion UX design pass that precedes ion implementation.
+- **atom-transactions.md** _(landed 2026-07-12 — `[publish-mode]`;
+  the fact-append MECHANISM remains registered design work)_: the
+  reproducibility mode as a protocol-defined publish field (§6) —
+  root-level protocol namespace, not `meta.*` (root keys are reserved
+  for protocol fields; the mode is one), default `witnessed`, with its
+  own invariant and its `[no-duplicate-version]` interaction stated
+  (a mode transition is a new tag on the existing chain, never a new
+  version); the fact-append signer-authorization and carve-out
+  obligations (§4).
+- **git-storage-format.md** _(landed 2026-07-12)_:
+  `[tag-chain-semantic-immutable]` — the mode joins the
+  chain-_variable_ class (it is promotable/demotable per §6), which
+  the constraint's variance list must name explicitly;
   `[publish-update-transition]` — its permitted reasons (today "key
   revocation or resigning") extend to mode transitions.
-- **atom-sad.md**: §6 gains the plane framing (composite duality,
-  anchoring law); §9 gap 5 narrows from open design to the P12/P13
-  obligations and carve-out convention this model states.
-- **htc-sad.md §6.10**: cite this model as the governing law of the
-  fact-publication channel.
+- **atom-sad.md** _(landed 2026-07-12)_: §6 gains the plane framing
+  (composite duality, anchoring law); §9 gap 5 narrows from open
+  design to the P12/P13 obligations and carve-out convention this
+  model states.
+- **htc-sad.md §6.10** _(landed 2026-07-12)_: cite this model as the
+  governing law of the fact-publication channel.
 
 ## 9. What this model deliberately does not own
 
@@ -446,10 +450,10 @@ performed by this document:
   `[lock-set-charter-head]`); this model cites them as discharged
   obligations, never re-derives them.
 - **Backend mechanics.** How a backend stores transactions, walks
-  chains, and enforces ancestry is the backend contract's subject — a
-  companion specification (planned as `docs/specs/atom-backend-contract.md`)
-  axiomatizing what ANY content-addressed VCS must provide to host
-  this plane, with the git backend
+  chains, and enforces ancestry is the subject of the companion
+  [backend contract](../specs/atom-backend-contract.md), axiomatizing
+  what ANY content-addressed VCS must provide to host this plane,
+  with the git backend
   ([git-storage-format](../specs/git-storage-format.md)) as its
   reference instantiation.
 - **Key management and identity frameworks.** Below the plane
