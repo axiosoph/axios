@@ -392,6 +392,18 @@ commitments with a timeline:
   version-level checking the MVP ships with.
 - Canonical, append-only OS-layer compositions with generation switching
   (the territory `bootc`/OSTree-style systems occupy today).
+- Full deployment tracking: a deployment target as a named,
+  atom-anchored succession of system compositions — each deployment a
+  commit on a tracking branch (diffs compose natively; ancestry is
+  hash-committed, so what changed between deployments is never
+  ambiguous), with signed deployment sign-offs on the atom's metadata
+  chain for production targets, and drift between the declared and
+  observed state surfacing through the same divergence machinery the
+  trust model defines. Covers bare-metal deploys, infrastructure-as-code,
+  and cluster-orchestrator declarations (rendered through the export
+  tier). Everything it needs — the publish chain, trial attestations,
+  the export tier, per-name atomic ref updates — is MVP-scoped
+  foundation; the deployment layer itself is deliberately post-MVP.
 - macOS and Windows executors.
 - A capability-runtime (WASI) execution tier.
 - Finer-than-atom action refinement inside eos, for cases where whole-atom
