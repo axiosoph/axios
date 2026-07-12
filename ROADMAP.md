@@ -130,6 +130,33 @@ milestone consumes directly:
   reproducibility mode and its violation classification) are already fixed
   by the protocol-plane model; this spec supplies the consumer-side policy
   language the execution model delegates.
+- State the format-evolution discipline once, normatively, and test it in
+  the conformance battery: which persisted formats (lock, manifest, publish
+  payload, composition, build record) carry version discriminators, the
+  unknown-field tolerance rules consumers MUST follow, and what a consumer
+  does with an unrecognized version. The MVP is the user boundary — after
+  it, the first field addition either breaks old consumers or cannot ship,
+  so this discipline is nearly free now and unpayable later.
+- Fix namespace and fact-kind governance before third-party publication
+  makes collisions permanent: reserved bare names for the core namespace
+  and fact-kind sets, qualified names for third-party extensions. Signed,
+  append-only, decentralized publication means a naming collision can
+  never be rewritten once it exists; this convention costs a paragraph now
+  and is structurally impossible to retrofit. (It also governs the
+  analyzer namespaces the analyzers-and-composer milestone introduces.)
+- Close the backend-identifier hash-strength gap for `dig`/`src` at
+  publish time — the atom-set anchor is already backend-agnostic (the
+  charter's content digest), but these two fields inherit git's SHA-1.
+  Two candidate mechanisms, deciding between them is design work this
+  milestone owns: the metadata re-anchor the backend contract already
+  recommends (record the ingested source's artifact-store digest as an
+  appended fact), or — the preferred direction, pending a feasibility
+  check — re-hashing atom objects in full into a stronger-algorithm
+  object set at publish, plausible because `refs/atom/*` is an orthogonal
+  namespace that never mixes into repository history and the `gix`
+  library now exposes multi-algorithm support. Either way the norm ships
+  with the MVP, so every atom ever published carries the stronger anchor
+  from day one.
 - Open the storage/ingest layer early rather than late — the identity/backend
   conflation above was systemic, and `GitStore::ingest`'s current fix is
   known-incomplete (tracked in [issue #64](https://github.com/axiosoph/axios/issues/64)).
@@ -256,6 +283,20 @@ the fetch proxy, and the licensing seam between this substrate and the
   closure-fault semantics that replace Nix's grep-based closure discovery.
 - The lock's `fetch` plugin type, consuming M2's plugin mechanism and M3's
   fetch-proxy output.
+- Decide the artifact-side digest-succession posture: composition roots and
+  the content-addressed store are bare blake3 today, with no stated story
+  for algorithm succession. The decision (self-describing algorithm
+  discriminators in the identity preimage, or version-bump succession) is
+  one field and one paragraph now; deferred, it is a re-address of every
+  composition root in existence.
+
+**Open item — scheduled design prerequisite, same status as ion's UX
+pass:** the ambient base — the declared residual environment that
+certificates stand on (kernel ABI, dynamic loader) — must be pinned down
+before certificates ship. A certificate is a user-shared artifact; a fuzzy
+ambient set makes it machine-relative in exactly the way this substrate
+exists to prevent, and tightening the definition later invalidates every
+certificate users have already exchanged.
 
 **Exit demo:** swap an ABI-compatible OpenSSL into an existing composition —
 a recorded satisfaction proof, a new composition root, and zero rebuilds.
@@ -285,6 +326,13 @@ starting point.
   implementation.
 - Re-validate scheduling behavior at atom granularity using the existing
   simulator and trace corpus.
+- Preserve the path to the full distributed model: the MVP's single-process
+  deployment must be a natural foundation from which the envisioned
+  distributed scheduling layer can later emerge — the proven theory is
+  already node-agnostic, so the obligation falls on the implementation
+  seams (the executor trait, the record store, witness selection), which
+  must not foreclose it. Building the distributed engine itself remains a
+  post-MVP effort (see Non-goals); not foreclosing it is MVP scope.
 
 **Open item:** a dependency-pin sweep across this project's own build
 manifests should land before this milestone starts — a hermetic-build
@@ -321,7 +369,12 @@ milestone, but guided throughout by an existing proof.
 - Seed one upstream toolchain so the pipeline has something concrete to
   build with.
 - Golden-path documentation written for a reader with no prior context on
-  this project, and tested against that claim directly.
+  this project, and tested against that claim directly — including the
+  honest retraction posture: what yanking or deprecating a published atom
+  means (visibility and resolution semantics) and what it structurally
+  cannot mean (byte erasure) in a content-addressed, mirrored,
+  append-only system. Users learn this at the boundary, not from an
+  incident.
 
 **Estimated effort:** 4–6 weeks; the seams it integrates are already typed
 by the time this milestone starts, which is what keeps the risk low-to-
