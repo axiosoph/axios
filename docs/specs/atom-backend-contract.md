@@ -483,7 +483,11 @@ spec relies on today without stating — each is an amendment item
 
 ## Appendix B: Doc Amendments This Contract Obligates
 
-Recorded for the reconciliation sweep; none performed here:
+Recorded for the reconciliation sweep; none performed here. _(Sweep
+status, 2026-07-12: all git-storage-format, atom-transactions,
+atom-model, and execution-model items below LANDED; the
+`atom_backend_seam.als` model remains OWED — it is verification
+design work, not a mechanical amendment.)_
 
 - **git-storage-format.md, priority correctness amendment**: raise the
   publish-time CAS from SHOULD to MUST — the SHOULD-grade site is a
