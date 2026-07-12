@@ -34,6 +34,14 @@ not a replacement. All constraints in atom-transactions.md apply
 unconditionally. This specification adds git-specific constraints and
 MUST NOT contradict the parent.
 
+**Backend Contract:**
+[atom-backend-contract.md](atom-backend-contract.md) — this
+specification is the **git reference instantiation** of the abstract
+backend contract. Appendix A there maps every `[backend-*]` obligation
+to its discharge site in this document (or honestly names the gap);
+the `[backend-*]` discharge notes on constraints below are the
+receiving ends of that mapping.
+
 **Criticality Tier:** Medium — the git backend is the reference storage
 implementation. Correctness failures affect supply chain integrity, but
 the protocol-level cryptographic guarantees (in atom-transactions.md) are
@@ -311,7 +319,85 @@ by walking the tag chain.
 **[coz-bit-perfect]**: All `CozMessage` JSON stored in git objects
 (commit messages, tag messages) MUST be preserved bit-for-bit. The
 backend MUST NOT reformat, re-serialize, or alter the JSON in any
-way. (Satisfies atom-transactions.md `[backend-bit-perfect]`.)
+way. (Satisfies atom-transactions.md `[backend-bit-perfect]`;
+discharges atom-backend-contract.md `[backend-carriage-bit-perfect]`.)
+`VERIFIED: unverified`
+
+**[odb-immutable]**: The backend MUST treat the object database as
+append-only for protocol objects (charter/claim/atom commits, publish
+tags): a protocol object, once written, MUST NOT be mutated in place,
+and MUST NOT be deleted while protocol-reachable (the protective and
+protocol refs define reachability). Deletion is permitted only through
+garbage collection of protocol-unreachable objects. Git's
+content-addressed object store provides this by construction; the
+constraint makes the reliance explicit rather than implicit.
+(Discharges atom-backend-contract.md `[backend-store-immutable]`.)
+`VERIFIED: unverified`
+
+**[refs-sole-mutable]**: Refs are the backend's ONLY mutable protocol
+state. Objects are immutable (`[odb-immutable]`) and ancestry is
+derived from hash-committed object content
+(`[ancestry-hash-committed]`), so every protocol state transition is
+exactly a refs transaction. Implementations MUST NOT keep protocol
+state in any side store (index files, database tables, packed
+metadata) that can diverge from the refs — such state MAY exist only
+as a cache reconstructible from refs + objects. This is what makes
+liveness-by-reachability, rollback-by-old-ref, and GC arguments
+transfer to the intent store. (Discharges atom-backend-contract.md
+`[backend-refs-sole-mutability]`.)
+`VERIFIED: unverified`
+
+**[ancestry-hash-committed]**: A git ObjectId commits to its entire
+ancestry: a commit's parent OIDs are part of the hashed commit
+preimage, so asserting false ancestry for an existing OID requires a
+hash collision. Every ancestry-dependent check in this spec
+(`[temporal-vector]`, `[no-backdated-src]`,
+`[anchor-vector-authenticity]`) quantifies over THIS parent relation —
+the hash-committed one — never over whatever a query layer happens to
+answer. (Discharges atom-backend-contract.md
+`[backend-ancestry-sound]`.)
+`VERIFIED: unverified`
+
+**[ancestry-query-path]**: Protocol ancestry queries MUST resolve
+parents from hash-committed object content with object replacement
+disabled (`--no-replace-objects` semantics): `refs/replace/*` and
+grafts MUST NOT influence `[temporal-vector]`, `[no-backdated-src]`,
+or `[anchor-vector-authenticity]` checks — replacement rewrites the
+operational parent function without changing the OID, which is
+exactly the divergence `[ancestry-hash-committed]` exists to exclude.
+Ancestry verification MUST NOT be attempted against a depth-limited
+(shallow) clone: a shallow boundary is indistinguishable from a true
+root to a naive walk, so the check MUST fail closed rather than pass;
+treeless fetching (`tree:0`, `[temporal-vector]`) is the sanctioned
+minimal mode — it limits blobs, never ancestry.
+`VERIFIED: unverified`
+
+**[czd-oid-disjoint]**: The seam law's git instance
+(atom-backend-contract.md `[backend-seam-typed]`): `Czd` values and
+git `ObjectId`s are disjoint types. The only OID-typed protocol
+identities are the payload fields `dig` and `src` and the atom
+snapshot's `src` extra header; every other protocol identity (anchor,
+claim czd, publish czd) is a coz digest. Implementations MUST
+represent the two as distinct types such that any czd↔OID comparison
+is rejected at the type level. Ref paths are typed encodings, not free
+strings: the identity-bearing segments come in three families —
+czd-hex (`refs/atom/claims/d/{claim_czd}`, the `{anchor}` segment of
+dev refs), blake3-hex (`refs/atom/d/{blake3(publish_czd)}`), and
+oid-hex (`refs/atom/src/{oid}`) — each family renders exactly one
+sort, parsing MUST rehydrate the segment to that sort, and comparison
+of raw segments across families is ill-typed.
+`VERIFIED: unverified`
+
+**[oid-hash-inheritance]**: `dig` and `src` inherit the repository's
+object hash algorithm; under git's SHA-1 default they are NOT
+collision-resistant, unlike every czd-sorted identity
+(`[anchor-hash-agile]`). This inheritance MUST be documented wherever
+`dig` is presented as an artifact identity. Implementations SHOULD
+record the ingested source tree's artifact-store digest (blake3) in
+appended atom metadata as a protocol-independent re-anchor, and
+consumers SHOULD prefer the re-anchor where present. (Registers
+atom-backend-contract.md `[backend-hash-strength]` for the git
+instantiation.)
 `VERIFIED: unverified`
 
 **[single-active-claim-registry]**: In a registry (source repository),
@@ -463,10 +549,14 @@ publish tag.
   as the message (containing the `claim` czd binding). The ref
   `refs/atom/pub/{label}/{version}` points to the publish tag.
   A protective ref `refs/atom/src/{src_oid}` is written to prevent
-  GC of the source revision. The ref write SHOULD use a
+  GC of the source revision. The ref write MUST use a
   compare-and-swap (CAS) on `refs/atom/claims/pub/{label}` to ensure
   the claim has not been replaced between payload construction and
-  tag creation.
+  tag creation. _(Raised from SHOULD 2026-07-12: the non-CAS write is
+  a TOCTOU window — a publish can land against a claim state that no
+  longer matches what the signer verified against. Discharges the
+  per-name register law, atom-backend-contract.md
+  `[backend-refs-linearizable]`.)_
   `VERIFIED: unverified`
 
 **[ingest-transition]**: Atoms MAY be ingested from a registry (or
@@ -503,8 +593,9 @@ replaced (e.g., after key compromise).
   `VERIFIED: unverified`
 
 **[publish-update-transition]**: A publish tag MAY be updated (e.g.,
-after key revocation or resigning) by appending a new tag to the
-chain.
+after key revocation or resigning, or to carry a reproducibility-mode
+transition — promotion or demotion per atom-model.md §6) by appending
+a new tag to the chain.
 
 - **PRE**: An existing publish tag chain for this `(label, version)`
   exists. The new tag's `CozMessage` MUST be valid.
@@ -523,11 +614,25 @@ chain.
 **[tag-chain-semantic-immutable]**: All tags within a single publish
 update chain MUST contain identical values for the immutable payload
 fields: `(label, version, dig, src, path)`. Only signing metadata
-(`tmb`, `now`, `claim`), the `key` field, and extension fields
-(`meta`) MAY differ between tags in the same chain. Altering the
-artifact identity (`dig`), version string, or source revision
-requires a new atom commit and a new publish ref — not an update
-to an existing tag chain.
+(`tmb`, `now`, `claim`), the `key` field, extension fields (`meta`),
+and the reproducibility `mode` field (chain-VARIABLE by design — it is
+promotable/demotable via signed chain appends, atom-model.md §6 and
+atom-transactions.md `[publish-mode]`) MAY differ between tags in the
+same chain. Altering the artifact identity (`dig`), version string,
+or source revision requires a new atom commit and a new publish ref —
+not an update to an existing tag chain.
+`VERIFIED: unverified`
+
+**[refs-atomic-multi]**: Multi-ref protocol transitions (claim +
+protective ref; publish tag + version ref + protective ref; multi-atom
+ingestion) MUST be committed atomically within the store — all named
+refs move together or none do — so no consumer can observe a torn
+intermediate state. This binds the authoritative store per-store;
+cross-mirror consistency is convergence, not atomicity
+(atom-backend-contract.md `[backend-replica-reads]`). _(Promoted
+2026-07-12 from the Atomicity implementation guidance below to a
+tagged constraint; discharges the per-store half of
+atom-backend-contract.md `[backend-refs-atomic-multi]`.)_
 `VERIFIED: unverified`
 
 **[fs-ingest-transition]**: Atoms from a filesystem `AtomSource` MAY
@@ -713,6 +818,13 @@ ingested atom. (Model §2.3, ⊇ condition.)
 | peel-content-integrity       | integration-test | pending | Peeled sha == payload.dig; mismatch → reject           |
 | store-claim-cleanup          | integration-test | pending | Orphaned claim ref cleaned on version eviction         |
 | tag-chain-semantic-immutable | unit-test        | pending | Update tags preserve (label,version,dig,src,path)      |
+| odb-immutable                | agent-check      | pending | Protocol objects append-only; GC only if unreachable   |
+| refs-sole-mutable            | agent-check      | pending | No protocol state outside refs + objects               |
+| ancestry-hash-committed      | agent-check      | pending | Parent OIDs in hashed preimage; checks quantify over it |
+| ancestry-query-path          | integration-test | pending | replace/grafts ignored; shallow ancestry fails closed  |
+| czd-oid-disjoint             | agent-check      | pending | Czd/OID distinct types; ref segments rehydrate to sort |
+| oid-hash-inheritance         | agent-check      | pending | SHA-1 dig/src documented; blake3 re-anchor recorded    |
+| refs-atomic-multi            | integration-test | pending | Multi-ref transitions commit atomically per store      |
 
 ## Implications
 
@@ -815,11 +927,12 @@ ingested atom. (Model §2.3, ⊇ condition.)
   Ancestry checks (`[temporal-vector]`) walk the DAG from the claim's
   `src` to the effective charter's `src`, not to a parentless root.
 
-- **Atomicity**: Multi-ref operations (claim + publish, ingestion of
-  many versions) MUST use `gix::refs::Transaction` to batch all
-  reference updates atomically. Remote pushes involving multiple refs
-  MUST use atomic push semantics (equivalent of `git push --atomic`)
-  to prevent torn states.
+- **Atomicity**: The normative rule is `[refs-atomic-multi]`; the gix
+  mechanism is `gix::refs::Transaction` to batch all reference updates
+  atomically. Remote pushes involving multiple refs MUST use atomic
+  push semantics (equivalent of `git push --atomic`) to a single
+  remote; cross-mirror consistency is convergence
+  (`[backend-replica-reads]`), never coordinated atomicity.
 
 - **Tree construction**: When building git tree objects from filesystem
   content (`FsSource`), entries MUST follow Git's canonical byte-order
