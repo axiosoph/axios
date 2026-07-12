@@ -1,17 +1,32 @@
 <!--
   Atom Software Architecture Document (SAD) — L1.
 
-  This document is the authoritative source of truth for the Atom layer.
-  The specifications under docs/specs/ (atom-transactions.md, atom-sourcing.md,
-  git-storage-format.md) derive from this document; on conflict, this document
-  takes precedence and the spec is realigned. ADRs record architectural changes
-  and are landed in the same commit as the SAD edit they justify.
+  This document is the authoritative source of truth for the Atom layer's
+  ARCHITECTURE: components, crate surfaces, lifecycles, boundaries, and
+  failure modes. Its precedence is scoped accordingly. The specifications
+  under docs/specs/ (atom-transactions.md, atom-sourcing.md,
+  git-storage-format.md) derive from this document; on ARCHITECTURAL
+  conflict, this document takes precedence and the spec is realigned.
+  FORMAL PLANE SEMANTICS — what an atom is (the composite duality), the
+  metadata partition law, the signature-anchoring law, the reproducibility
+  contract — are owned by docs/models/atom-model.md, and the obligations
+  any backend must discharge are owned by
+  docs/specs/atom-backend-contract.md; on a formal-semantics conflict,
+  those documents are the correction and this SAD is realigned. (This
+  scoping exists because an earlier unscoped precedence rule once pointed
+  implementors at a stale anchor definition; a SAD must never again
+  outrank the formal models on semantics.) ADRs record architectural
+  changes and are landed in the same commit as the SAD edit they justify.
 
   Maintained as Architecture-as-Code. Diagrams are Mermaid.js, inline.
 
   Settled design inputs: the keystone resolution (AtomId = abstract (anchor,label)
   pair; 2-value name-anchored lock; blake3(publish_czd)-keyed store; algorithm
-  agility deleted from identity, retained only in the Coz czd).
+  agility deleted from identity, retained only in the Coz czd); the
+  composition-unit repositioning (atom sits ABOVE language package
+  managers — one implementation, per-ecosystem internals as plugins);
+  the atom protocol-plane formalization (atom-model.md,
+  atom-backend-contract.md).
 -->
 
 # Atom Software Architecture Document (SAD)
@@ -24,6 +39,29 @@ Atom is the **identity and publishing foundation** (L1) of the Axios decentraliz
 publishing stack. It answers exactly one question authoritatively: _what is this
 thing, who owns it, and which immutable bytes does a given version resolve to_ —
 without a central registry and without trusting the publisher.
+
+Positioning: the atom is the **composition-unit layer** — it sits _above_
+language package managers, not beside them. A cargo crate can be an atom;
+cargo manages the Rust dependency graph interior to one build action,
+while the atom carries the system-level intent — the full composite
+(package, environment, or system) with its dependency closure determined
+by the signed lock. There is **one** atom implementation; per-ecosystem
+handling (version dialects, fetch adapters, manifest readers) consists of
+internal plugins of that implementation, never co-equal per-ecosystem
+protocols. What an atom _is_ at this layer — the composite duality, the
+metadata partition law, the signature-anchoring law, the reproducibility
+contract — is formalized in the [Atom Model](../models/atom-model.md);
+what any storage backend must provide to host the plane is the
+[Atom Backend Contract](../specs/atom-backend-contract.md), with the
+[git storage format](../specs/git-storage-format.md) as its reference
+instantiation. This SAD defers to both on semantics and owns the
+architecture.
+
+Surety of source: an atom wrapping upstream sources derives its
+provenance from the **curating repository** — the anchor, claim, and
+publish chain of the set that packaged it — not from upstream's own
+release artifacts; upstream's bytes are pinned _inside_ that signed
+intent, they do not sign it.
 
 Atom owns:
 
@@ -148,7 +186,11 @@ resolution cache: an atom fetched once is content-addressed for reuse.
 `atom-git` implements `AtomContent`/`AtomStore` over a git repository: it reads atom
 commits, walks publish tag chains and claim chains, and verifies the anchor against
 the set's founding charter (`Anchor := czd(charter₀)`). The git object DB is the
-substrate; the registry/store refs are views over it.
+substrate; the registry/store refs are views over it. The obligations this
+backend discharges — and the ones still open against it — are enumerated
+in the [Atom Backend Contract](../specs/atom-backend-contract.md)'s
+git-instantiation table (its Appendix A); a non-git backend evaluates
+itself against that contract, never against this SAD.
 
 ### 2.4 Mirrors
 
@@ -299,6 +341,20 @@ stateDiagram-v2
 
 ## 6. Cross-Cutting Concerns and System Invariants
 
+The plane framing for everything below is the
+[Atom Model](../models/atom-model.md), cited rather than restated:
+identity names the **composite** (the atom is its intent reification;
+the composition its artifact reification — atom-model §2); every
+signature offered across a trust boundary is **anchored to an atom**,
+and publication is impossible unsigned, which is what makes every
+published object trust-decidable (the anchoring law, atom-model §5);
+publish-time metadata and post-build facts are partitioned by law, not
+taste (atom-model §4 — the law §5.1's chain-variable class and §8.6's
+carve-out obligation instantiate); and a publish carries a declared
+**reproducibility mode** whose violation semantics are defined
+(atom-model §6; the payload field is a pending `atom-transactions.md`
+amendment, tracked in atom-model §8).
+
 ### 6.1 Identity is the Abstract Pair
 
 **Invariant `[identity-content-addressed]`**: an atom's identity (`AtomId`) MUST be
@@ -432,7 +488,7 @@ PoC's `get_atoms` proves the pattern). See Appendix D.
 | 8.3 | Peeled content sha ≠ payload.dig                     | tamper/funny-business — reject the fetched atom                      |
 | 8.4 | Mirror divergence (same atom@version, different dig) | conflict, reject (`[no-conflicting-digest]`)                         |
 | 8.5 | Distinct-ownership czd divergence                    | reject unless same claim chain (`[czd-divergence-handling]`)         |
-| 8.6 | Moved publish-tag tip (metadata appended)            | non-fatal: warn "metadata updated / key rotated" + optional czd bump |
+| 8.6 | Moved publish-tag tip (metadata appended)            | non-fatal: warn "metadata updated / key rotated" + optional czd bump. Routine _fact_ appends (build records, interfaces — the L2 fact channel) tripping this warning is the known defect the fact-append carve-out resolves: atom-model §4 states the law (ownership-relevant vs fact-accumulating appends are distinct kinds); the mechanism spec is §9 gap 5 |
 
 ## 9. Known Gaps and Future Explorations
 
@@ -441,8 +497,8 @@ PoC's `get_atoms` proves the pattern). See Appendix D.
 | 1   | Object-free discovery unbuilt in axios                                                                                                                       | spec-mandated; PoC `get_atoms` proves the pattern                                                                                                                                                                                                                                                          |
 | 2   | FsSource sentinel anchor value/encoding unconstrained                                                                                                        | local atoms; needs a protocol-level constant                                                                                                                                                                                                                                                               |
 | 3   | `rev` peel mechanism (locate commit from `publish_czd`; GC of an old chain tip)                                                                              | specify the failure mode when a serving mirror has GC'd                                                                                                                                                                                                                                                    |
-| 4   | Cross-ecosystem `VersionScheme` adapters                                                                                                                     | trait surface defined; concrete adapters are above L1                                                                                                                                                                                                                                                      |
-| 5   | Signed metadata append as the substrate's fact-publication channel (build records, interface manifests — HTC/L2, per ADR-0005 §Open Items, htc-sad.md §6.10) | Builder ≠ claim-owner signer authorization is unspecified; every routine fact append currently trips §8.6's "moved tip / optional czd bump" warning path, which needs a fact-append carve-out; a fact-kind convention is also open. Design campaign **P1**. No change to §4.2/§8.6 semantics in this pass. |
+| 4   | Cross-ecosystem `VersionScheme` adapters                                                                                                                     | trait surface defined; concrete adapters are internal plugins of the one implementation, registered above L1 (one meta-PM, many version dialects)                                                                                                                                                          |
+| 5   | Signed metadata append as the substrate's fact-publication channel (build records, interface manifests — HTC/L2, per ADR-0005 §Open Items, htc-sad.md §6.10) | **Narrowed 2026-07-12**: the _law_ is now stated — atom-model §4 gives the partition (intent xor chain-anchored fact, derived or asserted), the carve-out requirement (fact appends are not ownership-relevant events), and the P12/P13 audit obligations. Still open: the _mechanism_ — the fact-kind encoding on the chain and the builder ≠ claim-owner signer-authorization policy. Design campaign **P1**. |
 
 ## 10. Scope Boundaries
 
@@ -459,6 +515,8 @@ Out of scope for the atom layer:
 
 | Term           | Definition                                                                       |
 | :------------- | :------------------------------------------------------------------------------- |
+| Composite      | The genus an atom reifies as intent: a package, environment, or system with its determined closure (atom-model §2) |
+| Mode           | The publish-carried reproducibility declaration, `reproducible` \| `witnessed` (atom-model §6)                     |
 | Anchor         | `czd(charter₀)` — the founding charter's coz digest; immutable atom-set identity |
 | AtomId         | The abstract pair `(anchor, label)` — the identity, not a hash                   |
 | Atom-set       | Atoms sharing a common anchor                                                    |
@@ -489,6 +547,8 @@ Out of scope for the atom layer:
 | §4.3 Ingest            | [atom-transactions.md](../specs/atom-transactions.md) `[ingest-preserves-identity]`                                                        |
 | §5.1 Publish Tag Chain | [git-storage-format.md](../specs/git-storage-format.md) `[tag-chain-immutable]`, `[tag-chain-semantic-immutable]`                          |
 | §5.2 Claim Chain       | [git-storage-format.md](../specs/git-storage-format.md) `[single-active-claim-registry]`, `[claim-replacement-transition]`                 |
+| §6 plane semantics     | [atom-model.md](../models/atom-model.md) (composite duality §2, partition law §4, anchoring law §5, reproducibility contract §6)            |
+| §2.3 backend duties    | [atom-backend-contract.md](../specs/atom-backend-contract.md) (git instantiation: its Appendix A)                                          |
 | §6.1 Identity          | [atom-transactions.md](../specs/atom-transactions.md) `[identity-content-addressed]`, `[identity-stability]`                               |
 | §6.2 Anchor            | [atom-transactions.md](../specs/atom-transactions.md) `[anchor-*]`                                                                         |
 | §6.3 Ownership         | [atom-transactions.md](../specs/atom-transactions.md) `[no-unclaimed-publish]`, `[publish-claim-coherence]`                                |
@@ -511,6 +571,15 @@ the git backend's storage encoding and ref layout for charter transactions is no
 yet specified (`git-storage-format.md` Open Questions #6) — tracked as
 atom-milestone design work, not silent drift. (The L4 consequences — the ion lock
 cross-references and the eos handoff — are tracked by `ion-sad.md`.)
+
+The 2026-07-12 plane formalization (atom-model.md, atom-backend-contract.md)
+obligates a set of spec amendments that are **registered, not yet landed**:
+the reproducibility-mode publish field and fact-append items against
+`atom-transactions.md` (atom-model §8), and the priority publish-CAS
+SHOULD→MUST plus the seam/ancestry/immutability statements against
+`git-storage-format.md` (backend contract Appendix B). Until those land,
+the manifests in the two new documents are the authoritative drift record
+for their items — deliberate, enumerated, not silent.
 
 ## Appendix E: Stale Documentation
 
