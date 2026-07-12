@@ -940,10 +940,19 @@ Deliberately NOT proof targets, with reasons:
    earlier FUSE-observation preference on measured cost evidence (5.9×
    vs ~25%). The §7.2 sequencing rule stands: FUSE machinery is removed
    from the fork only after ptrace proves coverage at openssl scale.
-7. **Trust-anchor policy language** _(added in v0.2, from §3.4)_: fact-hood
-   is signer-relative; the anchor set format and the acceptance policy for
-   foreign records (reproducibility-attestation thresholds included) need
-   their own spec, riding on atom's Coz identities.
+7. **Trust-anchor policy language** _(added in v0.2, from §3.4; scope
+   updated 2026-07-12)_: fact-hood is signer-relative; the anchor set
+   format and the acceptance policy for foreign records
+   (reproducibility-attestation thresholds included) need their own
+   spec, riding on atom's Coz identities. The ATOM-SIDE half is now
+   specified: the declared reproducibility mode, its violation
+   semantics, and the promotion/demotion law live in
+   [atom-model.md §6](atom-model.md); the policy-language spec
+   inherits them. The same work package owns **split-view
+   (equivocation) detection**: per-consumer linearizability plus chain
+   monotonicity cannot detect a backend serving different consumers
+   permanently divergent timelines — detection needs gossip or
+   witness-cosigning (atom-backend-contract.md, Open Questions).
 8. **The ambient base** _(added in v0.3, from §1.4)_: an environment's
    coherence certificate must state its residual `Req` — the declared
    base it stands on (kernel ABI, dynamic loader, VDSO). What is the
@@ -954,11 +963,15 @@ Deliberately NOT proof targets, with reasons:
    policy for choosing one provider per (ns, name) at environment
    formation needs an owner and a spec (prefer-same-atom, then lock
    order, is ion's existing determinism rule; does it lift unchanged?).
-10. **Environments as atoms** _(added in v0.3)_: publishing an
-    environment as a signed atom (content = the composition) would give
-    versioning/resolution over environments with zero new machinery — my
-    lean is yes, but it makes environments _publishable intent_, which
-    deserves a deliberate decision rather than a default.
+10. ~~Environments as atoms~~ — **RATIFIED (nrd, 2026-07-12)**: yes —
+    every composite stratum (package, environment, system) MAY publish
+    as a signed atom; publication is uniform across strata
+    ([atom-model.md §3, §7](atom-model.md)). The system kind stands
+    with it (composition model §4's boundary-declaration content).
+    _(Original framing, for the record: publishing an environment as a
+    signed atom gives versioning/resolution over environments with
+    zero new machinery, at the cost of making environments publishable
+    intent.)_
 11. **The override operator set** _(rewritten in v0.4 — v0.3 misfiled
     this as a "generator gap")_: overlays are not a missing language
     feature; they are operations inside the algebra (Composition Model §7 — `subst`,
@@ -987,7 +1000,11 @@ Deliberately NOT proof targets, with reasons:
     only schema: the kind discriminator's shape in the manifest
     (`[package]` / `[environment]` / `[generator]` tables? a `kind`
     field?) and whether hygiene wants mixed atoms discouraged despite
-    their legality.
+    their legality. _(2026-07-12: the kind family's plane placement is
+    now stated in [atom-model.md §7](atom-model.md) — granularity
+    strata vs intent strata separated, generator atoms placed as
+    transitions outside the composite genus; the schema shape remains
+    open here.)_
 14. **The lock format** _(added v0.6; re-assessed v0.8 after nrd's
     whole-system corrections)_: the lock is binding-algebra instantiation
     #1 and the promotion target (§3.3); its formal treatment is an
@@ -1006,3 +1023,13 @@ Deliberately NOT proof targets, with reasons:
     whether lock and certificate share one formal treatment (Composition
     Model §5's
     symmetry); and P7's resolution-determinism elaboration.
+15. **Constraint authoring for declared runtime dependencies** _(added
+    2026-07-12, from atom-model.md §2)_: when a closure fault names a
+    missing runtime dependency, the `Declared` repair carries a
+    version/interface constraint the fault cannot supply — a human or
+    tool must author it. The system can assist (candidate proposal
+    from interface satisfaction, prefer-same-atom ordering), but the
+    assist is UX, not formalism. Directed at the ion UX design pass
+    that precedes ion implementation (Phase 2); the declared dep is
+    injected into the observation environment so tracing exercises it
+    (atom-model.md §2).
