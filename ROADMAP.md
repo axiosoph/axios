@@ -392,18 +392,33 @@ commitments with a timeline:
   version-level checking the MVP ships with.
 - Canonical, append-only OS-layer compositions with generation switching
   (the territory `bootc`/OSTree-style systems occupy today).
-- Full deployment tracking: a deployment target as a named,
-  atom-anchored succession of system compositions — each deployment a
-  commit on a tracking branch (diffs compose natively; ancestry is
-  hash-committed, so what changed between deployments is never
-  ambiguous), with signed deployment sign-offs on the atom's metadata
-  chain for production targets, and drift between the declared and
-  observed state surfacing through the same divergence machinery the
-  trust model defines. Covers bare-metal deploys, infrastructure-as-code,
-  and cluster-orchestrator declarations (rendered through the export
-  tier). Everything it needs — the publish chain, trial attestations,
-  the export tier, per-name atomic ref updates — is MVP-scoped
-  foundation; the deployment layer itself is deliberately post-MVP.
+- **Full deployment tracking — the destination this stack has been
+  building toward.** No existing tool manages the complete deployment
+  architecture — from signed source publication, through hermetic
+  build, to the exact bytes running on a fleet — as one coherent,
+  verifiable history; GitOps-style tools track unsigned manifests that
+  reference floating artifacts, and everything below the manifest is
+  someone else's problem. This substrate is shaped so that the whole
+  chain is one discipline. A deployment target is an atom-anchored
+  succession of system compositions: each deployment is a commit on a
+  tracking branch based at the first deployed version of the atom, and
+  every commit thereafter is either a published atom version or — for
+  staging and development targets — a development snapshot. The
+  production constraint falls out of the trust model rather than being
+  bolted on: only published, signed atoms are anchored and
+  trust-decidable, so "production deploys published atoms only, never
+  development snapshots" is an instance of the signature-anchoring law,
+  not a policy invention. Diffs compose natively and ancestry is
+  hash-committed, so what changed between any two deployments is never
+  ambiguous; production deployments carry signed sign-offs on the
+  atom's metadata chain; drift between declared and observed state
+  surfaces through the same divergence machinery the trust model
+  defines. Covers bare-metal deploys, infrastructure-as-code, and
+  cluster-orchestrator declarations (rendered through the export tier).
+  Deliberately post-MVP — but everything it needs (the publish chain,
+  trial attestations, the export tier, per-name atomic ref updates) is
+  MVP-scoped foundation, which is the structural reason the MVP is
+  shaped the way it is.
 - macOS and Windows executors.
 - A capability-runtime (WASI) execution tier.
 - Finer-than-atom action refinement inside eos, for cases where whole-atom
