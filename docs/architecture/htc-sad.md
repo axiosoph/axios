@@ -660,12 +660,17 @@ primitive's own shape, one level up (ADR-0005 §Context).
 Interface manifests and build records are appended as signed atom
 metadata (§2.2, §2.3) — the mechanism atom already provides, per
 `[publish-payload-extensible]` (atom-transactions.md) and the append
-transition in `git-storage-format.md` (both cited, not restated). This
-channel is currently under-hardened for HTC's purposes: builder-signer
-authorization (builder ≠ claim owner) is unspecified, and every routine
-fact append currently trips atom-sad §8.6's "moved tip / optional czd
-bump" warning path, which needs a fact-append carve-out. Registered as a
-Known Gap (§9) and an ADR-0005 open item (P1), not resolved here.
+transition in `git-storage-format.md` (both cited, not restated). The
+channel's governing law is the metadata partition law,
+[atom-model.md §4](../models/atom-model.md): post-build facts (these
+objects) live on the chain, never in identity-bearing position, with
+the builder≠owner authorization and fact-append carve-out stated
+there as normative obligations. The MECHANISM remains under-hardened:
+the concrete fact-kind encoding and signer-authorization scheme are
+unspecified, and every routine fact append currently trips atom-sad
+§8.6's "moved tip / optional czd bump" warning path pending the
+carve-out's design. Registered as a Known Gap (§9) and an ADR-0005
+open item (P1); the law is settled, the mechanism is not.
 
 ## 7. Wire and Storage Formats
 
