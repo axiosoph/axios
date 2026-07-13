@@ -572,15 +572,15 @@ mod tests {
                 .with_type::<(Option<String>, String, Option<String>)>()
                 .for_each(|(src, lbl_str, ver)| {
                     if let Ok(label) = Label::try_from(lbl_str.as_str()) {
-                        if let Some(s) = &src {
-                            if s.contains("::") || s.is_empty() {
-                                return;
-                            }
+                        if let Some(s) = &src
+                            && (s.contains("::") || s.is_empty())
+                        {
+                            return;
                         }
-                        if let Some(v) = &ver {
-                            if v.contains('@') || v.contains("::") || v.is_empty() {
-                                return;
-                            }
+                        if let Some(v) = &ver
+                            && (v.contains('@') || v.contains("::") || v.is_empty())
+                        {
+                            return;
                         }
 
                         let version = ver.clone().map(RawVersion::new);

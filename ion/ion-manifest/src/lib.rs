@@ -374,31 +374,27 @@ mod proptests {
                         // Remove the required [compose] section.
                         if let Ok(mut value) =
                             toml::to_string(&manifest).unwrap().parse::<toml::Value>()
+                            && let Some(table) = value.as_table_mut()
                         {
-                            if let Some(table) = value.as_table_mut() {
-                                table.remove("compose");
-                                let serialized = toml::to_string(&value).unwrap();
-                                assert!(IonManifest::parse(&serialized).is_err());
-                            }
+                            table.remove("compose");
+                            let serialized = toml::to_string(&value).unwrap();
+                            assert!(IonManifest::parse(&serialized).is_err());
                         }
                     },
                     _ => {
                         // Inject an unrecognized field to test deny_unknown_fields.
                         if let Ok(mut value) =
                             toml::to_string(&manifest).unwrap().parse::<toml::Value>()
+                            && let Some(table) = value.as_table_mut()
+                            && let Some(package) =
+                                table.get_mut("package").and_then(|v| v.as_table_mut())
                         {
-                            if let Some(table) = value.as_table_mut() {
-                                if let Some(package) =
-                                    table.get_mut("package").and_then(|v| v.as_table_mut())
-                                {
-                                    package.insert(
-                                        "unknown_field_xyz".to_string(),
-                                        toml::Value::String("invalid".to_string()),
-                                    );
-                                    let serialized = toml::to_string(&value).unwrap();
-                                    assert!(IonManifest::parse(&serialized).is_err());
-                                }
-                            }
+                            package.insert(
+                                "unknown_field_xyz".to_string(),
+                                toml::Value::String("invalid".to_string()),
+                            );
+                            let serialized = toml::to_string(&value).unwrap();
+                            assert!(IonManifest::parse(&serialized).is_err());
                         }
                     },
                 }

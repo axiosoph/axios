@@ -458,9 +458,9 @@ mod tests {
             // atom_i can only require atoms from 0..i
             let mut requires = Vec::new();
             if i > 0 {
-                for j in 0..i {
+                for dep in atom_deps.iter().take(i) {
                     if driver.arbitrary::<bool>()? {
-                        requires.push(atom_deps[j].id.clone());
+                        requires.push(dep.id.clone());
                     }
                 }
             }
@@ -722,10 +722,10 @@ mod tests {
     #[test]
     fn test_lock_file_parse_raw_no_panic() {
         check!().with_type::<Vec<u8>>().for_each(|bytes| {
-            if let Ok(s) = std::str::from_utf8(bytes) {
-                if let Ok(lock) = LockFile::parse(s) {
-                    let _ = lock.validate();
-                }
+            if let Ok(s) = std::str::from_utf8(bytes)
+                && let Ok(lock) = LockFile::parse(s)
+            {
+                let _ = lock.validate();
             }
         });
     }
