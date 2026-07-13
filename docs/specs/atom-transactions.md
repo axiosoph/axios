@@ -958,6 +958,80 @@ ingested filesystem atoms.
 - **Type**: Safety
   `VERIFIED: unverified`
 
+### Extensibility & Evolution
+
+The lock format already establishes two independent extension
+disciplines: version rejection (`[lock-schema-version]`,
+lock-file-schema.md) and a plugin mechanism for new entry types
+(`[lock-type-extension-mechanism]`, lock-file-schema.md, ion-owned —
+its mechanics live in ion's spec territory and are not restated here).
+This subsection generalizes the first discipline, and the
+unknown-field-preservation half of `[publish-payload-extensible]`
+(above), into cross-format design principles that any future
+HTC-plane persisted format (a composition, a build record, an
+interface manifest) SHOULD follow, and seeds the reserved-name
+vocabulary those principles govern.
+
+**[format-version-discriminator]**: Any new persisted wire format — a
+distinct serialized object type intended for storage, exchange, or
+retention, such as a lock, a composition, a build record, or an
+interface manifest — SHOULD carry a top-level version/schema
+discriminator field. Where such a field exists, consumers MUST refuse
+to interpret an instance whose discriminator value they do not
+implement. This generalizes `[lock-schema-version]`'s pattern
+(lock-file-schema.md:128-132) as a design principle for future
+formats; it is prospective only and does NOT retroactively require a
+discriminator on an already-shipped format that lacks one. (As of this
+writing, htc-sad.md §2.1's `Composition` object carries a literal
+`version: 0` field with no stated consumer-side rejection rule, and
+§2.3's `BuildRecord` carries no version field at all — both are known,
+pre-existing gaps this principle does not retroactively close; they
+are noted here for the record, not addressed by this document.)
+
+- **Type**: Safety
+  `VERIFIED: unverified`
+
+**[format-unknown-field-tolerance]**: Any persisted format that admits
+third-party or ecosystem-specific extension MUST preserve fields it
+does not itself define — nested under that format's designated
+extension namespace (e.g. a `meta` object) — rather than silently
+dropping them. This generalizes `[publish-payload-extensible]`'s
+unknown-field-preservation rule (above) as a cross-format norm; a
+format that does not support extension at all is simply out of this
+rule's scope. (The claim side of this same file already has a landed
+counter-example tracked as residue: `[claim-payload-extensible]`'s
+`RESIDUE` note above records that `ClaimPayload`'s current
+implementation has no `meta` field and drops unknown fields on
+deserialization — this principle names the target state that residue
+is measured against, it does not resolve it.)
+
+- **Type**: Safety
+  `VERIFIED: unverified`
+
+**[format-reserved-names]**: The following namespace and field
+identifiers are already in live protocol use and are reserved bare
+names — a third-party or ecosystem-specific extension MUST NOT
+redefine any of them with incompatible meaning. Interface-analyzer
+namespaces (`[htc-manifest-binding-free]`, htc-sad.md:233-234, an open
+plugin set per §6.1): `elf-soname`, `python-module`, `cli-name`,
+`pkgconfig`. Publish-side advisory `meta` fields
+(git-storage-format.md:862-869): `meta.broken`, `meta.security`,
+`meta.superseded-by`, `meta.deprecated`, `meta.build-hash`,
+`meta.min-compatible`. Claim-side transition `meta` fields
+(git-storage-format.md:883-895): `meta.supersedes`,
+`meta.announcement`, `meta.effective-after`. A new namespace or `meta`
+field introduced by a third-party or ecosystem-specific extension MUST
+use a name distinguishable from this reserved set — a lightweight
+prefix convention (for example, reverse-DNS-style qualification such
+as `com.example.my-field`) MAY be used. Distinguishing reserved from
+qualified names is a naming convention enforced through ordinary
+review of new namespace/field additions, mirroring in spirit — not in
+mechanism — `[lock-type-extension-mechanism]`'s plugin discipline; no
+separate submission process governs it.
+
+- **Type**: Safety
+  `VERIFIED: unverified`
+
 ## Verification Pipeline
 
 The following defines the normative verification steps for consumers.
