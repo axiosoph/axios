@@ -124,24 +124,31 @@ def scan_oid_seam(path: str, lines: list[str]) -> list[Violation]:
     Scoped structurally (by module nesting), not by waiver: the three legal
     sites are a fixed, load-bearing part of the seam's own definition, not
     legacy debt scheduled for removal.
+
+    Module extent is found by COLUMN, not by brace-depth counting: `pub mod
+    seam` is a top-level item (column 0 under this repo's enforced rustfmt
+    style), so its closing brace is the first line that is exactly `}` at
+    column 0 after the module opens. Depth-counting braces found anywhere in
+    a line's content is unsound here — a brace inside a string literal, a
+    char literal, or a block comment (e.g. an escaped `{{` in a `format!`
+    error message) miscounts, silently extending or truncating the module's
+    perceived extent. Column-0 matching sidesteps that class entirely: it
+    never inspects brace characters inside line content at all.
     """
     if not path.startswith("atom/atom-git/src/") or not path.endswith(".rs"):
         return []
     is_gix_util = path.endswith("/gix_util.rs")
     out: list[Violation] = []
     in_seam = False
-    depth = 0
     for n, raw in enumerate(lines, start=1):
         code = rust_code_part(raw)
         if is_gix_util:
             if in_seam:
-                depth += code.count("{") - code.count("}")
-                if depth <= 0:
+                if raw.rstrip("\n") == "}":
                     in_seam = False
                 continue
             if _SEAM_MOD_RE.search(code):
                 in_seam = True
-                depth = code.count("{") - code.count("}")
                 continue
         if "ObjectId::try_from" in code:
             out.append(Violation("oid-seam-bypass", path, n, raw.rstrip("\n")))
@@ -439,6 +446,69 @@ def self_test(cfg: dict) -> int:
     expect(
         not scan_oid_seam("eos/eos-core/src/lib.rs", ["ObjectId::try_from(x)"]),
         "oid-seam-bypass must be scoped to atom/atom-git/src/*.rs only",
+    )
+    # Column-0 module-close boundary: an interior brace character inside a
+    # string, char literal, or block comment must never extend or truncate
+    # the seam module's perceived extent (a prior depth-counting version was
+    # bypassable this way — see the docstring). Each case below is a
+    # reproduced defect from that version, now a permanent regression guard.
+    oescaped_brace = scan_oid_seam(
+        "atom/atom-git/src/gix_util.rs",
+        [
+            "pub mod seam {",
+            '    fn err() -> String { format!("bad oid: {{") }',
+            "}",
+            "fn bypass() -> Result<ObjectId, Error> {",
+            "    ObjectId::try_from(raw)",
+            "}",
+        ],
+    )
+    expect(
+        len(oescaped_brace) == 1,
+        f"an escaped brace {{{{ inside seam must not hide a bypass after it, got {oescaped_brace}",
+    )
+    ochar_brace = scan_oid_seam(
+        "atom/atom-git/src/gix_util.rs",
+        [
+            "pub mod seam {",
+            "    const OPEN: char = '{';",
+            "}",
+            "fn bypass() -> Result<ObjectId, Error> {",
+            "    ObjectId::try_from(raw)",
+            "}",
+        ],
+    )
+    expect(
+        len(ochar_brace) == 1,
+        f"a char literal '{{' inside seam must not hide a bypass after it, got {ochar_brace}",
+    )
+    ocomment_brace = scan_oid_seam(
+        "atom/atom-git/src/gix_util.rs",
+        [
+            "pub mod seam {",
+            "    /* opening brace: { */",
+            "}",
+            "fn bypass() -> Result<ObjectId, Error> {",
+            "    ObjectId::try_from(raw)",
+            "}",
+        ],
+    )
+    expect(
+        len(ocomment_brace) == 1,
+        f"a block-comment {{ inside seam must not hide a bypass after it, got {ocomment_brace}",
+    )
+    ostring_close_brace = scan_oid_seam(
+        "atom/atom-git/src/gix_util.rs",
+        [
+            "pub mod seam {",
+            '    fn narrate() { let s = "close: }"; }',
+            "    pub fn ok(s: &[u8]) -> Result<ObjectId, Error> { ObjectId::try_from(s) }",
+            "}",
+        ],
+    )
+    expect(
+        not ostring_close_brace,
+        f"a stray }} inside a string inside seam must not spuriously flag a legit call, got {ostring_close_brace}",
     )
 
     # scratch-reference.
