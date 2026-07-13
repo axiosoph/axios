@@ -7,7 +7,6 @@ use std::time::SystemTime;
 
 use atom_core::{AtomContent, AtomId, AtomRegistry, AtomSource, ContentEntry, Czd, RawVersion};
 use atom_id::{Anchor, ClaimPayload, PublishPayload};
-use gix::hash::ObjectId;
 use gix::refs::transaction::{Change, LogChange, PreviousValue, RefEdit, RefLog};
 use gix::refs::{FullName, Target};
 
@@ -250,9 +249,9 @@ impl AtomRegistry for GitRegistry {
         }
 
         // 3. Verify temporal vector (publish src must be a descendant of claim src)
-        let publish_src_oid = ObjectId::try_from(src)
+        let publish_src_oid = crate::gix_util::seam::oid_from_src_field(src)
             .map_err(|e| GitError::Validation(format!("Invalid publish source OID: {}", e)))?;
-        let claim_src_oid = ObjectId::try_from(claim_payload.src.as_slice())
+        let claim_src_oid = crate::gix_util::seam::oid_from_src_field(claim_payload.src.as_slice())
             .map_err(|e| GitError::Validation(format!("Invalid claim source OID: {}", e)))?;
 
         if !crate::gix_util::is_descendant(&repo, publish_src_oid, claim_src_oid)? {
@@ -263,7 +262,7 @@ impl AtomRegistry for GitRegistry {
         }
 
         // 4. Create the deterministic, parentless atom commit
-        let tree_oid = ObjectId::try_from(dig)
+        let tree_oid = crate::gix_util::seam::oid_from_dig_field(dig)
             .map_err(|e| GitError::Validation(format!("Invalid tree OID: {}", e)))?;
         let atom_commit_oid =
             crate::gix_util::write_deterministic_commit(&repo, tree_oid, publish_src_oid)?;
