@@ -1,0 +1,27 @@
+[package]
+description = "Backend-conformance battery: machine-checked verdicts for docs/specs/atom-backend-contract.md"
+edition     = "2024"
+name        = "atom-conformance"
+publish     = false
+version     = "0.1.0"
+
+[lib]
+doctest = false
+
+[dependencies]
+atom-core = { path = "../atom-core" }
+
+[dev-dependencies]
+atom-git = { path = "../atom-git" }
+atom-id  = { path = "../atom-id" }
+coz-rs   = { version = "0.4" }
+gix      = { version = "^0.83", default-features = false, features = [
+  "blocking-http-transport-reqwest-rust-tls",
+  "max-performance-safe",
+  "revision",
+  "sha1",
+  "sha256",
+] }
+serde_json = "1"
+tempfile   = "3"
+tokio      = { version = "1", features = ["rt", "macros"] }
