@@ -221,8 +221,8 @@ pub mod seam {
     /// `[backend-seam-typed]`, so this conversion is LEGAL. Rejects any
     /// input whose length does not match a supported git hash; never
     /// panics.
-    pub fn oid_from_src_field(_src: &[u8]) -> Result<ObjectId, Error> {
-        unimplemented!("n0-seam-types: red state")
+    pub fn oid_from_src_field(src: &[u8]) -> Result<ObjectId, Error> {
+        ObjectId::try_from(src)
     }
 
     /// Interpret a transaction payload's `dig` field as a git [`ObjectId`].
@@ -231,8 +231,8 @@ pub mod seam {
     /// `[backend-seam-typed]`, so this conversion is LEGAL. Rejects any
     /// input whose length does not match a supported git hash; never
     /// panics.
-    pub fn oid_from_dig_field(_dig: &[u8]) -> Result<ObjectId, Error> {
-        unimplemented!("n0-seam-types: red state")
+    pub fn oid_from_dig_field(dig: &[u8]) -> Result<ObjectId, Error> {
+        ObjectId::try_from(dig)
     }
 
     /// Quarantine a `Czd` — never an OID-sorted value — into an [`ObjectId`].
@@ -244,8 +244,8 @@ pub mod seam {
     /// graph. Every call site is a defect site being carried forward, not
     /// a legal seam; `n2-ingest-fix` deletes this function along with its
     /// callers.
-    pub fn assume_czd_is_oid_issue64(_czd: &Czd) -> Result<ObjectId, Error> {
-        unimplemented!("n0-seam-types: red state")
+    pub fn assume_czd_is_oid_issue64(czd: &Czd) -> Result<ObjectId, Error> {
+        ObjectId::try_from(czd.as_bytes())
     }
 
     #[cfg(test)]
