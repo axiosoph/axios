@@ -251,10 +251,16 @@ verifies for intent
 The selector introduces no new authorization machinery — it reuses
 the protocol's own judgment, evaluated per chain position so that a
 later ownership change does not retroactively re-classify old
-appends. _Rationale (delegated decision): "trust the publisher's own
-builds" is the single most common real policy; without this selector
-it would require per-atom anchor maintenance that tracks every key
-rotation by hand._
+appends. When a record's signer matches BOTH an explicit `tmb(_)`
+entry and the `owner` selector, the explicit entry MUST govern
+alone — roles and quorum both: per-key curation is more specific
+than the blanket selector, and the precedence must be stated because
+`TrustAnchorSet` is unordered — without it, two conforming
+implementations could apply different quorums to the same record,
+violating `[trust-policy-pure]`. _Rationale (delegated decision):
+"trust the publisher's own builds" is the single most common real
+policy; without this selector it would require per-atom anchor
+maintenance that tracks every key rotation by hand._
 `VERIFIED: unverified`
 
 **[trust-threshold-rule]**: Acceptance of a derived execution record
@@ -383,7 +389,9 @@ through any other path:
    `[trust-anchored-input]`. Unanchored ⇒ no verdict; stop.
 2. **Signer.** Resolve the record's signing `tmb` against
    `policy.anchors` (including `owner` expansion per
-   `[trust-owner-selector]`). No matching entry ⇒ `evidence`.
+   `[trust-owner-selector]`; on a double match, the explicit
+   `tmb(_)` entry governs, per that constraint). No matching
+   entry ⇒ `evidence`.
 3. **Role.** Check the entry's roles against the record's fact class
    per `[trust-role-authorization]`. Not covered ⇒ `evidence`.
 4. **Rule.** Resolve the applicable rule per
