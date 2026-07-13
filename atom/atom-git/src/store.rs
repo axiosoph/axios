@@ -216,7 +216,7 @@ impl AtomStore for GitStore {
                 for v in entry.versions() {
                     if let Some(oid) = v
                         .czd()
-                        .and_then(|czd| ObjectId::try_from(czd.as_bytes()).ok())
+                        .and_then(|czd| crate::gix_util::seam::assume_czd_is_oid_issue64(czd).ok())
                     {
                         candidate_parents.push(oid);
                     }
@@ -327,7 +327,9 @@ impl AtomStore for GitStore {
                         ));
                     }
 
-                    let claim_oid = ObjectId::try_from(publish_payload.claim.as_bytes())
+                    let claim_oid = crate::gix_util::seam::assume_czd_is_oid_issue64(
+                        &publish_payload.claim,
+                    )
                         .map_err(|e| GitError::Validation(format!("Invalid claim OID: {}", e)))?;
                     let claim_czd_hex = claim_oid.to_hex().to_string();
 
@@ -404,7 +406,8 @@ impl AtomStore for GitStore {
                     }
 
                     // Reconstruct/write deterministic atom commit
-                    let publish_src_oid = ObjectId::try_from(publish_payload.src.as_slice())
+                    let publish_src_oid =
+                        crate::gix_util::seam::oid_from_src_field(publish_payload.src.as_slice())
                         .map_err(|e| {
                             GitError::Validation(format!("Invalid publish src OID: {}", e))
                         })?;
