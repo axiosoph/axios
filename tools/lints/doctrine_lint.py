@@ -111,6 +111,43 @@ _NEWTYPE_RE = re.compile(
 )
 
 
+_SEAM_MOD_RE = re.compile(r"^\s*pub\s+mod\s+seam\b")
+
+
+def scan_oid_seam(path: str, lines: list[str]) -> list[Violation]:
+    """Flag raw ``ObjectId::try_from`` calls outside the seam constructors.
+
+    `[backend-seam-typed]` (`docs/specs/atom-backend-contract.md`) routes
+    every protocol-digest -> `ObjectId` conversion through the three named
+    constructors in `gix_util.rs`'s `seam` module; a raw call anywhere else
+    in `atom-git` bypasses the sort-assertion those constructors encode.
+    Scoped structurally (by module nesting), not by waiver: the three legal
+    sites are a fixed, load-bearing part of the seam's own definition, not
+    legacy debt scheduled for removal.
+    """
+    if not path.startswith("atom/atom-git/src/") or not path.endswith(".rs"):
+        return []
+    is_gix_util = path.endswith("/gix_util.rs")
+    out: list[Violation] = []
+    in_seam = False
+    depth = 0
+    for n, raw in enumerate(lines, start=1):
+        code = rust_code_part(raw)
+        if is_gix_util:
+            if in_seam:
+                depth += code.count("{") - code.count("}")
+                if depth <= 0:
+                    in_seam = False
+                continue
+            if _SEAM_MOD_RE.search(code):
+                in_seam = True
+                depth = code.count("{") - code.count("}")
+                continue
+        if "ObjectId::try_from" in code:
+            out.append(Violation("oid-seam-bypass", path, n, raw.rstrip("\n")))
+    return out
+
+
 def scan_serde_identity(path: str, lines: list[str]) -> list[Violation]:
     """Flag identity newtypes (``ReqDigest``/``ActionId`` class) deriving serde.
 
@@ -252,6 +289,7 @@ def scan_repo(cfg: dict) -> tuple[list[Violation], list[str]]:
         if path.endswith(".rs"):
             violations += scan_rust_identifiers(path, lines)
             violations += scan_serde_identity(path, lines)
+            violations += scan_oid_seam(path, lines)
         # scratch check: documentation only (*.md), excluding the doctrine source
         # (AGENTS.md), which names the paths to forbid them.
         if path.endswith(".md") and path != DOCTRINE_SOURCE:
@@ -351,6 +389,58 @@ def self_test(cfg: dict) -> int:
     )
     expect(not sclean, f"clean identity newtypes must pass, got {sclean}")
 
+    # oid-seam-bypass: fire on a raw call outside the seam module; exempt
+    # inside it (including the module's own doc-comment narration and its
+    # nested #[cfg(test)] block, which only calls the wrapped constructors).
+    ofire_other_file = scan_oid_seam(
+        "atom/atom-git/src/store.rs",
+        ["    let oid = ObjectId::try_from(bytes)?;"],
+    )
+    expect(
+        len(ofire_other_file) == 1,
+        f"oid-seam-bypass must fire outside gix_util.rs, got {ofire_other_file}",
+    )
+    ofire_same_file = scan_oid_seam(
+        "atom/atom-git/src/gix_util.rs",
+        [
+            "fn helper() -> Result<ObjectId, Error> {",
+            "    ObjectId::try_from(bytes)",
+            "}",
+            "pub mod seam {",
+            "    pub fn oid_from_src_field(src: &[u8]) -> Result<ObjectId, Error> {",
+            "        ObjectId::try_from(src)",
+            "    }",
+            "}",
+        ],
+    )
+    expect(
+        len(ofire_same_file) == 1,
+        f"oid-seam-bypass must fire on gix_util.rs sites outside seam only, got {ofire_same_file}",
+    )
+    oclean = scan_oid_seam(
+        "atom/atom-git/src/gix_util.rs",
+        [
+            "/// ...to call `ObjectId::try_from` on protocol-payload bytes...",
+            "pub mod seam {",
+            "    pub fn oid_from_src_field(src: &[u8]) -> Result<ObjectId, Error> {",
+            "        ObjectId::try_from(src)",
+            "    }",
+            "    #[cfg(test)]",
+            "    mod tests {",
+            "        // ObjectId::try_from is exercised via oid_from_src_field",
+            "    }",
+            "}",
+        ],
+    )
+    expect(
+        not oclean,
+        f"oid-seam-bypass must not fire inside seam or on doc-comment narration, got {oclean}",
+    )
+    expect(
+        not scan_oid_seam("eos/eos-core/src/lib.rs", ["ObjectId::try_from(x)"]),
+        "oid-seam-bypass must be scoped to atom/atom-git/src/*.rs only",
+    )
+
     # scratch-reference.
     expect(
         bool(scan_scratch("docs/x.md", ["see .scratch/notes for detail"])),
@@ -393,7 +483,7 @@ def self_test(cfg: dict) -> int:
         for m in failures:
             print(f"  - {m}")
         return 1
-    print(f"self-test PASS ({6} lint classes exercised, violation + clean cases)")
+    print(f"self-test PASS ({7} lint classes exercised, violation + clean cases)")
     return 0
 
 
