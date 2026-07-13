@@ -40,6 +40,45 @@ gate:
     @echo "Checking on-path constraint coverage..."
     python3 docs/check_constraint_coverage.py
 
+# Run clippy with the CI warning gate across the four workspaces
+clippy:
+    @echo "Running clippy in 'atom' workspace..."
+    cargo clippy --manifest-path atom/Cargo.toml --all-targets -- -D warnings
+    @echo "Running clippy in 'eos' workspace..."
+    cargo clippy --manifest-path eos/Cargo.toml --all-targets -- -D warnings
+    @echo "Running clippy in 'htc' workspace..."
+    cargo clippy --manifest-path htc/Cargo.toml --all-targets -- -D warnings
+    @echo "Running clippy in 'ion' workspace..."
+    cargo clippy --manifest-path ion/Cargo.toml --all-targets -- -D warnings
+
+# cargo fmt --check does not resolve targets via --manifest-path, so each
+# check below runs from inside its workspace directory.
+# Check formatting across the four workspaces
+fmt-check:
+    @echo "Checking format in 'atom' workspace..."
+    cd atom && cargo fmt --check
+    @echo "Checking format in 'eos' workspace..."
+    cd eos && cargo fmt --check
+    @echo "Checking format in 'htc' workspace..."
+    cd htc && cargo fmt --check
+    @echo "Checking format in 'ion' workspace..."
+    cd ion && cargo fmt --check
+
+# --offline restricts lychee to local files and blocks network requests, so
+# external URLs are out of scope; only relative link targets are checked.
+# Audit relative-path link targets in docs/, README.md, and ROADMAP.md
+link-audit:
+    nix run nixpkgs#lychee -- --offline --no-progress docs README.md ROADMAP.md
+
+# The TLA+/Alloy model check is a separate manually-dispatched job
+# (docs/specs/run_model_check.sh) and is intentionally not part of this gate.
+# Single-entry local reproduction of the push/PR CI gate set
+ci:
+    just lint
+    just test
+    just clippy
+    just fmt-check
+    just link-audit
 
 # Run all Bolero fuzzers sequentially (defaults to 10 seconds each)
 fuzz args="-T 10s --profile release":

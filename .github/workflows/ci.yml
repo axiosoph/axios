@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+env:
+  # tools/lints/doctrine_lint.py diffs added lines against this ref; it must
+  # resolve as a remote-tracking ref post-checkout, so it is prefixed with
+  # origin/. Falls back to origin/master on push events, where base_ref is
+  # unset.
+  LINT_DIFF_BASE: origin/${{ github.base_ref || 'master' }}
+
+jobs:
+  test:
+    name: test (${{ matrix.workspace }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        workspace: [atom, ion, eos, htc]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - run: nix-shell --run "cargo test --manifest-path ${{ matrix.workspace }}/Cargo.toml"
+
+  clippy:
+    name: clippy (${{ matrix.workspace }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        workspace: [atom, ion, eos, htc]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - run: nix-shell --run "cargo clippy --manifest-path ${{ matrix.workspace }}/Cargo.toml --all-targets -- -D warnings"
+
+  fmt:
+    name: fmt (${{ matrix.workspace }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        workspace: [atom, ion, eos, htc]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      # cargo fmt --check does not resolve targets via --manifest-path; it
+      # must run with the workspace as the working directory.
+      - run: nix-shell --run "cd ${{ matrix.workspace }} && cargo fmt --check"
+
+  doctrine-lint:
+    name: doctrine lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so LINT_DIFF_BASE resolves and the diff-scoped
+          # glossary lint can compare against it.
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 tools/lints/doctrine_lint.py
+
+  link-audit:
+    name: link audit (local targets)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      # --offline restricts lychee to local files and blocks network
+      # requests, so external URLs are out of scope; only relative link
+      # targets under docs/, README.md, and ROADMAP.md are checked.
+      - run: nix run nixpkgs#lychee -- --offline --no-progress docs README.md ROADMAP.md
