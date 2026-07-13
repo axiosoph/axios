@@ -144,7 +144,14 @@ def scan_oid_seam(path: str, lines: list[str]) -> list[Violation]:
         code = rust_code_part(raw)
         if is_gix_util:
             if in_seam:
-                if raw.rstrip("\n") == "}":
+                # Column-0 discriminates a top-level close from a nested one
+                # (`raw[:1]`, not the stripped `code`, so an indented "    }"
+                # never matches). The remainder, comment-stripped and
+                # trailing-whitespace-stripped (which also absorbs a `\r` from
+                # CRLF input), must be empty: tolerates a trailing `// end
+                # seam`-style comment on the close line without treating it as
+                # non-close content.
+                if raw[:1] == "}" and code[1:].strip() == "":
                     in_seam = False
                 continue
             if _SEAM_MOD_RE.search(code):
@@ -509,6 +516,55 @@ def self_test(cfg: dict) -> int:
     expect(
         not ostring_close_brace,
         f"a stray }} inside a string inside seam must not spuriously flag a legit call, got {ostring_close_brace}",
+    )
+    # Close-line boundary: the column-0 match itself must tolerate a
+    # trailing comment and line-ending noise without losing the close, or
+    # in_seam over-extends and hides a bypass after the module -- the same
+    # failure class as the interior-brace cases above, one line later.
+    otrailing_comment_close = scan_oid_seam(
+        "atom/atom-git/src/gix_util.rs",
+        [
+            "pub mod seam {",
+            "    pub fn ok(s: &[u8]) -> Result<ObjectId, Error> { ObjectId::try_from(s) }",
+            "} // end seam",
+            "fn bypass() -> Result<ObjectId, Error> {",
+            "    ObjectId::try_from(raw)",
+            "}",
+        ],
+    )
+    expect(
+        len(otrailing_comment_close) == 1,
+        f"a trailing comment on the seam close must not hide a bypass after it, got {otrailing_comment_close}",
+    )
+    ocrlf_close = scan_oid_seam(
+        "atom/atom-git/src/gix_util.rs",
+        [
+            "pub mod seam {\r\n",
+            "    pub fn ok(s: &[u8]) -> Result<ObjectId, Error> { ObjectId::try_from(s) }\r\n",
+            "}\r\n",
+            "fn bypass() -> Result<ObjectId, Error> {\r\n",
+            "    ObjectId::try_from(raw)\r\n",
+            "}\r\n",
+        ],
+    )
+    expect(
+        len(ocrlf_close) == 1,
+        f"a CRLF line ending on the seam close must not hide a bypass after it, got {ocrlf_close}",
+    )
+    otrailing_space_close = scan_oid_seam(
+        "atom/atom-git/src/gix_util.rs",
+        [
+            "pub mod seam {",
+            "    pub fn ok(s: &[u8]) -> Result<ObjectId, Error> { ObjectId::try_from(s) }",
+            "}  ",
+            "fn bypass() -> Result<ObjectId, Error> {",
+            "    ObjectId::try_from(raw)",
+            "}",
+        ],
+    )
+    expect(
+        len(otrailing_space_close) == 1,
+        f"trailing whitespace on the seam close must not hide a bypass after it, got {otrailing_space_close}",
     )
 
     # scratch-reference.
