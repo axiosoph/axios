@@ -480,6 +480,8 @@ spec relies on today without stating — each is an amendment item
 | backend-refs-sole-mutability | git object DB immutability + all protocol mutation via `refs/atom/*`                | **GAP (implicit)** — true of the design, stated nowhere |
 | backend-liveness-protection  | `refs/atom/src/{oid}` protective refs; `[store-claim-ref]` GC protection             | Discharged |
 | backend-hash-strength        | `[anchor-hash-agile]` covers the czd side only                                       | **GAP** — dig/src SHA-1 inheritance unacknowledged; re-anchor hardening unregistered |
+| backend-substitutable        | `[snapshot-deterministic]` + canonical serialization make git a valid golden-trace subject | **PARTIAL** — the property is inherently cross-backend (interchangeability WITH another backend); git's own determinism is discharged, but nothing to compare against exists yet |
+| backend-verification-carried | git's object model: once fetched, all objects read from the local database with zero network — structural to distributed version control | Discharged (implicit) — no git-storage-format.md constraint states this as an obligation; it is true of the design, not stated |
 
 ## Appendix B: Doc Amendments This Contract Obligates
 
