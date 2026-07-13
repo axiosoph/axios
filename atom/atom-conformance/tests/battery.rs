@@ -512,38 +512,41 @@ mod backend_hash_strength {
 }
 
 // ---------------------------------------------------------------------
-// backend-substitutable — MISSING from Appendix A (Reserved-predicate hit)
+// backend-substitutable — PARTIAL, inherently cross-backend
 // ---------------------------------------------------------------------
 mod backend_substitutable {
     #[test]
-    #[ignore = "SPEC DEFECT FINDING (n0-battery Reserved predicate): backend-substitutable is a \
-                Behavioral Property with its own Verification-table row ('integration-test': \
-                golden-trace conformance across two backends), but Appendix A's discharge map — \
-                whose own preamble claims it maps 'every obligation' — has no row for it at all. \
-                This is a disagreement between the contract's own constraint list and Appendix A, \
-                which the n0-battery IBC (S3 Reserved) explicitly reserves: 'freeze and report the \
-                row — that is a spec defect finding, not yours to resolve.' Not classified green \
-                or red pending a spec amendment adding an Appendix A row (or a stated rationale \
-                for its absence). A golden-trace conformance test also structurally needs a second \
-                conforming backend to compare against, which does not exist yet."]
+    #[ignore = "PARTIAL (atom-backend-contract.md Appendix A, backend-substitutable row): the \
+                property is inherently cross-backend (interchangeability WITH another backend); \
+                git's own determinism (snapshot-deterministic + canonical serialization) \
+                discharges its git-side half, but there is no second conforming backend to \
+                compare against yet, so a golden-trace conformance test cannot run. This row was \
+                MISSING from Appendix A when this crate first landed (a genuine spec defect this \
+                Reserved predicate correctly froze rather than resolved) — the composer added it \
+                directly afterward (PR #77). The ignore verdict is unchanged by that fix; only \
+                the reason has been corrected to match the row that now exists."]
     fn substitutable_missing_from_appendix_a() {
-        unreachable!("ignored: see #[ignore] reason — spec defect, frozen per Reserved predicate");
+        unreachable!("ignored: see #[ignore] reason — PARTIAL, no second backend to compare against");
     }
 }
 
 // ---------------------------------------------------------------------
-// backend-verification-carried — MISSING from Appendix A (Reserved-predicate hit)
+// backend-verification-carried — Discharged (implicit)
 // ---------------------------------------------------------------------
 mod backend_verification_carried {
     #[test]
-    #[ignore = "SPEC DEFECT FINDING (n0-battery Reserved predicate): backend-verification-carried \
-                has a Verification-table row ('integration-test': pipeline steps 1-13 offline \
-                against carried state) but no Appendix A discharge row, despite Appendix A's \
-                preamble claiming coverage of 'every obligation'. Same finding class as \
-                backend-substitutable — see that module's annotation. Not classified green or red; \
-                frozen for campaign escalation, not resolved here."]
+    #[ignore = "Discharged (implicit) (atom-backend-contract.md Appendix A, \
+                backend-verification-carried row): true of git's local object model by \
+                construction — once fetched, every object reads from the local database with \
+                zero network round-trips — but no git-storage-format.md constraint states this \
+                as a formal obligation, so there is nothing to test against as an integration \
+                check. This row was MISSING from Appendix A when this crate first landed (the \
+                same spec defect as backend-substitutable, correctly frozen rather than \
+                resolved) — the composer added it directly afterward (PR #77). The ignore \
+                verdict is unchanged by that fix; only the reason has been corrected to match \
+                the row that now exists."]
     fn verification_carried_missing_from_appendix_a() {
-        unreachable!("ignored: see #[ignore] reason — spec defect, frozen per Reserved predicate");
+        unreachable!("ignored: see #[ignore] reason — Discharged (implicit), nothing to test against");
     }
 }
 

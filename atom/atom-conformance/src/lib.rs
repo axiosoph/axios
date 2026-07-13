@@ -30,15 +30,20 @@
 //! | `backend-refs-sole-mutability` | `backend_refs_sole_mutability` | RED (ignored) | GAP (implicit) |
 //! | `backend-liveness-protection` | `backend_liveness_protection` | GREEN | Discharged |
 //! | `backend-hash-strength` | `backend_hash_strength` | RED (ignored) | GAP (review-residue, doc obligation) |
-//! | `backend-substitutable` | `backend_substitutable` | RED (ignored) | **MISSING from Appendix A — spec defect finding** |
-//! | `backend-verification-carried` | `backend_verification_carried` | RED (ignored) | **MISSING from Appendix A — spec defect finding** |
+//! | `backend-substitutable` | `backend_substitutable` | RED (ignored) | PARTIAL — inherently cross-backend, nothing to compare against yet |
+//! | `backend-verification-carried` | `backend_verification_carried` | RED (ignored) | Discharged (implicit) — true of git's design, stated nowhere |
 //!
-//! The last two rows are a Reserved-predicate hit (IBC `n0-battery` S3):
-//! the contract's own Verification table lists both tags with
-//! `Method: integration-test`, but Appendix A's discharge map — which its
-//! own preamble claims covers "every obligation" — has no row for
-//! either. This battery does not resolve that disagreement; it freezes
-//! each as an ignored stub naming the finding, for campaign escalation.
+//! The last two rows were a Reserved-predicate hit at this crate's
+//! original landing (IBC `n0-battery` S3): the contract's own
+//! Verification table listed both tags with `Method: integration-test`,
+//! but Appendix A's discharge map had no row for either despite its own
+//! preamble's "every obligation" claim. The composer landed the missing
+//! rows directly (`atom-backend-contract.md`, PR #77) after this crate
+//! froze; both stay ignored on their own merits — `backend-substitutable`
+//! genuinely needs a second conforming backend to compare against, and
+//! `backend-verification-carried` has no git-storage-format.md constraint
+//! naming it a formal obligation to test against — not because a row is
+//! still missing.
 
 /// The full, canonical set of `[backend-*]` constraint tags this contract
 /// defines (`docs/specs/atom-backend-contract.md`, Constraints section:
