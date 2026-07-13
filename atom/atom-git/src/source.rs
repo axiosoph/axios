@@ -255,12 +255,11 @@ impl AtomSource for GitSource {
                         }
 
                         // Validate that publish src matches the atom commit extra header
-                        let pub_src_oid = crate::gix_util::seam::oid_from_src_field(
-                            pub_payload.src.as_slice(),
-                        )
-                        .map_err(|e| {
-                            GitError::Validation(format!("Invalid publish source OID: {}", e))
-                        })?;
+                        let pub_src_oid =
+                            crate::gix_util::seam::oid_from_src_field(pub_payload.src.as_slice())
+                                .map_err(|e| {
+                                GitError::Validation(format!("Invalid publish source OID: {}", e))
+                            })?;
                         if pub_src_oid != atom_src_oid {
                             return Err(GitError::Validation(
                                 "Publish payload src does not match atom commit extra header"
@@ -269,12 +268,11 @@ impl AtomSource for GitSource {
                         }
 
                         // Check temporal vector: publish src must be descendant of claim src
-                        let claim_src_oid = crate::gix_util::seam::oid_from_src_field(
-                            claim_payload.src.as_slice(),
-                        )
-                        .map_err(|e| {
-                            GitError::Validation(format!("Invalid claim source OID: {}", e))
-                        })?;
+                        let claim_src_oid =
+                            crate::gix_util::seam::oid_from_src_field(claim_payload.src.as_slice())
+                                .map_err(|e| {
+                                    GitError::Validation(format!("Invalid claim source OID: {}", e))
+                                })?;
                         if !is_descendant(&repo, pub_src_oid, claim_src_oid)? {
                             return Err(GitError::InvalidTemporalVector {
                                 publish_src: pub_src_oid.to_hex().to_string(),
@@ -463,12 +461,11 @@ impl AtomSource for GitSource {
                         }
 
                         // Validate that publish src matches the atom commit extra header
-                        let pub_src_oid = crate::gix_util::seam::oid_from_src_field(
-                            pub_payload.src.as_slice(),
-                        )
-                        .map_err(|e| {
-                            GitError::Validation(format!("Invalid publish source OID: {}", e))
-                        })?;
+                        let pub_src_oid =
+                            crate::gix_util::seam::oid_from_src_field(pub_payload.src.as_slice())
+                                .map_err(|e| {
+                                GitError::Validation(format!("Invalid publish source OID: {}", e))
+                            })?;
                         if pub_src_oid != atom_src_oid {
                             return Err(GitError::Validation(
                                 "Publish payload src does not match atom commit extra header"
