@@ -79,8 +79,10 @@ The git backend uses four categories of git objects:
    transitively pinned by the founding charter's `src` (a revision hash
    commits to its entire ancestry), but nothing selects or derives it.
    The git object encoding and ref layout for storing and retrieving
-   charter transactions (analogous to the claim commit format below) is
-   **not yet specified** — see Open Questions #6.
+   charter transactions is the **charter commit** and the
+   `refs/atom/charter/d/{charter_czd}` ref family, specified under
+   Constraints below (`[charter-commit-format]`,
+   `[charter-succession-via-prior]`, `[charter-ref-by-czd]`).
 
 2. **Claim commits** — commits with an empty tree whose `message`
    field contains a claim `CozMessage` (JSON). The first claim for an
@@ -141,6 +143,20 @@ TYPE  AtomSnapshot = {
       -- Including `src` cryptographically binds the atom to its source
       -- revision, enabling a quick verification that the publish payload's
       -- `src` field matches the atom commit's extra header.
+
+TYPE  CharterCommitFormat = {
+        tree:          EMPTY_TREE,                  -- well-known empty tree hash
+        parent:        ∅,                           -- ALWAYS parentless (founding and successor)
+        author:        ATOM_AUTHOR,                 -- constant: blank identity
+        committer:     ATOM_AUTHOR,                 -- constant: same as author
+        timestamp:     ATOM_TIMESTAMP,              -- epoch zero
+        message:       CozMessage(CharterPayload),  -- the signed charter, JSON (typ: atom/charter)
+      }
+      -- Identity is the charter czd (czd(charter)); the founding charter's
+      -- czd (the one with no `prior`) IS the atom-set Anchor. Unlike claims,
+      -- charter commits are ALWAYS parentless: succession is carried by the
+      -- signed `prior` czd in the payload, never a git parent link (see
+      -- [charter-commit-format], [charter-succession-via-prior]).
 
 TYPE  ClaimCommitFormat = {
         tree:          EMPTY_TREE,                  -- well-known empty tree hash
@@ -262,6 +278,84 @@ temporal floor — only content at or after the claim is publishable.
 the verifier MUST check that the publish's `src` is genuinely in the
 repository's history and is at or after the claim's `src`. This uses
 treeless commit-only fetching (`tree:0`) for efficiency.
+`VERIFIED: unverified`
+
+**[charter-commit-format]**: A charter transaction MUST be stored as a
+**charter commit**: a commit whose `tree` is the well-known empty tree
+(`EMPTY_TREE`), whose author and committer are `ATOM_AUTHOR` at
+`ATOM_TIMESTAMP`, and whose commit `message` is the charter `CozMessage`
+(JSON, `typ: "atom/charter"`). A charter commit MUST have **zero git
+parents** — every charter commit is parentless, founding or successor
+alike. The charter's identity is its czd (`czd(charter)`); the founding
+charter's czd is the atom-set `Anchor` (`[charter-anchor]`).
+
+This adopts the claim commit's *object shape* (empty tree, CozMessage in
+the message, lightweight object) but deliberately NOT its git-parent
+chaining. Claims chain via git parents because that parent chain IS the
+ownership-history audit trail, anchored by a single tip ref; charters
+instead receive one protective ref per czd (`[charter-ref-by-czd]`), so
+garbage-collection reachability needs no parent chain, and the
+authoritative succession link is the signed `prior` czd in the payload
+(`[charter-succession-via-prior]`). Re-encoding succession as a git
+parent would duplicate that link in an unsigned channel that could
+diverge from the signed truth, and — collapsed onto a single mutable tip
+ref — would hide the divergent-successor fork that
+`[charter-succession-linear]` requires consumers to detect. Succession
+therefore lives in the signed payload alone.
+`VERIFIED: unverified`
+
+**[charter-message-is-coz]**: The commit message of a charter commit
+MUST be a valid, complete `CozMessage` JSON object whose payload has
+`typ: "atom/charter"`. The message MUST be parseable as JSON and MUST
+pass Coz verification. No additional text, headers, or formatting
+SHOULD be present outside the CozMessage JSON. (The charter analogue of
+`[claim-message-is-coz]`.)
+`VERIFIED: unverified`
+
+**[charter-succession-via-prior]**: A succession chain MUST be walked by
+following the **signed** `prior` czd of each `CharterPayload` — each
+`prior` resolved to its charter commit through
+`refs/atom/charter/d/{prior_czd}` — never by a git parent link and never
+by `now` (which is untrusted for authority ordering,
+`[charter-succession-linear]`). The founding charter is the unique
+charter carrying no `prior`; its czd is the anchor. The effective
+charter is the head of the chain — the charter that is no valid
+charter's `prior`. Two charters sharing one `prior` value are divergent
+successors: the git encoding materializes both (each has its own
+`charter/d/` ref), so a resolver enumerating the family observes the
+set-authority fork directly and MUST fail closed per
+`[charter-succession-linear]` rather than let a mutable pointer silently
+select a winner. This encoding satisfies `[charter-succession]`,
+`[charter-succession-linear]`, and `[charter-ancestry]`; it does not
+restate or alter them.
+`VERIFIED: unverified`
+
+**[charter-src-reachable]**: A resolver MUST be able to obtain the
+effective charter's `src` for the `[temporal-vector]` ancestry check by
+resolving the effective charter commit (`[charter-succession-via-prior]`)
+and reading the `src` field of its signed `CharterPayload` — one object
+read. Locating the effective charter costs at most one pass over the
+`refs/atom/charter/d/*` family, whose size is the succession-chain length
+(the count of ownership transfers), bounded and independent of the
+repository's commit history; in the common no-succession case there is
+exactly one charter and the cost is O(1). This is the bounded replacement
+for the retired genesis-graph walk (`[anchor-oldest-root]`), which walked
+unbounded commit ancestry.
+`VERIFIED: unverified`
+
+**[dev-atom-unchartered-local]**: A development atom built from a git
+source that carries **no charter yet** MUST be treated as **local class**
+(atom-model.md §5): it acquires no set anchor, because the anchor is
+`czd(charter₀)` and no founding charter exists to supply one. For the
+`refs/atom/dev/{anchor}/{label}/{dev_version}` ref segment, such an atom
+MUST use the same well-known constant sentinel anchor as a filesystem
+source (atom-transactions.md `[fs-source-contract]`) — an unchartered git
+source is, for identity purposes, exactly as anchorless as a filesystem
+source. A local-class dev atom is available for local build consumption
+only; it carries no protocol trust and cannot be claimed or published
+until the set is chartered, after which atoms built from
+charter-descended revisions anchor to `czd(charter₀)` normally
+(`[fs-ingest-transition]`).
 `VERIFIED: unverified`
 
 **[claim-detached]**: A claim commit MUST have the well-known empty
@@ -512,7 +606,57 @@ accumulation. Git has no cross-namespace reference counting, so this
 cleanup is the backend's responsibility.
 `VERIFIED: unverified`
 
+#### Charter Refs (source and store)
+
+```
+refs/atom/charter/d/{charter_czd}                → charter commit (parentless, empty tree)
+```
+
+A charter has no label — its identity is its czd — so a single
+czd-addressed family serves both a source (registry) and a store, with
+no label-addressed sibling. The founding charter (`prior` absent) is the
+anchor `czd(charter₀)`; successors chain via the signed `prior` czd, not
+via git parents (`[charter-succession-via-prior]`). Charter commits carry
+the empty tree, so the whole succession chain is lightweight to enumerate
+and fetch (commit objects only), exactly as claim chains are.
+
+**[charter-ref-by-czd]**: Each charter commit MUST be referenced by
+`refs/atom/charter/d/{charter_czd}`, a czd-hex ref family (conforming to
+the typed ref-path discipline of `[czd-oid-disjoint]`) that both protects
+the charter commit from garbage collection and addresses it by czd for
+`CharterStore::get_charter`. Enumerating `refs/atom/charter/d/*` yields
+the candidate charter set an `[anchor-resolvable]` consumer verifies
+against — the git instance of atom-transactions.md `[charter-transition]`
+POST ("stored in the source's atom refs, enumerable by consumers and
+retrievable by its czd"). The family is identical in a source and a
+store; ingesting a set fetches its charter chain into the same family.
+`VERIFIED: unverified`
+
 ### Transitions
+
+**[charter-transition-git]**: An atom-set MAY be chartered on the git
+backend by creating a parentless charter commit.
+
+- **PRE**: The repository MUST have at least one commit, and the
+  charter's `src` MUST reference a revision that exists in it. A
+  **founding** charter's payload carries no `prior`; a **successor**'s
+  `prior` czd MUST resolve to an existing charter commit via
+  `refs/atom/charter/d/{prior_czd}` whose `owner` authorizes the
+  successor's signing key (`[charter-succession]`). The charter
+  `CozMessage` MUST be valid (`[charter-message-is-coz]`). Authorization
+  of a founding charter over a source that already carries pre-charter
+  claims is governed protocol-side by atom-transactions.md
+  `[charter-transition]` (the bootstrap gate); the backend enforces
+  storage, not that authorization decision.
+- **POST**: A parentless charter commit exists with the well-known empty
+  tree and the charter `CozMessage` as its message
+  (`[charter-commit-format]`), referenced by
+  `refs/atom/charter/d/{charter_czd}` (`[charter-ref-by-czd]`). A
+  founding charter's czd is thereby the atom-set `Anchor`. The charter is
+  enumerable and retrievable by czd, discharging atom-transactions.md
+  `[charter-transition]` POST for the git backend. Multi-ref writes
+  follow `[refs-atomic-multi]`.
+  `VERIFIED: unverified`
 
 **[claim-transition-git]**: An atom MAY be claimed by creating a
 detached claim commit.
@@ -649,8 +793,10 @@ be ingested into a git `AtomStore` without claims or publishes.
   Every atom has an AtomId — git-sourced dev atoms use the set's
   charter anchor (`czd(charter₀)`); filesystem-sourced atoms use
   a well-known constant sentinel anchor (see atom-transactions.md
-  `[fs-source-contract]`). Dev-atom behavior in a repository that has
-  no charter yet is unspecified (Open Questions #6). Note: the dev atom's `dig` will inherently
+  `[fs-source-contract]`). A git source that has no charter yet is
+  identity-equivalent to a filesystem source: its dev atoms are
+  local-class and carry the same sentinel anchor
+  (`[dev-atom-unchartered-local]`). Note: the dev atom's `dig` will inherently
   differ from the published `dig` because published atoms include a
   real `src` extra header — this is by design.
   `VERIFIED: unverified`
@@ -783,6 +929,13 @@ ingested atom. (Model §2.3, ⊇ condition.)
 | snapshot-parentless          | unit-test        | pending | Atom commit has zero parents                           |
 | snapshot-src-header          | unit-test        | pending | Atom commit has exactly one extra header `src`         |
 | temporal-vector              | integration-test | pending | charter src → claim src → publish src enforced         |
+| charter-commit-format        | unit-test        | pending | Charter: parentless, empty tree, CozMessage message    |
+| charter-message-is-coz       | integration-test | pending | Parse charter from commit message, verify typ          |
+| charter-succession-via-prior | integration-test | pending | Walk signed `prior`; divergent successors fail closed  |
+| charter-src-reachable        | integration-test | pending | Effective charter `src` via head, bounded cost         |
+| charter-ref-by-czd           | integration-test | pending | `charter/d/{czd}` addresses, GC-protects, enumerates   |
+| charter-transition-git       | integration-test | pending | Charter creates parentless commit + `charter/d/` ref   |
+| dev-atom-unchartered-local   | integration-test | pending | Unchartered dev atom = local, sentinel anchor          |
 | claim-detached               | unit-test        | pending | Claim: empty tree, chains to prev if exists            |
 | claim-message-is-coz         | integration-test | pending | Parse claim from commit message, verify                |
 | publish-tag-targets-correct  | integration-test | pending | Tag target is atom commit or previous tag              |
@@ -996,16 +1149,19 @@ ingested atom. (Model §2.3, ⊇ condition.)
    The choice does not affect protocol correctness — only git tooling
    ergonomics.
 
-6. **Charter storage representation**: The 2026-07-08 charter amendment
-   (`Anchor := czd(charter₀)`, atom-transactions.md `[charter-anchor]`)
-   makes the founding charter the root of every set's trust chain, and
-   `[anchor-resolvable]` requires that a consumer can locate and verify
-   it from the source's atom refs — but this spec does not yet define
-   the git object encoding or ref layout for charter transactions
-   (a claim-commit-analogous encoding is the obvious candidate).
-   Until it does, the following are unspecified on the git backend:
-   how a charter transaction is stored and enumerated, how
-   `[temporal-vector]` obtains the effective charter's `src`, and what
-   anchor (if any) dev atoms carry in a repository that has no charter
-   yet. This is atom-milestone design work
-   (see the repository's ROADMAP), not an editorial gap.
+6. **Charter storage representation** — RESOLVED (2026-07-13): The git
+   object encoding and ref layout for charter transactions is now
+   specified. A charter is a **charter commit** — a parentless,
+   empty-tree commit carrying the charter `CozMessage`
+   (`[charter-commit-format]`, `[charter-message-is-coz]`) — addressed
+   and enumerated by `refs/atom/charter/d/{charter_czd}`
+   (`[charter-ref-by-czd]`). Succession is walked by the signed `prior`
+   czd, never a git parent or `now` (`[charter-succession-via-prior]`),
+   which is how a resolver reaches the effective charter's `src` for
+   `[temporal-vector]` in bounded, chain-length-only cost
+   (`[charter-src-reachable]`). A dev atom in a repository with no
+   charter yet is local-class and carries the filesystem sentinel anchor
+   (`[dev-atom-unchartered-local]`). The founding-charter authorization
+   over a pre-claimed source (the bootstrap gate) remains
+   protocol-side in atom-transactions.md `[charter-transition]`, not a
+   backend concern.
