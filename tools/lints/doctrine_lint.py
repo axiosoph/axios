@@ -111,6 +111,57 @@ _NEWTYPE_RE = re.compile(
 )
 
 
+_SEAM_MOD_RE = re.compile(r"^\s*pub\s+mod\s+seam\b")
+
+
+def scan_oid_seam(path: str, lines: list[str]) -> list[Violation]:
+    """Flag raw ``ObjectId::try_from`` calls outside the seam constructors.
+
+    `[backend-seam-typed]` (`docs/specs/atom-backend-contract.md`) routes
+    every protocol-digest -> `ObjectId` conversion through the three named
+    constructors in `gix_util.rs`'s `seam` module; a raw call anywhere else
+    in `atom-git` bypasses the sort-assertion those constructors encode.
+    Scoped structurally (by module nesting), not by waiver: the three legal
+    sites are a fixed, load-bearing part of the seam's own definition, not
+    legacy debt scheduled for removal.
+
+    Module extent is found by COLUMN, not by brace-depth counting: `pub mod
+    seam` is a top-level item (column 0 under this repo's enforced rustfmt
+    style), so its closing brace is the first line that is exactly `}` at
+    column 0 after the module opens. Depth-counting braces found anywhere in
+    a line's content is unsound here — a brace inside a string literal, a
+    char literal, or a block comment (e.g. an escaped `{{` in a `format!`
+    error message) miscounts, silently extending or truncating the module's
+    perceived extent. Column-0 matching sidesteps that class entirely: it
+    never inspects brace characters inside line content at all.
+    """
+    if not path.startswith("atom/atom-git/src/") or not path.endswith(".rs"):
+        return []
+    is_gix_util = path.endswith("/gix_util.rs")
+    out: list[Violation] = []
+    in_seam = False
+    for n, raw in enumerate(lines, start=1):
+        code = rust_code_part(raw)
+        if is_gix_util:
+            if in_seam:
+                # Column-0 discriminates a top-level close from a nested one
+                # (`raw[:1]`, not the stripped `code`, so an indented "    }"
+                # never matches). The remainder, comment-stripped and
+                # trailing-whitespace-stripped (which also absorbs a `\r` from
+                # CRLF input), must be empty: tolerates a trailing `// end
+                # seam`-style comment on the close line without treating it as
+                # non-close content.
+                if raw[:1] == "}" and code[1:].strip() == "":
+                    in_seam = False
+                continue
+            if _SEAM_MOD_RE.search(code):
+                in_seam = True
+                continue
+        if "ObjectId::try_from" in code:
+            out.append(Violation("oid-seam-bypass", path, n, raw.rstrip("\n")))
+    return out
+
+
 def scan_serde_identity(path: str, lines: list[str]) -> list[Violation]:
     """Flag identity newtypes (``ReqDigest``/``ActionId`` class) deriving serde.
 
@@ -252,6 +303,7 @@ def scan_repo(cfg: dict) -> tuple[list[Violation], list[str]]:
         if path.endswith(".rs"):
             violations += scan_rust_identifiers(path, lines)
             violations += scan_serde_identity(path, lines)
+            violations += scan_oid_seam(path, lines)
         # scratch check: documentation only (*.md), excluding the doctrine source
         # (AGENTS.md), which names the paths to forbid them.
         if path.endswith(".md") and path != DOCTRINE_SOURCE:
@@ -351,6 +403,170 @@ def self_test(cfg: dict) -> int:
     )
     expect(not sclean, f"clean identity newtypes must pass, got {sclean}")
 
+    # oid-seam-bypass: fire on a raw call outside the seam module; exempt
+    # inside it (including the module's own doc-comment narration and its
+    # nested #[cfg(test)] block, which only calls the wrapped constructors).
+    ofire_other_file = scan_oid_seam(
+        "atom/atom-git/src/store.rs",
+        ["    let oid = ObjectId::try_from(bytes)?;"],
+    )
+    expect(
+        len(ofire_other_file) == 1,
+        f"oid-seam-bypass must fire outside gix_util.rs, got {ofire_other_file}",
+    )
+    ofire_same_file = scan_oid_seam(
+        "atom/atom-git/src/gix_util.rs",
+        [
+            "fn helper() -> Result<ObjectId, Error> {",
+            "    ObjectId::try_from(bytes)",
+            "}",
+            "pub mod seam {",
+            "    pub fn oid_from_src_field(src: &[u8]) -> Result<ObjectId, Error> {",
+            "        ObjectId::try_from(src)",
+            "    }",
+            "}",
+        ],
+    )
+    expect(
+        len(ofire_same_file) == 1,
+        f"oid-seam-bypass must fire on gix_util.rs sites outside seam only, got {ofire_same_file}",
+    )
+    oclean = scan_oid_seam(
+        "atom/atom-git/src/gix_util.rs",
+        [
+            "/// ...to call `ObjectId::try_from` on protocol-payload bytes...",
+            "pub mod seam {",
+            "    pub fn oid_from_src_field(src: &[u8]) -> Result<ObjectId, Error> {",
+            "        ObjectId::try_from(src)",
+            "    }",
+            "    #[cfg(test)]",
+            "    mod tests {",
+            "        // ObjectId::try_from is exercised via oid_from_src_field",
+            "    }",
+            "}",
+        ],
+    )
+    expect(
+        not oclean,
+        f"oid-seam-bypass must not fire inside seam or on doc-comment narration, got {oclean}",
+    )
+    expect(
+        not scan_oid_seam("eos/eos-core/src/lib.rs", ["ObjectId::try_from(x)"]),
+        "oid-seam-bypass must be scoped to atom/atom-git/src/*.rs only",
+    )
+    # Column-0 module-close boundary: an interior brace character inside a
+    # string, char literal, or block comment must never extend or truncate
+    # the seam module's perceived extent (a prior depth-counting version was
+    # bypassable this way — see the docstring). Each case below is a
+    # reproduced defect from that version, now a permanent regression guard.
+    oescaped_brace = scan_oid_seam(
+        "atom/atom-git/src/gix_util.rs",
+        [
+            "pub mod seam {",
+            '    fn err() -> String { format!("bad oid: {{") }',
+            "}",
+            "fn bypass() -> Result<ObjectId, Error> {",
+            "    ObjectId::try_from(raw)",
+            "}",
+        ],
+    )
+    expect(
+        len(oescaped_brace) == 1,
+        f"an escaped brace {{{{ inside seam must not hide a bypass after it, got {oescaped_brace}",
+    )
+    ochar_brace = scan_oid_seam(
+        "atom/atom-git/src/gix_util.rs",
+        [
+            "pub mod seam {",
+            "    const OPEN: char = '{';",
+            "}",
+            "fn bypass() -> Result<ObjectId, Error> {",
+            "    ObjectId::try_from(raw)",
+            "}",
+        ],
+    )
+    expect(
+        len(ochar_brace) == 1,
+        f"a char literal '{{' inside seam must not hide a bypass after it, got {ochar_brace}",
+    )
+    ocomment_brace = scan_oid_seam(
+        "atom/atom-git/src/gix_util.rs",
+        [
+            "pub mod seam {",
+            "    /* opening brace: { */",
+            "}",
+            "fn bypass() -> Result<ObjectId, Error> {",
+            "    ObjectId::try_from(raw)",
+            "}",
+        ],
+    )
+    expect(
+        len(ocomment_brace) == 1,
+        f"a block-comment {{ inside seam must not hide a bypass after it, got {ocomment_brace}",
+    )
+    ostring_close_brace = scan_oid_seam(
+        "atom/atom-git/src/gix_util.rs",
+        [
+            "pub mod seam {",
+            '    fn narrate() { let s = "close: }"; }',
+            "    pub fn ok(s: &[u8]) -> Result<ObjectId, Error> { ObjectId::try_from(s) }",
+            "}",
+        ],
+    )
+    expect(
+        not ostring_close_brace,
+        f"a stray }} inside a string inside seam must not spuriously flag a legit call, got {ostring_close_brace}",
+    )
+    # Close-line boundary: the column-0 match itself must tolerate a
+    # trailing comment and line-ending noise without losing the close, or
+    # in_seam over-extends and hides a bypass after the module -- the same
+    # failure class as the interior-brace cases above, one line later.
+    otrailing_comment_close = scan_oid_seam(
+        "atom/atom-git/src/gix_util.rs",
+        [
+            "pub mod seam {",
+            "    pub fn ok(s: &[u8]) -> Result<ObjectId, Error> { ObjectId::try_from(s) }",
+            "} // end seam",
+            "fn bypass() -> Result<ObjectId, Error> {",
+            "    ObjectId::try_from(raw)",
+            "}",
+        ],
+    )
+    expect(
+        len(otrailing_comment_close) == 1,
+        f"a trailing comment on the seam close must not hide a bypass after it, got {otrailing_comment_close}",
+    )
+    ocrlf_close = scan_oid_seam(
+        "atom/atom-git/src/gix_util.rs",
+        [
+            "pub mod seam {\r\n",
+            "    pub fn ok(s: &[u8]) -> Result<ObjectId, Error> { ObjectId::try_from(s) }\r\n",
+            "}\r\n",
+            "fn bypass() -> Result<ObjectId, Error> {\r\n",
+            "    ObjectId::try_from(raw)\r\n",
+            "}\r\n",
+        ],
+    )
+    expect(
+        len(ocrlf_close) == 1,
+        f"a CRLF line ending on the seam close must not hide a bypass after it, got {ocrlf_close}",
+    )
+    otrailing_space_close = scan_oid_seam(
+        "atom/atom-git/src/gix_util.rs",
+        [
+            "pub mod seam {",
+            "    pub fn ok(s: &[u8]) -> Result<ObjectId, Error> { ObjectId::try_from(s) }",
+            "}  ",
+            "fn bypass() -> Result<ObjectId, Error> {",
+            "    ObjectId::try_from(raw)",
+            "}",
+        ],
+    )
+    expect(
+        len(otrailing_space_close) == 1,
+        f"trailing whitespace on the seam close must not hide a bypass after it, got {otrailing_space_close}",
+    )
+
     # scratch-reference.
     expect(
         bool(scan_scratch("docs/x.md", ["see .scratch/notes for detail"])),
@@ -393,7 +609,7 @@ def self_test(cfg: dict) -> int:
         for m in failures:
             print(f"  - {m}")
         return 1
-    print(f"self-test PASS ({6} lint classes exercised, violation + clean cases)")
+    print(f"self-test PASS ({7} lint classes exercised, violation + clean cases)")
     return 0
 
 
