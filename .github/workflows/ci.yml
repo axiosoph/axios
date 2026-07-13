@@ -17,8 +17,12 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      # alurl is a 5th crate (its own Cargo.toml, not one of the four
+      # doctrine layers) already covered by `just test`; included here so
+      # this job doesn't regress that existing coverage. clippy/fmt below
+      # stay scoped to the four layer workspaces per this task's boundary.
       matrix:
-        workspace: [atom, ion, eos, htc]
+        workspace: [atom, ion, eos, htc, alurl]
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@main
