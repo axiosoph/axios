@@ -1,0 +1,16 @@
+name: Model Check
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  model-check:
+    name: TLC + Alloy model check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      # run_model_check.sh re-execs itself inside docs/specs/shell.nix when
+      # tlc/java are absent from PATH, so no wrapping nix-shell call is
+      # needed here.
+      - run: docs/specs/run_model_check.sh
