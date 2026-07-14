@@ -302,6 +302,13 @@ pub struct ClaimPayload {
     pub tmb: Thumbprint,
     /// Transaction type — always [`TYP_CLAIM`].
     pub typ: String,
+    /// Ecosystem-specific extensions, nested here per
+    /// `[claim-payload-extensible]` (root JSON keys are otherwise
+    /// reserved for protocol fields). `None` when no extensions are
+    /// present.
+    #[cfg(feature = "serde")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub meta: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
 impl ClaimPayload {
@@ -332,6 +339,8 @@ impl ClaimPayload {
             src,
             tmb,
             typ: TYP_CLAIM.to_owned(),
+            #[cfg(feature = "serde")]
+            meta: None,
         }
     }
 
@@ -369,6 +378,8 @@ impl ClaimPayload {
             src,
             tmb,
             typ: TYP_CLAIM.to_owned(),
+            #[cfg(feature = "serde")]
+            meta: None,
         }
     }
 }
@@ -376,6 +387,19 @@ impl ClaimPayload {
 // ============================================================================
 // PublishPayload
 // ============================================================================
+
+/// The reproducibility mode a `PublishPayload` declares — `[publish-mode]`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+pub enum Mode {
+    /// Every action the publish denotes yields `record_core`-equal
+    /// records at fixed `action_id` (atom-model.md §6).
+    Reproducible,
+    /// Asserts nothing beyond witness accumulation. The spec's default
+    /// when `mode` is absent from the wire.
+    Witnessed,
+}
 
 /// Payload for an `atom/publish` transaction.
 ///
@@ -414,13 +438,29 @@ pub struct PublishPayload {
     pub version: RawVersion,
     /// Transaction type — always [`TYP_PUBLISH`].
     pub typ: String,
+    /// Declared reproducibility mode. `None` on the wire (and here)
+    /// means `witnessed`, the spec's `[publish-mode]` default — read
+    /// [`PublishPayload::effective_mode`] rather than this field
+    /// directly when the resolved value is what matters.
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
+    pub mode: Option<Mode>,
+    /// Ecosystem-specific extensions, nested here per
+    /// `[publish-payload-extensible]` (root JSON keys are otherwise
+    /// reserved for protocol fields). `None` when no extensions are
+    /// present.
+    #[cfg(feature = "serde")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub meta: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
 impl PublishPayload {
     /// Construct a new publish payload.
     ///
     /// Takes an [`AtomId`] to ensure that the anchor and label come from
-    /// a validated identity pair. Sets `typ` to [`TYP_PUBLISH`] automatically.
+    /// a validated identity pair. Sets `typ` to [`TYP_PUBLISH`]
+    /// automatically, and leaves `mode` and `meta` unset — use
+    /// [`PublishPayload::effective_mode`] to read the resolved mode, and
+    /// set `meta`/`mode` directly on the returned value if needed.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         alg: Alg,
@@ -445,7 +485,16 @@ impl PublishPayload {
             tmb,
             version,
             typ: TYP_PUBLISH.to_owned(),
+            mode: None,
+            #[cfg(feature = "serde")]
+            meta: None,
         }
+    }
+
+    /// The effective reproducibility mode: `mode` if set, else the
+    /// spec's `[publish-mode]` default (`witnessed`).
+    pub fn effective_mode(&self) -> Mode {
+        self.mode.unwrap_or(Mode::Witnessed)
     }
 }
 

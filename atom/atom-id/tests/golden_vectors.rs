@@ -1,5 +1,5 @@
 //! Golden vectors across the czd digest-algorithm axis (32/48/64 bytes) +
-//! RED unknown-field round-trip fixtures.
+//! unknown-field and `mode`-default round-trip fixtures.
 //!
 //! Every fixture prior to this node used 4-byte toy anchors and a single
 //! algorithm (Ed25519), so the historic digest bug that mislabeled a
@@ -17,11 +17,12 @@
 //!
 //! Spec: `docs/specs/atom-transactions.md` `[charter-anchor]`,
 //! `[symmetric-payloads]`, `[publish-chains-claim]`, `[czd-recalculatable]`,
-//! `[publish-payload-extensible]`.
+//! `[publish-payload-extensible]`, `[claim-payload-extensible]`,
+//! `[publish-mode]`.
 
 use atom_id::{
-    Alg, Anchor, AtomId, CharterPayload, ClaimPayload, Czd, Label, PublishPayload, RawVersion,
-    Thumbprint,
+    Alg, Anchor, AtomId, CharterPayload, ClaimPayload, Czd, Label, Mode, PublishPayload,
+    RawVersion, Thumbprint,
 };
 use serde::{Deserialize, Serialize};
 
@@ -391,7 +392,7 @@ fn golden_vectors_signatures_verify() {
 }
 
 // ============================================================================
-// c3 — RED extensibility fixtures (n2-payload-fields greens these)
+// c1/c2 — extensibility fixtures (greened by n2-payload-fields)
 // ============================================================================
 
 /// A minimal, valid `PublishPayload` for the extensibility fixtures below
@@ -446,9 +447,8 @@ fn inject_meta<P: Serialize>(payload: &P) -> Vec<u8> {
 
 // F8: PublishPayload silently drops the unknown `meta` field under serde
 // — the exact opposite of `[publish-payload-extensible]`'s preserve-all
-// mandate. Greens once n2-payload-fields lands the `meta` field.
+// mandate. Greened by n2-payload-fields's `meta` field.
 #[test]
-#[ignore = "F8: greens at n2-payload-fields"]
 fn publish_payload_preserves_unknown_meta_field() {
     let injected = inject_meta(&extensibility_publish_payload());
 
@@ -467,10 +467,9 @@ fn publish_payload_preserves_unknown_meta_field() {
 
 // F8: ClaimPayload silently drops the unknown `meta` field under serde —
 // `[symmetric-payloads]` ties claim and publish payload shape together,
-// so the same preservation obligation applies. Greens once
-// n2-payload-fields lands the `meta` field on both payload types.
+// so the same preservation obligation applies. Greened by
+// n2-payload-fields's `meta` field on both payload types.
 #[test]
-#[ignore = "F8: greens at n2-payload-fields"]
 fn claim_payload_preserves_unknown_meta_field() {
     let injected = inject_meta(&extensibility_claim_payload());
 
@@ -484,5 +483,33 @@ fn claim_payload_preserves_unknown_meta_field() {
         Some(&serde_json::json!({ "note": "ecosystem-specific extension" })),
         "[symmetric-payloads] x [publish-payload-extensible]: an unknown 'meta' field MUST \
          survive a deserialize/reserialize round trip, not be silently dropped"
+    );
+}
+
+// ============================================================================
+// c1 — RED mode-default fixture (n2-payload-fields greens this)
+// ============================================================================
+
+/// F9 / `[publish-mode]`: a `PublishPayload` built without an explicit mode
+/// omits `mode` from the wire, and reading it back MUST resolve to
+/// `witnessed` — the spec's stated default for an absent field.
+#[test]
+fn publish_payload_mode_absent_reads_witnessed() {
+    let payload = extensibility_publish_payload();
+    let json = serde_json::to_value(&payload).expect("payload always serializes");
+
+    assert_eq!(
+        json.get("mode"),
+        None,
+        "an unset mode MUST be omitted from the wire, not written as null"
+    );
+
+    let round_tripped: PublishPayload =
+        serde_json::from_value(json).expect("a payload with no mode field must still deserialize");
+
+    assert_eq!(
+        round_tripped.effective_mode(),
+        Mode::Witnessed,
+        "[publish-mode]: an absent mode field MUST read as witnessed"
     );
 }
