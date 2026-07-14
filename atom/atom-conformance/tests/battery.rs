@@ -85,8 +85,8 @@ mod backend_ancestry_sound {
     #[test]
     #[ignore = "GAP: backend-ancestry-sound (P15) is used by \
                 [temporal-vector]/[no-backdated-src]/[charter-ancestry] but never stated as an \
-                obligation. atom-git's ancestry primitives (gix_util::is_descendant, \
-                derive_anchor) do walk hash-committed commit.parent_ids() — the right shape — but \
+                obligation. atom-git's ancestry primitive (gix_util::is_descendant) does walk \
+                hash-committed commit.parent_ids() — the right shape — but \
                 no spec obligation or machine-checked proof binds that fact yet. Node: \
                 n3-alloy-seam (P15's abstract row) + a doc-amendment sweep item stating the git \
                 argument (parent OIDs are in the hashed preimage)."]
@@ -137,7 +137,7 @@ mod backend_ancestry_queryable {
 // ---------------------------------------------------------------------
 mod backend_refs_linearizable {
     use super::*;
-    use crate::common::{atom_id, new_registry, setup_repo};
+    use crate::common::{chartered_atom_id, new_registry, setup_repo};
 
     /// The mechanism half: gix's per-ref transaction genuinely rejects a
     /// write whose `expected` no longer matches the ref's live value —
@@ -147,7 +147,7 @@ mod backend_refs_linearizable {
     fn ref_cas_rejects_stale_expected() {
         let (_dir, repo, genesis) = setup_repo();
         let registry = new_registry(repo.clone(), "cargo");
-        let id = atom_id(genesis, "pkg-a");
+        let id = chartered_atom_id(&registry, "pkg-a");
 
         let _ = registry.claim(&id, b"owner").expect("initial claim");
 
@@ -203,7 +203,7 @@ mod backend_refs_linearizable {
 mod backend_refs_atomic_multi {
     use atom_core::AtomRegistry;
 
-    use crate::common::{atom_id, new_registry, setup_repo};
+    use crate::common::{chartered_atom_id, new_registry, setup_repo};
 
     /// `claim()` writes the claim ref and its protective src ref through
     /// a single `gix::Repository::edit_references` batch
@@ -213,7 +213,7 @@ mod backend_refs_atomic_multi {
     fn claim_writes_land_both_refs_together() {
         let (_dir, repo, genesis) = setup_repo();
         let registry = new_registry(repo.clone(), "cargo");
-        let id = atom_id(genesis, "pkg-b");
+        let id = chartered_atom_id(&registry, "pkg-b");
 
         let _ = registry.claim(&id, b"owner").expect("claim");
 
@@ -345,15 +345,15 @@ mod backend_carriage_bit_perfect {
 mod backend_chain_append {
     use atom_core::AtomRegistry;
 
-    use crate::common::{atom_id, new_registry, setup_repo};
+    use crate::common::{chartered_atom_id, new_registry, setup_repo};
 
     /// Claim rotation is append-only: the prior claim commit remains a
     /// retrievable git object after a successor claim lands.
     #[test]
     fn claim_rotation_preserves_prior_chain_object() {
-        let (_dir, repo, genesis) = setup_repo();
+        let (_dir, repo, _genesis) = setup_repo();
         let registry = new_registry(repo.clone(), "cargo");
-        let id = atom_id(genesis, "pkg-d");
+        let id = chartered_atom_id(&registry, "pkg-d");
 
         let _ = registry.claim(&id, b"owner-1").expect("first claim");
         let first_claim_oid = repo
@@ -388,7 +388,7 @@ mod backend_chain_append {
 mod backend_enumeration {
     use atom_core::{AtomRegistry, AtomSource, RawVersion};
 
-    use crate::common::{atom_id, new_registry, setup_repo};
+    use crate::common::{chartered_atom_id, new_registry, setup_repo};
 
     /// A claimed+published atom is discoverable and resolvable purely
     /// from ref/commit-message scans (`GitSource::discover`/`resolve`),
@@ -397,7 +397,7 @@ mod backend_enumeration {
     async fn labels_and_versions_enumerable_without_content() {
         let (_dir, repo, genesis) = setup_repo();
         let registry = new_registry(repo.clone(), "cargo");
-        let id = atom_id(genesis, "pkg-e");
+        let id = chartered_atom_id(&registry, "pkg-e");
 
         let claim_czd = registry.claim(&id, b"owner").expect("claim");
         let empty_tree = repo
@@ -468,7 +468,7 @@ mod backend_refs_sole_mutability {
 mod backend_liveness_protection {
     use atom_core::AtomRegistry;
 
-    use crate::common::{atom_id, new_registry, setup_repo};
+    use crate::common::{chartered_atom_id, new_registry, setup_repo};
 
     /// After `claim()`, the protective `refs/atom/src/{oid}` ref exists
     /// and its target (the claim's src revision) is retrievable — the
@@ -478,7 +478,7 @@ mod backend_liveness_protection {
     fn protective_src_ref_exists_and_target_retrievable() {
         let (_dir, repo, genesis) = setup_repo();
         let registry = new_registry(repo.clone(), "cargo");
-        let id = atom_id(genesis, "pkg-f");
+        let id = chartered_atom_id(&registry, "pkg-f");
 
         let _ = registry.claim(&id, b"owner").expect("claim");
 

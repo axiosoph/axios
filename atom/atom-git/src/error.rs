@@ -59,15 +59,6 @@ pub enum GitError {
     #[error("Repository open/initialization error: {0}")]
     Init(String),
 
-    /// The derived anchor did not match the expected anchor in the transaction.
-    #[error("Anchor mismatch: derived {derived} but expected {expected}")]
-    InvalidAnchor {
-        /// The derived anchor base64ut value.
-        derived: String,
-        /// The expected anchor base64ut value.
-        expected: String,
-    },
-
     /// The publish source revision is not at or after the claim source revision.
     #[error(
         "Invalid temporal vector: publish src {publish_src} is not a descendant of claim src \

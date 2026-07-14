@@ -6,7 +6,7 @@
 //! genesis commit, one blank-signature actor, no network, no clock
 //! reads baked into any assertion (c4-deterministic).
 
-use atom_core::{AtomId, Label};
+use atom_core::{AtomId, AtomRegistry, Label};
 use atom_git::GitRegistry;
 use atom_id::Anchor;
 use coz_rs::{Alg, Ed25519, SigningKey};
@@ -53,8 +53,25 @@ pub fn new_registry(repo: gix::Repository, pkg: &str) -> GitRegistry {
 }
 
 /// An `AtomId` anchored at `genesis_oid` under `label`.
+///
+/// The anchor is a bare, never-chartered value — usable only by fixtures
+/// that never call [`GitRegistry::claim`] (which requires a real founding
+/// charter for the anchor it's given, per `[anchor-resolvable]`). Callers
+/// that do call `claim` MUST use [`chartered_atom_id`] instead.
 pub fn atom_id(genesis_oid: ObjectId, label: &str) -> AtomId {
     let anchor = Anchor::new(genesis_oid.as_bytes().to_vec());
+    AtomId::new(anchor, Label::try_from(label).expect("valid label"))
+}
+
+/// Charters `registry`'s source (founding, no `prior`) and returns an
+/// `AtomId` anchored at the real founding charter's czd — the fixture
+/// `GitRegistry::claim()` requires, since it verifies the anchor against
+/// an actual resolvable charter, not a bare git OID.
+pub fn chartered_atom_id(registry: &GitRegistry, label: &str) -> AtomId {
+    let founding_czd = registry
+        .charter(&registry.pub_key, b"conformance-fixture-src", None)
+        .expect("charter");
+    let anchor = Anchor::new(founding_czd.as_bytes().to_vec());
     AtomId::new(anchor, Label::try_from(label).expect("valid label"))
 }
 
