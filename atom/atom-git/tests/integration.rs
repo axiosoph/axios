@@ -583,6 +583,97 @@ async fn test_resolve_registry_branch_returns_real_czd() {
     );
 }
 
+/// Adversarial (tmb-binding): a claim validly signed by an ATTACKER's own
+/// key, but whose payload declares `tmb` equal to a LEGITIMATE charter
+/// owner's thumbprint, must be rejected by `resolve()`'s REGISTRY branch
+/// before `verify_claim_authorized_by_charter` ever trusts the declared
+/// `tmb`. `verify_claim`'s signature check alone cannot catch this: the
+/// attacker's own key validly signs the attacker's own payload regardless
+/// of what `tmb` field it asserts.
+#[tokio::test]
+async fn test_resolve_registry_branch_rejects_claim_with_forged_tmb() {
+    let (_dir, repo, _genesis_oid) = setup_test_repo();
+
+    let victim_sk = SigningKey::<Ed25519>::generate();
+    let victim_pub = victim_sk.verifying_key().public_key_bytes().to_vec();
+    let victim_tmb = coz_rs::compute_thumbprint_for_alg("Ed25519", &victim_pub).unwrap();
+
+    let attacker_sk = SigningKey::<Ed25519>::generate();
+    let attacker_prv = attacker_sk.private_key_bytes().to_vec();
+    let attacker_pub = attacker_sk.verifying_key().public_key_bytes().to_vec();
+
+    // A real charter, whose owner set names the VICTIM as the sole
+    // authorized principal.
+    let registry_for_charter = GitRegistry::new(
+        repo,
+        attacker_prv.clone(), // irrelevant to founding; any key may found a virgin source
+        attacker_pub.clone(),
+        Alg::Ed25519,
+        "cargo".to_string(),
+    );
+    let founding_czd = registry_for_charter
+        .charter(
+            std::slice::from_ref(&atom_id::OwnerRef::single_key(&victim_tmb)),
+            b"src-rev",
+            None,
+        )
+        .unwrap();
+    let repo = registry_for_charter.source.repo();
+    let anchor = atom_core::Anchor::new(founding_czd.as_bytes().to_vec());
+    let label = Label::try_from("my-package").unwrap();
+    let id = AtomId::new(anchor, label);
+
+    // Forged claim: signed by the ATTACKER's own key, but declares `tmb`
+    // equal to the VICTIM's -- the only charter-set member --
+    // impersonating the one signer `verify_claim_authorized_by_charter`
+    // would accept.
+    let forged_claim = atom_id::ClaimPayload::new(
+        Alg::Ed25519,
+        id.clone(),
+        1_000,
+        atom_id::OwnerRef::single_key(&victim_tmb),
+        "cargo".to_string(),
+        b"src-rev".to_vec(),
+        victim_tmb.clone(), // forged: declares the victim's tmb
+    );
+    let pay_val = serde_json::to_value(&forged_claim).unwrap();
+    let pay_map: indexmap::IndexMap<String, serde_json::Value> =
+        serde_json::from_value(pay_val).unwrap();
+    let pay_bytes = serde_json::to_vec(&pay_map).unwrap();
+    let (sig, _cad) =
+        coz_rs::sign_json(&pay_bytes, "Ed25519", &attacker_prv, &attacker_pub).unwrap();
+    let envelope = atom_git::source::CozMessageEnvelope {
+        pay: pay_map,
+        sig,
+        key: Some(attacker_pub.clone()),
+    };
+    let claim_msg = serde_json::to_string(&envelope).unwrap();
+    let claim_oid = atom_git::gix_util::write_claim_commit(&repo, claim_msg, None).unwrap();
+    let claim_ref_fullname =
+        gix::refs::FullName::try_from("refs/atom/claims/pub/my-package").unwrap();
+    repo.edit_reference(gix::refs::transaction::RefEdit {
+        change: gix::refs::transaction::Change::Update {
+            log: gix::refs::transaction::LogChange::default(),
+            expected: gix::refs::transaction::PreviousValue::Any,
+            new: gix::refs::Target::Object(claim_oid),
+        },
+        name: claim_ref_fullname,
+        deref: false,
+    })
+    .unwrap();
+
+    let source = GitSource::new(gix::open(repo.path()).unwrap());
+    let result = source.resolve(&id).await;
+    assert!(
+        matches!(
+            result,
+            Err(GitError::Verify(atom_id::VerifyError::ThumbprintMismatch))
+        ),
+        "a claim signed by an attacker's key but declaring the victim's tmb must be rejected \
+         before authorization ever trusts the declared tmb: {result:?}"
+    );
+}
+
 /// Regression: `GitSource::resolve`'s STORE branch
 /// (`refs/atom/claims/d/*` + `refs/atom/d/*/*`) must also return the real,
 /// independently-recomputable czd — not the claim commit's git oid, and

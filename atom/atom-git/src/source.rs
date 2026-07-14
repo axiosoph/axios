@@ -157,6 +157,16 @@ impl AtomSource for GitSource {
                 claim_pub_key,
             )?;
 
+            // Close the tmb-binding soundness gap (Verification Pipeline
+            // step 6, claim side) BEFORE trusting `claim_payload.tmb` for
+            // anything downstream: a valid signature alone does not bind
+            // the declared `tmb` to the actual signing key -- an attacker
+            // can sign with their own key while declaring `tmb` equal to
+            // a legitimate charter-set member's thumbprint, and
+            // verify_claim_authorized_by_charter would otherwise trust
+            // that declaration uncritically.
+            atom_id::verify_claim_key_thumbprint(&claim_payload, alg_str, claim_pub_key)?;
+
             // Verify that anchor matches
             if claim_payload.anchor == *id.anchor() {
                 // Resolve the charter chain and check the claim's signer
@@ -467,6 +477,10 @@ impl AtomSource for GitSource {
                 alg_str,
                 claim_pub_key,
             )?;
+
+            // Close the tmb-binding soundness gap -- see the REGISTRY
+            // resolution branch above for the identical rationale.
+            atom_id::verify_claim_key_thumbprint(&claim_payload, alg_str, claim_pub_key)?;
 
             // Only keep versions whose claim matches this anchor and label.
             if claim_payload.anchor != *id.anchor() || claim_payload.label != *id.label() {

@@ -141,6 +141,39 @@ pub fn verify_charter(
     Ok(payload)
 }
 
+/// Verify a charter's declared thumbprint against its actual signing key —
+/// the charter-side instance of Verification Pipeline step 6.
+///
+/// Checks `tmb(charter.key) == charter.pay.tmb`, exactly mirroring
+/// [`crate::verify_claim_key_thumbprint`]/[`crate::verify_publish_key_thumbprint`]'s
+/// same check for claims/publishes. `charter.tmb` is a self-declared
+/// payload field; a valid signature alone does not establish that it
+/// names the actual signing key — any key can validly sign its own
+/// payload while that payload asserts an unrelated `tmb`. Left unchecked,
+/// this defeats [`verify_succession_chain`]'s per-link authorization: a
+/// successor charter validly signed by an attacker's own key, but
+/// declaring `tmb` equal to a legitimate charter-set member's thumbprint,
+/// would be wrongly authorized — a full anchor takeover, not a narrow
+/// gap, since the forged charter re-anchors the whole set going forward.
+/// A caller MUST call this (or otherwise establish the same binding) for
+/// every charter in a chain before trusting
+/// [`verify_succession_chain`]'s result over it.
+///
+/// Spec constraints: `[charter-succession]`, `[owner-authorization-delegated]`.
+#[cfg(feature = "serde")]
+pub fn verify_charter_key_thumbprint(
+    charter: &CharterPayload,
+    alg: &str,
+    pub_key: &[u8],
+) -> Result<(), crate::VerifyError> {
+    let computed = coz_rs::compute_thumbprint_for_alg(alg, pub_key)
+        .ok_or_else(|| crate::VerifyError::UnsupportedAlgorithm(alg.to_string()))?;
+    if computed != charter.tmb {
+        return Err(crate::VerifyError::ThumbprintMismatch);
+    }
+    Ok(())
+}
+
 /// Verify a succession chain of charters for linearity, authorization,
 /// and (given a recorded head) monotonicity.
 ///
@@ -528,6 +561,68 @@ mod tests {
         assert!(
             matches!(result, Err(crate::VerifyError::WrongTyp { .. })),
             "tampered typ should fail with WrongTyp: {result:?}"
+        );
+    }
+
+    #[test]
+    fn verify_charter_key_thumbprint_accepts_matching_signer() {
+        let (_prv, pub_bytes, tmb) = gen_ed25519_key();
+        let charter = CharterPayload::new(
+            crate::Alg::Ed25519,
+            1000,
+            single_owner(vec![1]),
+            None,
+            vec![0; 32],
+            tmb,
+        )
+        .unwrap();
+        let result = verify_charter_key_thumbprint(&charter, "Ed25519", &pub_bytes);
+        assert!(
+            result.is_ok(),
+            "declared tmb matching the real signing key must pass: {result:?}"
+        );
+    }
+
+    #[test]
+    fn verify_charter_key_thumbprint_rejects_forged_tmb() {
+        // The attack this check exists to close: a charter signed by an
+        // ATTACKER's own key (so `verify_charter`'s signature check passes
+        // fine -- any key can validly sign its own payload), but whose
+        // payload declares `tmb` equal to a legitimate owner's thumbprint
+        // instead of the attacker's own. Left unchecked, a downstream
+        // authorization check trusting `charter.tmb` (e.g.
+        // `verify_succession_chain`'s per-link check) would wrongly
+        // authorize this as the legitimate owner.
+        let (_attacker_prv, attacker_pub, _attacker_tmb) = gen_ed25519_key();
+        let (_victim_prv, _victim_pub, victim_tmb) = gen_ed25519_key();
+
+        let forged = CharterPayload::new(
+            crate::Alg::Ed25519,
+            1000,
+            single_owner(vec![1]),
+            None,
+            vec![0; 32],
+            victim_tmb, // declares the VICTIM's tmb, not the attacker's own
+        )
+        .unwrap();
+
+        // Signature check alone passes: signed by the attacker's own key.
+        let pay_json = serde_json::to_vec(&forged).unwrap();
+        let (sig, _cad) =
+            coz_rs::sign_json(&pay_json, "Ed25519", &_attacker_prv, &attacker_pub).unwrap();
+        let sig_result = verify_charter(&pay_json, &sig, "Ed25519", &attacker_pub);
+        assert!(
+            sig_result.is_ok(),
+            "sanity: the forged charter's signature verifies fine against the attacker's own key: \
+             {sig_result:?}"
+        );
+
+        // The tmb-binding check must catch what the signature check cannot.
+        let result = verify_charter_key_thumbprint(&forged, "Ed25519", &attacker_pub);
+        assert!(
+            matches!(result, Err(crate::VerifyError::ThumbprintMismatch)),
+            "a charter whose declared tmb does not match its actual signing key must be rejected, \
+             even though its signature verifies fine: {result:?}"
         );
     }
 

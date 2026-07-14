@@ -87,7 +87,7 @@ use std::str::FromStr;
 #[cfg(feature = "serde")]
 pub use charter::{
     CharterLink, verify_bootstrap_gate, verify_charter, verify_charter_chain_signatures,
-    verify_succession_chain,
+    verify_charter_key_thumbprint, verify_succession_chain,
 };
 pub use charter::{CharterPayload, CharterStore, TYP_CHARTER};
 pub use coz_rs::{Alg, Cad, Czd, Thumbprint, canonical, canonical_hash_for_alg};
