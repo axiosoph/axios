@@ -212,7 +212,6 @@ pub fn is_descendant(
 /// call site MUST route through one of them, naming which sort it
 /// asserts of its input.
 pub mod seam {
-    use atom_core::Czd;
     use gix::hash::{Error, ObjectId};
 
     /// Interpret a transaction payload's `src` field as a git [`ObjectId`].
@@ -235,23 +234,8 @@ pub mod seam {
         ObjectId::try_from(dig)
     }
 
-    /// Quarantine a `Czd` — never an OID-sorted value — into an [`ObjectId`].
-    ///
-    /// This is exactly the ILLEGAL-shaped conversion `[backend-seam-typed]`
-    /// forbids. It exists only because `GitStore::ingest` (issue #64)
-    /// currently keys claim-commit reconstruction on git object ids
-    /// derived from claim `Czd`s instead of from the store's own object
-    /// graph. Every call site is a defect site being carried forward, not
-    /// a legal seam; `n2-ingest-fix` deletes this function along with its
-    /// callers.
-    pub fn assume_czd_is_oid_issue64(czd: &Czd) -> Result<ObjectId, Error> {
-        ObjectId::try_from(czd.as_bytes())
-    }
-
     #[cfg(test)]
     mod tests {
-        use atom_core::Czd;
-
         use super::*;
 
         // atom-git compiles gix with both `sha1` and `sha256` (see
@@ -307,38 +291,9 @@ pub mod seam {
         }
 
         #[test]
-        fn assume_czd_is_oid_issue64_rejects_wrong_length() {
-            for len in INVALID_LENS {
-                let czd = Czd::from_bytes(vec![0u8; len]);
-                assert!(
-                    assume_czd_is_oid_issue64(&czd).is_err(),
-                    "expected Err for {len}-byte Czd"
-                );
-            }
-        }
-
-        #[test]
-        fn assume_czd_is_oid_issue64_accepts_20_bytes() {
-            let czd = Czd::from_bytes(vec![0u8; 20]);
-            assert!(assume_czd_is_oid_issue64(&czd).is_ok());
-        }
-
-        #[test]
-        fn assume_czd_is_oid_issue64_is_the_named_defect_a_sha256_czd_quietly_fits() {
-            // Documents exactly why this constructor is loudly-named and
-            // quarantined: a 32-byte (SHA-256) Czd is bytewise
-            // indistinguishable from a valid SHA-256 git OID, so this
-            // "succeeds" despite the two being disjoint protocol sorts.
-            // Only lengths matching no configured git hash are caught.
-            let sha256_shaped_czd = Czd::from_bytes(vec![0u8; 32]);
-            assert!(assume_czd_is_oid_issue64(&sha256_shaped_czd).is_ok());
-        }
-
-        #[test]
         fn constructors_never_panic_on_empty_input() {
             assert!(oid_from_src_field(&[]).is_err());
             assert!(oid_from_dig_field(&[]).is_err());
-            assert!(assume_czd_is_oid_issue64(&Czd::from_bytes(Vec::new())).is_err());
         }
     }
 }
