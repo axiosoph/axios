@@ -569,6 +569,7 @@ async fn test_resolve_store_branch_returns_real_czd() {
         key: Some(pub_key.clone()),
     };
     let publish_msg = serde_json::to_string(&pub_envelope).unwrap();
+    let publish_czd = independent_ed25519_czd(&publish_msg);
     let tag_oid = atom_git::gix_util::write_publish_tag(
         &repo,
         "store-pkg-1.0.0",
@@ -579,13 +580,19 @@ async fn test_resolve_store_branch_returns_real_czd() {
     )
     .unwrap();
 
-    // Write the store layout refs. The ref-path hex segment is a
-    // store-internal addressing key, independent of the real czd now that
-    // the two are correctly decoupled — any stable hex string works.
-    let store_key_hex = claim_oid.to_hex().to_string();
+    // Write the store layout refs. The claim ref is keyed by the claim's
+    // own real czd (`[store-claim-ref]`); the version ref is flat and
+    // keyed by blake3(publish_czd) (`[store-ref-by-publish-czd]`) --
+    // `GitSource::resolve`'s store branch discovers a version's owning
+    // claim only via this real linkage now (the publish tag's own
+    // `claim` field), unlike the old nested scheme where any shared
+    // stable hex string sufficed structurally.
+    let claim_key_hex = atom_git::store::hex_encode(expected_czd.as_bytes());
+    let version_key_hex =
+        atom_git::store::hex_encode(blake3::hash(publish_czd.as_bytes()).as_bytes());
     for (name, oid) in [
-        (format!("refs/atom/claims/d/{}", store_key_hex), claim_oid),
-        (format!("refs/atom/d/{}/1.0.0", store_key_hex), tag_oid),
+        (format!("refs/atom/claims/d/{}", claim_key_hex), claim_oid),
+        (format!("refs/atom/d/{}", version_key_hex), tag_oid),
     ] {
         let fullname = gix::refs::FullName::try_from(name.as_str()).unwrap();
         let edit = gix::refs::transaction::RefEdit {
@@ -701,7 +708,11 @@ async fn test_local_ingest() {
         .unwrap()
         .map(|r| r.unwrap().id().detach())
         .collect();
-    assert_eq!(claim_refs.len(), 1, "expected exactly one ingested claim ref");
+    assert_eq!(
+        claim_refs.len(),
+        1,
+        "expected exactly one ingested claim ref"
+    );
     let store_claim_oid = claim_refs[0];
 
     let claim_commit = repo_store
@@ -890,8 +901,35 @@ fn test_differential_git_cli() {
     assert!(stdout_str.contains("committer "));
 }
 
+/// Write a ref pointing directly at `target` -- a bare structural ref
+/// with no real object content, used to exercise `evict_version`'s
+/// behavior against store refs that carry no publish tag payload.
+fn write_bare_ref(repo: &gix::Repository, name: &str, target: ObjectId) {
+    let fullname = gix::refs::FullName::try_from(name).unwrap();
+    let edit = gix::refs::transaction::RefEdit {
+        change: gix::refs::transaction::Change::Update {
+            log: gix::refs::transaction::LogChange::default(),
+            expected: gix::refs::transaction::PreviousValue::Any,
+            new: gix::refs::Target::Object(target),
+        },
+        name: fullname,
+        deref: false,
+    };
+    repo.edit_reference(edit).unwrap();
+}
+
+/// `evict_version`'s claim-cleanup step (`[store-claim-cleanup]`) can
+/// only key off a claim czd discovered from the evicted ref's own
+/// publish tag payload -- under the flat scheme there is no shared
+/// claim-prefix to scan, unlike the old nested
+/// `refs/atom/d/{claim_czd}/{version}` shape this test originally
+/// exercised. Against bare, non-tag store refs (no payload to read),
+/// eviction must still succeed for each version ref, but ownership can
+/// never be proven, so the claim ref is intentionally left alone rather
+/// than guessed at -- see `store_keying.rs::evict_sibling_scan_flat_refs`
+/// for the real-tag-payload case, where cleanup does fire.
 #[test]
-fn test_store_claim_cleanup() {
+fn test_store_claim_cleanup_bare_refs_skip_orphan_check() {
     let dir = tempfile::tempdir().unwrap();
     let repo = gix::init_bare(dir.path()).unwrap();
 
@@ -902,123 +940,40 @@ fn test_store_claim_cleanup() {
 
     let store = GitStore::new(repo);
     let claim_czd_hex = "0123456789abcdef0123456789abcdef01234567";
+    let v1_key = "aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111";
+    let v2_key = "bbbb2222bbbb2222bbbb2222bbbb2222bbbb2222bbbb2222bbbb2222bbbb2222";
 
-    // 1. Write claim reference refs/atom/claims/d/{claim_czd_hex}
     let claim_ref_name = format!("refs/atom/claims/d/{}", claim_czd_hex);
-    let claim_fullname = gix::refs::FullName::try_from(claim_ref_name.as_str()).unwrap();
-    let claim_edit = gix::refs::transaction::RefEdit {
-        change: gix::refs::transaction::Change::Update {
-            log: gix::refs::transaction::LogChange::default(),
-            expected: gix::refs::transaction::PreviousValue::Any,
-            new: gix::refs::Target::Object(empty_tree_oid),
-        },
-        name: claim_fullname,
-        deref: false,
-    };
-    store.source.repo().edit_reference(claim_edit).unwrap();
+    let v1_ref_name = format!("refs/atom/d/{}", v1_key);
+    let v2_ref_name = format!("refs/atom/d/{}", v2_key);
 
-    // 2. Write version 1 refs/atom/d/{claim_czd_hex}/1.0.0
-    let v1_ref_name = format!("refs/atom/d/{}/1.0.0", claim_czd_hex);
-    let v1_fullname = gix::refs::FullName::try_from(v1_ref_name.as_str()).unwrap();
-    let v1_edit = gix::refs::transaction::RefEdit {
-        change: gix::refs::transaction::Change::Update {
-            log: gix::refs::transaction::LogChange::default(),
-            expected: gix::refs::transaction::PreviousValue::Any,
-            new: gix::refs::Target::Object(empty_tree_oid),
-        },
-        name: v1_fullname,
-        deref: false,
-    };
-    store.source.repo().edit_reference(v1_edit).unwrap();
-
-    // 3. Write version 2 refs/atom/d/{claim_czd_hex}/2.0.0
-    let v2_ref_name = format!("refs/atom/d/{}/2.0.0", claim_czd_hex);
-    let v2_fullname = gix::refs::FullName::try_from(v2_ref_name.as_str()).unwrap();
-    let v2_edit = gix::refs::transaction::RefEdit {
-        change: gix::refs::transaction::Change::Update {
-            log: gix::refs::transaction::LogChange::default(),
-            expected: gix::refs::transaction::PreviousValue::Any,
-            new: gix::refs::Target::Object(empty_tree_oid),
-        },
-        name: v2_fullname,
-        deref: false,
-    };
-    store.source.repo().edit_reference(v2_edit).unwrap();
+    write_bare_ref(&store.source.repo(), &claim_ref_name, empty_tree_oid);
+    write_bare_ref(&store.source.repo(), &v1_ref_name, empty_tree_oid);
+    write_bare_ref(&store.source.repo(), &v2_ref_name, empty_tree_oid);
 
     // Verify all references exist
+    let repo = store.source.repo();
+    assert!(repo.try_find_reference(&claim_ref_name).unwrap().is_some());
+    assert!(repo.try_find_reference(&v1_ref_name).unwrap().is_some());
+    assert!(repo.try_find_reference(&v2_ref_name).unwrap().is_some());
+
+    // Evict version 1
+    store.evict_version(v1_key).unwrap();
+    assert!(repo.try_find_reference(&v1_ref_name).unwrap().is_none());
+    assert!(repo.try_find_reference(&v2_ref_name).unwrap().is_some());
     assert!(
-        store
-            .source
-            .repo()
-            .try_find_reference(&claim_ref_name)
-            .unwrap()
-            .is_some()
-    );
-    assert!(
-        store
-            .source
-            .repo()
-            .try_find_reference(&v1_ref_name)
-            .unwrap()
-            .is_some()
-    );
-    assert!(
-        store
-            .source
-            .repo()
-            .try_find_reference(&v2_ref_name)
-            .unwrap()
-            .is_some()
+        repo.try_find_reference(&claim_ref_name).unwrap().is_some(),
+        "claim ref must not be touched when ownership can't be established"
     );
 
-    // 4. Evict version 1.0.0
-    store.evict_version(claim_czd_hex, "1.0.0").unwrap();
-
-    // Verify version 1.0.0 is gone, but version 2.0.0 and claim remain
+    // Evict version 2 -- still no ownership can be established, so the
+    // claim ref must survive even though no version refs remain.
+    store.evict_version(v2_key).unwrap();
+    assert!(repo.try_find_reference(&v2_ref_name).unwrap().is_none());
     assert!(
-        store
-            .source
-            .repo()
-            .try_find_reference(&v1_ref_name)
-            .unwrap()
-            .is_none()
-    );
-    assert!(
-        store
-            .source
-            .repo()
-            .try_find_reference(&v2_ref_name)
-            .unwrap()
-            .is_some()
-    );
-    assert!(
-        store
-            .source
-            .repo()
-            .try_find_reference(&claim_ref_name)
-            .unwrap()
-            .is_some()
-    );
-
-    // 5. Evict version 2.0.0
-    store.evict_version(claim_czd_hex, "2.0.0").unwrap();
-
-    // Verify version 2.0.0 is gone, and since no versions are left, the claim is also deleted
-    assert!(
-        store
-            .source
-            .repo()
-            .try_find_reference(&v2_ref_name)
-            .unwrap()
-            .is_none()
-    );
-    assert!(
-        store
-            .source
-            .repo()
-            .try_find_reference(&claim_ref_name)
-            .unwrap()
-            .is_none()
+        repo.try_find_reference(&claim_ref_name).unwrap().is_some(),
+        "bare, non-tag store refs never trigger claim cleanup -- there is no payload to attribute \
+         them to a claim"
     );
 }
 
@@ -1116,9 +1071,18 @@ mod proptests {
             prop_assert_eq!(derived, expected_oldest_root);
         }
 
+        // Under the flat `refs/atom/d/{blake3(publish_czd)}` scheme,
+        // claim-cleanup ownership is only discoverable from a real
+        // publish tag payload (deterministically covered by
+        // `store_keying.rs::evict_sibling_scan_flat_refs`). This
+        // property test's bare, non-tag refs can no longer exercise that
+        // linkage (see `test_store_claim_cleanup_bare_refs_skip_orphan_check`),
+        // so it now fuzzes the orthogonal property it still can: given N
+        // distinct flat version refs, evicting them in any order deletes
+        // exactly the evicted ref and leaves every other ref untouched.
         #[test]
-        fn test_store_ingest_evict_pbt(
-            major_versions in prop::collection::vec(0..10u32, 1..5),
+        fn test_store_evict_pbt(
+            version_count in 1..10usize,
             shuffle_seed in 0..100usize,
         ) {
             let dir = TempDir::new().unwrap();
@@ -1130,31 +1094,16 @@ mod proptests {
                 .detach();
 
             let store = GitStore::new(repo);
-            let claim_czd_hex = "abcdef0123456789abcdef0123456789abcdef01";
 
-            // 1. Write claim reference refs/atom/claims/d/{claim_czd_hex}
-            let claim_ref_name = format!("refs/atom/claims/d/{}", claim_czd_hex);
-            let claim_fullname = gix::refs::FullName::try_from(claim_ref_name.as_str()).unwrap();
-            let claim_edit = gix::refs::transaction::RefEdit {
-                change: gix::refs::transaction::Change::Update {
-                    log: gix::refs::transaction::LogChange::default(),
-                    expected: gix::refs::transaction::PreviousValue::Any,
-                    new: gix::refs::Target::Object(empty_tree_oid),
-                },
-                name: claim_fullname,
-                deref: false,
-            };
-            store.source.repo().edit_reference(claim_edit).unwrap();
+            // Distinct flat store keys, one per generated version -- a
+            // stand-in for hex(blake3(publish_czd)); their real content
+            // doesn't matter for this property, only that they're unique.
+            let keys: Vec<String> = (0..version_count)
+                .map(|i| format!("{:064x}", i))
+                .collect();
 
-            // Deduplicate versions
-            let mut versions = major_versions;
-            versions.sort();
-            versions.dedup();
-            let version_strs: Vec<String> = versions.iter().map(|v| format!("{}.0.0", v)).collect();
-
-            // Write version references
-            for ver_str in &version_strs {
-                let ref_name = format!("refs/atom/d/{}/{}", claim_czd_hex, ver_str);
+            for key in &keys {
+                let ref_name = format!("refs/atom/d/{}", key);
                 let fullname = gix::refs::FullName::try_from(ref_name.as_str()).unwrap();
                 let edit = gix::refs::transaction::RefEdit {
                     change: gix::refs::transaction::Change::Update {
@@ -1169,58 +1118,44 @@ mod proptests {
             }
 
             // Verify all exist
-            for ver_str in &version_strs {
-                let ref_name = format!("refs/atom/d/{}/{}", claim_czd_hex, ver_str);
+            for key in &keys {
+                let ref_name = format!("refs/atom/d/{}", key);
                 let has_ref = store.source.repo().try_find_reference(&ref_name)
                     .unwrap()
                     .is_some();
                 prop_assert!(has_ref);
             }
-            let has_claim = store.source.repo().try_find_reference(&claim_ref_name)
-                .unwrap()
-                .is_some();
-            prop_assert!(has_claim);
 
             // Evict them in pseudo-random order determined by shuffle_seed
-            let mut to_evict = version_strs.clone();
+            let mut to_evict = keys.clone();
             let n = to_evict.len();
             for i in 0..n {
                 let j = (shuffle_seed + i) % n;
                 to_evict.swap(i, j);
             }
 
-            let mut remaining = version_strs.clone();
+            let mut remaining = keys.clone();
 
-            for ver_str in to_evict {
-                store.evict_version(claim_czd_hex, &ver_str).unwrap();
+            for key in to_evict {
+                store.evict_version(&key).unwrap();
 
                 // Verify this version is gone
-                let ref_name = format!("refs/atom/d/{}/{}", claim_czd_hex, ver_str);
+                let ref_name = format!("refs/atom/d/{}", key);
                 let has_ver = store.source.repo().try_find_reference(&ref_name)
                     .unwrap()
                     .is_some();
                 prop_assert!(!has_ver);
 
                 // Remove from remaining list
-                remaining.retain(|x| x != &ver_str);
+                remaining.retain(|x| x != &key);
 
                 // Verify all other remaining versions still exist
                 for rem in &remaining {
-                    let rem_ref_name = format!("refs/atom/d/{}/{}", claim_czd_hex, rem);
+                    let rem_ref_name = format!("refs/atom/d/{}", rem);
                     let has_rem = store.source.repo().try_find_reference(&rem_ref_name)
                         .unwrap()
                         .is_some();
                     prop_assert!(has_rem);
-                }
-
-                // Verify claim reference presence matches remaining status
-                let has_claim = store.source.repo().try_find_reference(&claim_ref_name)
-                    .unwrap()
-                    .is_some();
-                if !remaining.is_empty() {
-                    prop_assert!(has_claim);
-                } else {
-                    prop_assert!(!has_claim);
                 }
             }
         }

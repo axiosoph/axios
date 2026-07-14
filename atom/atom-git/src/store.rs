@@ -35,18 +35,20 @@ pub fn dev_ref_digest(digest: &atom_core::AtomDigest) -> String {
 /// Lowercase-hex encode arbitrary bytes for a ref-path segment.
 ///
 /// Backs the `czd-hex` ref family (`docs/specs/git-storage-format.md`
-/// `[czd-oid-disjoint]`, `refs/atom/claims/d/{claim_czd}`). A local encoder
-/// avoids a new dependency for one line of logic: any injective,
-/// git-ref-safe encoding satisfies `[store-claim-ref]`, since
-/// `GitSource::resolve` treats this segment as an opaque lookup key and
-/// re-derives the real czd from the claim's own signed content, never from
-/// this string (see `test_resolve_store_branch_returns_real_czd`).
-fn hex_encode(bytes: &[u8]) -> String {
+/// `[czd-oid-disjoint]`, `refs/atom/claims/d/{claim_czd}`) and the
+/// `blake3(publish_czd)` store version-ref family
+/// (`[store-ref-by-publish-czd]`). Public so `GitSource::resolve` (which
+/// must derive the same claim-ref key from a publish payload's `claim`
+/// field to find its owning claim under the flat ref layout) and test
+/// fixtures can compute identical keys without duplicating the encoding.
+pub fn hex_encode(bytes: &[u8]) -> String {
     use std::fmt::Write;
-    bytes.iter().fold(String::with_capacity(bytes.len() * 2), |mut s, b| {
-        let _ = write!(s, "{:02x}", b);
-        s
-    })
+    bytes
+        .iter()
+        .fold(String::with_capacity(bytes.len() * 2), |mut s, b| {
+            let _ = write!(s, "{:02x}", b);
+            s
+        })
 }
 
 /// Write-enabled Git store.
@@ -129,9 +131,16 @@ impl GitStore {
 
     /// Evict (delete) a version ref from the store.
     ///
-    /// Implements `[store-claim-cleanup]` by removing the version ref.
-    /// If no other version refs remain under `refs/atom/d/{claim_czd}/`,
-    /// also deletes the corresponding `refs/atom/claims/d/{claim_czd}` ref.
+    /// `store_key_hex` is the flat store ref's own key,
+    /// `hex(blake3(publish_czd))` (`[store-ref-by-publish-czd]`) -- the
+    /// same segment `GitStore::ingest` writes under. Implements
+    /// `[store-claim-cleanup]`: after removing the version ref, if no
+    /// other surviving `refs/atom/d/*` ref's publish tag still chains to
+    /// the same claim czd, the corresponding
+    /// `refs/atom/claims/d/{claim_czd}` ref is also deleted. The flat
+    /// scheme carries no claim segment in its own path, so the owning
+    /// claim can only be discovered by inspecting the ref's own publish
+    /// tag payload before deletion.
     ///
     /// # Concurrency
     ///
@@ -139,11 +148,19 @@ impl GitStore {
     /// Concurrent eviction of the last two versions under the same claim
     /// could leave an orphan claim ref. Callers must serialize evictions
     /// per claim, or a periodic GC pass should sweep orphaned claims.
-    pub fn evict_version(&self, claim_czd_hex: &str, version: &str) -> Result<(), GitError> {
+    pub fn evict_version(&self, store_key_hex: &str) -> Result<(), GitError> {
         let repo = self.source.repo();
-        let version_ref_name = format!("refs/atom/d/{}/{}", claim_czd_hex, version);
+        let version_ref_name = format!("refs/atom/d/{}", store_key_hex);
         let version_fullname = FullName::try_from(version_ref_name.as_str())
             .map_err(|e| GitError::Validation(e.to_string()))?;
+
+        // Discover the owning claim czd from this ref's own publish tag
+        // payload before deleting it -- there is no path segment to read
+        // it from under the flat scheme.
+        let claim_czd = match repo.try_find_reference(&version_ref_name)? {
+            Some(existing) => claim_czd_of_store_ref(&repo, &existing)?,
+            None => None,
+        };
 
         // 1. Delete the version reference
         let edit = RefEdit {
@@ -156,19 +173,25 @@ impl GitStore {
         };
         repo.edit_reference(edit)?;
 
-        // 2. Check if any other version refs remain under refs/atom/d/{claim_czd_hex}/
-        let prefix = format!("refs/atom/d/{}/", claim_czd_hex);
-        let refs = repo.references()?;
+        let Some(claim_czd) = claim_czd else {
+            return Ok(());
+        };
+
+        // 2. Check whether any surviving refs/atom/d/* ref's publish tag
+        // still chains to the same claim -- a full scan, since flat refs
+        // share no claim-prefix to scan under.
         let mut any_left = false;
-        for r in refs.prefixed(prefix.as_str())? {
-            if r.is_ok() {
+        for r in repo.references()?.prefixed("refs/atom/d/")? {
+            let Ok(r) = r else { continue };
+            if claim_czd_of_store_ref(&repo, &r)?.as_ref() == Some(&claim_czd) {
                 any_left = true;
                 break;
             }
         }
 
-        // 3. If no other versions remain, delete refs/atom/claims/d/{claim_czd_hex}
+        // 3. If no other versions remain, delete refs/atom/claims/d/{claim_czd}
         if !any_left {
+            let claim_czd_hex = hex_encode(claim_czd.as_bytes());
             let claim_ref_name = format!("refs/atom/claims/d/{}", claim_czd_hex);
             if let Ok(claim_fullname) = FullName::try_from(claim_ref_name.as_str()) {
                 let claim_edit = RefEdit {
@@ -185,6 +208,31 @@ impl GitStore {
 
         Ok(())
     }
+}
+
+/// Read the claim czd a store version ref's publish tag chains to,
+/// without full signature verification -- eviction cleanup
+/// (`[store-claim-cleanup]`) is a best-effort GC pass keyed by claim
+/// identity, not a trust-establishing operation. Returns `None` if the
+/// ref's target isn't a tag (should not occur for a real
+/// `refs/atom/d/*` entry, but cleanup degrades gracefully rather than
+/// erroring on unexpected store contents).
+fn claim_czd_of_store_ref(
+    repo: &gix::Repository,
+    reference: &gix::Reference,
+) -> Result<Option<coz_rs::Czd>, GitError> {
+    let oid = reference.id().detach();
+    let obj = repo.find_object(oid)?;
+    if obj.kind != gix::object::Kind::Tag {
+        return Ok(None);
+    }
+    let tag = obj.try_into_tag()?;
+    let tag_decoded = tag.decode()?;
+    let msg_str = tag_decoded.message.to_string();
+    let envelope: CozMessageEnvelope = serde_json::from_str(&msg_str)?;
+    let pay_value = serde_json::to_value(&envelope.pay)?;
+    let publish_payload: atom_id::PublishPayload = serde_json::from_value(pay_value)?;
+    Ok(Some(publish_payload.claim))
 }
 
 impl AtomSource for GitStore {
@@ -309,6 +357,16 @@ impl AtomStore for GitStore {
                         pub_key,
                     )?;
 
+                    // The store's version ref is keyed by the PUBLISH
+                    // transaction's own czd (`[store-ref-by-publish-czd]`),
+                    // not the claim's -- distinct from `czd_val`/
+                    // `publish_payload.claim` above.
+                    let publish_czd = atom_id::czd_for_alg(
+                        &publish_pay_bytes,
+                        &publish_envelope.sig,
+                        publish_alg_str,
+                    )?;
+
                     // Verify publish chains to claim
                     if publish_payload.claim != *czd_val {
                         return Err(GitError::Validation(
@@ -415,10 +473,17 @@ impl AtomStore for GitStore {
                         publish_msg.to_string(),
                     )?;
 
-                    // 4. Update the references in store layout
+                    // 4. Update the references in store layout. The
+                    // version ref is flat and keyed by
+                    // blake3(publish_czd), not nested under the claim
+                    // (`[store-ref-by-publish-czd]`); the version string
+                    // lives only in the publish payload now, never in the
+                    // ref path.
                     let store_claim_ref = format!("refs/atom/claims/d/{}", claim_czd_hex);
-                    let store_version_ref =
-                        format!("refs/atom/d/{}/{}", claim_czd_hex, version.as_str());
+                    let store_version_ref = format!(
+                        "refs/atom/d/{}",
+                        hex_encode(blake3::hash(publish_czd.as_bytes()).as_bytes())
+                    );
 
                     let mut edits = Vec::new();
 

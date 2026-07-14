@@ -7,6 +7,7 @@ version     = "0.1.0"
 [dependencies]
 atom-core = { path = "../atom-core" }
 atom-id = { path = "../atom-id" }
+blake3 = "1"
 coz-rs = { version = "0.4" }
 gix = { version = "^0.83", default-features = false, features = [
   "blocking-http-transport-reqwest-rust-tls",

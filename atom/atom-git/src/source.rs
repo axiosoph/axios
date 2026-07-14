@@ -332,17 +332,67 @@ impl AtomSource for GitSource {
             }
         }
 
-        // 2. STORE RESOLUTION: refs/atom/claims/d/{claim_czd} and refs/atom/d/{claim_czd}/{version}
-        // Scan all claims in refs/atom/claims/d/* to find matching (anchor, label)
-        let store_claims_prefix = "refs/atom/claims/d/";
+        // 2. STORE RESOLUTION: refs/atom/d/{blake3(publish_czd)} (flat
+        // store version refs, `[store-ref-by-publish-czd]`) carry their
+        // owning claim only in their own publish tag payload -- there is
+        // no per-claim path segment to scan under, unlike the old nested
+        // `refs/atom/d/{claim_czd}/{version}` shape. Walk every flat
+        // store ref directly; for each, resolve its own claim via
+        // `refs/atom/claims/d/{claim_czd}` (the same claim-resolution-by-
+        // payload pattern `GitStore::ingest` uses) and keep only the
+        // versions whose claim matches this id's (anchor, label). The
+        // version string is likewise read from the publish payload, not
+        // the ref path -- the flat scheme has no version segment.
+        let store_version_prefix = "refs/atom/d/";
         let references = repo.references()?;
-        for ref_res in references.prefixed(store_claims_prefix)? {
-            let claim_ref = ref_res.map_err(|e| GitError::Validation(e.to_string()))?;
-            let ref_name = claim_ref.name().as_bstr().to_string();
-            let claim_czd_hex = ref_name.strip_prefix(store_claims_prefix).unwrap_or("");
-            if claim_czd_hex.is_empty() {
-                continue;
-            }
+        for v_ref_res in references.prefixed(store_version_prefix)? {
+            let v_ref = v_ref_res.map_err(|e| GitError::Validation(e.to_string()))?;
+            let v_ref_name = v_ref.name().as_bstr().to_string();
+
+            // Walk the publish tag chain starting from the reference OID
+            let observed_tip = v_ref.id().detach();
+            let mut current_oid = observed_tip;
+            let mut tag_messages = Vec::new();
+
+            let dig_oid = loop {
+                let obj = repo.find_object(current_oid)?;
+                match obj.kind {
+                    gix::object::Kind::Tag => {
+                        let tag = obj.try_into_tag()?;
+                        let tag_decoded = tag.decode()?;
+                        tag_messages.push((current_oid, tag_decoded.message.to_string()));
+                        current_oid = tag.target_id()?.detach();
+                    },
+                    gix::object::Kind::Commit => {
+                        break current_oid;
+                    },
+                    _ => {
+                        return Err(GitError::Validation(format!(
+                            "Invalid object kind {} in tag chain for store ref {}",
+                            obj.kind, v_ref_name
+                        )));
+                    },
+                }
+            };
+
+            // Peek the tip publish payload (unverified so far) to learn
+            // which claim this ref belongs to, so that claim's pubkey can
+            // be fetched for real signature verification below.
+            let (_, tip_msg_str) = tag_messages.first().ok_or_else(|| {
+                GitError::Validation(format!("No publish tag found for store ref {}", v_ref_name))
+            })?;
+            let tip_envelope: CozMessageEnvelope = serde_json::from_str(tip_msg_str)?;
+            let tip_pay_value = serde_json::to_value(&tip_envelope.pay)?;
+            let tip_payload: PublishPayload = serde_json::from_value(tip_pay_value)?;
+
+            let claim_czd_hex = crate::store::hex_encode(tip_payload.claim.as_bytes());
+            let claim_ref_name = format!("refs/atom/claims/d/{}", claim_czd_hex);
+            // `[store-claim-ref]`: a publish payload referencing a claim
+            // czd with no corresponding claim commit in the store MUST be
+            // treated as an error, not silently skipped.
+            let claim_ref = repo
+                .try_find_reference(&claim_ref_name)?
+                .ok_or_else(|| GitError::UnclaimedPublish(claim_czd_hex))?;
 
             let claim_oid = claim_ref.id().detach();
             let claim_obj = repo.find_object(claim_oid)?;
@@ -371,171 +421,123 @@ impl AtomSource for GitSource {
                 claim_pub_key,
             )?;
 
-            // If the claim matches this anchor and label
-            if claim_payload.anchor == *id.anchor() && claim_payload.label == *id.label() {
-                // Find all version refs under refs/atom/d/{claim_czd_hex}/*
-                let prefix_str = format!("refs/atom/d/{}/", claim_czd_hex);
-                let refs_iter = repo.references()?;
-                for v_ref_res in refs_iter.prefixed(prefix_str.as_str())? {
-                    let v_ref = v_ref_res.map_err(|e| GitError::Validation(e.to_string()))?;
-                    let v_ref_name = v_ref.name().as_bstr().to_string();
-                    let version_str = v_ref_name.strip_prefix(&prefix_str).unwrap_or("");
-                    if version_str.is_empty() {
-                        continue;
-                    }
+            // Only keep versions whose claim matches this anchor and label.
+            if claim_payload.anchor != *id.anchor() || claim_payload.label != *id.label() {
+                continue;
+            }
 
-                    // Walk the publish tag chain starting from the reference OID
-                    let observed_tip = v_ref.id().detach();
-                    let mut current_oid = observed_tip;
-                    let mut tag_messages = Vec::new();
+            // Verify that the atom commit has the src header matching publish
+            let atom_obj = repo.find_object(dig_oid)?;
+            let atom_commit = atom_obj.try_into_commit()?;
+            let atom_decoded = atom_commit.decode()?;
+            let atom_src_val = atom_decoded
+                .extra_headers
+                .iter()
+                .find(|(k, _)| *k == "src")
+                .map(|(_, v)| v.to_string())
+                .ok_or_else(|| {
+                    GitError::Validation(format!("Atom commit {} is missing 'src' header", dig_oid))
+                })?;
+            let atom_src_oid = ObjectId::from_hex(atom_src_val.as_bytes())
+                .map_err(|e| GitError::Validation(format!("Invalid src header OID: {}", e)))?;
 
-                    let dig_oid = loop {
-                        let obj = repo.find_object(current_oid)?;
-                        match obj.kind {
-                            gix::object::Kind::Tag => {
-                                let tag = obj.try_into_tag()?;
-                                let tag_decoded = tag.decode()?;
-                                tag_messages.push((current_oid, tag_decoded.message.to_string()));
-                                current_oid = tag.target_id()?.detach();
-                            },
-                            gix::object::Kind::Commit => {
-                                break current_oid;
-                            },
-                            _ => {
-                                return Err(GitError::Validation(format!(
-                                    "Invalid object kind {} in tag chain for version {}",
-                                    obj.kind, version_str
-                                )));
-                            },
-                        }
-                    };
+            // Verify the publish coz messages (from tip to oldest)
+            let mut prev_publish_payload: Option<PublishPayload> = None;
+            let mut tip_publish_msg = None;
+            let mut tip_publish_sig = None;
+            let mut tip_publish_pubkey = None;
 
-                    // Verify that the atom commit has the src header matching publish
-                    let atom_obj = repo.find_object(dig_oid)?;
-                    let atom_commit = atom_obj.try_into_commit()?;
-                    let atom_decoded = atom_commit.decode()?;
-                    let atom_src_val = atom_decoded
-                        .extra_headers
-                        .iter()
-                        .find(|(k, _)| *k == "src")
-                        .map(|(_, v)| v.to_string())
-                        .ok_or_else(|| {
-                            GitError::Validation(format!(
-                                "Atom commit {} is missing 'src' header",
-                                dig_oid
-                            ))
-                        })?;
-                    let atom_src_oid =
-                        ObjectId::from_hex(atom_src_val.as_bytes()).map_err(|e| {
-                            GitError::Validation(format!("Invalid src header OID: {}", e))
-                        })?;
+            for (_tag_oid, msg_str) in &tag_messages {
+                let pub_envelope: CozMessageEnvelope = serde_json::from_str(msg_str)?;
+                let pub_pay_bytes = serde_json::to_vec(&pub_envelope.pay)?;
 
-                    // Verify the publish coz messages (from tip to oldest)
-                    let mut prev_publish_payload: Option<PublishPayload> = None;
-                    let mut tip_publish_msg = None;
-                    let mut tip_publish_sig = None;
-                    let mut tip_publish_pubkey = None;
+                // Use public key in publish tag if present, otherwise fall back to claim
+                // key
+                let pub_key_bytes = pub_envelope.key.as_ref().unwrap_or(claim_pub_key);
 
-                    for (_tag_oid, msg_str) in &tag_messages {
-                        let pub_envelope: CozMessageEnvelope = serde_json::from_str(msg_str)?;
-                        let pub_pay_bytes = serde_json::to_vec(&pub_envelope.pay)?;
-
-                        // Use public key in publish tag if present, otherwise fall back to claim
-                        // key
-                        let pub_key_bytes = pub_envelope.key.as_ref().unwrap_or(claim_pub_key);
-
-                        let pub_alg_str = pub_envelope
-                            .pay
-                            .get("alg")
-                            .and_then(|v| v.as_str())
-                            .ok_or_else(|| {
-                                GitError::Validation(
-                                    "Publish alg field is missing or invalid".into(),
-                                )
-                            })?;
-
-                        let pub_payload = atom_id::verify_publish(
-                            &pub_pay_bytes,
-                            &pub_envelope.sig,
-                            pub_alg_str,
-                            pub_key_bytes,
-                        )?;
-
-                        // Invariant [tag-chain-semantic-immutable]: immutable fields must match
-                        // across updates
-                        if prev_publish_payload.as_ref().is_some_and(|prev| {
-                            pub_payload.label != prev.label
-                                || pub_payload.version != prev.version
-                                || pub_payload.dig != prev.dig
-                                || pub_payload.src != prev.src
-                                || pub_payload.path != prev.path
-                        }) {
-                            return Err(GitError::Validation(
-                                "Semantic immutability violation in update tag chain".into(),
-                            ));
-                        }
-
-                        // Validate that publish src matches the atom commit extra header
-                        let pub_src_oid =
-                            crate::gix_util::seam::oid_from_src_field(pub_payload.src.as_slice())
-                                .map_err(|e| {
-                                GitError::Validation(format!("Invalid publish source OID: {}", e))
-                            })?;
-                        if pub_src_oid != atom_src_oid {
-                            return Err(GitError::Validation(
-                                "Publish payload src does not match atom commit extra header"
-                                    .into(),
-                            ));
-                        }
-
-                        // Check temporal vector: publish src must be descendant of claim src
-                        // NOTE: Store resolution does not verify descendant relation using graph
-                        // traversal as the development history is not
-                        // present in the store repository.
-
-                        if prev_publish_payload.is_none() {
-                            prev_publish_payload = Some(pub_payload.clone());
-                            tip_publish_msg = Some(msg_str.clone());
-                            tip_publish_sig = Some(pub_envelope.sig.clone());
-                            tip_publish_pubkey = Some(pub_key_bytes.clone());
-                        }
-                    }
-
-                    // As above: the claim's identity is the spec-defined
-                    // czd recomputed from its own signed bytes. The
-                    // `claim_czd_hex` ref-path segment is a store-internal
-                    // addressing key, not a substitute for this.
-                    let czd = atom_id::czd_for_alg(&claim_pay_bytes, &claim_envelope.sig, alg_str)?;
-
-                    let pub_payload = prev_publish_payload.ok_or_else(|| {
-                        GitError::Validation(format!(
-                            "No publish tag found for version {}",
-                            version_str
-                        ))
+                let pub_alg_str = pub_envelope
+                    .pay
+                    .get("alg")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        GitError::Validation("Publish alg field is missing or invalid".into())
                     })?;
 
-                    // Re-read the ref immediately before returning this
-                    // version's resolution: if it moved (or vanished)
-                    // since `observed_tip` was captured at the start of
-                    // the walk, the fields above may already be stale.
-                    let moved_tip = tip_stability(&repo, &v_ref_name, observed_tip)?;
+                let pub_payload = atom_id::verify_publish(
+                    &pub_pay_bytes,
+                    &pub_envelope.sig,
+                    pub_alg_str,
+                    pub_key_bytes,
+                )?;
 
-                    versions.push(GitVersionEntry {
-                        version: RawVersion::new(version_str.to_string()),
-                        dig: dig_oid.as_bytes().to_vec(),
-                        czd: Some(czd),
-                        claim_payload: Some(claim_payload.clone()),
-                        claim_msg: Some(claim_msg_str.clone()),
-                        claim_sig: Some(claim_envelope.sig.clone()),
-                        claim_pubkey: Some(claim_pub_key.clone()),
-                        publish_payload: Some(pub_payload),
-                        publish_msg: tip_publish_msg,
-                        publish_sig: tip_publish_sig,
-                        publish_pubkey: tip_publish_pubkey,
-                        moved_tip,
-                    });
+                // Invariant [tag-chain-semantic-immutable]: immutable fields must match
+                // across updates
+                if prev_publish_payload.as_ref().is_some_and(|prev| {
+                    pub_payload.label != prev.label
+                        || pub_payload.version != prev.version
+                        || pub_payload.dig != prev.dig
+                        || pub_payload.src != prev.src
+                        || pub_payload.path != prev.path
+                }) {
+                    return Err(GitError::Validation(
+                        "Semantic immutability violation in update tag chain".into(),
+                    ));
+                }
+
+                // Validate that publish src matches the atom commit extra header
+                let pub_src_oid = crate::gix_util::seam::oid_from_src_field(
+                    pub_payload.src.as_slice(),
+                )
+                .map_err(|e| GitError::Validation(format!("Invalid publish source OID: {}", e)))?;
+                if pub_src_oid != atom_src_oid {
+                    return Err(GitError::Validation(
+                        "Publish payload src does not match atom commit extra header".into(),
+                    ));
+                }
+
+                // Check temporal vector: publish src must be descendant of claim src
+                // NOTE: Store resolution does not verify descendant relation using graph
+                // traversal as the development history is not
+                // present in the store repository.
+
+                if prev_publish_payload.is_none() {
+                    prev_publish_payload = Some(pub_payload.clone());
+                    tip_publish_msg = Some(msg_str.clone());
+                    tip_publish_sig = Some(pub_envelope.sig.clone());
+                    tip_publish_pubkey = Some(pub_key_bytes.clone());
                 }
             }
+
+            // As above: the claim's identity is the spec-defined czd
+            // recomputed from its own signed bytes. The `claim_czd_hex`
+            // ref-path segment is a store-internal addressing key, not a
+            // substitute for this.
+            let czd = atom_id::czd_for_alg(&claim_pay_bytes, &claim_envelope.sig, alg_str)?;
+
+            let pub_payload = prev_publish_payload.ok_or_else(|| {
+                GitError::Validation(format!("No publish tag found for store ref {}", v_ref_name))
+            })?;
+
+            // Re-read the ref immediately before returning this version's
+            // resolution: if it moved (or vanished) since `observed_tip`
+            // was captured at the start of the walk, the fields above may
+            // already be stale.
+            let moved_tip = tip_stability(&repo, &v_ref_name, observed_tip)?;
+
+            versions.push(GitVersionEntry {
+                version: pub_payload.version.clone(),
+                dig: dig_oid.as_bytes().to_vec(),
+                czd: Some(czd),
+                claim_payload: Some(claim_payload.clone()),
+                claim_msg: Some(claim_msg_str.clone()),
+                claim_sig: Some(claim_envelope.sig.clone()),
+                claim_pubkey: Some(claim_pub_key.clone()),
+                publish_payload: Some(pub_payload),
+                publish_msg: tip_publish_msg,
+                publish_sig: tip_publish_sig,
+                publish_pubkey: tip_publish_pubkey,
+                moved_tip,
+            });
         }
 
         // 3. DEV RESOLUTION: refs/atom/dev/{atom_digest}/{dev_version}
