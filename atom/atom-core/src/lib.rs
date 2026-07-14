@@ -233,6 +233,20 @@ pub trait AtomRegistry: AtomSource {
         src: &[u8],
         path: &str,
     ) -> Result<(), Self::Error>;
+
+    /// Charter (found or succeed) an atom-set.
+    ///
+    /// `prior: None` founds a new atom-set: the returned [`Czd`] becomes
+    /// the atom-set's [`Anchor`]. `prior: Some(czd)` signs a successor to
+    /// the charter named by `czd`, transferring ownership without
+    /// changing the anchor.
+    ///
+    /// # Arguments
+    ///
+    /// * `owner` — opaque identity digest of the new/incoming owner
+    /// * `src` — source revision demarking the chartering point
+    /// * `prior` — czd of the charter this one succeeds, or `None` to found a new atom-set
+    fn charter(&self, owner: &[u8], src: &[u8], prior: Option<&Czd>) -> Result<Czd, Self::Error>;
 }
 
 /// Local accumulation interface (consumer-side).
