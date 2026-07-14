@@ -487,29 +487,47 @@ authorities, distinguishable by every consumer:
   contact. Absolute freshness without a transport of record is not
   claimed — monotonic non-regression plus mandatory marking is.
 
-  **Widened by the owner-set generalization (named here, not
-  mitigated).** Under a single-valued charter owner, only that one key
-  could force a governance replacement. Under `[charter-owner-set]`,
-  ANY existing charter-set member can, unilaterally — the same flat,
-  undifferentiated authority `[charter-succession-linear]` grants for
-  charter succession now extends to seizing any claim under the
-  anchor. Charter succession has an explicit, already-specified
-  mitigation for unilateral action (`[charter-succession-linear]`'s
-  fail-closed rule on conflicting successors); THIS constraint does
-  NOT define an analogous fail-closed rule for two CONFLICTING
-  governance replacements of the same claim signed by different
-  charter-set members, and `[charter-succession-linear]`'s named
-  governance-policy extension point is scoped to charter succession,
-  not claim-level governance replacement. This is a genuine widening
-  of unilateral-seizure authority introduced by the owner-set
-  amendment; it is named explicitly rather than left implicit, and
-  resolving it (a claim-level fork/divergence rule, or folding claim
-  governance under the same future per-charter policy mechanism) is
-  out of this node's scope.
+  **Widened by the owner-set generalization, mitigated the same way
+  charter succession is.** Under a single-valued charter owner, only
+  that one key could force a governance replacement. Under
+  `[charter-owner-set]`, ANY existing charter-set member can,
+  unilaterally — the same flat, undifferentiated authority
+  `[charter-succession-linear]` grants for charter succession now
+  extends to seizing any claim under the anchor. This constraint
+  extends `[charter-succession-linear]`'s existing fail-closed
+  divergence rule one level down, mirroring it exactly: **a claim has
+  at most one valid governance replacement.** Nothing can prevent a
+  charter-set member from _signing_ two governance replacements naming
+  the same `prior` claim; the constraint therefore binds consumers —
+  observing two DIVERGENT governance-replacement claims (both carrying
+  `governance: true` and the same `prior`), signed by different
+  charter-set members, is a **claim-authority fork**, and a consumer
+  MUST fail closed for any authority decision downstream of the
+  divergence point — neither branch is effective — surfacing the
+  divergence for an out-of-band trust decision, exactly as
+  `[charter-succession-linear]` requires for a set-authority fork. A
+  consumer's previously recorded chain head (`[chain-monotonicity]`)
+  remains valid for decisions at or below that head. This rule is
+  scoped to governance replacements specifically — two divergent
+  OWNER replacements of the same claim are outside this constraint's
+  scope, unaffected by the owner-set widening this rule mitigates.
+  Exactly as for charter succession, safety here comes from
+  fork-detection, not from unilateral governance-replacement authority
+  being intrinsically safe; the same named future extension
+  (human-configurable per-charter governance policy,
+  `[charter-succession-linear]`) is where quorum-style protection
+  against unilateral claim seizure would eventually land — this rule
+  is not a complete answer to unilateral capture, only to divergent
+  seizure attempts going undetected.
 
 Publishes chained to a replaced claim remain verifiable history;
 new publishes MUST chain to the current claim.
-`VERIFIED: machine (TLC)`
+`VERIFIED: machine (TLC) (pre-existing owner-replacement/governance-
+replacement split — subject to the AtomCharter.tla owner-set-rework
+staleness already tracked separately, out of this node's scope); the
+claim-authority fail-closed rule above is UNVERIFIED — new protocol
+text mirroring `[charter-succession-linear]`'s ForkFailClosed
+mechanism, but no TLA+ module models the claim-replacement chain`
 
 **[charter-ancestry]**: A claim's `src` MUST be a descendant of (or equal
 to) the effective charter's `src`. Together with the existing
@@ -763,16 +781,45 @@ replacement (`[claim-replacement-transition]`) MAY update the
 identity.
 `VERIFIED: unverified`
 
-**[symmetric-payloads]**: Both `ClaimPayload` and `PublishPayload`
-MUST carry raw `anchor` and `label` fields. A consumer MUST be able
-to reconstruct the `AtomId` from either payload independently by
-extracting `(anchor, label)`.
-`VERIFIED: rustc (atom-id: both payloads carry anchor + label)`
+**[symmetric-payloads]**: `ClaimPayload` and a publish's **base
+payload** (`[amendment-field-classification]` class 1 — the first tag
+in an update chain, the one targeting the atom commit) MUST carry raw
+`anchor` and `label` fields. A consumer MUST be able to reconstruct
+the `AtomId` from either payload independently by extracting
+`(anchor, label)`.
 
-**[publish-chains-claim]**: The `claim` field in `PublishPayload` MUST
-contain the `czd` of a valid claim for the same `(anchor, label)`.
-This creates the cryptographic chain from publish back to claim.
-`VERIFIED: machine (TLC)`
+This constraint does NOT extend to a non-base **amendment payload**
+(`[publish-update-transition]`, git-storage-format.md): an amendment
+payload structurally lacks every identity-class field — `anchor` and
+`label` included — by the same class-1 mechanism that already governs
+`dig`/`src`/`path`/`version`/`content_hash`/`claim`. Re-adding
+`anchor`+`label` to an amendment payload alone, while every other
+identity field stays absent, would be an ad hoc asymmetry the field
+classification does not otherwise support; an amendment payload was
+never symmetric with `ClaimPayload` under the duplicate-then-compare
+model this constraint originally described. `AtomId` reconstruction
+from an amendment payload in isolation is NOT possible by design — a
+consumer MUST walk the chain to the base tag
+(`[tag-chain-semantic-immutable]`) to recover it, the same obligation
+the resolver already has for every other identity-class field.
+`VERIFIED: unverified (ClaimPayload/base-PublishPayload carrying
+anchor+label is rustc-verified today; the amendment-payload exclusion
+is new protocol design — the base/amendment Rust type split is not yet
+implemented, [amendment-field-classification])`
+
+**[publish-chains-claim]**: The `claim` field in a publish's **base
+payload** (`[amendment-field-classification]` class 1) MUST contain
+the `czd` of a valid claim for the same `(anchor, label)`. This
+creates the cryptographic chain from publish back to claim. A non-base
+amendment payload carries no `claim` field — `claim` is
+identity-class, structurally absent from every tag but the base
+(`[amendment-field-classification]`) — so an amendment's membership in
+this same chain, and therefore this same claim, is established by
+chain position (`[tag-chain-semantic-immutable]`), never by restating
+this field.
+`VERIFIED: machine (TLC) (base-payload case); the amendment-payload
+exclusion is UNVERIFIED — new protocol design, no TLA+ model of the
+publish tag chain exists yet`
 
 **[claim-typ]**: The `typ` field of a `ClaimPayload` MUST be the
 literal string `"atom/claim"`. The protocol is the authority.
@@ -950,23 +997,46 @@ attempt it and no such mechanism should be inferred from
 
 **[amendment-field-classification]**: Every `PublishPayload` field is
 classified into exactly one of three kinds. The classification is a
-fixed protocol table, not a per-message choice:
+fixed protocol table, not a per-message choice, and covers every field
+in the `PublishPayload` type declaration (above) without exception:
 
 1. **Identity (write-once).** `label`, `version`, `dig`, `src`, `path`,
-   `content_hash`. MUST be set only by the **base publish payload** —
-   the tag that targets the atom commit directly, the first tag in a
-   publish's update chain. Every other tag in the chain carries an
-   **amendment payload** whose shape has no slot for an identity-class
-   field at all — the field is structurally absent, not present and
-   checked equal to the base tag's value. `[tag-chain-semantic-
-   immutable]` (git-storage-format.md) is the storage-side statement
-   of this rule; this constraint is its protocol-level source.
+   `content_hash`, `anchor`, `claim`. MUST be set only by the **base
+   publish payload** — the tag that targets the atom commit directly,
+   the first tag in a publish's update chain. Every other tag in the
+   chain carries an **amendment payload** whose shape has no slot for
+   an identity-class field at all — the field is structurally absent,
+   not present and checked equal to the base tag's value. An amendment
+   cannot change which claim it chains to (`claim`) or which anchor
+   it's under (`anchor`), exactly as it cannot change `label` or `dig`;
+   chain membership for a non-base tag is established by **chain
+   position** (its git tag object targets the previous tag, ultimately
+   reaching the base tag), never by restating these fields.
+   `[tag-chain-semantic-immutable]` (git-storage-format.md) is the
+   storage-side statement of this rule; this constraint is its
+   protocol-level source.
+
+   `typ` is identity-class in the same VALUE sense — an amendment
+   cannot change which transaction type it is — but is the one
+   exception to class 1's structural-absence mechanism: it MUST be
+   present, unchanged, on every tag, base or amendment alike
+   (`[publish-typ]`), because it is the `CozMessage` payload-family
+   discriminator needed to parse the message at all, not per-chain
+   data a resolver accumulates from the base tag. No other field in
+   this classification carries a parsing role, so no other field needs
+   this exception.
 2. **Overwrite (latest-wins).** `mode`, `meta`, the signing identity
-   (`tmb` and the envelope `key`), `now`. MAY be set by the base
-   payload or by any amendment payload. The current value of an
+   (`tmb`, the envelope `key`, and `alg`), `now`. MAY be set by the
+   base payload or by any amendment payload. The current value of an
    overwrite-class field is the value set by the last tag, walking the
    chain base to tip, that set it; a tag that omits an overwrite-class
-   field leaves an earlier tag's value for it unchanged.
+   field leaves an earlier tag's value for it unchanged. `alg` groups
+   with the signing identity fields rather than sitting alone: a key
+   rotation (`tmb`/`key` changing) MAY plausibly carry an algorithm
+   change with it (e.g. moving from an EC curve to Ed25519), and `alg`
+   has no independent existence apart from the key it describes — it
+   is not classified identity, since nothing about the payload's
+   *content* identity depends on which signature algorithm secured it.
 3. **Append (accumulate, never overwrite).** Fact-kind entries
    (`[fact-kind-table]`, below — `meta` is NOT the carrier for these).
    MAY be set by the base payload or by any amendment payload. The
@@ -976,12 +1046,13 @@ fixed protocol table, not a per-message choice:
 
 A conforming resolver walks a publish's update chain exactly once,
 base to tip, and produces one accumulated view: identity fields read
-from the base tag only; the latest-setter value of every overwrite
-field; the full accumulated set of every append entry. This is the
-sole resolution algorithm for a publish chain — pairwise inter-tag
-comparison MUST NOT be used to enforce identity-field immutability;
-class 1's payload shape enforces it structurally, so there is nothing
-to compare.
+from the base tag only (`typ` read from any tag — it is identical on
+all of them, so no accumulation is needed); the latest-setter value of
+every overwrite field; the full accumulated set of every append entry.
+This is the sole resolution algorithm for a publish chain — pairwise
+inter-tag comparison MUST NOT be used to enforce identity-field
+immutability; class 1's payload shape enforces it structurally, so
+there is nothing to compare.
 `VERIFIED: unverified`
 
 **[fact-kind-table]**: An append-class entry (`[amendment-field-
@@ -989,19 +1060,50 @@ classification]` class 3) MUST carry one of the following fact kinds.
 The species column is atom-model.md §4's own partition: a **derived**
 fact is produced only by building or independently inspecting the
 published artifact; an **asserted** fact is a keyed, post-hoc
-assertion no build produces.
+assertion no build produces. The tier column is this entry's
+authorization tier — **open** (any anchored signer with the fact's
+`SignerRole`, `[trust-role-authorization]`, trust-model.md, governs
+acceptance alone) or **claim-owner-gated** (additionally requires
+`[fact-claim-owner-gated]`, below):
 
-| Kind                 | Species  | Retired `meta` field  |
-| :------------------- | :------- | :--------------------- |
-| `build-record`        | derived  | `meta.build-hash`       |
-| `interface-manifest`  | derived  | —                        |
-| `observation-record`  | derived  | —                        |
-| `trial-attestation`   | derived  | —                        |
-| `advisory`             | asserted | `meta.security`          |
-| `deprecated`           | asserted | `meta.deprecated`        |
-| `yanked`               | asserted | `meta.broken`            |
-| `superseded-by`        | asserted | `meta.superseded-by`     |
-| `runtime-requires`     | asserted | —                        |
+| Kind                 | Species  | Tier              | Retired `meta` field |
+| :------------------- | :------- | :---------------- | :------------------- |
+| `build-record`       | derived  | open              | `meta.build-hash`    |
+| `interface-manifest` | derived  | open              | —                    |
+| `observation-record` | derived  | open              | —                    |
+| `trial-attestation`  | derived  | open              | —                    |
+| `advisory`           | asserted | open              | `meta.security`      |
+| `deprecated`         | asserted | claim-owner-gated | `meta.deprecated`    |
+| `yanked`             | asserted | claim-owner-gated | `meta.broken`        |
+| `superseded-by`      | asserted | claim-owner-gated | `meta.superseded-by` |
+| `runtime-requires`   | asserted | claim-owner-gated | —                    |
+
+The four derived kinds are open per atom-model.md §4's own language
+("signed by their deriving executor, generally not the claim owner") —
+requiring claim-owner authorization for a build record would break the
+builder≠owner obligation the model already establishes. `advisory` is
+open because independent security-research value depends on
+non-project-controlled signers being admissible; gating it to the
+claim owner would let a compromised or uncooperative owner suppress
+advisories about their own package. `deprecated`/`yanked`/
+`superseded-by` are claim-owner-gated because a lifecycle marker on
+one label is that label's claim owner's call, not any other anchored
+signer's. `runtime-requires` is claim-owner-gated for the same reason,
+though it is not a lifecycle marker: it is an assertion about the
+package's own technical properties (its declared runtime dependency),
+for which the claim owner — the accountable identity for this label —
+is the authoritative source, exactly as for the lifecycle markers.
+
+No kind draws its tier from charter-set membership rather than
+claim-single-owner. Charter-set membership governs who MAY hold a
+claim under the anchor (`[claim-charter-authorization]`); it says
+nothing about who is accountable for a SPECIFIC already-held claim's
+technical or lifecycle assertions. A charter-set member with no stake
+in this particular label would, under charter-set gating, be able to
+yank, deprecate, or assert runtime requirements for a package they do
+not own — defeating the isolation the claim-owner model exists to
+provide. Every claim-owner-gated kind therefore stays scoped to the
+narrower claim-single-owner selector, never the broader charter set.
 
 A fact is simply an append-class amendment tag: `typ` remains the
 literal `"atom/publish"` (`[publish-typ]`) — a fact does NOT introduce
@@ -1014,29 +1116,40 @@ classifies every field it encounters by kind
 chain.
 `VERIFIED: unverified`
 
-**[fact-lifecycle-owner-gated]**: For an append-class entry of a
-lifecycle fact kind (`yanked`, `deprecated`, `superseded-by`;
-`[fact-kind-table]`), the `assertor`-role authorization that
-`[trust-role-authorization]` (trust-model.md) grants an anchored
-`assertor` signer is NECESSARY BUT NOT SUFFICIENT: a conforming
-reader's acceptance procedure MUST additionally require the signer to
-match the `owner` `SignerRef` at the entry's chain position
-(`[trust-owner-selector]`, trust-model.md) before assigning verdict
+**[fact-claim-owner-gated]**: For an append-class entry of a
+claim-owner-gated fact kind (`yanked`, `deprecated`, `superseded-by`,
+`runtime-requires`; `[fact-kind-table]` tier column), the
+`assertor`-role authorization that `[trust-role-authorization]`
+(trust-model.md) grants an anchored `assertor` signer is NECESSARY BUT
+NOT SUFFICIENT: a conforming reader's acceptance procedure MUST
+additionally require the signer to match the atom's EFFECTIVE CLAIM's
+single owner at the entry's chain position —
+`[trust-owner-selector]` (trust-model.md), disambiguated to mean
+specifically `ClaimPayload.owner` (`[claim-owner-single]`), never
+`CharterPayload.owner` set membership — before assigning verdict
 `fact` (`[trust-acceptance-procedure]`, trust-model.md) to a
-lifecycle-kind entry. A lifecycle-kind entry from an `assertor`-
-anchored signer that does not match `owner` MUST receive verdict
-`evidence` — a role-adequate signer failing this constraint's
+claim-owner-gated entry. A claim-owner-gated entry from an `assertor`-
+anchored signer that does not match the claim owner MUST receive
+verdict `evidence` — a role-adequate signer failing this constraint's
 additional owner-match gate, falling back to the same `evidence`
 verdict `[trust-role-authorization]` assigns a role-inadequate signer,
 though for a distinct reason (owner mismatch, not role mismatch); this
-constraint introduces no new verdict, no new `SignerRole`, and no
-chain-level
-rejection (`[trust-signer-relative]`, trust-model.md) — the gate is
-evaluated entirely in the consumer's policy layer, using machinery
-`[trust-owner-selector]` already defines. Non-lifecycle asserted kinds
-(`advisory`, `runtime-requires`) and every derived kind are governed
-by `[trust-role-authorization]` alone, with no additional owner
+constraint introduces no new verdict and no new `SignerRole`. Open-tier
+kinds (the four derived kinds, plus `advisory`) are governed by
+`[trust-role-authorization]` alone, with no additional owner
 requirement.
+
+This is a consumer-policy-layer requirement — it governs which verdict
+a consumer assigns a structurally valid fact entry, not whether the
+entry may exist on the chain at all (`[trust-signer-relative]`,
+trust-model.md: verdicts are per-consumer, fact-hood is
+signer-relative). It is therefore distinct from, and does not
+duplicate, `[publish-update-transition]`'s protocol-level amendment
+authorization (git-storage-format.md) — the PRE clause there governs
+transaction VALIDITY (an append-class entry from any signer is a
+structurally valid amendment); this constraint governs TRUST (which
+verdict a specific claim-owner-gated entry earns from a given
+consumer).
 `VERIFIED: unverified`
 
 **[rawversion-opaque]**: `RawVersion` MUST be treated as an opaque
@@ -1235,9 +1348,18 @@ or transitively require any cryptographic crate. All crypto flows
 through atom-id via Coz.
 `VERIFIED: unverified`
 
-**[no-backdated-publish]**: A publish with `now` less than or equal
-to the `now` of the referenced claim MUST be rejected. Publishes
-MUST be temporally ordered after their authorizing claim.
+**[no-backdated-publish]**: A publish's **base payload** — the first
+tag in the chain (`[amendment-field-classification]` class 1) — with
+`now` less than or equal to the `now` of the referenced claim MUST be
+rejected. Publishes MUST be temporally ordered after their authorizing
+claim. This check anchors the temporal floor once, at base-publish
+time; it is NOT re-evaluated against a later amendment payload's own
+`now` value. `now` is overwrite-class (`[amendment-field-
+classification]`) — every tag, base or amendment, necessarily carries
+its own distinct `now` — but only the base payload's `now`
+participates in this temporal-floor check; an amendment's `now`
+records when the amendment was signed, not a new temporal floor for
+the publish event.
 `VERIFIED: unverified`
 
 ### Behavioral Properties
@@ -1446,12 +1568,21 @@ following locally:
 | 5    | Publish signature valid          | `publish.pay`, `publish.sig`, key                                    |
 | 6    | Key thumbprints match            | `tmb(x.key) == x.pay.tmb` for charter/claim                          |
 | 7    | Claim chains to charter          | `claim.anchor == czd(charter₀)`                                      |
-| 8    | Publish chains to claim          | `publish.claim == czd(claim)` (current claim per replacement chain)  |
-| 9    | Temporal ordering                | `charter.now < claim.now < publish.now`                              |
+| 8    | Publish chains to claim          | BASE-`publish.claim == czd(claim)` (current claim per replacement chain; `claim` is identity-class, present only on the base tag, `[amendment-field-classification]`) |
+| 9    | Temporal ordering                | `charter.now < claim.now < BASE-publish.now` (an amendment tag's own `now` is overwrite-class and does not re-anchor this floor, `[no-backdated-publish]`) |
 | 10   | Claim signer authorized          | `claim.tmb` authorized by membership in effective charter `owner` set |
 | 11   | Publish signer authorized        | `publish.tmb` authorized by `claim.owner` (single-valued, per its `kind`) |
 | 12   | Replacement authority (if any)   | per `[claim-replacement-authority]`; `governance` flag surfaced      |
 | 13   | AtomId matches payload fields    | extract `(anchor, label)` from payload, compare to expected `AtomId` |
+
+This pipeline verifies a single base transaction set (charter chain,
+one claim, one publish's base tag). Verifying a publish's full update
+chain — walking amendment tags and applying
+`[amendment-field-classification]`'s accumulation algorithm, and
+checking `[publish-update-transition]`'s per-class amendment
+authorization — is additional to these 18 steps, not modeled as its
+own numbered sequence here; the two governing constraints are
+normative on their own.
 
 ### Provenance Verification (minimal network)
 
@@ -1593,7 +1724,7 @@ _The rows added or amended for the charter constraints are marked (amended)._
 | content-hash-obligation       | integration-test | pending  | Optional schema; present ⇒ consumer verifies or rejects; SHOULD on weak backend | 4 |
 | amendment-field-classification | unit-test       | pending  | Amendment payload has no identity-field slot; base tag is sole source     | 4     |
 | fact-kind-table               | unit-test        | pending  | Fact entries round-trip; kind name drawn from the reserved table          | 4     |
-| fact-lifecycle-owner-gated    | policy-test       | pending  | Lifecycle fact from non-owner assertor → evidence, never fact             | 4     |
+| fact-claim-owner-gated        | policy-test       | pending  | Claim-owner-gated fact (incl. runtime-requires) from non-owner assertor → evidence, never fact | 4 |
 | path-is-subdir                | rustc            | **pass** | `path` field type constrains to subdir                                    | 1     |
 | rawversion-opaque             | rustc            | **pass** | Newtype, no `Deref`/`AsRef`/`Into`                                        | 1     |
 | claim-key-required            | unit-test        | **pass** | CozMessage key — tested in claim roundtrip                                | 1     |
@@ -1660,6 +1791,6 @@ This specification explicitly does NOT define:
   ownership-relevant events). The concrete fact-kind encoding and
   authorization mechanism are now defined —
   `[amendment-field-classification]`, `[fact-kind-table]`, and
-  `[fact-lifecycle-owner-gated]` above — closing atom-sad.md §9 gap 5
+  `[fact-claim-owner-gated]` above — closing atom-sad.md §9 gap 5
   at the specification level. The Rust implementation of this
   mechanism is separate, not-yet-landed work.
