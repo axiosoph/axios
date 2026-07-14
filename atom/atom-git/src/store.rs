@@ -12,7 +12,6 @@ use atom_core::{
 };
 use coz_rs;
 use gix::hash::ObjectId;
-use gix::objs::Exists;
 use gix::refs::transaction::{Change, LogChange, PreviousValue, RefEdit, RefLog};
 use gix::refs::{FullName, Target};
 
@@ -31,6 +30,23 @@ pub const FS_SENTINEL_ANCHOR: &[u8] = b"fs-sentinel-anchor";
 /// contain no `.`, so the substitution is unambiguous.
 pub fn dev_ref_digest(digest: &atom_core::AtomDigest) -> String {
     digest.to_string().replace(':', ".")
+}
+
+/// Lowercase-hex encode arbitrary bytes for a ref-path segment.
+///
+/// Backs the `czd-hex` ref family (`docs/specs/git-storage-format.md`
+/// `[czd-oid-disjoint]`, `refs/atom/claims/d/{claim_czd}`). A local encoder
+/// avoids a new dependency for one line of logic: any injective,
+/// git-ref-safe encoding satisfies `[store-claim-ref]`, since
+/// `GitSource::resolve` treats this segment as an opaque lookup key and
+/// re-derives the real czd from the claim's own signed content, never from
+/// this string (see `test_resolve_store_branch_returns_real_czd`).
+fn hex_encode(bytes: &[u8]) -> String {
+    use std::fmt::Write;
+    bytes.iter().fold(String::with_capacity(bytes.len() * 2), |mut s, b| {
+        let _ = write!(s, "{:02x}", b);
+        s
+    })
 }
 
 /// Write-enabled Git store.
@@ -204,26 +220,6 @@ impl AtomStore for GitStore {
             .await
             .map_err(|e| GitError::Validation(e.to_string()))?;
 
-        // Collect candidate claim parents across all discovered versions for potential rotation
-        // reconstruction
-        let mut candidate_parents = Vec::new();
-        for id in &discovered_ids {
-            if let Some(entry) = source
-                .resolve(id)
-                .await
-                .map_err(|e| GitError::Validation(e.to_string()))?
-            {
-                for v in entry.versions() {
-                    if let Some(oid) = v
-                        .czd()
-                        .and_then(|czd| crate::gix_util::seam::assume_czd_is_oid_issue64(czd).ok())
-                    {
-                        candidate_parents.push(oid);
-                    }
-                }
-            }
-        }
-
         for id in discovered_ids {
             let versions_to_ingest = {
                 let entry_opt = source
@@ -327,67 +323,52 @@ impl AtomStore for GitStore {
                         ));
                     }
 
-                    let claim_oid =
-                        crate::gix_util::seam::assume_czd_is_oid_issue64(&publish_payload.claim)
-                            .map_err(|e| {
-                                GitError::Validation(format!("Invalid claim OID: {}", e))
-                            })?;
-                    let claim_czd_hex = claim_oid.to_hex().to_string();
+                    // Resolve the claim commit through its own ref family
+                    // (`refs/atom/claims/d/{claim_czd}`,
+                    // docs/specs/git-storage-format.md `[store-claim-ref]`)
+                    // instead of assuming the claim's czd is a git object id
+                    // (issue #64). `Czd` and `ObjectId` are disjoint sorts
+                    // (`[czd-oid-disjoint]`): the destination OID for a claim
+                    // commit can only come from a real ref lookup or from
+                    // actually writing the commit — never from casting or
+                    // guessing one.
+                    let claim_czd_hex = hex_encode(publish_payload.claim.as_bytes());
+                    let store_claim_ref_name = format!("refs/atom/claims/d/{}", claim_czd_hex);
 
-                    // Reconstruct or find the claim commit in the destination repository
-                    if !dest_repo.objects.exists(&claim_oid) {
-                        // Find the correct parent by checking candidate parents
-                        let active_claim_oid = dest_repo
-                            .try_find_reference(&format!("refs/atom/claims/pub/{}", id.label()))?
-                            .map(|r| r.id().detach());
-
-                        let mut candidates = Vec::new();
-                        if let Some(p) = active_claim_oid {
-                            candidates.push(p);
-                        }
-                        for parent_candidate in &candidate_parents {
-                            if *parent_candidate != claim_oid
-                                && !candidates.contains(parent_candidate)
-                            {
-                                candidates.push(*parent_candidate);
-                            }
-                        }
-
-                        let mut found = false;
-                        // First try None (no parent)
-                        if crate::gix_util::write_claim_commit(
-                            &dest_repo,
-                            claim_msg.to_string(),
-                            None,
-                        )
-                        .ok()
-                            == Some(claim_oid)
-                        {
-                            found = true;
-                        }
-                        if !found {
-                            for candidate in candidates {
-                                if crate::gix_util::write_claim_commit(
-                                    &dest_repo,
-                                    claim_msg.to_string(),
-                                    Some(candidate),
-                                )
-                                .ok()
-                                    == Some(claim_oid)
-                                {
-                                    found = true;
-                                    break;
-                                }
-                            }
-                        }
-
-                        if !found {
-                            return Err(GitError::Validation(format!(
-                                "Could not reconstruct claim commit {}: hash mismatch",
-                                claim_oid
-                            )));
-                        }
-                    }
+                    let claim_oid = match dest_repo.try_find_reference(&store_claim_ref_name)? {
+                        Some(existing) => existing.id().detach(),
+                        None => {
+                            // A claim replacement chains to its prior claim via
+                            // the payload's own signed `prior` field — never
+                            // guessed. The prior claim MUST already be ingested
+                            // for a rotation to resolve; an absent prior claim
+                            // is a genuine sequencing problem, not a defect in
+                            // this lookup.
+                            let parent_oid = match &claim_payload.prior {
+                                Some(prior_czd) => {
+                                    let prior_hex = hex_encode(prior_czd.as_bytes());
+                                    let prior_ref_name =
+                                        format!("refs/atom/claims/d/{}", prior_hex);
+                                    let prior_ref = dest_repo
+                                        .try_find_reference(&prior_ref_name)?
+                                        .ok_or_else(|| {
+                                            GitError::Validation(format!(
+                                                "claim {} replaces {} but no claim commit for it \
+                                                 has been ingested yet",
+                                                claim_czd_hex, prior_hex
+                                            ))
+                                        })?;
+                                    Some(prior_ref.id().detach())
+                                },
+                                None => None,
+                            };
+                            crate::gix_util::write_claim_commit(
+                                &dest_repo,
+                                claim_msg.to_string(),
+                                parent_oid,
+                            )?
+                        },
+                    };
 
                     // Write each ContentEntry as a git object and reconstruct the tree
                     let content_entries = source
