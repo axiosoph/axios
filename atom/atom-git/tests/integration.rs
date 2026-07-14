@@ -1234,8 +1234,8 @@ fn map_components_to_path(components: &[u8], kind: u8) -> Option<String> {
     // Limit depth to avoid ridiculously deep trees or stack overflows
     let depth = std::cmp::min(components.len(), 5);
     let mut parts = Vec::new();
-    for i in 0..depth {
-        let name = match components[i] % 4 {
+    for component in components.iter().take(depth) {
+        let name = match component % 4 {
             0 => "dir_a",
             1 => "dir_b",
             2 => "dir_c",
