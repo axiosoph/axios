@@ -226,8 +226,11 @@ design work this model now governs rather than defers:
    §8.6's moved-tip warning exists to surface signing/ownership
    changes, and fact traffic through the same mechanism
    (`[publish-update-transition]`) currently trips it. The carve-out
-   is a fact-kind convention distinguishing appends that touch the
-   trust chain from appends that only accumulate facts.
+   is now concretely mechanized by the field classification —
+   atom-transactions.md `[amendment-field-classification]` and its
+   fact-kind table (`[fact-kind-table]`) — distinguishing appends that
+   set an overwrite-class field (trust-chain-relevant) from appends
+   that add only append-class fact entries (routine).
 
 ## 5. The signature-anchoring law
 

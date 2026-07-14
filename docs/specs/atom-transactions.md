@@ -948,6 +948,97 @@ attempt it and no such mechanism should be inferred from
 `content_hash`'s existence.
 `VERIFIED: unverified`
 
+**[amendment-field-classification]**: Every `PublishPayload` field is
+classified into exactly one of three kinds. The classification is a
+fixed protocol table, not a per-message choice:
+
+1. **Identity (write-once).** `label`, `version`, `dig`, `src`, `path`,
+   `content_hash`. MUST be set only by the **base publish payload** —
+   the tag that targets the atom commit directly, the first tag in a
+   publish's update chain. Every other tag in the chain carries an
+   **amendment payload** whose shape has no slot for an identity-class
+   field at all — the field is structurally absent, not present and
+   checked equal to the base tag's value. `[tag-chain-semantic-
+   immutable]` (git-storage-format.md) is the storage-side statement
+   of this rule; this constraint is its protocol-level source.
+2. **Overwrite (latest-wins).** `mode`, `meta`, the signing identity
+   (`tmb` and the envelope `key`), `now`. MAY be set by the base
+   payload or by any amendment payload. The current value of an
+   overwrite-class field is the value set by the last tag, walking the
+   chain base to tip, that set it; a tag that omits an overwrite-class
+   field leaves an earlier tag's value for it unchanged.
+3. **Append (accumulate, never overwrite).** Fact-kind entries
+   (`[fact-kind-table]`, below — `meta` is NOT the carrier for these).
+   MAY be set by the base payload or by any amendment payload. The
+   current state of the append-class fields is the union of every
+   entry seen walking the whole chain; a later tag MUST NOT cause an
+   earlier append-class entry to be removed or replaced.
+
+A conforming resolver walks a publish's update chain exactly once,
+base to tip, and produces one accumulated view: identity fields read
+from the base tag only; the latest-setter value of every overwrite
+field; the full accumulated set of every append entry. This is the
+sole resolution algorithm for a publish chain — pairwise inter-tag
+comparison MUST NOT be used to enforce identity-field immutability;
+class 1's payload shape enforces it structurally, so there is nothing
+to compare.
+`VERIFIED: unverified`
+
+**[fact-kind-table]**: An append-class entry (`[amendment-field-
+classification]` class 3) MUST carry one of the following fact kinds.
+The species column is atom-model.md §4's own partition: a **derived**
+fact is produced only by building or independently inspecting the
+published artifact; an **asserted** fact is a keyed, post-hoc
+assertion no build produces.
+
+| Kind                 | Species  | Retired `meta` field  |
+| :------------------- | :------- | :--------------------- |
+| `build-record`        | derived  | `meta.build-hash`       |
+| `interface-manifest`  | derived  | —                        |
+| `observation-record`  | derived  | —                        |
+| `trial-attestation`   | derived  | —                        |
+| `advisory`             | asserted | `meta.security`          |
+| `deprecated`           | asserted | `meta.deprecated`        |
+| `yanked`               | asserted | `meta.broken`            |
+| `superseded-by`        | asserted | `meta.superseded-by`     |
+| `runtime-requires`     | asserted | —                        |
+
+A fact is simply an append-class amendment tag: `typ` remains the
+literal `"atom/publish"` (`[publish-typ]`) — a fact does NOT introduce
+a distinct `typ` value — carrying an append-class entry naming one of
+the kinds above, in place of or alongside an overwrite-class field.
+This is why no separate ref family or walk-compatibility branch is
+needed for facts: a resolver never special-cases by `typ`; it
+classifies every field it encounters by kind
+(`[amendment-field-classification]`), uniformly, for every tag in the
+chain.
+`VERIFIED: unverified`
+
+**[fact-lifecycle-owner-gated]**: For an append-class entry of a
+lifecycle fact kind (`yanked`, `deprecated`, `superseded-by`;
+`[fact-kind-table]`), the `assertor`-role authorization that
+`[trust-role-authorization]` (trust-model.md) grants an anchored
+`assertor` signer is NECESSARY BUT NOT SUFFICIENT: a conforming
+reader's acceptance procedure MUST additionally require the signer to
+match the `owner` `SignerRef` at the entry's chain position
+(`[trust-owner-selector]`, trust-model.md) before assigning verdict
+`fact` (`[trust-acceptance-procedure]`, trust-model.md) to a
+lifecycle-kind entry. A lifecycle-kind entry from an `assertor`-
+anchored signer that does not match `owner` MUST receive verdict
+`evidence` — a role-adequate signer failing this constraint's
+additional owner-match gate, falling back to the same `evidence`
+verdict `[trust-role-authorization]` assigns a role-inadequate signer,
+though for a distinct reason (owner mismatch, not role mismatch); this
+constraint introduces no new verdict, no new `SignerRole`, and no
+chain-level
+rejection (`[trust-signer-relative]`, trust-model.md) — the gate is
+evaluated entirely in the consumer's policy layer, using machinery
+`[trust-owner-selector]` already defines. Non-lifecycle asserted kinds
+(`advisory`, `runtime-requires`) and every derived kind are governed
+by `[trust-role-authorization]` alone, with no additional owner
+requirement.
+`VERIFIED: unverified`
+
 **[rawversion-opaque]**: `RawVersion` MUST be treated as an opaque
 string by the protocol layer. Semantic interpretation MUST be
 deferred to a `VersionScheme` implementor.
@@ -1309,26 +1400,29 @@ is measured against, it does not resolve it.)
 - **Type**: Safety
   `VERIFIED: unverified`
 
-**[format-reserved-names]**: The following namespace and field
+**[format-reserved-names]**: The following namespace, field, and kind
 identifiers are already in live protocol use and are reserved bare
 names — a third-party or ecosystem-specific extension MUST NOT
 redefine any of them with incompatible meaning. Interface-analyzer
 namespaces (`[htc-manifest-binding-free]`, htc-sad.md:233-234, an open
 plugin set per §6.1): `elf-soname`, `python-module`, `cli-name`,
-`pkgconfig`. Publish-side advisory `meta` fields
-(git-storage-format.md:862-869): `meta.broken`, `meta.security`,
-`meta.superseded-by`, `meta.deprecated`, `meta.build-hash`,
-`meta.min-compatible`. Claim-side transition `meta` fields
-(git-storage-format.md:883-895): `meta.supersedes`,
-`meta.announcement`, `meta.effective-after`. A new namespace or `meta`
-field introduced by a third-party or ecosystem-specific extension MUST
-use a name distinguishable from this reserved set — a lightweight
-prefix convention (for example, reverse-DNS-style qualification such
-as `com.example.my-field`) MAY be used. Distinguishing reserved from
-qualified names is a naming convention enforced through ordinary
-review of new namespace/field additions, mirroring in spirit — not in
-mechanism — `[lock-type-extension-mechanism]`'s plugin discipline; no
-separate submission process governs it.
+`pkgconfig`. Publish-side overwrite-class `meta` field
+(git-storage-format.md, "Publish tag metadata"): `meta.min-compatible`.
+Publish-side append-class fact kinds (`[fact-kind-table]`, above):
+`build-record`, `interface-manifest`, `observation-record`,
+`trial-attestation`, `advisory`, `deprecated`, `yanked`,
+`superseded-by`, `runtime-requires`. Claim-side transition `meta`
+fields (git-storage-format.md:883-895): `meta.supersedes`,
+`meta.announcement`, `meta.effective-after`. A new namespace, `meta`
+field, or fact kind introduced by a third-party or ecosystem-specific
+extension MUST use a name distinguishable from this reserved set — a
+lightweight prefix convention (for example, reverse-DNS-style
+qualification such as `com.example.my-field`) MAY be used.
+Distinguishing reserved from qualified names is a naming convention
+enforced through ordinary review of new namespace/field/kind
+additions, mirroring in spirit — not in mechanism —
+`[lock-type-extension-mechanism]`'s plugin discipline; no separate
+submission process governs it.
 
 - **Type**: Safety
   `VERIFIED: unverified`
@@ -1497,6 +1591,9 @@ _The rows added or amended for the charter constraints are marked (amended)._
 | content-hash-is-tree-digest   | unit-test        | pending  | Present `content_hash` is BLAKE3 over content entries, publisher-signed   | 4     |
 | content-hash-algorithm        | unit-test        | pending  | Two independent inputs of same content → byte-identical digest            | 4     |
 | content-hash-obligation       | integration-test | pending  | Optional schema; present ⇒ consumer verifies or rejects; SHOULD on weak backend | 4 |
+| amendment-field-classification | unit-test       | pending  | Amendment payload has no identity-field slot; base tag is sole source     | 4     |
+| fact-kind-table               | unit-test        | pending  | Fact entries round-trip; kind name drawn from the reserved table          | 4     |
+| fact-lifecycle-owner-gated    | policy-test       | pending  | Lifecycle fact from non-owner assertor → evidence, never fact             | 4     |
 | path-is-subdir                | rustc            | **pass** | `path` field type constrains to subdir                                    | 1     |
 | rawversion-opaque             | rustc            | **pass** | Newtype, no `Deref`/`AsRef`/`Into`                                        | 1     |
 | claim-key-required            | unit-test        | **pass** | CozMessage key — tested in claim roundtrip                                | 1     |
@@ -1561,5 +1658,8 @@ This specification explicitly does NOT define:
   signer authorization for appended facts, and the fact-append
   carve-out (routine fact appends must not present as
   ownership-relevant events). The concrete fact-kind encoding and
-  authorization mechanism remain registered design work (atom-sad.md
-  §9 gap 5), not defined here.
+  authorization mechanism are now defined —
+  `[amendment-field-classification]`, `[fact-kind-table]`, and
+  `[fact-lifecycle-owner-gated]` above — closing atom-sad.md §9 gap 5
+  at the specification level. The Rust implementation of this
+  mechanism is separate, not-yet-landed work.

@@ -783,12 +783,20 @@ replaced (e.g., after key compromise).
   `VERIFIED: unverified`
 
 **[publish-update-transition]**: A publish tag MAY be updated (e.g.,
-after key revocation or resigning, or to carry a reproducibility-mode
-transition — promotion or demotion per atom-model.md §6) by appending
-a new tag to the chain.
+after key revocation or resigning, to carry a reproducibility-mode
+transition — promotion or demotion per atom-model.md §6 — or to append
+overwrite- or append-class fields per atom-transactions.md
+`[amendment-field-classification]`) by appending a new tag to the
+chain.
 
 - **PRE**: An existing publish tag chain for this `(label, version)`
-  exists. The new tag's `CozMessage` MUST be valid.
+  exists. The new tag's `CozMessage` MUST carry an **amendment
+  payload**: the same payload shape as a base publish, but with every
+  identity-class field (atom-transactions.md `[amendment-field-
+  classification]`) structurally absent — not present and checked
+  equal, absent. The amendment payload MUST be valid per `[sig-over-
+  pay]` (atom-transactions.md) and MUST set at least one overwrite- or
+  append-class field.
 - **POST**: A new tag object is created targeting the _previous_ tag
   object (not the atom commit). The ref
   `refs/atom/pub/{label}/{version}` (registry) is updated to point to
@@ -801,15 +809,25 @@ a new tag to the chain.
   chain to the underlying atom commit.
   `VERIFIED: unverified`
 
-**[tag-chain-semantic-immutable]**: All tags within a single publish
-update chain MUST contain identical values for the immutable payload
-fields: `(label, version, dig, src, path)`. Only signing metadata
-(`tmb`, `now`, `claim`), the `key` field, extension fields (`meta`),
-and the reproducibility `mode` field (chain-VARIABLE by design — it is
-promotable/demotable via signed chain appends, atom-model.md §6 and
-atom-transactions.md `[publish-mode]`) MAY differ between tags in the
-same chain. Altering the artifact identity (`dig`), version string,
-or source revision requires a new atom commit and a new publish ref —
+**[tag-chain-semantic-immutable]**: The identity-class fields of a
+publish payload — `label`, `version`, `dig`, `src`, `path`, and
+`content_hash` (atom-transactions.md `[amendment-field-
+classification]`) — MUST be set only by the base publish payload: the
+first tag in a publish's update chain, the one targeting the atom
+commit directly. Every later tag in the chain carries an amendment
+payload (`[publish-update-transition]`) whose shape has no slot for
+these fields — they are structurally absent, not present and checked
+equal against the base tag's value. A backend or consumer walking the
+chain MUST read identity-class field values from the base tag only,
+and MUST NOT read them from, or expect them present on, any later tag.
+Overwrite-class fields (signing metadata `tmb`/`now`/`claim`, the
+`key` field, `meta`, the reproducibility `mode` field —
+chain-VARIABLE by design, promotable/demotable via signed chain
+appends per atom-model.md §6 and atom-transactions.md
+`[publish-mode]`) and append-class fields (facts, atom-transactions.md
+`[fact-kind-table]`) MAY be set by the base tag or by any later tag in
+the chain. Altering the artifact identity (`dig`), version string, or
+source revision requires a new atom commit and a new publish ref —
 not an update to an existing tag chain.
 `VERIFIED: unverified`
 
@@ -1001,7 +1019,7 @@ ingested atom. (Model §2.3, ⊇ condition.)
 | publish-transition-git       | integration-test | pending | Publish creates atom commit + tag + src ref            |
 | ingest-transition            | integration-test | pending | Full ingest cycle preserves identity                   |
 | claim-replacement-transition | integration-test | pending | New claim replaces ref, old commit stays               |
-| publish-update-transition    | integration-test | pending | New tag chains to old tag, ref updated                 |
+| publish-update-transition    | integration-test | pending | New tag carries amendment payload, chains to old tag, ref updated |
 | fs-ingest-transition         | integration-test | pending | FS atoms ingested unsigned into store                  |
 | no-non-empty-claim           | unit-test        | pending | Validation rejects non-empty-tree claim                |
 | no-orphan-publish            | integration-test | pending | Publish without claim rejected                         |
@@ -1016,7 +1034,7 @@ ingested atom. (Model §2.3, ⊇ condition.)
 | dev-atom-resolution          | integration-test | pending | Local → dev/{anchor}/{label}/{ver}, remote → d/        |
 | peel-content-integrity       | integration-test | pending | Peeled sha == payload.dig; mismatch → reject           |
 | store-claim-cleanup          | integration-test | pending | Orphaned claim ref cleaned on version eviction         |
-| tag-chain-semantic-immutable | unit-test        | pending | Update tags preserve (label,version,dig,src,path)      |
+| tag-chain-semantic-immutable | unit-test        | pending | Amendment payload has no identity-field slot; base tag is sole source |
 | odb-immutable                | agent-check      | pending | Protocol objects append-only; GC only if unreachable   |
 | refs-sole-mutable            | agent-check      | pending | No protocol state outside refs + objects               |
 | ancestry-hash-committed      | agent-check      | pending | Parent OIDs in hashed preimage; checks quantify over it |
@@ -1056,22 +1074,35 @@ ingested atom. (Model §2.3, ⊇ condition.)
   object (not the atom commit).
 
 - **Publish tag metadata**: Clients SHOULD leverage
-  `[publish-payload-extensible]` to provide programmatic lifecycle
-  metadata in the publish `CozMessage` payload's `meta` object.
-  Recommended fields for client implementors (all nested under `meta`):
-  - `meta.broken: true` — marks a version as yanked/broken; clients
-    SHOULD warn or refuse to resolve
-  - `meta.security: "CVE-2026-XXXX"` — security advisory identifier
-  - `meta.superseded-by: "1.2.3"` — recommended replacement version
-  - `meta.deprecated: true` — marks version as deprecated
-  - `meta.build-hash: "sha256:..."` — reproducible build artifact hash,
-    cryptographically tying the final artifact to the source
+  `[publish-payload-extensible]` to provide programmatic overwrite-
+  class metadata in the publish `CozMessage` payload's `meta` object
+  (atom-transactions.md `[amendment-field-classification]` — `meta` is
+  an overwrite-class field; the latest tag's `meta` value is current).
+  One recommended field remains here:
   - `meta.min-compatible: "1.0.0"` — minimum compatible version for
-    semver-unaware ecosystems
-    All extension fields are signed as part of the `CozMessage` and
-    carry cryptographic assurance. Publish tag updates
-    (`[publish-update-transition]`) enable retroactive advisory
-    annotation without altering the original publish.
+    semver-unaware ecosystems. This is a publisher-asserted
+    compatibility *declaration*, not a post-hoc observation — the
+    publisher states it deliberately, at or after publish time, rather
+    than it being something building or independent inspection would
+    discover the way a security advisory or a build-artifact hash is.
+    It therefore stays an overwrite-class `meta` field rather than
+    moving to the fact-kind table below.
+
+  The five fields formerly recommended here — `meta.broken`,
+  `meta.security`, `meta.superseded-by`, `meta.deprecated`, and
+  `meta.build-hash` — are **retired as `meta` fields**. Each is a
+  post-hoc, append-class fact under atom-model.md §4's partition law
+  (an advisory or a lifecycle marker is exactly its "asserted fact"
+  example; a build hash is exactly its "derived fact" example), and
+  each is now a fact kind in atom-transactions.md's fact-kind table
+  (`[fact-kind-table]`): `meta.broken` → `yanked`, `meta.security` →
+  `advisory`, `meta.superseded-by` → `superseded-by`,
+  `meta.deprecated` → `deprecated`, `meta.build-hash` →
+  `build-record`. All `meta` and fact-kind fields alike are signed as
+  part of the `CozMessage` and carry cryptographic assurance. Publish
+  tag updates (`[publish-update-transition]`) enable both
+  overwrite-class `meta` revision and append-class fact accumulation,
+  without altering the base publish.
 
 - **Claim metadata**: Clients SHOULD leverage
   `[claim-payload-extensible]` to provide programmatic claim chain
