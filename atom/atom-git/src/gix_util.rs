@@ -21,61 +21,6 @@ pub fn blank_signature() -> Signature {
     }
 }
 
-/// Derive the unique anchor from the oldest parentless genesis commit reachable from `src_oid`.
-///
-/// Follows parent headers in the commit history to find all ancestral roots,
-/// selecting the chronologically oldest by committer timestamp.
-///
-/// Spec constraint: `[anchor-is-genesis]`, `[anchor-oldest-root]`.
-pub fn derive_anchor(repo: &gix::Repository, src_oid: ObjectId) -> Result<ObjectId, GitError> {
-    let mut roots = Vec::new();
-    let mut visited = HashSet::new();
-    let mut queue = VecDeque::new();
-    queue.push_back(src_oid);
-    visited.insert(src_oid);
-
-    while let Some(oid) = queue.pop_front() {
-        let obj = repo.find_object(oid)?;
-        let commit = obj.try_into_commit()?;
-
-        let parent_ids: Vec<ObjectId> = commit.parent_ids().map(|p| p.detach()).collect();
-        if parent_ids.is_empty() {
-            roots.push(oid);
-        } else {
-            for parent_oid in parent_ids {
-                if visited.insert(parent_oid) {
-                    queue.push_back(parent_oid);
-                }
-            }
-        }
-    }
-
-    if roots.is_empty() {
-        return Err(GitError::Validation("No genesis commits found".into()));
-    }
-
-    // Select the oldest genesis commit by committer timestamp
-    let mut oldest_oid = roots[0];
-    let mut oldest_time = u64::MAX;
-
-    for oid in roots {
-        let obj = repo.find_object(oid)?;
-        let commit = obj.try_into_commit()?;
-        let committer = commit.committer()?;
-        let decoded_time = committer
-            .time()
-            .map_err(|e| GitError::Validation(format!("Failed to parse committer time: {}", e)))?;
-
-        let seconds = decoded_time.seconds as u64;
-        if seconds < oldest_time {
-            oldest_time = seconds;
-            oldest_oid = oid;
-        }
-    }
-
-    Ok(oldest_oid)
-}
-
 /// Create a deterministic, parentless commit representing the content snapshot of the atom.
 ///
 /// Fixes timestamps, author, and committer information, and appends the `src` extra header.
