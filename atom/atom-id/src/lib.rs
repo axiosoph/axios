@@ -629,7 +629,9 @@ pub enum VerifyError {
     },
     /// A signing key was not authorized by the required owner.
     ///
-    /// Spec constraint: `[charter-succession]`.
+    /// Spec constraints: `[charter-succession]` (charter-chain
+    /// authorization), `[owner-authorization-delegated]` (claim/publish
+    /// single-key authorization — e.g. Verification Pipeline step 11).
     #[error("unauthorized: signing key not authorized by the required owner")]
     Unauthorized,
     /// A succession chain was empty; a chain requires at least a founding
@@ -655,6 +657,23 @@ pub enum VerifyError {
     /// Spec constraint: `[chain-monotonicity]`.
     #[error("chain regression: served chain does not extend past the recorded head")]
     ChainRegression,
+    /// A claim's payload-declared `tmb` does not match the thumbprint
+    /// computed from its actual signing key.
+    ///
+    /// Spec constraint: `[claim-key-required]`.
+    #[error("thumbprint mismatch: declared tmb does not match the signing key")]
+    ThumbprintMismatch,
+    /// A publish's `claim` field does not match the referenced claim's
+    /// actual czd.
+    ///
+    /// Spec constraint: `[publish-chains-claim]`.
+    #[error("claim chain mismatch: publish.claim does not match the claim's czd")]
+    ClaimChainMismatch,
+    /// A payload's `(anchor, label)` does not match the expected `AtomId`.
+    ///
+    /// Spec constraint: `[symmetric-payloads]`.
+    #[error("AtomId mismatch: payload's (anchor, label) does not match the expected AtomId")]
+    AtomIdMismatch,
 }
 
 // ============================================================================
@@ -780,6 +799,111 @@ fn verify_signature(
         Some(false) => Err(VerifyError::InvalidSignature),
         None => Err(VerifyError::UnsupportedAlgorithm(alg.to_owned())),
     }
+}
+
+// ============================================================================
+// Pipeline verification (no-charter subset)
+// ============================================================================
+//
+// The remaining Local Verification steps checkable without walking a
+// charter succession chain (`docs/specs/atom-transactions.md`,
+// "Verification Pipeline" → "Local Verification"): steps 6 (claim side
+// only), 8, 11, and 13. Steps 2, 3, 7, 9, 10, 12 require charter data
+// (walking the succession chain or resolving charter fields) and are
+// out of scope here — see `n3-verify-charter-steps`.
+
+/// Verify a claim's declared thumbprint against its actual signing key
+/// (Verification Pipeline step 6, claim side).
+///
+/// Checks `tmb(claim.key) == claim.pay.tmb`: the thumbprint computed
+/// from the raw public key that signed the claim must match the
+/// thumbprint the claim's own payload declares. A valid signature alone
+/// does not establish this — any key can validly sign its own payload
+/// while that payload asserts an unrelated `tmb`, defeating the TOFU key
+/// binding `[claim-key-required]` exists to establish (and which later
+/// authorization checks, e.g. [`verify_publish_authorized`], rely on
+/// being trustworthy). The charter-side instance of this same step
+/// (`tmb(charter.key) == charter.pay.tmb`) is out of scope for this
+/// no-charter subset.
+///
+/// Spec constraint: `[claim-key-required]`.
+#[cfg(feature = "serde")]
+pub fn verify_claim_key_thumbprint(
+    claim: &ClaimPayload,
+    alg: &str,
+    pub_key: &[u8],
+) -> Result<(), VerifyError> {
+    let computed = coz_rs::compute_thumbprint_for_alg(alg, pub_key)
+        .ok_or_else(|| VerifyError::UnsupportedAlgorithm(alg.to_string()))?;
+    if computed != claim.tmb {
+        return Err(VerifyError::ThumbprintMismatch);
+    }
+    Ok(())
+}
+
+/// Verify a publish's claim-chain link (Verification Pipeline step 8).
+///
+/// Checks `publish.claim == czd(claim)`. The claim's czd is recomputed
+/// independently from its own raw wire components (payload JSON,
+/// signature, algorithm) via [`czd_for_alg`] rather than trusted from a
+/// caller-supplied value, so a publish cannot merely assert a chain it
+/// does not actually hold.
+///
+/// Spec constraint: `[publish-chains-claim]`.
+#[cfg(feature = "serde")]
+pub fn verify_publish_chains_claim(
+    publish: &PublishPayload,
+    claim_pay_json: &[u8],
+    claim_sig: &[u8],
+    claim_alg: &str,
+) -> Result<(), VerifyError> {
+    let claim_czd = czd_for_alg(claim_pay_json, claim_sig, claim_alg)?;
+    if publish.claim != claim_czd {
+        return Err(VerifyError::ClaimChainMismatch);
+    }
+    Ok(())
+}
+
+/// Verify a publish's signer is authorized by the claim's owner
+/// (Verification Pipeline step 11).
+///
+/// Checks `publish.tmb` against `claim.owner` under the single-key
+/// identity framework's byte-equality semantics: `publish.tmb ==
+/// claim.owner` (`[owner-authorization-delegated]`). Richer identity
+/// frameworks (hierarchical, rooted-identity) resolve authorization
+/// differently and are a caller concern this crate does not implement.
+///
+/// Spec constraints: `[owner-authorization-delegated]`,
+/// `[publish-transition]`.
+#[cfg(feature = "serde")]
+pub fn verify_publish_authorized(
+    publish: &PublishPayload,
+    claim: &ClaimPayload,
+) -> Result<(), VerifyError> {
+    if publish.tmb.as_bytes() != claim.owner.as_slice() {
+        return Err(VerifyError::Unauthorized);
+    }
+    Ok(())
+}
+
+/// Verify a payload's `(anchor, label)` against an expected `AtomId`
+/// (Verification Pipeline step 13).
+///
+/// Both `ClaimPayload` and `PublishPayload` carry `anchor`/`label`
+/// directly (`[symmetric-payloads]`), so the caller extracts the pair
+/// from whichever payload it holds and passes it here uniformly.
+///
+/// Spec constraint: `[symmetric-payloads]`.
+#[cfg(feature = "serde")]
+pub fn verify_atom_id(
+    anchor: &Anchor,
+    label: &Label,
+    expected: &AtomId,
+) -> Result<(), VerifyError> {
+    if anchor != expected.anchor() || label != expected.label() {
+        return Err(VerifyError::AtomIdMismatch);
+    }
+    Ok(())
 }
 
 // ============================================================================
