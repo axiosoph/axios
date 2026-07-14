@@ -615,9 +615,21 @@ The `d/` sub-prefix under `claims/` denotes digest-addressed claims
 registry label-addressed claims.
 
 **[store-ref-by-publish-czd]**: Store version refs MUST be keyed by
-`blake3(publish_czd)` (the BLAKE3 reduction of the publish CozMessage
-digest). This ensures global uniqueness — distinct publishes produce
-distinct publish czds and therefore distinct flat ref keys.
+`blake3(publish_czd)`, where `publish_czd` is the `czd` of the
+**specific publish tag `CozMessage` the ref addresses** — the base tag
+or any amendment tag in the same update chain
+(atom-transactions.md `[amendment-field-classification]`) — never a
+single identifier fixed for the whole chain. Each tag in a chain has
+its own distinct `czd` and therefore its own store ref: landing a new
+amendment tag creates a NEW `refs/atom/d/{blake3(new_publish_czd)}`
+ref without invalidating or rewriting any earlier tag's ref
+(`[publish-update-transition]`'s POST states this for the amendment
+case directly; `[store-ownership-migration]`, below, states the
+analogous claim-replacement case). This ensures global uniqueness —
+distinct tags, base or amendment, produce distinct publish czds and
+therefore distinct flat ref keys — and ensures a lock pinned to any
+tag in the chain, not only the base, remains resolvable for as long as
+that tag's ref persists.
 `VERIFIED: unverified`
 
 **[store-claim-ref]**: Each ingested claim MUST have a corresponding
@@ -796,7 +808,33 @@ chain.
   classification]`) structurally absent — not present and checked
   equal, absent. The amendment payload MUST be valid per `[sig-over-
   pay]` (atom-transactions.md) and MUST set at least one overwrite- or
-  append-class field.
+  append-class field. Authorization is per amended-field class:
+  - A tag that sets an overwrite-class field (`[amendment-field-
+    classification]` class 2 — signing identity, `mode`, `meta`) MUST
+    be signed by a key authorized by the base tag's claim's single
+    owner (`[claim-owner-single]`, under `[owner-authorization-
+    delegated]`'s per-value semantics — the same check
+    `[publish-transition]`'s own PRE already applies to the base
+    payload). This is a protocol-level validity requirement: a tag
+    that sets an overwrite-class field without this authorization MUST
+    be rejected — it is not a valid amendment. This closes the gap an
+    unauthorized `tmb`/`key`/`alg`/`mode` change would otherwise leave
+    open ("no undeclared key signs anything").
+  - A tag that sets an append-class field (class 3, a fact entry)
+    carries NO protocol-level signer restriction: any validly-signed
+    tag MAY add a fact entry, from any signer, regardless of fact-kind
+    tier — this is a structural validity statement, not a trust one.
+    Which verdict (`fact`/`evidence`/`refused`) a given consumer
+    assigns a fact entry is governed entirely by the entry's fact-kind
+    authorization tier (atom-transactions.md `[fact-kind-table]`) as
+    evaluated through trust-model.md's consumer-local acceptance
+    policy (`[trust-role-authorization]`, atom-transactions.md
+    `[fact-claim-owner-gated]`) — fact acceptance is deliberately
+    signer-relative (`[trust-signer-relative]`, trust-model.md), never
+    a chain-level accept/reject gate.
+  - A tag MAY set fields of both classes in one amendment; the
+    overwrite-class authorization requirement above applies regardless
+    of any append-class content also present.
 - **POST**: A new tag object is created targeting the _previous_ tag
   object (not the atom commit). The ref
   `refs/atom/pub/{label}/{version}` (registry) is updated to point to
@@ -810,25 +848,30 @@ chain.
   `VERIFIED: unverified`
 
 **[tag-chain-semantic-immutable]**: The identity-class fields of a
-publish payload — `label`, `version`, `dig`, `src`, `path`, and
-`content_hash` (atom-transactions.md `[amendment-field-
-classification]`) — MUST be set only by the base publish payload: the
-first tag in a publish's update chain, the one targeting the atom
-commit directly. Every later tag in the chain carries an amendment
-payload (`[publish-update-transition]`) whose shape has no slot for
-these fields — they are structurally absent, not present and checked
-equal against the base tag's value. A backend or consumer walking the
-chain MUST read identity-class field values from the base tag only,
-and MUST NOT read them from, or expect them present on, any later tag.
-Overwrite-class fields (signing metadata `tmb`/`now`/`claim`, the
-`key` field, `meta`, the reproducibility `mode` field —
-chain-VARIABLE by design, promotable/demotable via signed chain
-appends per atom-model.md §6 and atom-transactions.md
-`[publish-mode]`) and append-class fields (facts, atom-transactions.md
-`[fact-kind-table]`) MAY be set by the base tag or by any later tag in
-the chain. Altering the artifact identity (`dig`), version string, or
-source revision requires a new atom commit and a new publish ref —
-not an update to an existing tag chain.
+publish payload — `label`, `version`, `dig`, `src`, `path`,
+`content_hash`, `anchor`, and `claim` (atom-transactions.md
+`[amendment-field-classification]`) — MUST be set only by the base
+publish payload: the first tag in a publish's update chain, the one
+targeting the atom commit directly. Every later tag in the chain
+carries an amendment payload (`[publish-update-transition]`) whose
+shape has no slot for these fields — they are structurally absent, not
+present and checked equal against the base tag's value. A backend or
+consumer walking the chain MUST read identity-class field values from
+the base tag only, and MUST NOT read them from, or expect them present
+on, any later tag. (`typ` is identity-class in value — it never
+changes across a chain — but, uniquely, IS required and present on
+every tag, base or amendment alike: it is the `CozMessage`
+payload-family discriminator, atom-transactions.md `[publish-typ]`,
+needed to parse the message at all, not per-chain data a resolver
+accumulates from the base tag.) Overwrite-class fields (signing
+metadata — `tmb`, `alg`, the envelope `key`, `now` — `meta`, the
+reproducibility `mode` field — chain-VARIABLE by design,
+promotable/demotable via signed chain appends per atom-model.md §6 and
+atom-transactions.md `[publish-mode]`) and append-class fields (facts,
+atom-transactions.md `[fact-kind-table]`) MAY be set by the base tag or
+by any later tag in the chain. Altering the artifact identity (`dig`),
+version string, or source revision requires a new atom commit and a
+new publish ref — not an update to an existing tag chain.
 `VERIFIED: unverified`
 
 **[refs-atomic-multi]**: Multi-ref protocol transitions (claim +
@@ -1019,7 +1062,7 @@ ingested atom. (Model §2.3, ⊇ condition.)
 | publish-transition-git       | integration-test | pending | Publish creates atom commit + tag + src ref            |
 | ingest-transition            | integration-test | pending | Full ingest cycle preserves identity                   |
 | claim-replacement-transition | integration-test | pending | New claim replaces ref, old commit stays               |
-| publish-update-transition    | integration-test | pending | New tag carries amendment payload, chains to old tag, ref updated |
+| publish-update-transition    | integration-test | pending | New tag carries amendment payload; overwrite-class change without claim-owner signature rejected; append-class from any signer accepted; chains to old tag, ref updated |
 | fs-ingest-transition         | integration-test | pending | FS atoms ingested unsigned into store                  |
 | no-non-empty-claim           | unit-test        | pending | Validation rejects non-empty-tree claim                |
 | no-orphan-publish            | integration-test | pending | Publish without claim rejected                         |
