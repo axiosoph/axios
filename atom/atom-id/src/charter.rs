@@ -233,6 +233,48 @@ pub fn verify_succession_chain(
     Ok(())
 }
 
+/// A single charter's raw wire components — one link in a succession
+/// chain, as needed to independently re-verify its own signature via
+/// [`verify_charter`].
+///
+/// Distinct from [`CharterPayload`]: a payload alone carries no signature
+/// bytes (see [`verify_succession_chain`]'s "Out of scope" note), so
+/// re-verifying step 2 requires the wire triple a payload never retains.
+#[cfg(feature = "serde")]
+#[derive(Debug, Clone, Copy)]
+pub struct CharterLink<'a> {
+    /// The charter's canonical payload JSON bytes.
+    pub pay_json: &'a [u8],
+    /// The Coz signature over `pay_json`.
+    pub sig: &'a [u8],
+    /// The signing algorithm name.
+    pub alg: &'a str,
+    /// The raw public key bytes the signature is checked against.
+    pub pub_key: &'a [u8],
+}
+
+/// Verify Verification Pipeline step 2: every charter in a chain has its
+/// own signature independently re-verified — not merely structurally
+/// trusted, which is all [`verify_succession_chain`] can assume of its
+/// already-parsed `CharterPayload` inputs (see that function's "Out of
+/// scope" note).
+///
+/// Calls [`verify_charter`] on each link in order, short-circuiting on
+/// the first invalid signature. On success, returns the parsed
+/// `CharterPayload` chain in the same order — ready to hand to
+/// [`verify_succession_chain`] for step 3.
+///
+/// Spec constraint: `[sig-over-pay]` (Verification Pipeline step 2).
+#[cfg(feature = "serde")]
+pub fn verify_charter_chain_signatures(
+    links: &[CharterLink<'_>],
+) -> Result<Vec<CharterPayload>, crate::VerifyError> {
+    links
+        .iter()
+        .map(|link| verify_charter(link.pay_json, link.sig, link.alg, link.pub_key))
+        .collect()
+}
+
 /// Verify the founding-charter bootstrap gate.
 ///
 /// Per `[charter-transition]` PRE (founding): if the source already
@@ -544,6 +586,129 @@ mod tests {
         );
         let result = verify_bootstrap_gate(&founding, Some(&pre_existing_claim));
         assert!(result.is_err(), "unauthorized founding must fail closed");
+    }
+
+    #[test]
+    fn verify_succession_chain_rejects_unauthorized_successor() {
+        // Verification Pipeline step 3: each successor's signer must be
+        // authorized by its prior charter's owner (charter.rs:218). No
+        // existing test exercised this rejection path directly — the
+        // divergent-successors and chain-regression tests cover other
+        // failure modes of the same function.
+        let (_prv0, _pub0, tmb0) = gen_ed25519_key();
+        let founding = CharterPayload::new(
+            crate::Alg::Ed25519,
+            1000,
+            vec![1], // founding owner
+            None,
+            vec![0; 32],
+            tmb0,
+        );
+        let founding_czd = crate::Czd::from_bytes(vec![9, 9, 9]); // stand-in for czd(founding)
+
+        let (_prv_stranger, _pub_stranger, tmb_stranger) = gen_ed25519_key();
+        let successor = CharterPayload::new(
+            crate::Alg::Ed25519,
+            2000,
+            vec![2],
+            Some(founding_czd),
+            vec![1; 32],
+            tmb_stranger, // NOT authorized by founding.owner (vec![1])
+        );
+
+        let result = verify_succession_chain(&[founding, successor], None);
+        assert!(
+            matches!(result, Err(crate::VerifyError::Unauthorized)),
+            "step 3: a successor not authorized by its prior's owner must fail closed: {result:?}"
+        );
+    }
+
+    #[test]
+    fn verify_charter_chain_signatures_accepts_all_valid() {
+        let (prv0, pub0, tmb0) = gen_ed25519_key();
+        let founding =
+            CharterPayload::new(crate::Alg::Ed25519, 1000, vec![1], None, vec![0; 32], tmb0);
+        let founding_json = serde_json::to_vec(&founding).unwrap();
+        let (founding_sig, _cad) =
+            coz_rs::sign_json(&founding_json, "Ed25519", &prv0, &pub0).unwrap();
+
+        let (prv1, pub1, tmb1) = gen_ed25519_key();
+        let successor = CharterPayload::new(
+            crate::Alg::Ed25519,
+            2000,
+            vec![2],
+            Some(crate::Czd::from_bytes(vec![9, 9, 9])),
+            vec![1; 32],
+            tmb1,
+        );
+        let successor_json = serde_json::to_vec(&successor).unwrap();
+        let (successor_sig, _cad) =
+            coz_rs::sign_json(&successor_json, "Ed25519", &prv1, &pub1).unwrap();
+
+        let links = [
+            CharterLink {
+                pay_json: &founding_json,
+                sig: &founding_sig,
+                alg: "Ed25519",
+                pub_key: &pub0,
+            },
+            CharterLink {
+                pay_json: &successor_json,
+                sig: &successor_sig,
+                alg: "Ed25519",
+                pub_key: &pub1,
+            },
+        ];
+
+        let result = verify_charter_chain_signatures(&links);
+        assert!(
+            result.is_ok(),
+            "a chain with every link validly signed must verify: {result:?}"
+        );
+        assert_eq!(result.unwrap(), vec![founding, successor]);
+    }
+
+    #[test]
+    fn verify_charter_chain_signatures_rejects_invalid_link_signature() {
+        let (prv0, pub0, tmb0) = gen_ed25519_key();
+        let founding =
+            CharterPayload::new(crate::Alg::Ed25519, 1000, vec![1], None, vec![0; 32], tmb0);
+        let founding_json = serde_json::to_vec(&founding).unwrap();
+        let (founding_sig, _cad) =
+            coz_rs::sign_json(&founding_json, "Ed25519", &prv0, &pub0).unwrap();
+
+        let (_prv1, pub1, tmb1) = gen_ed25519_key();
+        let successor = CharterPayload::new(
+            crate::Alg::Ed25519,
+            2000,
+            vec![2],
+            Some(crate::Czd::from_bytes(vec![9, 9, 9])),
+            vec![1; 32],
+            tmb1,
+        );
+        let successor_json = serde_json::to_vec(&successor).unwrap();
+        let bad_sig = vec![0u8; 64]; // deliberately invalid signature
+
+        let links = [
+            CharterLink {
+                pay_json: &founding_json,
+                sig: &founding_sig,
+                alg: "Ed25519",
+                pub_key: &pub0,
+            },
+            CharterLink {
+                pay_json: &successor_json,
+                sig: &bad_sig,
+                alg: "Ed25519",
+                pub_key: &pub1,
+            },
+        ];
+
+        let result = verify_charter_chain_signatures(&links);
+        assert!(
+            matches!(result, Err(crate::VerifyError::InvalidSignature)),
+            "a chain with one invalidly signed link must be rejected: {result:?}"
+        );
     }
 
     struct NullCharterStore;

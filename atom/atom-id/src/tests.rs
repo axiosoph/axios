@@ -563,34 +563,179 @@ fn claim_payload_governance_replacement_construct_and_roundtrip() {
 }
 
 #[test]
-#[should_panic(expected = "Phase 1")]
-fn verify_claim_replacement_stub_is_honest() {
-    let replacement = crate::ClaimPayload::new_replacement(
-        crate::Alg::ES256,
-        test_id(),
-        2000,
-        vec![99],
-        "cargo".to_string(),
-        crate::Czd::from_bytes(vec![1, 2, 3]),
-        false,
-        vec![1; 32],
-        test_tmb(),
-    );
+fn verify_claim_replacement_accepts_owner_replacement() {
+    // Ordinary path: replacement signed by the replaced claim's own
+    // owner, unmarked.
     let prior = crate::ClaimPayload::new(
         crate::Alg::ES256,
         test_id(),
         1000,
-        vec![99],
+        vec![1], // prior claim's owner
         "cargo".to_string(),
         vec![0; 32],
         test_tmb(),
     );
-    let _ = crate::verify_claim_replacement(&replacement, &prior, &[]);
+    let charter_owner = vec![2]; // unrelated to prior.owner
+
+    let replacement = crate::ClaimPayload::new_replacement(
+        crate::Alg::ES256,
+        test_id(),
+        2000, // strictly after prior.now
+        vec![9],
+        "cargo".to_string(),
+        crate::Czd::from_bytes(vec![9, 9, 9]),
+        false, // unmarked — the ordinary owner-replacement path
+        vec![1; 32],
+        crate::Thumbprint::from_bytes(vec![1]), // == prior.owner
+    );
+
+    let result = crate::verify_claim_replacement(&replacement, &prior, &charter_owner);
+    assert!(
+        result.is_ok(),
+        "owner replacement must be accepted: {result:?}"
+    );
 }
 
 #[test]
-#[ignore = "Phase 1: claim-replacement two-authority verification unimplemented — \
-            [claim-replacement-authority]/[claim-replacement-transition]"]
+fn verify_claim_replacement_accepts_governance_replacement() {
+    let prior = crate::ClaimPayload::new(
+        crate::Alg::ES256,
+        test_id(),
+        1000,
+        vec![1], // prior claim's owner
+        "cargo".to_string(),
+        vec![0; 32],
+        test_tmb(),
+    );
+    let charter_owner = vec![2];
+
+    let replacement = crate::ClaimPayload::new_replacement(
+        crate::Alg::ES256,
+        test_id(),
+        2000,
+        vec![9],
+        "cargo".to_string(),
+        crate::Czd::from_bytes(vec![9, 9, 9]),
+        true, // MUST carry governance: true
+        vec![1; 32],
+        crate::Thumbprint::from_bytes(vec![2]), // == charter_owner, NOT prior.owner
+    );
+
+    let result = crate::verify_claim_replacement(&replacement, &prior, &charter_owner);
+    assert!(
+        result.is_ok(),
+        "marked governance replacement must be accepted: {result:?}"
+    );
+}
+
+#[test]
+fn verify_claim_replacement_rejects_governance_authorized_but_unmarked() {
+    // Signed by the charter owner but NOT marked `governance: true` —
+    // [claim-replacement-authority]'s "MUST carry governance: true" makes
+    // this its own failure mode, distinct from a genuine third party.
+    let prior = crate::ClaimPayload::new(
+        crate::Alg::ES256,
+        test_id(),
+        1000,
+        vec![1],
+        "cargo".to_string(),
+        vec![0; 32],
+        test_tmb(),
+    );
+    let charter_owner = vec![2];
+
+    let replacement = crate::ClaimPayload::new_replacement(
+        crate::Alg::ES256,
+        test_id(),
+        2000,
+        vec![9],
+        "cargo".to_string(),
+        crate::Czd::from_bytes(vec![9, 9, 9]),
+        false, // unmarked, despite being signed by the charter owner
+        vec![1; 32],
+        crate::Thumbprint::from_bytes(vec![2]), // == charter_owner
+    );
+
+    let result = crate::verify_claim_replacement(&replacement, &prior, &charter_owner);
+    assert!(
+        matches!(result, Err(crate::VerifyError::Unauthorized)),
+        "charter-owner-signed but unmarked replacement must be rejected: {result:?}"
+    );
+}
+
+#[test]
+fn verify_claim_replacement_rejects_stale_now() {
+    let prior = crate::ClaimPayload::new(
+        crate::Alg::ES256,
+        test_id(),
+        2000,
+        vec![1],
+        "cargo".to_string(),
+        vec![0; 32],
+        test_tmb(),
+    );
+    let charter_owner = vec![2];
+
+    // Authorized (owner path) but `now` does not exceed prior.now.
+    let replacement = crate::ClaimPayload::new_replacement(
+        crate::Alg::ES256,
+        test_id(),
+        2000, // == prior.now, not strictly after
+        vec![9],
+        "cargo".to_string(),
+        crate::Czd::from_bytes(vec![9, 9, 9]),
+        false,
+        vec![1; 32],
+        crate::Thumbprint::from_bytes(vec![1]), // == prior.owner
+    );
+
+    let result = crate::verify_claim_replacement(&replacement, &prior, &charter_owner);
+    assert!(
+        matches!(result, Err(crate::VerifyError::ReplacementNotAfterPrior)),
+        "replacement.now not strictly after prior.now must be rejected: {result:?}"
+    );
+}
+
+#[test]
+fn verify_claim_replacement_rejects_changed_identity() {
+    let prior_id = test_id();
+    let other_id = AtomId::new(
+        Anchor::new(vec![0xAA, 0xBB]),
+        Label::try_from("other-pkg").unwrap(),
+    );
+
+    let prior = crate::ClaimPayload::new(
+        crate::Alg::ES256,
+        prior_id,
+        1000,
+        vec![1],
+        "cargo".to_string(),
+        vec![0; 32],
+        test_tmb(),
+    );
+    let charter_owner = vec![2];
+
+    // Authorized and temporally fine, but names a different (anchor, label).
+    let replacement = crate::ClaimPayload::new_replacement(
+        crate::Alg::ES256,
+        other_id,
+        2000,
+        vec![9],
+        "cargo".to_string(),
+        crate::Czd::from_bytes(vec![9, 9, 9]),
+        false,
+        vec![1; 32],
+        crate::Thumbprint::from_bytes(vec![1]), // == prior.owner
+    );
+
+    let result = crate::verify_claim_replacement(&replacement, &prior, &charter_owner);
+    assert!(
+        matches!(result, Err(crate::VerifyError::ReplacementIdentityChanged)),
+        "a replacement changing (anchor, label) must be rejected: {result:?}"
+    );
+}
+
+#[test]
 fn verify_claim_replacement_rejects_third_authority() {
     // Once implemented: `[claim-replacement-authority]` names exactly two
     // authorities — owner replacement (signed by the replaced claim's
@@ -902,6 +1047,204 @@ fn czd_for_alg_unknown_alg() {
     assert!(
         matches!(result, Err(crate::VerifyError::UnsupportedAlgorithm(_))),
         "unknown alg should be UnsupportedAlgorithm: {result:?}"
+    );
+}
+
+// ============================================================================
+// Charter-dependent pipeline steps (7, 9, 10)
+// ============================================================================
+//
+// Steps 2 and 3 (charter chain signatures / succession) are tested in
+// `charter.rs`. Step 12 (`verify_claim_replacement`) is tested above.
+
+#[test]
+fn verify_claim_chains_charter_accepts_matching_anchor() {
+    let (prv, pub_bytes, tmb) = gen_ed25519_key();
+    let founding =
+        crate::CharterPayload::new(crate::Alg::Ed25519, 1000, vec![1], None, vec![0; 32], tmb);
+    let founding_json = serde_json::to_vec(&founding).unwrap();
+    let (founding_sig, _cad) =
+        coz_rs::sign_json(&founding_json, "Ed25519", &prv, &pub_bytes).unwrap();
+    let founding_czd = crate::czd_for_alg(&founding_json, &founding_sig, "Ed25519").unwrap();
+
+    let claim = crate::ClaimPayload::new(
+        crate::Alg::ES256,
+        AtomId::new(Anchor::new(founding_czd.as_bytes().to_vec()), test_label()),
+        2000,
+        vec![99],
+        "cargo".to_string(),
+        vec![0; 32],
+        test_tmb(),
+    );
+
+    let result =
+        crate::verify_claim_chains_charter(&claim, &founding_json, &founding_sig, "Ed25519");
+    assert!(
+        result.is_ok(),
+        "claim anchored to the founding charter's czd must chain: {result:?}"
+    );
+}
+
+#[test]
+fn verify_claim_chains_charter_rejects_mismatched_anchor() {
+    let (prv, pub_bytes, tmb) = gen_ed25519_key();
+    let founding =
+        crate::CharterPayload::new(crate::Alg::Ed25519, 1000, vec![1], None, vec![0; 32], tmb);
+    let founding_json = serde_json::to_vec(&founding).unwrap();
+    let (founding_sig, _cad) =
+        coz_rs::sign_json(&founding_json, "Ed25519", &prv, &pub_bytes).unwrap();
+
+    // Anchor that does not correspond to the founding charter's czd.
+    let claim = crate::ClaimPayload::new(
+        crate::Alg::ES256,
+        AtomId::new(Anchor::new(vec![0xFF; 32]), test_label()),
+        2000,
+        vec![99],
+        "cargo".to_string(),
+        vec![0; 32],
+        test_tmb(),
+    );
+
+    let result =
+        crate::verify_claim_chains_charter(&claim, &founding_json, &founding_sig, "Ed25519");
+    assert!(
+        matches!(result, Err(crate::VerifyError::ClaimChartersMismatch)),
+        "claim anchored to an unrelated czd must be rejected: {result:?}"
+    );
+}
+
+fn temporal_triple(
+    charter_now: u64,
+    claim_now: u64,
+    publish_now: u64,
+) -> (
+    crate::CharterPayload,
+    crate::ClaimPayload,
+    crate::PublishPayload,
+) {
+    let charter = crate::CharterPayload::new(
+        crate::Alg::ES256,
+        charter_now,
+        vec![1],
+        None,
+        vec![0; 32],
+        test_tmb(),
+    );
+    let claim = crate::ClaimPayload::new(
+        crate::Alg::ES256,
+        test_id(),
+        claim_now,
+        vec![99],
+        "cargo".to_string(),
+        vec![0; 32],
+        test_tmb(),
+    );
+    let publish = crate::PublishPayload::new(
+        crate::Alg::ES256,
+        test_id(),
+        crate::Czd::from_bytes(vec![5, 6]),
+        vec![7, 8],
+        publish_now,
+        "src/lib".into(),
+        vec![9, 10],
+        test_tmb(),
+        crate::RawVersion::new("1.0.0".into()),
+    );
+    (charter, claim, publish)
+}
+
+#[test]
+fn verify_temporal_ordering_accepts_strictly_increasing() {
+    let (charter, claim, publish) = temporal_triple(1000, 2000, 3000);
+    let result = crate::verify_temporal_ordering(&charter, &claim, &publish);
+    assert!(
+        result.is_ok(),
+        "a genuinely ordered triple must pass: {result:?}"
+    );
+}
+
+#[test]
+fn verify_temporal_ordering_rejects_charter_not_before_claim() {
+    let (charter, claim, publish) = temporal_triple(2000, 2000, 3000);
+    let result = crate::verify_temporal_ordering(&charter, &claim, &publish);
+    assert!(
+        matches!(result, Err(crate::VerifyError::TemporalOrderViolation)),
+        "charter.now >= claim.now must be rejected: {result:?}"
+    );
+}
+
+#[test]
+fn verify_temporal_ordering_rejects_claim_not_before_publish() {
+    let (charter, claim, publish) = temporal_triple(1000, 3000, 3000);
+    let result = crate::verify_temporal_ordering(&charter, &claim, &publish);
+    assert!(
+        matches!(result, Err(crate::VerifyError::TemporalOrderViolation)),
+        "claim.now >= publish.now must be rejected: {result:?}"
+    );
+}
+
+#[test]
+fn verify_temporal_ordering_rejects_both_violations() {
+    let (charter, claim, publish) = temporal_triple(3000, 2000, 1000);
+    let result = crate::verify_temporal_ordering(&charter, &claim, &publish);
+    assert!(
+        matches!(result, Err(crate::VerifyError::TemporalOrderViolation)),
+        "a fully reversed triple must be rejected: {result:?}"
+    );
+}
+
+#[test]
+fn verify_claim_authorized_by_charter_accepts_matching_owner() {
+    let charter_owner = vec![7];
+    let charter = crate::CharterPayload::new(
+        crate::Alg::ES256,
+        1000,
+        charter_owner.clone(),
+        None,
+        vec![0; 32],
+        test_tmb(),
+    );
+    let claim = crate::ClaimPayload::new(
+        crate::Alg::ES256,
+        test_id(),
+        2000,
+        vec![99],
+        "cargo".to_string(),
+        vec![0; 32],
+        crate::Thumbprint::from_bytes(charter_owner),
+    );
+
+    let result = crate::verify_claim_authorized_by_charter(&claim, &charter);
+    assert!(
+        result.is_ok(),
+        "claim signed by the effective charter's owner must be authorized: {result:?}"
+    );
+}
+
+#[test]
+fn verify_claim_authorized_by_charter_rejects_stranger() {
+    let charter = crate::CharterPayload::new(
+        crate::Alg::ES256,
+        1000,
+        vec![7],
+        None,
+        vec![0; 32],
+        test_tmb(),
+    );
+    let claim = crate::ClaimPayload::new(
+        crate::Alg::ES256,
+        test_id(),
+        2000,
+        vec![99],
+        "cargo".to_string(),
+        vec![0; 32],
+        crate::Thumbprint::from_bytes(vec![0xAA]), // does not match charter.owner
+    );
+
+    let result = crate::verify_claim_authorized_by_charter(&claim, &charter);
+    assert!(
+        matches!(result, Err(crate::VerifyError::Unauthorized)),
+        "claim signed by a non-owner key must be rejected: {result:?}"
     );
 }
 
