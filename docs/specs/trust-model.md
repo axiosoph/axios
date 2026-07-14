@@ -106,8 +106,15 @@ rationale inline where each lands:
 ### Sorts and Type Declarations
 
 ```
-SORT  Tmb      -- Coz signing-key thumbprint
-                  (atom-transactions.md, payload `tmb` fields)
+SORT  Tmb      -- Coz signing-key thumbprint. For authorization
+                  purposes a `Tmb` value MUST be derived from the key
+                  that actually verified a record's signature, never
+                  read from that same record's own declared `tmb`
+                  payload field (atom-transactions.md, `PublishPayload`/
+                  `ClaimPayload` `tmb` fields) without that binding
+                  check — a self-declared field is attacker-controlled
+                  independent of which key signed it. See
+                  `[trust-acceptance-procedure]` step 2.
 SORT  Anchor   -- atom-set anchor = czd(charter₀) (atom-transactions.md
                   [charter-anchor]) — a Czd value, NOT a trust anchor
 SORT  AtomId   -- (anchor, label), the composite's identity
@@ -401,7 +408,32 @@ through any other path:
    `policy.anchors` (including `owner` expansion per
    `[trust-owner-selector]`; on a double match, the explicit
    `tmb(_)` entry governs, per that constraint). No matching
-   entry ⇒ `evidence`.
+   entry ⇒ `evidence`. **The signing `tmb` used for this resolution
+   MUST be `tmb(verifying_key)` — the thumbprint of the key that
+   actually produced a valid signature over the record — computed as
+   part of step 1's verification, never read from the record's own
+   declared `pay.tmb` field.** A record's `pay.tmb` is
+   attacker-controlled independent of which key signed it: nothing
+   in `[trust-anchored-input]`'s general verification requirement
+   guarantees this binding for every anchored class — in particular,
+   atom-transactions.md's Verification Pipeline step 6
+   (`tmb(x.key) == x.pay.tmb`) explicitly excludes `publish`, so a
+   fact record (an append-class amendment on a publish chain) is NOT
+   independently guaranteed to have its declared `tmb` bound to its
+   actual signer before it reaches this procedure. Without this
+   requirement, an attacker could declare `pay.tmb` = the claim
+   owner's thumbprint while signing with an unrelated key of their
+   own (via the envelope's own `key` field): the signature verifies
+   validly against THEIR key, and an implementation that resolved
+   step 2 against the declared field alone would match the `owner`
+   selector (`[trust-owner-selector]`) and assign an authoritative
+   `fact` verdict to a forged lifecycle marker (e.g. a fabricated
+   `yanked`/`deprecated` entry) for a package the attacker does not
+   own. This mirrors, and closes the same vulnerability class as,
+   git-storage-format.md `[publish-update-transition]`'s amendment
+   authorization clause, which states the identical binding
+   requirement for its own (structurally separate) protocol-level
+   check.
 3. **Role.** Check the entry's roles against the record's fact class
    per `[trust-role-authorization]`. Not covered ⇒ `evidence`.
 4. **Rule.** Resolve the applicable rule per
