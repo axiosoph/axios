@@ -815,11 +815,26 @@ chain.
     owner (`[claim-owner-single]`, under `[owner-authorization-
     delegated]`'s per-value semantics — the same check
     `[publish-transition]`'s own PRE already applies to the base
-    payload). This is a protocol-level validity requirement: a tag
-    that sets an overwrite-class field without this authorization MUST
-    be rejected — it is not a valid amendment. This closes the gap an
-    unauthorized `tmb`/`key`/`alg`/`mode` change would otherwise leave
-    open ("no undeclared key signs anything").
+    payload). This authorization check is against the SIGNING key, not
+    the declared `tmb` field: a conforming verifier MUST first bind
+    the declared `tmb` to the actual key that produced the signature —
+    `tmb(verifying_key) == pay.tmb` MUST hold, the same binding
+    atom-transactions.md's Verification Pipeline step 6 already
+    requires for charter/claim — and only THEN evaluate claim-owner
+    authorization against that bound key. A tag whose declared `tmb`
+    does not equal the thumbprint of its actual signing key MUST be
+    rejected before any claim-owner authorization check runs: without
+    this binding, a declared `tmb` naming the claim owner proves
+    nothing — the envelope's own `key` field can belong to an
+    unrelated signer, and the signature still verifies validly against
+    IT, letting an attacker declare `tmb = <claim owner's thumbprint>`
+    while actually signing with their own key. This is a
+    protocol-level validity requirement: a tag that sets an
+    overwrite-class field without both the tmb-binding check and
+    claim-owner authorization MUST be rejected — it is not a valid
+    amendment. This closes the gap an unauthorized `tmb`/`key`/`alg`/
+    `mode` change would otherwise leave open ("no undeclared key signs
+    anything").
   - A tag that sets an append-class field (class 3, a fact entry)
     carries NO protocol-level signer restriction: any validly-signed
     tag MAY add a fact entry, from any signer, regardless of fact-kind

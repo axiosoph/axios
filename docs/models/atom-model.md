@@ -207,9 +207,12 @@ contract (§6, where the assertion is intent and the evidence stays
 fact). An interface manifest: derived fact, memoized per
 `(analyzer, blob)` (htc-sad §2.2). A CVE advisory discovered months
 after publish: an asserted fact — knowable by no one at build time,
-affecting no result (git-storage-format's recommended
-`meta.security`/`meta.broken` lifecycle fields are this species,
-already landed). There are no taste calls left, only classifications.
+affecting no result (atom-transactions.md's `advisory` and `yanked`
+fact kinds, `[fact-kind-table]`, are this species — the
+git-storage-format `meta.security`/`meta.broken` fields this species
+was formerly recommended through are retired, their content now
+carried as append-class fact entries instead of `meta`). There are no
+taste calls left, only classifications.
 
 **Two hardening gaps become normative obligations of this plane.** Both
 are already registered (atom-sad §9 gap 5; htc-sad §6.10) and are
@@ -259,7 +262,7 @@ walks one chain, whoever the signers were. The classification is total
 | Charter, claim, publish                      | intent (the plane's own transactions)             |
 | Build record, interface manifest, observation record | fact (derived) — appended atom metadata (htc-sad §6.10) |
 | Trial attestation (networked-test witness)   | fact (derived) — anchored to the tested atom's chain; consumed by publication gating (Execution Model §2.3, §3.2) |
-| Advisory / lifecycle assertion (`meta.security`, yank, deprecation), declared runtime require | fact (asserted) — signed publish-chain append (§4) |
+| Advisory / lifecycle assertion (`advisory`, `yanked`, `deprecated`, `superseded-by`), declared runtime require (`runtime-requires`) | fact (asserted) — signed publish-chain append, atom-transactions.md `[fact-kind-table]` (§4) |
 | Lock, adopted ecosystem lockfile             | intent — inside the snapshot, czd-covered         |
 | Environment certificate, published           | intent — the environment atom's pinned elaboration (Composition Model §5) |
 | Composition, published as/within an atom     | intent — content of an environment/system atom    |

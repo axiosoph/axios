@@ -1573,7 +1573,17 @@ following locally:
 | 10   | Claim signer authorized          | `claim.tmb` authorized by membership in effective charter `owner` set |
 | 11   | Publish signer authorized        | `publish.tmb` authorized by `claim.owner` (single-valued, per its `kind`) |
 | 12   | Replacement authority (if any)   | per `[claim-replacement-authority]`; `governance` flag surfaced      |
-| 13   | AtomId matches payload fields    | extract `(anchor, label)` from payload, compare to expected `AtomId` |
+| 13   | AtomId matches payload fields    | extract BASE-`(anchor, label)` from payload, compare to expected `AtomId` (`anchor`/`label` are identity-class, present only on the base tag, `[amendment-field-classification]`) |
+
+Step 6's exclusion of `publish` is a pre-existing scoping gap, not
+introduced by this pipeline note: nothing here binds `publish.pay.tmb`
+to the thumbprint of the key that actually produced
+`publish.sig`/`publish.key`, for either a base payload (step 11's
+`claim.owner` check) or an amendment payload
+(`[publish-update-transition]`'s authorization clause, which states
+its own tmb-binding requirement explicitly precisely because this
+step does not cover it). Closing step 6's own scope to include
+`publish` is out of this node's surface — flagged here, not fixed.
 
 This pipeline verifies a single base transaction set (charter chain,
 one claim, one publish's base tag). Verifying a publish's full update
