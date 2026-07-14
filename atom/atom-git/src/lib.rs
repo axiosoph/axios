@@ -2,6 +2,7 @@
 //!
 //! Implements [`AtomRegistry`] and [`AtomStore`] using git object storage.
 
+pub mod charter_store;
 pub mod error;
 pub mod gix_util;
 pub mod registry;

@@ -141,6 +141,39 @@ pub fn write_claim_commit(
     Ok(oid)
 }
 
+/// Create a charter commit: empty tree, ALWAYS parentless.
+///
+/// Mirrors [`write_claim_commit`] exactly except for parenting: a charter
+/// commit never has a git parent, even on succession — succession is
+/// expressed entirely via the signed `prior` field on the next charter's
+/// payload, never via git ancestry (`[charter-succession-via-prior]`).
+///
+/// Spec constraint: `[charter-commit-format]`.
+pub fn write_charter_commit(
+    repo: &gix::Repository,
+    charter_message: String,
+) -> Result<ObjectId, GitError> {
+    // Write an empty tree to obtain the correct OID for the active hash algorithm
+    let empty_tree = gix::objs::Tree {
+        entries: Vec::new(),
+    };
+    let tree_oid = repo.write_object(empty_tree)?.detach();
+
+    let blank = blank_signature();
+    let commit = Commit {
+        tree: tree_oid,
+        parents: Vec::new().into(),
+        author: blank.clone(),
+        committer: blank,
+        encoding: None,
+        message: BString::from(charter_message),
+        extra_headers: Vec::new(),
+    };
+
+    let oid = repo.write_object(commit)?.detach();
+    Ok(oid)
+}
+
 /// Create an annotated tag object carrying a signed publish transaction payload.
 ///
 /// Targets either the atom commit (for initial publish) or the previous publish tag (for updates).
@@ -280,6 +313,65 @@ pub fn tip_stability(
         Some(r) if r.id().detach() == observed_tip => Ok(TipStability::Stable),
         Some(r) => Ok(TipStability::Moved(r.id().detach())),
         None => Ok(TipStability::Vanished),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use gix::actor::SignatureRef;
+    use gix::objs::Tree;
+    use tempfile::TempDir;
+
+    use super::*;
+
+    /// Set up a test Git repository with a genesis commit, matching the
+    /// established convention (`tests/tag_chain.rs::setup_test_repo`).
+    fn setup_test_repo() -> (TempDir, gix::Repository) {
+        let dir = TempDir::new().unwrap();
+        let repo = gix::init(dir.path()).unwrap();
+
+        let sig = SignatureRef::default();
+        let empty_tree = Tree {
+            entries: Vec::new(),
+        };
+        let tree_oid = repo.write_object(empty_tree).unwrap().detach();
+        repo.commit_as(
+            sig,
+            sig,
+            "refs/heads/master",
+            "genesis commit",
+            tree_oid,
+            Vec::<ObjectId>::new(),
+        )
+        .unwrap();
+
+        let repo = gix::open(dir.path()).unwrap();
+        (dir, repo)
+    }
+
+    /// c1: `write_charter_commit` writes a parentless commit with the
+    /// well-known empty tree.
+    #[test]
+    fn write_charter_commit_is_parentless_with_empty_tree() {
+        let (_dir, repo) = setup_test_repo();
+
+        let oid = write_charter_commit(&repo, "irrelevant body".to_string())
+            .expect("writing a charter commit must succeed");
+
+        let commit = repo.find_object(oid).unwrap().try_into_commit().unwrap();
+        assert_eq!(
+            commit.parent_ids().count(),
+            0,
+            "a charter commit must never have a git parent -- succession is via `prior`, not \
+             ancestry"
+        );
+
+        let tree_oid = commit.tree_id().unwrap().detach();
+        let tree = repo.find_object(tree_oid).unwrap().try_into_tree().unwrap();
+        assert!(
+            tree.iter().next().is_none(),
+            "a charter commit must carry the well-known empty tree"
+        );
     }
 }
 
