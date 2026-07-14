@@ -105,45 +105,6 @@ fn found_anchor(registry: &GitRegistry, pub_key: &[u8], src: &[u8]) -> atom_core
     atom_core::Anchor::new(czd.as_bytes().to_vec())
 }
 
-/// `GitStore::ingest` (atom-git/src/store.rs, outside this node's surface)
-/// does not yet propagate the charter chain into the destination store --
-/// only `refs/atom/claims/d/*`, `refs/atom/d/*`, and dev refs. Resolution
-/// now correctly requires a resolvable charter
-/// (`[claim-charter-authorization]`), so tests that ingest into a fresh
-/// store and then resolve from it must replant the SAME founding charter
-/// directly, to stay isolated from that separate, already-known gap.
-fn replant_charter(
-    source_repo: &gix::Repository,
-    dest_repo: &gix::Repository,
-    anchor: &atom_core::Anchor,
-) {
-    let ref_name = atom_git::charter_store::charter_ref_name(anchor.as_bytes());
-    let charter_ref = source_repo
-        .try_find_reference(&ref_name)
-        .unwrap()
-        .expect("the fixture's own charter() call must have written this ref");
-    let charter_msg = source_repo
-        .find_object(charter_ref.id().detach())
-        .unwrap()
-        .try_into_commit()
-        .unwrap()
-        .message_raw_sloppy()
-        .to_string();
-    let dest_oid = atom_git::gix_util::write_charter_commit(dest_repo, charter_msg).unwrap();
-    let dest_ref_fullname = gix::refs::FullName::try_from(ref_name.as_str()).unwrap();
-    dest_repo
-        .edit_reference(gix::refs::transaction::RefEdit {
-            change: gix::refs::transaction::Change::Update {
-                log: gix::refs::transaction::LogChange::default(),
-                expected: gix::refs::transaction::PreviousValue::Any,
-                new: gix::refs::Target::Object(dest_oid),
-            },
-            name: dest_ref_fullname,
-            deref: false,
-        })
-        .unwrap();
-}
-
 /// A `single-key` owner-reference authorizing the key with these raw
 /// public-key bytes -- the common case throughout these tests, none of
 /// which exercise multi-member sets or non-`single-key` tiers.
@@ -942,9 +903,10 @@ async fn test_local_ingest() {
     let (_store_dir, store_repo, _store_genesis_oid) = setup_test_repo();
     let store = GitStore::new(store_repo);
 
-    // Ingest!
+    // Ingest! `GitStore::ingest` now propagates the source's charter
+    // chain (n3-store-charter-ingest), so the store resolves the ingested
+    // claim/publish without any hand-replanted charter.
     store.ingest(&registry.source).await.unwrap();
-    replant_charter(&reg_repo, &store.source.repo(), &anchor);
 
     // 3. Verify store references exist and target a real, independently
     // ingested claim commit — the ref-path hex segment is a store-internal
@@ -993,6 +955,134 @@ async fn test_local_ingest() {
     let version_entry = versions.next().unwrap();
     assert_eq!(version_entry.version().as_str(), "1.0.0");
     assert_eq!(version_entry.czd().unwrap(), &claim_czd);
+}
+
+/// n3-store-charter-ingest's design decision: `ingest` copies the WHOLE
+/// succession chain, not just the founding charter -- a destination that
+/// only resolved the founding charter would wrongly reject an atom whose
+/// ownership has since transferred via succession. Found, succeed once,
+/// then claim+publish under the NEW (successor) owner -- this only
+/// resolves in the destination store if `resolve_effective_charter`'s
+/// walk in the destination actually sees both chain links, not just the
+/// founding one.
+#[tokio::test]
+async fn test_local_ingest_propagates_full_succession_chain() {
+    let (_dir, repo, genesis_oid) = setup_test_repo();
+
+    let founder_sk = SigningKey::<Ed25519>::generate();
+    let founder_prv = founder_sk.private_key_bytes().to_vec();
+    let founder_pub = founder_sk.verifying_key().public_key_bytes().to_vec();
+
+    let successor_sk = SigningKey::<Ed25519>::generate();
+    let successor_prv = successor_sk.private_key_bytes().to_vec();
+    let successor_pub = successor_sk.verifying_key().public_key_bytes().to_vec();
+
+    let registry = GitRegistry::new(
+        repo,
+        founder_prv,
+        founder_pub,
+        Alg::Ed25519,
+        "cargo".to_string(),
+    );
+    let reg_repo = registry.source.repo();
+
+    // Found, naming the successor's own thumbprint as the sole future
+    // owner (mirrors registry.rs's own
+    // charter_end_to_end_founding_then_succession_resolves_through_public_api).
+    let founding_czd = registry
+        .charter(
+            std::slice::from_ref(&owner_ref(&successor_pub)),
+            b"src-rev",
+            None,
+        )
+        .expect("founding must succeed");
+
+    // [charter-succession] requires the successor's `now` (second-
+    // granularity wall clock) to strictly exceed the founding charter's.
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+
+    let registry_successor = GitRegistry::new(
+        registry.source.repo(),
+        successor_prv,
+        successor_pub.clone(),
+        Alg::Ed25519,
+        "cargo".to_string(),
+    );
+    let successor_czd = registry_successor
+        .charter(
+            std::slice::from_ref(&owner_ref(&successor_pub)),
+            b"src-rev-2",
+            Some(&founding_czd),
+        )
+        .expect("succession must succeed");
+
+    let anchor = atom_core::Anchor::new(founding_czd.as_bytes().to_vec());
+    let label = Label::try_from("pkg").unwrap();
+    let id = AtomId::new(anchor, label);
+
+    // Claim + publish under the successor's own key -- only authorized
+    // because the successor charter (not just the founding one) resolves.
+    let claim_czd = registry_successor
+        .claim(&id, &owner_ref(&successor_pub))
+        .unwrap();
+
+    let ver_commit_oid = create_commit(
+        &reg_repo,
+        "v1.0.0 src",
+        "src/main.rs",
+        b"main",
+        vec![genesis_oid],
+    );
+    let ver_commit_obj = reg_repo
+        .find_object(ver_commit_oid)
+        .unwrap()
+        .try_into_commit()
+        .unwrap();
+    let ver_tree_oid = ver_commit_obj.tree_id().unwrap();
+    let ver = RawVersion::new("1.0.0".to_string());
+    registry_successor
+        .publish(
+            &id,
+            &claim_czd,
+            &ver,
+            ver_tree_oid.as_bytes(),
+            ver_commit_oid.as_bytes(),
+            "Cargo.toml",
+        )
+        .unwrap();
+
+    let (_store_dir, store_repo, _store_genesis_oid) = setup_test_repo();
+    let store = GitStore::new(store_repo);
+    store.ingest(&registry_successor.source).await.unwrap();
+
+    // Both chain links must have landed in the destination -- not just
+    // the founding charter.
+    let store_repo = store.source.repo();
+    let founding_ref_name = atom_git::charter_store::charter_ref_name(founding_czd.as_bytes());
+    let successor_ref_name = atom_git::charter_store::charter_ref_name(successor_czd.as_bytes());
+    assert!(
+        store_repo
+            .try_find_reference(&founding_ref_name)
+            .unwrap()
+            .is_some(),
+        "the founding charter must be copied into the destination store"
+    );
+    assert!(
+        store_repo
+            .try_find_reference(&successor_ref_name)
+            .unwrap()
+            .is_some(),
+        "the successor charter must also be copied, not just the founding one"
+    );
+
+    let resolved = store
+        .resolve(&id)
+        .await
+        .expect("resolve must succeed by walking the full copied succession chain")
+        .expect("the ingested atom must resolve");
+    let mut versions = resolved.versions();
+    let version_entry = versions.next().unwrap();
+    assert_eq!(version_entry.version().as_str(), "1.0.0");
 }
 
 #[test]
