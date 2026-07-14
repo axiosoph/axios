@@ -211,6 +211,12 @@ impl AtomSource for GitSource {
                                 dig_oid
                             ))
                         })?;
+                    // [src-hash-kind-disambiguated]: `ObjectId::from_hex`
+                    // already dispatches purely by input byte length (40
+                    // hex -> Sha1, 64 hex -> Sha256, gix-hash 0.25.1
+                    // object_id.rs's `from_hex` match arms), so this
+                    // reader needs no extra algorithm-tagging machinery —
+                    // confirm-only, not a gap.
                     let atom_src_oid =
                         ObjectId::from_hex(atom_src_val.as_bytes()).map_err(|e| {
                             GitError::Validation(format!("Invalid src header OID: {}", e))

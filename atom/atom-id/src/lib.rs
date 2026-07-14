@@ -46,6 +46,41 @@ mod serde_alg;
 #[cfg(feature = "serde")]
 mod serde_b64;
 
+/// Serde bridge for `Option<Vec<u8>>` via base64url-unpadded encoding.
+///
+/// `serde_b64` (this crate's sibling module) only covers `Vec<u8>` —
+/// `content_hash` needs the `Option` wrapper too, since it is `None` on
+/// the wire whenever absent (`[content-hash-obligation]`'s schema tier),
+/// mirroring `atom-git`'s own hand-rolled `option_b64` pattern
+/// (`atom-git/src/source.rs`) for the same shape.
+#[cfg(feature = "serde")]
+mod serde_b64_option {
+    use coz_rs::base64ct::{Base64UrlUnpadded, Encoding};
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub(crate) fn serialize<S: Serializer>(
+        opt: &Option<Vec<u8>>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        match opt {
+            Some(bytes) => serializer.serialize_str(&Base64UrlUnpadded::encode_string(bytes)),
+            None => serializer.serialize_none(),
+        }
+    }
+
+    pub(crate) fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<Option<Vec<u8>>, D::Error> {
+        let opt: Option<String> = Option::deserialize(deserializer)?;
+        match opt {
+            Some(s) => Base64UrlUnpadded::decode_vec(&s)
+                .map(Some)
+                .map_err(serde::de::Error::custom),
+            None => Ok(None),
+        }
+    }
+}
+
 use std::fmt;
 use std::str::FromStr;
 
@@ -447,6 +482,22 @@ pub struct PublishPayload {
     /// directly when the resolved value is what matters.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub mode: Option<Mode>,
+    /// BLAKE3 content-tree digest — `[content-hash-is-tree-digest]`.
+    ///
+    /// OPTIONAL (schema-tier of `[content-hash-obligation]`): `None` means
+    /// no claim beyond `dig` is made. Where `Some`, it MUST have been
+    /// computed by [`atom_core::content_hash`] over the same content
+    /// entries the backend's own content-tree construction consumes, and
+    /// set here BEFORE signing — a value added post-signature carries no
+    /// cryptographic assurance and is not this field. A consumer that
+    /// resolves a payload carrying `Some` MUST recompute and reject on
+    /// mismatch (consumer-tier of `[content-hash-obligation]`); this
+    /// crate does not enforce that obligation itself, since verification
+    /// requires the resolved content, which this crate never holds.
+    #[cfg_attr(feature = "serde", serde(with = "serde_b64_option"))]
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub content_hash: Option<Vec<u8>>,
     /// Ecosystem-specific extensions, nested here per
     /// `[publish-payload-extensible]` (root JSON keys are otherwise
     /// reserved for protocol fields). `None` when no extensions are
@@ -461,9 +512,11 @@ impl PublishPayload {
     ///
     /// Takes an [`AtomId`] to ensure that the anchor and label come from
     /// a validated identity pair. Sets `typ` to [`TYP_PUBLISH`]
-    /// automatically, and leaves `mode` and `meta` unset — use
-    /// [`PublishPayload::effective_mode`] to read the resolved mode, and
-    /// set `meta`/`mode` directly on the returned value if needed.
+    /// automatically, and leaves `mode`, `content_hash`, and `meta` unset
+    /// — use [`PublishPayload::effective_mode`] to read the resolved
+    /// mode, and set `meta`/`mode`/`content_hash` directly on the
+    /// returned value if needed (before signing, for `content_hash` —
+    /// `[content-hash-is-tree-digest]`).
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         alg: Alg,
@@ -489,6 +542,7 @@ impl PublishPayload {
             version,
             typ: TYP_PUBLISH.to_owned(),
             mode: None,
+            content_hash: None,
             #[cfg(feature = "serde")]
             meta: None,
         }
@@ -1066,3 +1120,63 @@ pub fn verify_atom_id(
 
 #[cfg(test)]
 mod tests;
+
+/// `content_hash` wire tests (c3-field-wired) — kept inline here rather
+/// than in `tests.rs`, since this node's declared file surface covers
+/// `lib.rs` only.
+#[cfg(all(test, feature = "serde"))]
+mod content_hash_wire_tests {
+    fn fixture_payload() -> crate::PublishPayload {
+        crate::PublishPayload::new(
+            crate::Alg::ES256,
+            crate::AtomId::new(
+                crate::Anchor::new(vec![1, 2, 3, 4]),
+                crate::Label::try_from("my-pkg").unwrap(),
+            ),
+            crate::Czd::from_bytes(vec![5, 6]),
+            vec![7, 8],
+            2000,
+            "src/lib".into(),
+            vec![9, 10],
+            crate::Thumbprint::from_bytes(vec![10, 20, 30]),
+            crate::RawVersion::new("1.0.0".into()),
+        )
+    }
+
+    /// A payload with `content_hash` unset omits the field entirely on
+    /// the wire (`skip_serializing_if`), rather than serializing `null`.
+    #[test]
+    fn absent_content_hash_is_omitted_from_wire() {
+        let payload = fixture_payload();
+        assert!(payload.content_hash.is_none());
+
+        let json = serde_json::to_value(&payload).unwrap();
+        assert!(
+            !json.as_object().unwrap().contains_key("content_hash"),
+            "content_hash key must be absent, not null, when unset"
+        );
+    }
+
+    /// A payload with `content_hash` set round-trips through
+    /// base64url-unpadded JSON exactly, mirroring `dig`/`src`'s encoding.
+    #[test]
+    fn present_content_hash_round_trips_base64() {
+        let mut payload = fixture_payload();
+        let digest = vec![0xAB; 32];
+        payload.content_hash = Some(digest.clone());
+
+        let json = serde_json::to_value(&payload).unwrap();
+        let encoded = json
+            .as_object()
+            .unwrap()
+            .get("content_hash")
+            .expect("content_hash key must be present when set")
+            .as_str()
+            .expect("content_hash must serialize as a string");
+        // base64url-unpadded, no '+' '/' or '=' padding characters.
+        assert!(!encoded.contains('+') && !encoded.contains('/') && !encoded.contains('='));
+
+        let round_tripped: crate::PublishPayload = serde_json::from_value(json).unwrap();
+        assert_eq!(round_tripped.content_hash, Some(digest));
+    }
+}
