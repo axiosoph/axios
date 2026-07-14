@@ -106,7 +106,7 @@ impl CharterPayload {
 ///
 /// This verifies a **single** charter's signature and shape only. It does
 /// NOT walk or validate a succession chain — see [`verify_succession_chain`]
-/// for that (deliberately unimplemented; Phase 1).
+/// for that.
 ///
 /// Spec constraints: `[sig-over-pay]`, `[charter-typ]`.
 #[cfg(feature = "serde")]
@@ -127,16 +127,18 @@ pub fn verify_charter(
     Ok(payload)
 }
 
-/// Verify a succession chain of charters for linearity and monotonicity.
+/// Verify a succession chain of charters for linearity and authorization.
 ///
-/// **Deliberately unimplemented — Phase 1.** A chain-length-N walk (as
-/// opposed to the single-message verification [`verify_charter`] performs)
-/// is a materially new kind of verification: checking that each successor
-/// is authorized by its `prior` charter's owner, that no charter has two
-/// divergent successors (a set-authority fork), and that a chain never
-/// regresses below a consumer's previously recorded head. Declaring this
-/// seam now (without a working validator) lets later phases de-stub it
-/// without reshaping the call surface.
+/// Given a chain already resolved and ordered by the caller (position `i`
+/// is the successor of position `i-1` — resolving that ordering from the
+/// underlying storage/encoding is the caller's job, not this function's;
+/// see `[charter-succession-via-prior]`), checks:
+///
+/// - `chain[0]` carries no `prior` — it is the founding charter (`[charter-anchor]`).
+/// - No two charters in the chain name the same `prior`: a **set-authority fork**, per
+///   `[charter-succession-linear]`, MUST fail closed rather than pick a branch.
+/// - Each successor's signing key (`tmb`) is authorized by its `prior` charter's `owner`
+///   (single-key identity, `[owner-authorization-delegated]`), per `[charter-succession]`.
 ///
 /// **Dual-signed transfers are chained, not multi-signed.**
 /// `[charter-succession-linear]` requires an ownership transfer to be
@@ -145,18 +147,53 @@ pub fn verify_charter(
 /// exactly one signature per message, so this is NOT expressed as multiple
 /// signatures embedded in a single Coz message — it is expressed the same
 /// way succession itself is: as a chain of independently-signed
-/// transactions linked via `prior`, each verified separately via
-/// [`verify_charter`]/`verify_signature`. A chain-walk implementation
-/// checks that the required links are present and correctly authorized,
-/// not that a single message carries two signatures.
+/// transactions linked via `prior`. Applying the owner-authorization check
+/// to every consecutive pair already captures this: the incoming owner's
+/// proof of possession is exactly their own key signing the *next* link.
 ///
-/// Spec constraints: `[charter-succession-linear]`, `[chain-monotonicity]`.
+/// **Out of scope.** This function does not itself re-verify each
+/// payload's Coz signature — a `CharterPayload` here is assumed to have
+/// already passed [`verify_charter`]/`verify_signature` upstream (this
+/// type carries no raw signature bytes to re-check). It also does not
+/// implement `[chain-monotonicity]` (a served chain regressing below a
+/// consumer's previously recorded head): that is inherently stateful —
+/// this signature has no recorded-head input to compare against — and is
+/// a separate, not-yet-designed obligation (see
+/// `atom/atom-id/tests/charter/chain_monotonicity.rs`).
+///
+/// Spec constraints: `[charter-anchor]`, `[charter-succession]`,
+/// `[charter-succession-linear]`.
 #[cfg(feature = "serde")]
-pub fn verify_succession_chain(_chain: &[CharterPayload]) -> Result<(), crate::VerifyError> {
-    unimplemented!(
-        "Phase 1: charter succession chain-walk is a specified deliverable, not a default — see \
-         docs/specs/atom-transactions.md [charter-succession-linear] and [chain-monotonicity]"
-    )
+pub fn verify_succession_chain(chain: &[CharterPayload]) -> Result<(), crate::VerifyError> {
+    let Some((founding, successors)) = chain.split_first() else {
+        return Err(crate::VerifyError::EmptyChain);
+    };
+    if founding.prior.is_some() {
+        return Err(crate::VerifyError::NotFoundingCharter);
+    }
+
+    // [charter-succession-linear]: at most one valid successor per prior.
+    for (i, a) in chain.iter().enumerate() {
+        let Some(a_prior) = &a.prior else { continue };
+        if chain[i + 1..]
+            .iter()
+            .any(|b| b.prior.as_ref() == Some(a_prior))
+        {
+            return Err(crate::VerifyError::DivergentSuccessors);
+        }
+    }
+
+    // [charter-succession]: each successor's signer authorized by its
+    // prior charter's owner.
+    let mut previous = founding;
+    for successor in successors {
+        if successor.tmb.as_bytes() != previous.owner.as_slice() {
+            return Err(crate::VerifyError::Unauthorized);
+        }
+        previous = successor;
+    }
+
+    Ok(())
 }
 
 // ============================================================================
@@ -292,12 +329,10 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Phase 1: charter succession chain-walk unimplemented — \
-                [charter-succession-linear]/[chain-monotonicity]"]
     fn verify_succession_chain_rejects_divergent_successors() {
-        // Once implemented: two successors both naming the same `prior`
-        // is a set-authority fork per [charter-succession-linear] — the
-        // walk MUST fail closed rather than pick either branch.
+        // Two successors both naming the same `prior` is a set-authority
+        // fork per [charter-succession-linear] — the walk MUST fail
+        // closed rather than pick either branch.
         let (_prv0, _pub0, tmb0) = gen_ed25519_key();
         let founding =
             CharterPayload::new(crate::Alg::Ed25519, 1000, vec![1], None, vec![0; 32], tmb0);

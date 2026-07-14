@@ -578,6 +578,27 @@ pub enum VerifyError {
         /// The actual transaction type found in the payload.
         actual: String,
     },
+    /// A signing key was not authorized by the required owner.
+    ///
+    /// Spec constraint: `[charter-succession]`.
+    #[error("unauthorized: signing key not authorized by the required owner")]
+    Unauthorized,
+    /// A succession chain was empty; a chain requires at least a founding
+    /// charter.
+    #[error("empty succession chain")]
+    EmptyChain,
+    /// A succession chain's first element carries a `prior` — only the
+    /// founding charter (no `prior`) may begin a chain.
+    ///
+    /// Spec constraint: `[charter-anchor]`.
+    #[error("succession chain does not begin with a founding charter")]
+    NotFoundingCharter,
+    /// Two charters in a succession chain name the same `prior` — a
+    /// set-authority fork that MUST fail closed rather than pick a branch.
+    ///
+    /// Spec constraint: `[charter-succession-linear]`.
+    #[error("divergent successors: two charters share the same prior")]
+    DivergentSuccessors,
 }
 
 // ============================================================================
