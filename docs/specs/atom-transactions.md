@@ -323,10 +323,25 @@ TYPE  AtomId      = { anchor: Anchor, label: Label }              (atom-id)
   -- Two atoms with the same (anchor, label) ARE the same atom.
   -- NOT a hash — this is the abstract identity pair.
 
+TYPE  OwnerKind   = "single-key" | "hierarchical" | "rooted-identity"
+                                                                   (atom-id)
+  -- Required, explicit discriminator on every owner-reference — no
+  -- implicit default, not even for "single-key". Names which
+  -- external identity framework interprets `OwnerRef.value`; the
+  -- VALUE stays opaque regardless of `kind`. See [owner-abstract],
+  -- [owner-kind-required].
+
+TYPE  OwnerRef    = { kind: OwnerKind, value: Vec<u8> }           (atom-id)
+  -- One kind-tagged, opaque identity digest. `ClaimPayload.owner` is
+  -- a single `OwnerRef`; `CharterPayload.owner` is a non-empty set
+  -- of them. See [claim-owner-single], [charter-owner-set].
+
 TYPE  CharterPayload = {
         alg:    Alg,
         now:    u64,
-        owner:  Vec<u8>,   -- opaque identity digest (same abstraction as claims)
+        owner:  Vec<OwnerRef>,  -- non-empty set: the principals
+                            -- recognized under this anchor
+                            -- ([charter-owner-set])
         prior:  Czd?,      -- OPTIONAL: czd of the charter this one succeeds
         src:    Vec<u8>,   -- source revision demarking the chartering point
         tmb:    Tmb,       -- standard Coz: signing key thumbprint
@@ -335,17 +350,19 @@ TYPE  CharterPayload = {
   -- CozMessage MUST include `key` field (public key for TOFU).
   -- The founding charter (no `prior`) DEFINES the set: Anchor :=
   -- czd(charter₀). A successor charter (with `prior`) MUST be
-  -- authorized by the owner of the charter it succeeds; succession
-  -- preserves the anchor. `src` demarks the chartering point in
-  -- history — everything before it is unowned by this set unless
-  -- claimed after it ("orphaned unless re-claimed").
+  -- authorized per [charter-succession]/[charter-succession-linear];
+  -- succession preserves the anchor. `src` demarks the chartering
+  -- point in history — everything before it is unowned by this set
+  -- unless claimed after it ("orphaned unless re-claimed").
 
 TYPE  ClaimPayload = {
         alg:    Alg,
         anchor: Anchor,
         label:  Label,
         now:    u64,
-        owner:  Vec<u8>,   -- opaque identity digest
+        owner:  OwnerRef,  -- single owner-reference: the one identity
+                            -- accountable for this label
+                            -- ([claim-owner-single])
         pkg:    String,    -- PURL type (e.g., "cargo", "npm", "pypi")
         prior:  Czd?,      -- OPTIONAL: czd of a replaced claim ([claim-replacement-authority])
         governance: bool?, -- OPTIONAL: MUST be true on governance replacement; absent otherwise
@@ -434,24 +451,31 @@ analogue of
 `[publish-chains-claim]`: charter : claim :: claim : publish.
 `VERIFIED: machine (Alloy)`
 
-**[claim-charter-authorization]**: A claim's signing key MUST be
-authorized by the effective charter's `owner`, under the same delegated
-semantics as `[owner-authorization-delegated]`. (The effective charter is
-the latest valid charter in the succession chain at claim time.) This
-replaces unscoped first-come label TOFU with set-governed claiming; open
-or delegated claiming is expressible through the owner abstraction's
-identity frameworks, not through protocol exceptions.
+**[claim-charter-authorization]** _(amended 2026-07-14 — owner-set
+membership)_: A claim's signing key MUST be authorized by membership
+in the effective charter's `owner` set — some entry in the set
+authorizes the signer, under that entry's own `kind`
+(`[owner-authorization-delegated]`'s set composition rule). (The
+effective charter is the latest valid charter in the succession chain
+at claim time.) This replaces unscoped first-come label TOFU with
+set-governed claiming; open or delegated claiming is expressible
+through the owner abstraction's identity frameworks, not through
+protocol exceptions.
 `VERIFIED: machine (TLC)`
 
-**[claim-replacement-authority]**: A claim MAY be replaced by a new
-claim carrying `prior: czd(replaced claim)`, under exactly two
+**[claim-replacement-authority]** _(amended 2026-07-14 — governance
+path reworded for owner-set membership)_: A claim MAY be replaced by
+a new claim carrying `prior: czd(replaced claim)`, under exactly two
 authorities, distinguishable by every consumer:
 
 - **owner replacement** — signing key authorized by the replaced
-  claim's `owner` (key rotation, identity-framework upgrade): the
-  ordinary path, no special marking.
-- **governance replacement** — signing key authorized by the effective
-  charter's `owner` but NOT by the replaced claim's owner: the
+  claim's `owner` (key rotation, identity-framework upgrade), under
+  `[claim-owner-single]`'s single-value semantics: the ordinary path,
+  no special marking. Unaffected by the charter-owner-set
+  generalization — a claim's own `owner` stays single-valued.
+- **governance replacement** — signing key authorized by MEMBERSHIP
+  in the effective charter's `owner` set (`[owner-authorization-delegated]`'s
+  set composition rule) but NOT by the replaced claim's `owner`: the
   replacement payload MUST carry `governance: true`. A governance
   replacement is a first-class, visible seizure event; consumers' trust
   policies MUST be able to distinguish it and MAY refuse, warn, or pin
@@ -462,6 +486,26 @@ authorities, distinguishable by every consumer:
   has never seen the newer state makes a TOFU judgment, as at all first
   contact. Absolute freshness without a transport of record is not
   claimed — monotonic non-regression plus mandatory marking is.
+
+  **Widened by the owner-set generalization (named here, not
+  mitigated).** Under a single-valued charter owner, only that one key
+  could force a governance replacement. Under `[charter-owner-set]`,
+  ANY existing charter-set member can, unilaterally — the same flat,
+  undifferentiated authority `[charter-succession-linear]` grants for
+  charter succession now extends to seizing any claim under the
+  anchor. Charter succession has an explicit, already-specified
+  mitigation for unilateral action (`[charter-succession-linear]`'s
+  fail-closed rule on conflicting successors); THIS constraint does
+  NOT define an analogous fail-closed rule for two CONFLICTING
+  governance replacements of the same claim signed by different
+  charter-set members, and `[charter-succession-linear]`'s named
+  governance-policy extension point is scoped to charter succession,
+  not claim-level governance replacement. This is a genuine widening
+  of unilateral-seizure authority introduced by the owner-set
+  amendment; it is named explicitly rather than left implicit, and
+  resolving it (a claim-level fork/divergence rule, or folding claim
+  governance under the same future per-charter policy mechanism) is
+  out of this node's scope.
 
 Publishes chained to a replaced claim remain verifiable history;
 new publishes MUST chain to the current claim.
@@ -479,43 +523,97 @@ treat it as unowned by this set — neither silently valid nor silently
 dropped, but surfaced as pre-charter state awaiting re-claim.
 `VERIFIED: machine (TLC)`
 
-**[charter-succession]**: A successor charter (carrying `prior`) MUST be
-signed by a key authorized by the owner of the charter named in `prior`,
-and MUST NOT alter the anchor: the anchor remains `czd(charter₀)` for
-the lifetime of the set. Succession is how key rotation and ownership
-transfer occur without identity change (preserving
+**[charter-succession]** _(amended 2026-07-14 — owner-set
+membership)_: A successor charter (carrying `prior`) MUST be signed
+by a key authorized under `[owner-authorization-delegated]`'s set
+composition rule by the charter named in `prior`'s `owner` set, and
+MUST NOT alter the anchor: the anchor remains `czd(charter₀)` for the
+lifetime of the set. Succession is how membership change and key
+rotation occur without identity change (preserving
 `[identity-stability]`). Orphaning is keyed to ANCHOR change and
 therefore occurs only on fork: succession preserves the anchor, so no
-claim or publish is orphaned by rotation or transfer. Note further that
-merely _adding_ a key usually requires no charter at all — hierarchical
-and rooted identity frameworks (`[owner-abstract]`) authorize new keys
-under an unchanged owner digest; succession charters are needed only
-when the owner identity itself changes.
+claim or publish is orphaned by a membership change.
+
+**Two independent layers, not one** — the confirmed non-conflict
+(`[charter-owner-set]` does not disturb this): each `OwnerRef` entry
+represents one coherent principal; that principal growing or rotating
+keys WITHIN its own identity framework (a hierarchical master
+authorizing a new subkey, a rooted identity deriving a new key)
+requires no charter at all, because the entry's `value` — the
+principal's own digest — is unchanged (`[owner-authorization-delegated]`).
+A successor charter is needed only when the *set of principals
+itself* changes: a member added, removed, or replaced.
+Single-key-tier entries are the degenerate case — a `"single-key"`
+principal has no internal growth mechanism of its own, so it cannot
+add a key without a membership change (a new `OwnerRef` entry, or
+replacing its own).
 `VERIFIED: machine (TLC)`
 
-**[charter-succession-linear]**: A charter has at most one valid
-successor. Nothing can prevent a key from _signing_ two successors
-naming the same `prior`; the constraint therefore binds consumers:
-observing divergent successors is a **set-authority fork**, and a
-consumer MUST fail closed for any authority decision downstream of the
-divergence point — neither branch is effective — surfacing the
-divergence for an out-of-band trust decision. A consumer's previously
-recorded chain head (`[chain-monotonicity]`) remains valid for
-decisions at or below that head. The effective charter is the head of
-the unique valid chain, ordered by **chain position** (`prior` links),
-never by `now`: the `now` field is untrusted for authority ordering
-(it feeds only the temporal-floor checks). Ownership transfers MUST be
-dual-signed: the successor charter is signed by a key authorized by the
-prior charter's owner, and a SECOND, independently-signed charter MUST
-follow it, chained via `prior` onto the successor's own `czd` and
-signed by the incoming owner's key (proof of possession) — the same
-succession-chain mechanism `[charter-succession]` already uses, applied
-one link further. A coz message carries exactly one signature (`czd` is
-the digest of a single `{cad, sig}` pair — Coz `README.md` "Canon"), so
-proof of possession cannot be a second signature embedded in the
-successor's own message; it is the next link in the chain. A unilateral
-transfer naming an unwitting recipient — a successor with no such
-chained possession-proof — is invalid.
+**[charter-succession-linear]** _(amended 2026-07-14 — owner-set
+add/remove semantics)_: A charter has at most one valid successor.
+Nothing can prevent a key from _signing_ two successors naming the
+same `prior`; the constraint therefore binds consumers: observing
+divergent successors is a **set-authority fork**, and a consumer MUST
+fail closed for any authority decision downstream of the divergence
+point — neither branch is effective — surfacing the divergence for an
+out-of-band trust decision. A consumer's previously recorded chain
+head (`[chain-monotonicity]`) remains valid for decisions at or below
+that head. The effective charter is the head of the unique valid
+chain, ordered by **chain position** (`prior` links), never by `now`:
+the `now` field is untrusted for authority ordering (it feeds only
+the temporal-floor checks).
+
+**Adding a principal** to the owner set requires that principal's own
+possession-proof, mirroring the single-owner transfer mechanism
+exactly: the successor charter (naming the enlarged set) is signed by
+a key authorized under the prior charter's `owner` set
+(`[owner-authorization-delegated]`'s set composition rule), and a
+SECOND, independently-signed charter MUST follow it, chained via
+`prior` onto the successor's own `czd` and signed by the INCOMING
+principal's key (proof of possession) — the same succession-chain
+mechanism this constraint already uses for full transfer, applied one
+link further, for the same reason: a coz message carries exactly one
+signature (`czd` is the digest of a single `{cad, sig}` pair — Coz
+`README.md` "Canon"), so proof of possession cannot be a second
+signature embedded in the successor's own message; it is the next
+link in the chain. A unilateral addition naming an unwitting
+recipient — an enlarged set with no such chained possession-proof for
+the new entry — is invalid.
+
+**Removing a principal** from the owner set requires only an existing
+REMAINING member's signature — no consent or proof from the removed
+principal. Rationale: a compromised or malicious member MUST NOT be
+able to block its own removal by withholding cooperation.
+
+**This removal rule adds no NEW weakness, but the reason must be
+stated, not assumed.** Flat set authority already lets any single
+existing member sign an arbitrary successor — including one that
+removes every other member. The actual protection against a
+malicious or compromised member racing a legitimate removal is NOT
+the removal rule itself; it is this constraint's own fail-closed
+divergence rule, already stated above: two conflicting successors
+naming the same `prior` (a mutual-ejection race is one instance) fork
+set authority, and a consumer MUST fail closed for any decision
+downstream of that divergence. A reader MUST NOT conclude "no consent
+needed for removal" implies "removal is safe by construction" — safety
+here comes from fork-detection, not from the removal rule.
+
+A successor charter whose resulting owner set would be empty MUST be
+rejected (`[charter-owner-set-non-empty]`) — the empty-set rejection
+applies to a removal-driven successor exactly as it does to any other
+path that could reach an empty set.
+
+**Named future extension, explicitly out of MVP scope**:
+human-configurable per-charter governance policy — e.g., a project
+declaring "changes to this charter require 3-of-5 member signatures"
+rather than the flat "any existing member" default this constraint
+specifies. This is specifically where quorum-style protection against
+unilateral capture (a single compromised member signing an
+arbitrary, damaging successor) would eventually land. Naming the
+extension point here keeps the flat MVP default honest about what it
+does and does not protect against: it is not a complete answer to
+unilateral capture, only to a removed member blocking its own
+removal.
 `VERIFIED: machine (TLC)`
 
 **[chain-monotonicity]**: Consumers MUST record the czd of the charter
@@ -548,44 +646,112 @@ determined by `anchor` and `label`, neither of which changes.
 (Model §1 olog: identity stability diagram.)
 `VERIFIED: machine (TLC)`
 
-**[owner-abstract]**: The `owner` field in `ClaimPayload` MUST be an
-opaque byte vector representing a cryptographic identity digest. The
-protocol MUST NOT impose any interpretation on its contents — it is
-an opaque value whose meaning is determined by the identity framework
-in use. Any identity system producing a stable cryptographic digest
-MAY be used.
+**[owner-abstract]** _(amended 2026-07-14 — owner_kind, charter-as-set)_:
+An `OwnerRef = { kind: OwnerKind, value: Vec<u8> }` is the protocol's
+unit of identity. `value` MUST be an opaque byte vector representing
+a cryptographic identity digest; the protocol MUST NOT impose any
+interpretation on `value`'s contents — its meaning is determined
+entirely by the identity framework `kind` names. Any identity system
+producing a stable cryptographic digest MAY be used. `kind` itself IS
+protocol-interpreted (`[owner-kind-required]`): it is the only part
+of an `OwnerRef` the protocol reads, and it says nothing about the
+digest's contents — only which external system a consumer must ask
+to resolve authorization. This narrows, but does not contradict, the
+original opacity guarantee: the *value* stays opaque; only
+*which-system-to-ask* becomes explicit.
+
+`ClaimPayload.owner` is a single `OwnerRef` (`[claim-owner-single]`);
+`CharterPayload.owner` is a non-empty set of them
+(`[charter-owner-set]`) — the two payloads share the SAME `OwnerRef`
+shape at different cardinalities, not different owner concepts.
 
 Different identity frameworks offer different **capabilities** along
-the owner abstraction:
+the owner abstraction, named by `OwnerKind`:
 
-- **Single-key** (e.g., raw Coz `tmb`): owner = key thumbprint.
-  Compromise requires reclaiming all atoms.
-- **Hierarchical keys** (e.g., OpenPGP master + subkeys): owner =
+- **`"single-key"`** (e.g., raw Coz `tmb`): `value` = key thumbprint.
+  Compromise requires reclaiming all atoms. The only tier with a
+  working evaluator today.
+- **`"hierarchical"`** (e.g., OpenPGP master + subkeys): `value` =
   master key fingerprint. Subkeys are authorized via binding
   signatures from the master key. Subkeys can be rotated; compromise
-  of a subkey is local, not catastrophic.
-- **Rooted identity** (e.g., Cyphr Principal Root): owner = PR
+  of a subkey is local, not catastrophic. Named and reserved — not
+  yet implemented.
+- **`"rooted-identity"`** (e.g., Cyphr Principal Root): `value` = PR
   digest. Supports key rotation, delegation, and sub-identities
-  natively. PR identity survives key transitions.
+  natively. PR identity survives key transitions. Named and
+  reserved — not yet implemented.
 
-The protocol is agnostic to which tier is in use. The `owner` value
-is stable across key rotations, upgrades, and delegation — only the
-authorization semantics of "signing key authorized by owner" vary.
+The protocol is agnostic to which tier is in use beyond dispatching
+on `kind`. An `OwnerRef`'s `value` is stable across key rotations,
+upgrades, and delegation — only the authorization semantics of
+"signing key authorized by this `OwnerRef`" vary, per
+`[owner-authorization-delegated]`.
 `VERIFIED: machine (Alloy)`
 
-**[owner-authorization-delegated]**: The meaning of "signing key
-MUST be authorized by the claim's `owner`" (as required by
-`[publish-transition]`) is **delegated to the identity framework**.
-The protocol defines the requirement but not the mechanism:
+**[owner-kind-required]**: Every `OwnerRef`'s `kind` field MUST be
+present and MUST be one of `OwnerKind`'s three named values — there
+is no implicit default, not even for `"single-key"`; a producer MUST
+tag every owner-reference explicitly. A consumer encountering
+`"hierarchical"` or `"rooted-identity"` MUST reject cleanly (treat
+the `OwnerRef` as unauthorizable) rather than attempt to interpret
+`value` — those tiers are named and reserved, not implemented; only
+`"single-key"` carries a working evaluator
+(`[owner-authorization-delegated]`).
+`VERIFIED: unverified`
 
-- Single-key: authorized iff `publish.tmb == claim.owner`
-- Hierarchical: authorized iff the signing subkey has a valid binding
-  signature from the master key whose fingerprint matches `claim.owner`
-- Rooted identity: authorized iff the signing key is derivable from
-  the Principal Root whose digest matches `claim.owner`
+**[claim-owner-single]**: `ClaimPayload.owner` MUST be a single
+`OwnerRef`. A claim represents accountability: within an
+organization, exactly one identity is responsible for a specific
+label. This is unchanged by the charter-level set generalization
+below (`[charter-owner-set]`) — the two fields share `OwnerRef`'s
+shape, not its cardinality.
+`VERIFIED: unverified`
+
+**[charter-owner-set]**: `CharterPayload.owner` MUST be a non-empty
+set of `OwnerRef` values (`Vec<OwnerRef>`; membership only — order
+carries no semantic meaning). A charter declares who is on the team
+under this anchor, not who owns one thing: team membership is
+naturally plural, and every listed principal has full, equal,
+undifferentiated authority — no per-entry roles or restricted
+identities exist (there is no concrete use case for a restricted
+identity distinct from "not on the team"). A charter (founding or
+successor) whose `owner` set is empty is a charter nobody could ever
+claim under; `[charter-owner-set-non-empty]` makes rejecting it
+explicit.
+`VERIFIED: unverified`
+
+**[charter-owner-set-non-empty]**: A charter transaction (founding or
+successor) whose `owner` set would contain zero entries MUST be
+rejected. This is a direct consequence of `[charter-owner-set]`'s
+non-empty requirement, restated as its own constraint because it is
+exactly the failure mode a removal-only transfer path
+(`[charter-succession-linear]`) could otherwise reach silently at
+implementation time.
+`VERIFIED: unverified`
+
+**[owner-authorization-delegated]** _(amended 2026-07-14 — owner_kind,
+set composition)_: The meaning of "signing key MUST be authorized by
+owner-reference `o`" is **delegated to `o.kind`**. The protocol
+defines the requirement but not the mechanism:
+
+- `"single-key"`: authorized iff `signer.tmb == o.value`
+- `"hierarchical"`: authorized iff the signing subkey has a valid
+  binding signature from the master key whose fingerprint matches
+  `o.value`
+- `"rooted-identity"`: authorized iff the signing key is derivable
+  from the Principal Root whose digest matches `o.value`
 
 This delegation is intentional — it allows the protocol to benefit
 from richer identity frameworks without coupling to any specific one.
+
+**Set composition** (charter-owner case): where `owner` is a set
+(`[charter-owner-set]`), a signer is authorized iff authorized by ANY
+entry in the set, evaluated under that entry's own `kind` per the
+per-value rule above — set membership is a disjunction over
+single-valued authorization, never a distinct mechanism of its own.
+Where `owner` is single-valued (`[claim-owner-single]`), the
+per-value rule above applies directly and unchanged; there is no
+composition step.
 `VERIFIED: unverified`
 
 **[owner-compatibility]**: Upgrading from a simpler to a richer
@@ -899,7 +1065,9 @@ includes the public key.
   (that is `[charter-fork-distinction]` working).
 - **PRE** (successor): `prior` MUST be the czd of a valid charter in
   this set's succession chain; the signing key MUST be authorized by
-  that charter's `owner`; `now` MUST exceed the prior charter's `now`.
+  membership in that charter's `owner` set
+  (`[owner-authorization-delegated]`'s set composition rule); `now`
+  MUST exceed the prior charter's `now`.
 - **POST**: The charter message is stored in the source's atom refs,
   enumerable by consumers and retrievable by its czd.
   `VERIFIED: unverified (pending implementation)`
@@ -911,9 +1079,10 @@ a `CozMessage` that includes the public key.
 
 - **PRE**: `anchor` MUST equal the czd of the set's founding charter,
   with a verifiable succession chain to the effective charter; the
-  signing key MUST be authorized by the effective charter's `owner`
-  (`[claim-charter-authorization]`); `src` MUST descend from the
-  effective charter's `src` (`[charter-ancestry]`).
+  signing key MUST be authorized by membership in the effective
+  charter's `owner` set (`[claim-charter-authorization]`); `src`
+  MUST descend from the effective charter's `src`
+  (`[charter-ancestry]`).
   `label` MUST pass UAX #31 validation. The signing key MUST be
   valid for the specified `alg`. The `CozMessage` MUST include a
   `key` field with the signing public key.
@@ -1178,15 +1347,15 @@ following locally:
 | :--- | :------------------------------- | :------------------------------------------------------------------- |
 | 1    | Atom snapshot hash matches `dig` | `publish.dig`                                                        |
 | 2    | Charter signature(s) valid       | `charter.pay`, `charter.sig`, `charter.key` (each link in the chain) |
-| 3    | Charter chain valid              | each successor's `prior` + signer authorized by prior `owner`        |
+| 3    | Charter chain valid              | each successor's `prior` + signer authorized by membership in prior `owner` set |
 | 4    | Claim signature valid            | `claim.pay`, `claim.sig`, `claim.key`                                |
 | 5    | Publish signature valid          | `publish.pay`, `publish.sig`, key                                    |
 | 6    | Key thumbprints match            | `tmb(x.key) == x.pay.tmb` for charter/claim                          |
 | 7    | Claim chains to charter          | `claim.anchor == czd(charter₀)`                                      |
 | 8    | Publish chains to claim          | `publish.claim == czd(claim)` (current claim per replacement chain)  |
 | 9    | Temporal ordering                | `charter.now < claim.now < publish.now`                              |
-| 10   | Claim signer authorized          | `claim.tmb` authorized by effective charter `owner`                  |
-| 11   | Publish signer authorized        | `publish.tmb` authorized by `claim.owner`                            |
+| 10   | Claim signer authorized          | `claim.tmb` authorized by membership in effective charter `owner` set |
+| 11   | Publish signer authorized        | `publish.tmb` authorized by `claim.owner` (single-valued, per its `kind`) |
 | 12   | Replacement authority (if any)   | per `[claim-replacement-authority]`; `governance` flag surfaced      |
 | 13   | AtomId matches payload fields    | extract `(anchor, label)` from payload, compare to expected `AtomId` |
 
@@ -1284,13 +1453,40 @@ _The rows added or amended for the charter constraints are marked (amended)._
 > are all explicit Phase 1 stubs). See `atom/atom-id/tests/charter/` for the
 > corresponding red-test inventory tracking that implementation gap.
 
+> [!NOTE]
+> **Owner-set amendment (2026-07-14) outpaces `AtomCharter.tla`.** This
+> revision generalizes `CharterPayload.owner` from a single value to a
+> non-empty `Vec<OwnerRef>` (`[charter-owner-set]`) and reworks
+> `[charter-succession]`/`[charter-succession-linear]`'s authorization
+> semantics to set membership. `AtomCharter.tla` still encodes the
+> pre-amendment single-owner model (`CharterSucceed`'s rotation guard,
+> `CharterTransfer`'s transfer dichotomy assume exactly one owner per
+> charter) and has not been re-run against set-valued ownership. The
+> `machine (TLC)` **pass** recorded below for `[charter-anchor]`,
+> `[claim-charter-authorization]`, `[charter-ancestry]`,
+> `[charter-succession]`, `[charter-succession-linear]`,
+> `[chain-monotonicity]`, `[claim-replacement-authority]`, and
+> `[anchor-immutable]` therefore reflects the single-owner model, not
+> this amendment's set semantics. An `AtomCharter.tla` rework covering
+> add/remove-membership operations is registered follow-on work, not
+> yet landed; until it lands and re-discharges these eight rows, their
+> **pass** status is inherited from the prior model, not fresh
+> coverage of the set case. `atom_structure.als`'s structural
+> assertions (`ownership_independence` and others) are unaffected —
+> that model carries no `owner` field at all, so `[owner-abstract]`'s
+> `machine (Alloy)` status stands unchanged.
+
 | Constraint                    | Method           | Result   | Detail                                                                    | Phase |
 | :---------------------------- | :--------------- | :------- | :------------------------------------------------------------------------ | :---- |
 | identity-content-addressed    | machine (Alloy)  | **pass** | Alloy `identity_content_addressed`                                        | —     |
 | identity-stability            | machine (TLC)    | **pass** | TLA+ `IdentityStability` — 2 configs                                      | —     |
 | owner-abstract                | machine (Alloy)  | **pass** | Alloy `ownership_independence`                                            | —     |
 | owner-compatibility           | machine (Alloy)  | **pass** | Alloy `ownership_independence`                                            | —     |
-| owner-authorization-delegated | integration-test | pending  | Signing key auth varies by identity system                                | 4     |
+| owner-authorization-delegated | integration-test | pending  | Signing key auth varies by identity system; set composition adds a disjunction over per-value checks | 4     |
+| owner-kind-required           | unit-test        | pending  | `kind` required, no default; `hierarchical`/`rooted-identity` rejected cleanly | 4     |
+| claim-owner-single             | rustc            | pending  | `ClaimPayload.owner: OwnerRef` (not a collection)                          | 4     |
+| charter-owner-set             | unit-test        | pending  | `CharterPayload.owner: Vec<OwnerRef>`; empty set rejected                  | 4     |
+| charter-owner-set-non-empty   | unit-test        | pending  | Founding/successor charter with empty resulting `owner` set rejected      | 4     |
 | symmetric-payloads            | rustc            | **pass** | Both structs have `anchor` + `label`                                      | 1     |
 | publish-chains-claim          | machine (TLC)    | **pass** | TLA+ `PublishChainsClaim` — 2 configs                                     | —     |
 | claim-typ                     | rustc            | **pass** | `TYP_CLAIM` const = `"atom/claim"`                                        | 1     |
