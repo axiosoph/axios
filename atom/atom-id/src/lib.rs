@@ -51,7 +51,7 @@ use std::str::FromStr;
 
 pub use charter::{CharterPayload, CharterStore, TYP_CHARTER};
 #[cfg(feature = "serde")]
-pub use charter::{verify_charter, verify_succession_chain};
+pub use charter::{verify_bootstrap_gate, verify_charter, verify_succession_chain};
 pub use coz_rs::{Alg, Cad, Czd, Thumbprint, canonical, canonical_hash_for_alg};
 pub use digest::{AtomDigest, DigestParseError, HashAlg};
 pub use name::{Identifier, Label, Name, Tag};
@@ -627,6 +627,34 @@ pub enum VerifyError {
         /// The actual transaction type found in the payload.
         actual: String,
     },
+    /// A signing key was not authorized by the required owner.
+    ///
+    /// Spec constraint: `[charter-succession]`.
+    #[error("unauthorized: signing key not authorized by the required owner")]
+    Unauthorized,
+    /// A succession chain was empty; a chain requires at least a founding
+    /// charter.
+    #[error("empty succession chain")]
+    EmptyChain,
+    /// A succession chain's first element carries a `prior` — only the
+    /// founding charter (no `prior`) may begin a chain.
+    ///
+    /// Spec constraint: `[charter-anchor]`.
+    #[error("succession chain does not begin with a founding charter")]
+    NotFoundingCharter,
+    /// Two charters in a succession chain name the same `prior` — a
+    /// set-authority fork that MUST fail closed rather than pick a branch.
+    ///
+    /// Spec constraint: `[charter-succession-linear]`.
+    #[error("divergent successors: two charters share the same prior")]
+    DivergentSuccessors,
+    /// A served succession chain does not demonstrably extend past a
+    /// consumer's previously recorded head — a rollback, not a
+    /// legitimate shorter chain.
+    ///
+    /// Spec constraint: `[chain-monotonicity]`.
+    #[error("chain regression: served chain does not extend past the recorded head")]
+    ChainRegression,
 }
 
 // ============================================================================

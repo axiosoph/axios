@@ -106,7 +106,7 @@ impl CharterPayload {
 ///
 /// This verifies a **single** charter's signature and shape only. It does
 /// NOT walk or validate a succession chain — see [`verify_succession_chain`]
-/// for that (deliberately unimplemented; Phase 1).
+/// for that.
 ///
 /// Spec constraints: `[sig-over-pay]`, `[charter-typ]`.
 #[cfg(feature = "serde")]
@@ -127,16 +127,21 @@ pub fn verify_charter(
     Ok(payload)
 }
 
-/// Verify a succession chain of charters for linearity and monotonicity.
+/// Verify a succession chain of charters for linearity, authorization,
+/// and (given a recorded head) monotonicity.
 ///
-/// **Deliberately unimplemented — Phase 1.** A chain-length-N walk (as
-/// opposed to the single-message verification [`verify_charter`] performs)
-/// is a materially new kind of verification: checking that each successor
-/// is authorized by its `prior` charter's owner, that no charter has two
-/// divergent successors (a set-authority fork), and that a chain never
-/// regresses below a consumer's previously recorded head. Declaring this
-/// seam now (without a working validator) lets later phases de-stub it
-/// without reshaping the call surface.
+/// Given a chain already resolved and ordered by the caller (position `i`
+/// is the successor of position `i-1` — resolving that ordering from the
+/// underlying storage/encoding is the caller's job, not this function's;
+/// see `[charter-succession-via-prior]`), checks:
+///
+/// - `chain[0]` carries no `prior` — it is the founding charter (`[charter-anchor]`).
+/// - No two charters in the chain name the same `prior`: a **set-authority fork**, per
+///   `[charter-succession-linear]`, MUST fail closed rather than pick a branch.
+/// - Each successor's signing key (`tmb`) is authorized by its `prior` charter's `owner`
+///   (single-key identity, `[owner-authorization-delegated]`), per `[charter-succession]`.
+/// - If `recorded_head` is `Some`, the chain demonstrably extends past it (`[chain-monotonicity]`)
+///   — see below.
 ///
 /// **Dual-signed transfers are chained, not multi-signed.**
 /// `[charter-succession-linear]` requires an ownership transfer to be
@@ -145,18 +150,108 @@ pub fn verify_charter(
 /// exactly one signature per message, so this is NOT expressed as multiple
 /// signatures embedded in a single Coz message — it is expressed the same
 /// way succession itself is: as a chain of independently-signed
-/// transactions linked via `prior`, each verified separately via
-/// [`verify_charter`]/`verify_signature`. A chain-walk implementation
-/// checks that the required links are present and correctly authorized,
-/// not that a single message carries two signatures.
+/// transactions linked via `prior`. Applying the owner-authorization check
+/// to every consecutive pair already captures this: the incoming owner's
+/// proof of possession is exactly their own key signing the *next* link.
 ///
-/// Spec constraints: `[charter-succession-linear]`, `[chain-monotonicity]`.
+/// **`[chain-monotonicity]` — recorded-head check.** A consumer that has
+/// previously recorded a chain head's czd passes it as `recorded_head`.
+/// The served chain must demonstrably extend past that point: some
+/// successor's `prior` must equal `recorded_head`, proving the chain
+/// progressed beyond it. A chain that never mentions `recorded_head` is
+/// treated as a regression (rollback) and rejected.
+///
+/// *Known limitation:* this cannot distinguish "the chain ends exactly at
+/// `recorded_head`, unchanged since last observation" from "the chain
+/// never reaches it" — doing so would require the served chain's own
+/// tail czd, which this function cannot compute (`CharterPayload` carries
+/// no raw signature bytes; see below). A caller that must accept an
+/// unchanged head needs to additionally compare `recorded_head` against
+/// the served chain's tail czd itself (which the caller — having
+/// resolved the chain from its git-ref-keyed storage — already has for
+/// free) before calling this function.
+///
+/// **Out of scope.** This function does not itself re-verify each
+/// payload's Coz signature — a `CharterPayload` here is assumed to have
+/// already passed [`verify_charter`]/`verify_signature` upstream (this
+/// type carries no raw signature bytes to re-check).
+///
+/// Spec constraints: `[charter-anchor]`, `[charter-succession]`,
+/// `[charter-succession-linear]`, `[chain-monotonicity]`.
 #[cfg(feature = "serde")]
-pub fn verify_succession_chain(_chain: &[CharterPayload]) -> Result<(), crate::VerifyError> {
-    unimplemented!(
-        "Phase 1: charter succession chain-walk is a specified deliverable, not a default — see \
-         docs/specs/atom-transactions.md [charter-succession-linear] and [chain-monotonicity]"
-    )
+pub fn verify_succession_chain(
+    chain: &[CharterPayload],
+    recorded_head: Option<&Czd>,
+) -> Result<(), crate::VerifyError> {
+    let Some((founding, successors)) = chain.split_first() else {
+        return Err(crate::VerifyError::EmptyChain);
+    };
+    if founding.prior.is_some() {
+        return Err(crate::VerifyError::NotFoundingCharter);
+    }
+
+    // [charter-succession-linear]: at most one valid successor per prior.
+    for (i, a) in chain.iter().enumerate() {
+        let Some(a_prior) = &a.prior else { continue };
+        if chain[i + 1..]
+            .iter()
+            .any(|b| b.prior.as_ref() == Some(a_prior))
+        {
+            return Err(crate::VerifyError::DivergentSuccessors);
+        }
+    }
+
+    // [charter-succession]: each successor's signer authorized by its
+    // prior charter's owner.
+    let mut previous = founding;
+    for successor in successors {
+        if successor.tmb.as_bytes() != previous.owner.as_slice() {
+            return Err(crate::VerifyError::Unauthorized);
+        }
+        previous = successor;
+    }
+
+    // [chain-monotonicity]: the chain must demonstrably extend past a
+    // previously recorded head (see "Known limitation" above).
+    if let Some(head) = recorded_head {
+        let extends_past_head = successors.iter().any(|c| c.prior.as_ref() == Some(head));
+        if !extends_past_head {
+            return Err(crate::VerifyError::ChainRegression);
+        }
+    }
+
+    Ok(())
+}
+
+/// Verify the founding-charter bootstrap gate.
+///
+/// Per `[charter-transition]` PRE (founding): if the source already
+/// carries claims predating any charter, the founding charter's signing
+/// key MUST be authorized by the owner of the earliest such claim —
+/// chartering over a live, claimed set is a migration act reserved to
+/// its incumbent, not a race open to strangers. A virgin source (no
+/// pre-existing claims) is first-to-charter by design
+/// (`[charter-fork-distinction]`) and passes trivially.
+///
+/// Resolving *which* claim is earliest (walking a source's claim history
+/// to find the one predating any charter, if any) is the caller's job —
+/// this function checks authorization only, given that resolution as
+/// input, the same division of labor [`verify_succession_chain`] uses
+/// for its already-resolved chain.
+///
+/// Spec constraint: `[charter-transition]`.
+#[cfg(feature = "serde")]
+pub fn verify_bootstrap_gate(
+    founding: &CharterPayload,
+    earliest_preexisting_claim: Option<&crate::ClaimPayload>,
+) -> Result<(), crate::VerifyError> {
+    let Some(claim) = earliest_preexisting_claim else {
+        return Ok(());
+    };
+    if founding.tmb.as_bytes() != claim.owner.as_slice() {
+        return Err(crate::VerifyError::Unauthorized);
+    }
+    Ok(())
 }
 
 // ============================================================================
@@ -292,12 +387,10 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Phase 1: charter succession chain-walk unimplemented — \
-                [charter-succession-linear]/[chain-monotonicity]"]
     fn verify_succession_chain_rejects_divergent_successors() {
-        // Once implemented: two successors both naming the same `prior`
-        // is a set-authority fork per [charter-succession-linear] — the
-        // walk MUST fail closed rather than pick either branch.
+        // Two successors both naming the same `prior` is a set-authority
+        // fork per [charter-succession-linear] — the walk MUST fail
+        // closed rather than pick either branch.
         let (_prv0, _pub0, tmb0) = gen_ed25519_key();
         let founding =
             CharterPayload::new(crate::Alg::Ed25519, 1000, vec![1], None, vec![0; 32], tmb0);
@@ -322,8 +415,125 @@ mod tests {
             tmb2,
         );
 
-        let result = verify_succession_chain(&[founding, successor_a, successor_b]);
+        let result = verify_succession_chain(&[founding, successor_a, successor_b], None);
         assert!(result.is_err(), "divergent successors must fail closed");
+    }
+
+    #[test]
+    fn verify_succession_chain_accepts_progression_past_recorded_head() {
+        // A chain that genuinely extends past `recorded_head` (some
+        // successor's `prior` names it) is not a regression.
+        let founding_owner = vec![1];
+        let founding = CharterPayload::new(
+            crate::Alg::Ed25519,
+            1000,
+            founding_owner.clone(),
+            None,
+            vec![0; 32],
+            crate::Thumbprint::from_bytes(vec![0]),
+        );
+        let founding_czd = crate::Czd::from_bytes(vec![9, 9, 9]); // stand-in for czd(founding)
+
+        let successor = CharterPayload::new(
+            crate::Alg::Ed25519,
+            2000,
+            vec![2],
+            Some(founding_czd.clone()),
+            vec![1; 32],
+            crate::Thumbprint::from_bytes(founding_owner), // authorized by founding's owner
+        );
+
+        let result = verify_succession_chain(&[founding, successor], Some(&founding_czd));
+        assert!(
+            result.is_ok(),
+            "chain extending past the recorded head is not a regression: {result:?}"
+        );
+    }
+
+    #[test]
+    fn verify_succession_chain_rejects_regression_below_recorded_head() {
+        // A chain that never mentions `recorded_head` (a prefix rollback,
+        // per [chain-monotonicity]) must fail closed.
+        let (_prv0, _pub0, tmb0) = gen_ed25519_key();
+        let founding =
+            CharterPayload::new(crate::Alg::Ed25519, 1000, vec![1], None, vec![0; 32], tmb0);
+        let unreached_head = crate::Czd::from_bytes(vec![7, 7, 7]); // never named by this chain
+
+        let result = verify_succession_chain(&[founding], Some(&unreached_head));
+        assert!(
+            result.is_err(),
+            "a chain never reaching the recorded head must be rejected"
+        );
+    }
+
+    #[test]
+    fn verify_bootstrap_gate_passes_with_no_preexisting_claim() {
+        let (_prv, _pub, tmb) = gen_ed25519_key();
+        let founding =
+            CharterPayload::new(crate::Alg::Ed25519, 1000, vec![1], None, vec![0; 32], tmb);
+        let result = verify_bootstrap_gate(&founding, None);
+        assert!(
+            result.is_ok(),
+            "a virgin source is first-to-charter: {result:?}"
+        );
+    }
+
+    #[test]
+    fn verify_bootstrap_gate_accepts_incumbent_authorized_founder() {
+        let (_prv, _pub, tmb) = gen_ed25519_key();
+        let founding = CharterPayload::new(
+            crate::Alg::Ed25519,
+            1000,
+            vec![1],
+            None,
+            vec![0; 32],
+            tmb.clone(), // founding signed by the incumbent's own key
+        );
+        let pre_existing_claim = crate::ClaimPayload::new(
+            crate::Alg::Ed25519,
+            crate::AtomId::new(
+                crate::Anchor::new(vec![0; 4]),
+                crate::Label::try_from("x").unwrap(),
+            ),
+            500,
+            tmb.as_bytes().to_vec(), // claim owner == founding's signing tmb
+            "cargo".to_string(),
+            vec![0; 32],
+            tmb,
+        );
+        let result = verify_bootstrap_gate(&founding, Some(&pre_existing_claim));
+        assert!(
+            result.is_ok(),
+            "incumbent-authorized founding must pass: {result:?}"
+        );
+    }
+
+    #[test]
+    fn verify_bootstrap_gate_rejects_unauthorized_founder() {
+        let (_prv_incumbent, _pub_incumbent, tmb_incumbent) = gen_ed25519_key();
+        let (_prv_stranger, _pub_stranger, tmb_stranger) = gen_ed25519_key();
+        let founding = CharterPayload::new(
+            crate::Alg::Ed25519,
+            1000,
+            vec![1],
+            None,
+            vec![0; 32],
+            tmb_stranger, // signed by a stranger, not the incumbent
+        );
+        let pre_existing_claim = crate::ClaimPayload::new(
+            crate::Alg::Ed25519,
+            crate::AtomId::new(
+                crate::Anchor::new(vec![0; 4]),
+                crate::Label::try_from("x").unwrap(),
+            ),
+            500,
+            tmb_incumbent.as_bytes().to_vec(),
+            "cargo".to_string(),
+            vec![0; 32],
+            tmb_incumbent,
+        );
+        let result = verify_bootstrap_gate(&founding, Some(&pre_existing_claim));
+        assert!(result.is_err(), "unauthorized founding must fail closed");
     }
 
     struct NullCharterStore;
