@@ -1,5 +1,6 @@
 use std::collections::{HashSet, VecDeque};
 
+use atom_id::PublishPayload;
 use gix::actor::Signature;
 use gix::date::Time;
 use gix::hash::ObjectId;
@@ -164,6 +165,53 @@ pub fn write_publish_tag(
 
     let oid = repo.write_object(tag)?.detach();
     Ok(oid)
+}
+
+/// Append a new publish tag onto an existing tag chain, enforcing
+/// write-side semantic-immutability before creating the tag object.
+///
+/// Wraps [`write_publish_tag`], always targeting `previous_tag_oid` (the
+/// existing chain tip) as a [`gix::object::Kind::Tag`] — that is what a
+/// chain append always targets (`registry.rs::publish()`'s existing
+/// version-ref-exists branch already does this implicitly, but performs
+/// no check between the two payloads first). Rejects with
+/// [`GitError::Validation`] if `(label, version, dig, src, path)` differ
+/// between `previous_payload` and `new_payload`; `mode`, `meta`, `claim`,
+/// `tmb`, `now`, and signing-key metadata MAY differ freely (e.g. a
+/// `witnessed` -> `reproducible` mode transition on re-publish).
+///
+/// This closes the write-side half of `[tag-chain-semantic-immutable]`
+/// (`docs/specs/git-storage-format.md:758-768`); the read-side half is
+/// enforced separately in `source.rs`'s resolution walk.
+pub fn write_chain_append_tag(
+    repo: &gix::Repository,
+    tag_name: &str,
+    previous_tag_oid: ObjectId,
+    previous_payload: &PublishPayload,
+    new_payload: &PublishPayload,
+    tagger: Signature,
+    publish_message: String,
+) -> Result<ObjectId, GitError> {
+    if previous_payload.label != new_payload.label
+        || previous_payload.version != new_payload.version
+        || previous_payload.dig != new_payload.dig
+        || previous_payload.src != new_payload.src
+        || previous_payload.path != new_payload.path
+    {
+        return Err(GitError::Validation(format!(
+            "Semantic immutability violation: chain-append payload for tag {tag_name} changes an \
+             immutable field (label/version/dig/src/path) from the previous tag"
+        )));
+    }
+
+    write_publish_tag(
+        repo,
+        tag_name,
+        previous_tag_oid,
+        gix::object::Kind::Tag,
+        tagger,
+        publish_message,
+    )
 }
 
 /// Walk the parent chain of a commit lineage to assert descendants.
