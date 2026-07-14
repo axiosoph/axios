@@ -587,7 +587,7 @@ The 2026-07-14 owner-set amendment (`atom-transactions.md`
 `[owner-kind-required]`, `[claim-owner-single]`, `[charter-owner-set]`)
 generalizes `CharterPayload.owner` from a single opaque digest to a
 non-empty set of `kind`-tagged owner-references, and adds the
-`owner_kind` discriminator required to interpret any owner-reference's
+`OwnerKind` discriminator required to interpret any owner-reference's
 value; `ClaimPayload.owner` stays a single owner-reference. This has
 been propagated across `atom-transactions.md` and `trust-model.md`
 (`[trust-owner-selector]`'s claim/charter disambiguation) and into
