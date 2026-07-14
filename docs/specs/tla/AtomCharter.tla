@@ -479,7 +479,7 @@ MonotonicHead ==
 \* Generalizes for free across the new add/remove actions: this property is
 \* stated over `charters`/`Divergent` generically, never over a specific
 \* action, so it ranges over CharterAddMember/CharterRemoveMember exactly as
-\* it already did over CharterSucceed/CharterAddMember.
+\* it already did over the pre-rework CharterSucceed/CharterTransfer.
 ForkFailClosed ==
     [][ (recordedHead' # recordedHead) =>
           \E c \in charters : c.czd = recordedHead' /\ ~Divergent(c.anchor) ]_vars
