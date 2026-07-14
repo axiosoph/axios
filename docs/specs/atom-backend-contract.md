@@ -533,9 +533,11 @@ design work, not a mechanical amendment.)_
   statement for ref paths** (`RefPath = String` is insufficient:
   czd-hex, blake3-hex, and oid-hex segment families each render one
   sort and MUST rehydrate to it on parse); register the SHA-1
-  `dig`/`src` inheritance and the blake3 re-anchor hardening
-  (`[backend-hash-strength]`); charter encoding remains Open
-  Questions #6, now doubly registered (chain + enumeration rows).
+  `dig`/`src` inheritance, the signed `content_hash` field's
+  protocol-level closure of content identity, and the irreducible
+  `src`/ancestry limit (`[backend-hash-strength]`); charter encoding
+  remains Open Questions #6, now doubly registered (chain +
+  enumeration rows).
 - **atom-transactions.md §Backend**: cite this contract as the formal
   elaboration of the backend MUST/MUST NOT lists.
 - **atom-model.md §9**: the companion-spec sentence gains a live link

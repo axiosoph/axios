@@ -678,9 +678,15 @@ canonical content-tree construction already builds (git:
 `[snapshot-deterministic]`'s tree; the entry sort rule below is
 git-storage-format.md's own "Tree construction" implementation
 guidance, restated precisely here), substituting BLAKE3 for the
-backend's object hash at every level. Two independent implementations
-given the same content entries and this algorithm MUST produce
-byte-identical output:
+backend's object hash at every level. This substitution is at the
+level of recursive STRUCTURE only, not byte framing: the numbered
+steps below deliberately omit git's own object headers (`blob
+<len>\0`, `tree <len>\0`) — an implementer reusing a backend's real
+object-hashing code path, which adds those headers, MUST NOT do so
+here; follow the numbered steps literally, not the backend's own
+hashing routine. Two independent implementations given the same
+content entries and this algorithm MUST produce byte-identical
+output:
 
 1. **Leaf digest.** A regular file's leaf digest is `BLAKE3(data)` —
    the raw file bytes, with no length or type prefix. A symlink's leaf
