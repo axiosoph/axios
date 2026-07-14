@@ -49,9 +49,12 @@ mod serde_b64;
 use std::fmt;
 use std::str::FromStr;
 
-pub use charter::{CharterPayload, CharterStore, TYP_CHARTER};
 #[cfg(feature = "serde")]
-pub use charter::{verify_bootstrap_gate, verify_charter, verify_succession_chain};
+pub use charter::{
+    CharterLink, verify_bootstrap_gate, verify_charter, verify_charter_chain_signatures,
+    verify_succession_chain,
+};
+pub use charter::{CharterPayload, CharterStore, TYP_CHARTER};
 pub use coz_rs::{Alg, Cad, Czd, Thumbprint, canonical, canonical_hash_for_alg};
 pub use digest::{AtomDigest, DigestParseError, HashAlg};
 pub use name::{Identifier, Label, Name, Tag};
@@ -674,6 +677,36 @@ pub enum VerifyError {
     /// Spec constraint: `[symmetric-payloads]`.
     #[error("AtomId mismatch: payload's (anchor, label) does not match the expected AtomId")]
     AtomIdMismatch,
+    /// A claim's `anchor` does not equal the founding charter's czd —
+    /// distinct from [`Self::ClaimChainMismatch`], which is about
+    /// publish→claim linkage, not claim→charter linkage.
+    ///
+    /// Spec constraint: `[claim-chains-charter]` (Verification Pipeline step 7).
+    #[error("claim charters mismatch: claim.anchor does not equal czd(charter\u{2080})")]
+    ClaimChartersMismatch,
+    /// The strict `charter.now < claim.now < publish.now` ordering does
+    /// not hold.
+    ///
+    /// Spec constraint: Verification Pipeline step 9.
+    #[error("temporal order violation: charter.now < claim.now < publish.now does not hold")]
+    TemporalOrderViolation,
+    /// A claim-replacement's `now` does not strictly exceed the replaced
+    /// claim's `now`.
+    ///
+    /// Spec constraint: `[claim-replacement-transition]` PRE.
+    #[error(
+        "replacement not after prior: replacement.now does not exceed the replaced claim's now"
+    )]
+    ReplacementNotAfterPrior,
+    /// A claim-replacement's `(anchor, label)` differs from the replaced
+    /// claim's — a replacement never alters identity.
+    ///
+    /// Spec constraint: `[claim-replacement-transition]` PRE.
+    #[error(
+        "replacement identity changed: replacement's (anchor, label) differs from the replaced \
+         claim's"
+    )]
+    ReplacementIdentityChanged,
 }
 
 // ============================================================================
@@ -733,31 +766,54 @@ pub fn verify_publish(
     Ok(payload)
 }
 
-/// Verify a claim-replacement's two-authority requirement.
+/// Verify a claim-replacement's two-authority requirement (Verification
+/// Pipeline step 12).
 ///
-/// **Deliberately unimplemented — Phase 1.** A replacement claim's
-/// authority is a materially new kind of verification beyond the
-/// single-message check [`verify_claim`] performs: checking that the
-/// signing key is authorized by EITHER `prior`'s `owner` (the ordinary,
-/// unmarked owner-replacement path) OR `charter_owner` (the
-/// governance-replacement path, which additionally MUST carry
-/// `governance: true` on `replacement`) — and rejecting any signer
-/// outside both. Declaring this seam now (without a working validator)
-/// lets later phases de-stub it without reshaping the call surface.
+/// Checks that `replacement`'s signing key (`replacement.tmb`) is
+/// authorized by EXACTLY one of the two authorities
+/// `[claim-replacement-authority]` names:
+///
+/// - **owner replacement** — `replacement.tmb == prior.owner`: the ordinary path, no marking
+///   required.
+/// - **governance replacement** — `replacement.tmb == charter_owner` AND `replacement.governance ==
+///   true`: a signer authorized by the effective charter's owner but NOT marking the replacement as
+///   a governance seizure is treated the same as an unauthorized signer —
+///   `[claim-replacement-authority]`'s "MUST carry `governance: true`" is itself part of the
+///   authority check, not a separate concern.
+///
+/// A signer matching neither path is rejected with
+/// [`VerifyError::Unauthorized`] — the same variant
+/// [`verify_publish_authorized`] and [`verify_succession_chain`] use for
+/// single-key authorization failures elsewhere in this crate.
+///
+/// Beyond authority, also checks `[claim-replacement-transition]` PRE:
+/// `replacement.now` MUST strictly exceed `prior.now`
+/// ([`VerifyError::ReplacementNotAfterPrior`]), and `(replacement.anchor,
+/// replacement.label)` MUST equal `(prior.anchor, prior.label)`
+/// ([`VerifyError::ReplacementIdentityChanged`]) — a replacement never
+/// alters identity.
 ///
 /// Spec constraints: `[claim-replacement-authority]`,
 /// `[claim-replacement-transition]`.
 #[cfg(feature = "serde")]
 pub fn verify_claim_replacement(
-    _replacement: &ClaimPayload,
-    _prior: &ClaimPayload,
-    _charter_owner: &[u8],
+    replacement: &ClaimPayload,
+    prior: &ClaimPayload,
+    charter_owner: &[u8],
 ) -> Result<(), VerifyError> {
-    unimplemented!(
-        "Phase 1: claim-replacement two-authority verification is a specified deliverable, not a \
-         default — see docs/specs/atom-transactions.md [claim-replacement-authority] and \
-         [claim-replacement-transition]"
-    )
+    let owner_authorized = replacement.tmb.as_bytes() == prior.owner.as_slice();
+    let governance_authorized =
+        replacement.governance && replacement.tmb.as_bytes() == charter_owner;
+    if !owner_authorized && !governance_authorized {
+        return Err(VerifyError::Unauthorized);
+    }
+    if replacement.now <= prior.now {
+        return Err(VerifyError::ReplacementNotAfterPrior);
+    }
+    if replacement.anchor != prior.anchor || replacement.label != prior.label {
+        return Err(VerifyError::ReplacementIdentityChanged);
+    }
+    Ok(())
 }
 
 /// Compute the Coz digest (`czd`) of a signed message from its raw wire
@@ -802,15 +858,16 @@ fn verify_signature(
 }
 
 // ============================================================================
-// Pipeline verification (no-charter subset)
+// Pipeline verification
 // ============================================================================
 //
-// The remaining Local Verification steps checkable without walking a
-// charter succession chain (`docs/specs/atom-transactions.md`,
-// "Verification Pipeline" → "Local Verification"): steps 6 (claim side
-// only), 8, 11, and 13. Steps 2, 3, 7, 9, 10, 12 require charter data
-// (walking the succession chain or resolving charter fields) and are
-// out of scope here — see `n3-verify-charter-steps`.
+// The Local Verification steps (`docs/specs/atom-transactions.md`,
+// "Verification Pipeline" → "Local Verification") that operate on
+// claim/publish payloads: steps 6 (claim side only), 7, 8, 9, 10, 11, 12,
+// and 13. Steps 2 and 3 walk the charter succession chain itself and
+// live in `charter.rs` (`verify_charter_chain_signatures`,
+// `verify_succession_chain`) alongside the rest of the charter-chain
+// idiom.
 
 /// Verify a claim's declared thumbprint against its actual signing key
 /// (Verification Pipeline step 6, claim side).
@@ -841,6 +898,38 @@ pub fn verify_claim_key_thumbprint(
     Ok(())
 }
 
+/// Verify a claim chains to its founding charter (Verification Pipeline
+/// step 7).
+///
+/// Checks `claim.anchor == czd(charter₀)` (`[claim-chains-charter]`) —
+/// the claim-level analogue of [`verify_publish_chains_claim`]'s
+/// charter : claim :: claim : publish relationship. The founding
+/// charter's czd is recomputed independently from its own raw wire
+/// components (payload JSON, signature, algorithm) via [`czd_for_alg`]
+/// rather than trusted from a caller-supplied value, mirroring step 8's
+/// same anti-assertion discipline.
+///
+/// `founding_pay_json`/`founding_sig`/`founding_alg` are the founding
+/// charter's (`chain[0]`, no `prior`) own wire components — resolving
+/// which charter in a chain is the founding one is the caller's job
+/// (the same division of labor [`crate::verify_succession_chain`]
+/// establishes for chain resolution generally).
+///
+/// Spec constraint: `[claim-chains-charter]`.
+#[cfg(feature = "serde")]
+pub fn verify_claim_chains_charter(
+    claim: &ClaimPayload,
+    founding_pay_json: &[u8],
+    founding_sig: &[u8],
+    founding_alg: &str,
+) -> Result<(), VerifyError> {
+    let founding_czd = czd_for_alg(founding_pay_json, founding_sig, founding_alg)?;
+    if claim.anchor.as_bytes() != founding_czd.as_bytes() {
+        return Err(VerifyError::ClaimChartersMismatch);
+    }
+    Ok(())
+}
+
 /// Verify a publish's claim-chain link (Verification Pipeline step 8).
 ///
 /// Checks `publish.claim == czd(claim)`. The claim's czd is recomputed
@@ -860,6 +949,58 @@ pub fn verify_publish_chains_claim(
     let claim_czd = czd_for_alg(claim_pay_json, claim_sig, claim_alg)?;
     if publish.claim != claim_czd {
         return Err(VerifyError::ClaimChainMismatch);
+    }
+    Ok(())
+}
+
+/// Verify the strict temporal ordering across a charter/claim/publish
+/// triple (Verification Pipeline step 9).
+///
+/// Checks `charter.now < claim.now < publish.now`, strictly — an equal
+/// timestamp at either boundary is a violation, not a pass. `charter` is
+/// the effective charter (the same resolved payload
+/// [`verify_claim_authorized_by_charter`] takes for step 10), not
+/// necessarily the founding charter step 7 anchors to.
+///
+/// Spec constraint: Verification Pipeline step 9.
+#[cfg(feature = "serde")]
+pub fn verify_temporal_ordering(
+    charter: &CharterPayload,
+    claim: &ClaimPayload,
+    publish: &PublishPayload,
+) -> Result<(), VerifyError> {
+    if !(charter.now < claim.now && claim.now < publish.now) {
+        return Err(VerifyError::TemporalOrderViolation);
+    }
+    Ok(())
+}
+
+/// Verify a claim's signer is authorized by the effective charter's
+/// owner (Verification Pipeline step 10).
+///
+/// Checks `claim.tmb == effective_charter.owner`
+/// (`[claim-charter-authorization]`) — distinct from step 3's per-link
+/// chain authorization ([`crate::verify_succession_chain`]): this checks
+/// the CLAIM against the chain's resolved tail, not one charter link
+/// against the previous one. `effective_charter` is the single resolved
+/// payload the caller has already selected as the chain's current tail
+/// — this function does not walk or resolve the chain itself, matching
+/// how [`crate::verify_bootstrap_gate`] and [`verify_publish_authorized`]
+/// take single already-resolved payloads rather than chains.
+///
+/// A mismatch is reported as [`VerifyError::Unauthorized`], the same
+/// variant [`verify_publish_authorized`] and
+/// [`crate::verify_succession_chain`] use for single-key authorization
+/// failures elsewhere in this crate.
+///
+/// Spec constraint: `[claim-charter-authorization]`.
+#[cfg(feature = "serde")]
+pub fn verify_claim_authorized_by_charter(
+    claim: &ClaimPayload,
+    effective_charter: &CharterPayload,
+) -> Result<(), VerifyError> {
+    if claim.tmb.as_bytes() != effective_charter.owner.as_slice() {
+        return Err(VerifyError::Unauthorized);
     }
     Ok(())
 }
