@@ -353,13 +353,34 @@ inherit the **backend's** hash strength, not the coz layer's: a
 backend whose object hash is not collision-resistant (git's default
 SHA-1) makes `dig` forgeable in principle, independent of every
 signature in the chain. A conforming backend MUST document its object
-hash and its collision-resistance status. Where the hash is weak,
-implementations SHOULD re-anchor: record the ingested source's
-artifact-store digest (blake3) in atom metadata at the ingest seam —
-the cheap integrity upgrade the storage model already notes
-([Storage Model](../models/storage-model.md) §5). The anchor and all
-czd-sorted identities are unaffected by construction
-(`[anchor-hash-agile]`).
+hash and its collision-resistance status.
+
+The closure mechanism is protocol-level, not backend-level:
+`content_hash` ([atom-transactions](atom-transactions.md)
+`[content-hash-is-tree-digest]`, `[content-hash-algorithm]`) is a
+publisher-signed BLAKE3 digest carried as ordinary `PublishPayload`
+data. It requires no backend-specific support — a conforming backend
+merely stores and returns the field bit-perfectly like any other
+signed payload content (`[backend-carriage-bit-perfect]`); no backend
+computes, verifies, or otherwise special-cases it. Its obligation
+level is the three-tier split in `[content-hash-obligation]`
+(schema-optional, MUST-verify-when-present,
+SHOULD-include-when-the-backend's-own-hash-is-weak) — this contract
+does not restate that split, only points to it as the discharge of
+the SHOULD named here.
+
+This mechanism does NOT extend to `src`: `src`'s ancestry and temporal
+verification is a property of the backend's own commit-parent graph
+structure, not of any single value, and is irreducible without
+migrating the backend's own history to a stronger hash
+(`[content-hash-obligation]`'s "Known limit" documents this in full).
+A conforming backend with a weak object hash therefore remains
+forgeable on `src`-anchored ancestry claims regardless of
+`content_hash`'s presence; this is a stated, permanent limit of this
+mechanism, not an oversight.
+
+The anchor and all czd-sorted identities are unaffected by
+construction (`[anchor-hash-agile]`).
 `VERIFIED: unverified`
 
 ### Behavioral Properties
@@ -450,7 +471,7 @@ below plus review.
 | backend-enumeration          | integration-test | pending | charters/labels/versions/tips enumerable object-free                |
 | backend-refs-sole-mutability | integration-test | pending | protocol-visible mutation outside the ref namespace absent/rejected |
 | backend-liveness-protection  | integration-test | pending | GC pass collects nothing protocol-reachable                         |
-| backend-hash-strength        | review-residue   | pending | documentation obligation + SHOULD-grade re-anchor hardening         |
+| backend-hash-strength        | review-residue   | pending | documentation obligation; closure is protocol-level (`content_hash`, atom-transactions.md), not backend-level |
 | backend-substitutable        | integration-test | pending | golden-trace conformance across two backends (Execution Model §6.1 testable form; trace-set conformance, not the universal claim) |
 | backend-verification-carried | integration-test | pending | pipeline steps 1–13 offline against carried state                   |
 
@@ -479,7 +500,7 @@ spec relies on today without stating — each is an amendment item
 | backend-enumeration          | atom-sad §6.8 (object-free `ls-refs` discovery), `[ingestion-portable]`, `[anchor-resolvable]` (protocol) | Discharged except charter enumeration (Open Questions #6) |
 | backend-refs-sole-mutability | git object DB immutability + all protocol mutation via `refs/atom/*`                | **GAP (implicit)** — true of the design, stated nowhere |
 | backend-liveness-protection  | `refs/atom/src/{oid}` protective refs; `[store-claim-ref]` GC protection             | Discharged |
-| backend-hash-strength        | `[anchor-hash-agile]` covers the czd side only                                       | **GAP** — dig/src SHA-1 inheritance unacknowledged; re-anchor hardening unregistered |
+| backend-hash-strength        | `[oid-hash-inheritance]` states the dig/src SHA-1 inheritance; the closure itself (`content_hash`) is protocol-level (atom-transactions.md), carried bit-perfectly per `[backend-carriage-bit-perfect]` with no git-specific handling | Discharged |
 | backend-substitutable        | `[snapshot-deterministic]` + canonical serialization make git a valid golden-trace subject | **PARTIAL** — the property is inherently cross-backend (interchangeability WITH another backend); git's own determinism is discharged, but nothing to compare against exists yet |
 | backend-verification-carried | git's object model: once fetched, all objects read from the local database with zero network — structural to distributed version control | Discharged (implicit) — no git-storage-format.md constraint states this as an obligation; it is true of the design, not stated |
 
@@ -512,9 +533,11 @@ design work, not a mechanical amendment.)_
   statement for ref paths** (`RefPath = String` is insufficient:
   czd-hex, blake3-hex, and oid-hex segment families each render one
   sort and MUST rehydrate to it on parse); register the SHA-1
-  `dig`/`src` inheritance and the blake3 re-anchor hardening
-  (`[backend-hash-strength]`); charter encoding remains Open
-  Questions #6, now doubly registered (chain + enumeration rows).
+  `dig`/`src` inheritance, the signed `content_hash` field's
+  protocol-level closure of content identity, and the irreducible
+  `src`/ancestry limit (`[backend-hash-strength]`); charter encoding
+  remains Open Questions #6, now doubly registered (chain +
+  enumeration rows).
 - **atom-transactions.md §Backend**: cite this contract as the formal
   elaboration of the backend MUST/MUST NOT lists.
 - **atom-model.md §9**: the companion-spec sentence gains a live link
@@ -556,7 +579,8 @@ This contract explicitly does NOT define:
   layer ([atom-model](../models/atom-model.md) §5–§6; Execution Model
   §3.4).
 - **The artifact store** — blake3 CAS for build outputs:
-  [Storage Model](../models/storage-model.md). The two stores meet at
-  exactly one seam (source ingestion), where
-  `[backend-hash-strength]`'s re-anchor hardening lives.
+  [Storage Model](../models/storage-model.md). `content_hash`
+  (`[backend-hash-strength]`'s discharge) is unrelated to this store:
+  it is publisher-signed payload data computed once, before publish,
+  never derived at an ingestion seam or from artifact-store content.
 - **Key management** — Coz/Cyphr, below the plane.

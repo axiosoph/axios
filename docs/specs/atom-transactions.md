@@ -378,6 +378,8 @@ TYPE  PublishPayload = {
         alg:     Alg,
         anchor:  Anchor,
         claim:   Czd,       -- czd of authorizing claim
+        content_hash?: Vec<u8>,  -- OPTIONAL: BLAKE3 content tree digest
+                            -- ([content-hash-is-tree-digest]; absent = not asserted)
         dig:     Vec<u8>,   -- atom snapshot hash (the published artifact)
         label:   Label,
         mode?:   "reproducible" | "witnessed",  -- reproducibility mode
@@ -390,6 +392,11 @@ TYPE  PublishPayload = {
         typ:     "atom/publish"
       }                                                           (atom-id)
   -- CozMessage MAY include `key` field (convenience for rotated keys).
+  -- `content_hash`, when present, is signed exactly like every other
+  -- payload field — it carries no separate trust mechanism of its own.
+  -- Unlike `dig`, it is never required: a publisher on an
+  -- already-collision-resistant backend has no reason to compute it
+  -- ([content-hash-obligation]).
 
 TYPE  CozMessage = { pay: JSON, sig: Vec<u8>, key?: PubKey }     (coz-rs)
 
@@ -648,6 +655,131 @@ backend spec), NEVER as a new version: a mode transition changes
 no immutable payload field, so `[no-duplicate-version]`'s
 same-version rejection does not apply to it and MUST NOT be
 weakened to permit it — the chain append is the lawful path.
+`VERIFIED: unverified`
+
+**[content-hash-is-tree-digest]**: The OPTIONAL root-level
+`content_hash` field of a `PublishPayload` is a BLAKE3 digest over the
+atom's content entries — the same `(path, data-or-target, executable)`
+set a backend's own content-tree construction consumes — computed and
+included by the publisher before signing (never derived after the
+fact by a backend or an ingesting party: a value added post-signature
+would carry no cryptographic assurance and is not this field). Where
+present, it is a stronger, backend-independent restatement of the
+same content identity `dig` already asserts through the backend's own
+object hash; where absent, no claim beyond `dig` is made. The exact
+algorithm is `[content-hash-algorithm]`; the exact obligation level is
+`[content-hash-obligation]`.
+`VERIFIED: unverified`
+
+**[content-hash-algorithm]**: Where present, `content_hash` MUST be
+computed by the canonical recursion below, which mirrors — deliberately,
+not coincidentally — the same recursive structure a backend's own
+canonical content-tree construction already builds (git:
+`[snapshot-deterministic]`'s tree; the entry sort rule below is
+git-storage-format.md's own "Tree construction" implementation
+guidance, restated precisely here), substituting BLAKE3 for the
+backend's object hash at every level. This substitution is at the
+level of recursive STRUCTURE only, not byte framing: the numbered
+steps below deliberately omit git's own object headers (`blob
+<len>\0`, `tree <len>\0`) — an implementer reusing a backend's real
+object-hashing code path, which adds those headers, MUST NOT do so
+here; follow the numbered steps literally, not the backend's own
+hashing routine. Two independent implementations given the same
+content entries and this algorithm MUST produce byte-identical
+output:
+
+1. **Leaf digest.** A regular file's leaf digest is `BLAKE3(data)` —
+   the raw file bytes, with no length or type prefix. A symlink's leaf
+   digest is `BLAKE3(target)` — the raw target-path bytes. A directory
+   has no leaf digest of its own; it is defined entirely by step 2.
+2. **Per-directory digest.** For a directory (including the content
+   root, treated as the directory at the empty path), collect its
+   immediate children — regular files, symlinks, and subdirectories
+   exactly one path-segment below it — as `(mode, filename,
+   child_digest)` triples. `mode` MUST be the exact ASCII decimal
+   digit string a git tree object would record for that entry's kind:
+   `100644` (regular file), `100755` (executable regular file),
+   `120000` (symlink), or `40000` (directory — five digits, not six;
+   this is git's own canonical tree-mode encoding, reused verbatim,
+   not reinvented). `child_digest` is that child's leaf digest (step
+   1) or, for a subdirectory, its own per-directory digest computed
+   recursively, children before parents. Sort the triples using the
+   same tie-break rule git's own canonical tree-entry order uses:
+   comparing two entries, let `n` be the length of the shorter
+   filename; compare the first `n` bytes of each filename byte-wise —
+   if they differ, that decides the order. If equal, each entry's
+   *tie-break byte* is: its `(n+1)`-th filename byte, if its filename
+   is longer than `n`; otherwise `0x2F` (`/`) if the entry is a
+   directory; otherwise the entry has no tie-break byte at all, and an
+   entry with no tie-break byte sorts before one that has any. (Plain
+   filename-only comparison, without this rule, can order a directory
+   relative to a same-prefixed sibling file differently than git's own
+   tree does — this rule exists precisely to make the two agree, and
+   is why it is reused rather than replaced with a simpler comparison.)
+   A filename containing a NUL byte (`0x00`) is a forbidden input to
+   this algorithm; a producer MUST reject such content before hashing.
+   Serialize the sorted triples by concatenating, for each: the `mode`
+   digits, one ASCII space (`0x20`), the filename bytes, one NUL byte
+   (`0x00`), and the child digest's raw 32 bytes. The directory's
+   digest is `BLAKE3` of that concatenation. A directory with zero
+   children serializes to the empty byte string; its digest is
+   `BLAKE3("")`.
+3. **Result.** `content_hash` is the per-directory digest (step 2) of
+   the content root: 32 raw bytes, carried as `Vec<u8>` exactly like
+   `dig`, `src`, and `anchor` — never hex-encoded at the protocol
+   layer. This is a distinct field computed by a distinct algorithm
+   from the git backend's own object hash: `content_hash`'s length,
+   if ever rendered as hex, coincides with a SHA-256 `src` value's hex
+   length, which is exactly why the git backend's own `src`-header
+   disambiguation (`[src-hash-kind-disambiguated]`,
+   git-storage-format.md) is scoped to the `src` header's own field
+   family and MUST NOT be extended to infer or cross-check
+   `content_hash` by length or position — they are unrelated fields.
+
+The same canonical-serialization argument that makes a backend's own
+content tree injective (distinct content never shares an object hash)
+applies here unchanged: the explicit mode digits and NUL-delimited
+framing make the per-level serialization unambiguous independent of
+which total order is used to sort siblings, and the git tie-break rule
+above supplies that order.
+`VERIFIED: unverified`
+
+**[content-hash-obligation]**: `content_hash`'s obligation is
+three-tiered, and each tier MUST be read independently — none of the
+three follows from either of the others:
+
+1. **Schema level: OPTIONAL.** `content_hash` is not a required
+   `PublishPayload` field. A publisher on an already
+   collision-resistant backend has no integrity reason to compute it —
+   `dig` alone already carries the guarantee this field exists to add.
+2. **Consumer level: MUST-verify-when-present.** A consumer that
+   receives a `PublishPayload` carrying `content_hash` MUST recompute
+   it per `[content-hash-algorithm]` over the resolved content and
+   MUST reject the publish on mismatch. Because the field is inside
+   the signed payload, an attacker cannot strip it to force a consumer
+   back to weak-only verification without invalidating the signature
+   entirely — so this obligation costs nothing extra and closes off
+   selectively targeting non-checking consumers, which a mere
+   SHOULD-prefer would leave open.
+3. **Publisher level: SHOULD-include when the backend's own hash is
+   weak.** A recommendation, not a schema requirement: publishers on a
+   backend whose own object hash is not collision-resistant (git's
+   default SHA-1) SHOULD include `content_hash`; publishers on an
+   already collision-resistant backend have no obligation to.
+
+**Known limit — `src` is NOT hardened by this field.** `content_hash`
+strengthens content identity (the `dig`-equivalent question: "is this
+the content the publisher signed"). It does nothing for `src`'s
+ancestry and temporal verification (`[charter-ancestry]`,
+`[no-backdated-publish]`): those checks depend on walking the actual
+git commit-parent graph of the mainline source repository, whose
+identity and links are the backend's own commit hashes — a property of
+graph structure, not of any single signed value, and therefore not
+substitutable by a signed digest the way `dig` is. Hardening `src`'s
+ancestry guarantee is irreducible without migrating the mainline
+repository itself to a stronger hash; this specification does not
+attempt it and no such mechanism should be inferred from
+`content_hash`'s existence.
 `VERIFIED: unverified`
 
 **[rawversion-opaque]**: `RawVersion` MUST be treated as an opaque
@@ -1166,6 +1298,9 @@ _The rows added or amended for the charter constraints are marked (amended)._
 | sig-over-pay                  | unit-test        | **pass** | sign→verify roundtrip in atom-id tests                                    | 1     |
 | dig-is-atom-snapshot          | unit-test        | pending  | Snapshot hash matches `dig` field                                         | 4     |
 | src-is-source-revision        | integration-test | pending  | Git revision hash matches `src` field                                     | 4     |
+| content-hash-is-tree-digest   | unit-test        | pending  | Present `content_hash` is BLAKE3 over content entries, publisher-signed   | 4     |
+| content-hash-algorithm        | unit-test        | pending  | Two independent inputs of same content → byte-identical digest            | 4     |
+| content-hash-obligation       | integration-test | pending  | Optional schema; present ⇒ consumer verifies or rejects; SHOULD on weak backend | 4 |
 | path-is-subdir                | rustc            | **pass** | `path` field type constrains to subdir                                    | 1     |
 | rawversion-opaque             | rustc            | **pass** | Newtype, no `Deref`/`AsRef`/`Into`                                        | 1     |
 | claim-key-required            | unit-test        | **pass** | CozMessage key — tested in claim roundtrip                                | 1     |

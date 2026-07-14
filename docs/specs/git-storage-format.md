@@ -244,12 +244,19 @@ chain. (Satisfies atom-transactions.md `[atom-detached]`.)
 
 **[snapshot-src-header]**: An atom commit MUST contain exactly one extra
 header: `src`, whose value is the hex-encoded ObjectId of the source
-revision commit from which the atom's content was extracted. This
-header cryptographically binds the atom snapshot to its source revision.
+revision commit from which the atom's content was extracted, in the
+length-disambiguated encoding `[src-hash-kind-disambiguated]` defines.
+This header cryptographically binds the atom snapshot to its source
+revision.
 
 The `src` value in the atom commit MUST match the `src` field in the
-corresponding publish payload. A consumer MAY verify this as a quick
-integrity check before performing full Coz signature verification.
+corresponding publish payload — semantically, as the same source
+revision identity; the payload's `src` field is raw bytes
+(atom-transactions.md `TYPE PublishPayload`) while the commit header is
+hex text, so "match" means the header's hex-decoded bytes equal the
+payload's raw bytes, not literal string equality. A consumer MAY
+verify this as a quick integrity check before performing full Coz
+signature verification.
 `VERIFIED: unverified`
 
 **[temporal-vector]**: The atom protocol's git backend enforces a
@@ -486,12 +493,51 @@ of raw segments across families is ill-typed.
 object hash algorithm; under git's SHA-1 default they are NOT
 collision-resistant, unlike every czd-sorted identity
 (`[anchor-hash-agile]`). This inheritance MUST be documented wherever
-`dig` is presented as an artifact identity. Implementations SHOULD
-record the ingested source tree's artifact-store digest (blake3) in
-appended atom metadata as a protocol-independent re-anchor, and
-consumers SHOULD prefer the re-anchor where present. (Registers
-atom-backend-contract.md `[backend-hash-strength]` for the git
-instantiation.)
+`dig` is presented as an artifact identity. The closure for `dig` is
+the protocol-level, publisher-signed `content_hash` field
+(atom-transactions.md `[content-hash-is-tree-digest]`), not any
+git-specific mechanism — the git instantiation carries it bit-perfectly
+like any other payload field and does nothing further. `src`'s
+inheritance is NOT closed by `content_hash` or by any mechanism this
+specification defines: `src`-anchored ancestry verification
+(`[temporal-vector]`) depends on this repository's own commit-parent
+graph, whose links are this repository's own object hashes, and is
+irreducible without migrating this repository's history to a stronger
+hash (atom-transactions.md `[content-hash-obligation]`'s "Known
+limit"). (Registers atom-backend-contract.md `[backend-hash-strength]`
+for the git instantiation.)
+`VERIFIED: unverified`
+
+**[src-hash-kind-disambiguated]**: The atom commit's `src` extra
+header (`[snapshot-src-header]`) is a hex-encoded git `ObjectId` whose
+byte length MUST be read as the sole, authoritative indicator of which
+hash algorithm produced it: 40 hex characters denotes SHA-1, 64
+denotes SHA-256. A reader MUST NOT assume a fixed algorithm (e.g.
+always SHA-1) regardless of length, and MUST NOT require any other
+marker — no algorithm prefix or tag is added to the header's value.
+This is a minimal fix, not a new mechanism: it makes an
+already-structural property (git `ObjectId` hex length is
+algorithm-determined; `gix` itself dispatches object decoding by OID
+length) an explicit, binding reading rule instead of an unstated
+assumption, consistent with `[czd-oid-disjoint]`'s "each family
+renders exactly one sort" precedent for identity-bearing ref-path
+segments applied here to a header value instead. No untagged
+ambiguity exists to migrate away from: every `src` header written
+under this project to date is 40 hex characters (git's SHA-1 default
+is this project's only backend hash kind in current use), so this
+constraint has no legacy population to reconcile — it binds future
+readers as of this amendment, not a transition.
+
+**Caution — do not confuse with `content_hash`.** BLAKE3 (the
+`content_hash` algorithm, atom-transactions.md
+`[content-hash-algorithm]`) also produces 32-byte digests that render
+as 64 hex characters, identical in length to a SHA-256 `src`. Length-
+based disambiguation under this constraint applies ONLY within the
+`src` header's own git-OID field family (`[czd-oid-disjoint]`'s
+oid-hex family); `content_hash` is a distinctly named field in a
+different structure (the `PublishPayload`, not a git commit header)
+and MUST NOT be inferred from, or cross-checked against, `src`'s
+length or position.
 `VERIFIED: unverified`
 
 **[single-active-claim-registry]**: In a registry (source repository),
@@ -976,7 +1022,8 @@ ingested atom. (Model §2.3, ⊇ condition.)
 | ancestry-hash-committed      | agent-check      | pending | Parent OIDs in hashed preimage; checks quantify over it |
 | ancestry-query-path          | integration-test | pending | replace/grafts ignored; shallow ancestry fails closed  |
 | czd-oid-disjoint             | agent-check      | pending | Czd/OID distinct types; ref segments rehydrate to sort |
-| oid-hash-inheritance         | agent-check      | pending | SHA-1 dig/src documented; blake3 re-anchor recorded    |
+| oid-hash-inheritance         | agent-check      | pending | SHA-1 dig/src documented; dig closure is content_hash (atom-transactions.md), src closure irreducible |
+| src-hash-kind-disambiguated  | agent-check      | pending | src header length (40/64) is the sole algorithm indicator |
 | refs-atomic-multi            | integration-test | pending | Multi-ref transitions commit atomically per store      |
 
 ## Implications
