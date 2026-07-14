@@ -3,6 +3,8 @@
 //! Provides accumulation of packages from remote sources and filesystem
 //! directories into a local Git store repository.
 
+use std::any::Any;
+use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 
@@ -235,6 +237,152 @@ fn claim_czd_of_store_ref(
     Ok(Some(publish_payload.claim))
 }
 
+/// Propagate the source's charter chain for `anchor` into the destination
+/// store, verifying the whole succession chain before trusting any of it
+/// (`[c1-charter-propagated]`) -- copying only the founding charter would
+/// silently reject any atom whose ownership has since transferred via
+/// succession, so the entire chain is brought over, matching this
+/// codebase's existing "claims are lightweight, copy the whole thing"
+/// convention (`[store-claim-ref]`). Idempotent: a chain member already
+/// present at its czd-keyed ref in `dest_repo` is left untouched, so
+/// re-ingesting the same source (or two sources sharing an anchor) never
+/// double-writes.
+///
+/// **Design decision (n3-store-charter-ingest):** git-native, scoped to
+/// this function, not a new `AtomContent` trait method. Every current
+/// implementor of `AtomContent`/`AtomStore` in this codebase is
+/// git-backed, and `ingest`'s own claim/publish handling already
+/// materializes exclusively through `dest_repo` (always concretely
+/// `gix::Repository`, since `self` is `GitStore`) -- only the *source*
+/// side is generic. Reaching a concrete `gix::Repository` from an opaque
+/// `S: AtomContent` therefore requires either (a) extending `AtomContent`
+/// with a charter-exposing method, which every implementor (today: one)
+/// would need to grow, and which builds generic machinery for backends
+/// that don't exist yet -- exactly what the Cutting Imperative says not
+/// to do preemptively -- or (b) a downcast, confined entirely to this
+/// function, that recovers the concrete `GitSource` when the caller's
+/// bound (`S: AtomContent: AtomSource: 'static`) permits it. This function
+/// takes (b): it is the one place `ingest`'s charter handling is more
+/// tightly coupled to the git backend than its claim/publish handling,
+/// exactly as flagged in this node's own IBC. A source that isn't
+/// downcastable to `GitSource` (impossible today -- no other
+/// implementation exists) fails closed with a clear error rather than
+/// silently skipping charter propagation, so `[c3-fails-closed-still]`
+/// holds even in that hypothetical case. When a second backend is ever
+/// added, this is the seam to revisit -- not before.
+fn propagate_charter_chain<S: AtomContent>(
+    dest_repo: &gix::Repository,
+    source: &S,
+    anchor: &atom_id::Anchor,
+) -> Result<(), GitError> {
+    let source_any: &dyn Any = source;
+    let Some(git_source) = source_any.downcast_ref::<GitSource>() else {
+        return Err(GitError::Validation(
+            "cannot propagate charter chain: ingest's charter propagation is git-native \
+             (n3-store-charter-ingest) and this source is not a git-backed AtomContent \
+             implementation"
+                .into(),
+        ));
+    };
+    let source_repo = git_source.repo();
+
+    let Some((_, chain)) =
+        crate::charter_store::resolve_effective_charter(&source_repo, anchor, None)?
+    else {
+        return Err(GitError::Validation(format!(
+            "no charter resolves for anchor {} in source -- refusing to ingest an atom whose \
+             ownership chain cannot be established",
+            anchor.to_b64()
+        )));
+    };
+
+    let source_entries = source_charter_entries(&source_repo)?;
+
+    for payload in &chain {
+        let (czd, raw_msg) = source_entries
+            .iter()
+            .find(|(_, _, candidate)| candidate == payload)
+            .map(|(czd, raw_msg, _)| (czd.clone(), raw_msg.clone()))
+            .ok_or_else(|| {
+                GitError::Validation(
+                    "a verified charter chain member has no matching raw message in the source -- \
+                     resolve_effective_charter and the raw ref scan disagree"
+                        .into(),
+                )
+            })?;
+
+        let ref_name = crate::charter_store::charter_ref_name(czd.as_bytes());
+        if dest_repo.try_find_reference(&ref_name)?.is_some() {
+            continue;
+        }
+
+        let oid = crate::gix_util::write_charter_commit(dest_repo, raw_msg)?;
+        let fullname = FullName::try_from(ref_name.as_str())
+            .map_err(|e| GitError::Validation(e.to_string()))?;
+        dest_repo.edit_reference(RefEdit {
+            change: Change::Update {
+                log: LogChange {
+                    mode: RefLog::AndReference,
+                    force_create_reflog: false,
+                    message: "Ingest charter commit".into(),
+                },
+                expected: PreviousValue::Any,
+                new: Target::Object(oid),
+            },
+            name: fullname,
+            deref: false,
+        })?;
+    }
+
+    Ok(())
+}
+
+/// Enumerate every entry under `refs/atom/charter/d/*` in `repo`, recovering
+/// each candidate's raw signed `CozMessage` envelope alongside its
+/// recomputed czd and deserialized payload. Deliberately does not
+/// re-verify signatures or czd-binding here -- [`propagate_charter_chain`]
+/// only trusts entries that also appear in
+/// [`crate::charter_store::resolve_effective_charter`]'s already-verified
+/// chain (matched by payload equality); this scan exists solely to recover
+/// the exact raw bytes for a verified payload, mirroring how claim/publish
+/// handling in `ingest` carries raw message strings end-to-end rather than
+/// reconstructing them from parsed fields.
+fn source_charter_entries(
+    repo: &gix::Repository,
+) -> Result<Vec<(atom_id::Czd, String, atom_id::CharterPayload)>, GitError> {
+    let prefix = "refs/atom/charter/d/";
+    let mut entries = Vec::new();
+    for ref_res in repo.references()?.prefixed(prefix)? {
+        let reference = ref_res.map_err(|e| GitError::Validation(e.to_string()))?;
+        let oid = reference.id().detach();
+        let obj = repo.find_object(oid)?;
+        let Ok(commit) = obj.try_into_commit() else {
+            continue;
+        };
+        let msg_str = commit.message_raw_sloppy().to_string();
+        let Ok(envelope) = serde_json::from_str::<CozMessageEnvelope>(&msg_str) else {
+            continue;
+        };
+        let Ok(pay_value) = serde_json::to_value(&envelope.pay) else {
+            continue;
+        };
+        let Ok(payload) = serde_json::from_value::<atom_id::CharterPayload>(pay_value) else {
+            continue;
+        };
+        let Ok(pay_bytes) = serde_json::to_vec(&envelope.pay) else {
+            continue;
+        };
+        let Some(alg_str) = envelope.pay.get("alg").and_then(|v| v.as_str()) else {
+            continue;
+        };
+        let Ok(czd) = atom_id::czd_for_alg(&pay_bytes, &envelope.sig, alg_str) else {
+            continue;
+        };
+        entries.push((czd, msg_str, payload));
+    }
+    Ok(entries)
+}
+
 impl AtomSource for GitStore {
     type Entry = GitEntry;
     type Error = GitError;
@@ -268,6 +416,14 @@ impl AtomStore for GitStore {
             .await
             .map_err(|e| GitError::Validation(e.to_string()))?;
 
+        // Charter chains are per-anchor, not per-atom -- multiple
+        // discovered ids (distinct labels) can share the same atom-set
+        // anchor, and re-processing the same anchor's chain per id would
+        // be wasted work (the ref-existence check in
+        // `propagate_charter_chain` makes it safe, but redundant repo
+        // scans are still avoidable at this granularity).
+        let mut propagated_anchors: HashSet<Vec<u8>> = HashSet::new();
+
         for id in discovered_ids {
             let versions_to_ingest = {
                 let entry_opt = source
@@ -291,6 +447,18 @@ impl AtomStore for GitStore {
 
             for (version, dig, czd_opt, claim_msg_opt, publish_msg_opt) in versions_to_ingest {
                 if let Some(czd_val) = &czd_opt {
+                    // A published version's claim/publish handling
+                    // (below) requires the destination to already
+                    // resolve a charter for this anchor -- propagate it
+                    // now, at ingest time (matching how claim/publish are
+                    // themselves verified during ingest, not deferred to
+                    // resolve time), before this id's `claim_czd_hex` is
+                    // even asked to resolve anything.
+                    let anchor_key = id.anchor().as_bytes().to_vec();
+                    if propagated_anchors.insert(anchor_key) {
+                        propagate_charter_chain(&dest_repo, source, id.anchor())?;
+                    }
+
                     // Ingestion of a published version
                     let claim_msg = claim_msg_opt.ok_or_else(|| {
                         GitError::Validation(format!(
