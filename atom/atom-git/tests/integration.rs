@@ -472,9 +472,9 @@ async fn test_resolve_registry_branch_returns_real_czd() {
 /// not the ref-name hex segment used for the store's internal addressing.
 ///
 /// This exercises the store layout directly (rather than via
-/// `GitStore::ingest`, which has its own unrelated, pre-existing defect —
-/// see `test_local_ingest`'s rationale) by hand-signing and hand-writing a
-/// claim + publish pair, mirroring what `GitRegistry` does internally.
+/// `GitStore::ingest`, exercised by `test_local_ingest`) by hand-signing and
+/// hand-writing a claim + publish pair, mirroring what `GitRegistry` does
+/// internally.
 #[tokio::test]
 async fn test_resolve_store_branch_returns_real_czd() {
     let dir = tempfile::tempdir().unwrap();
@@ -617,35 +617,20 @@ async fn test_resolve_store_branch_returns_real_czd() {
     );
 }
 
-/// `GitStore::ingest` (store.rs) is architecturally broken by the czd fix
-/// and needs its own follow-up node — this is NOT a regression from this
-/// change, it is a pre-existing defect this change unmasks.
-///
-/// `ingest()` derives the destination git object id it must reconstruct the
-/// claim commit at via `ObjectId::try_from(publish_payload.claim.as_bytes())`
-/// (store.rs) — i.e. it assumes the signed `PublishPayload.claim` field
-/// (a `Czd`) literally IS a git object id. That assumption only held
-/// because of the exact bug this node fixes: before the fix, `claim()`
-/// fabricated its returned czd FROM the claim commit's own git oid, so the
-/// two were accidentally identical. With a spec-correct czd (independently
-/// recomputable from `(cad, sig)`, sized to the signing algorithm's hash —
-/// e.g. 64 bytes for Ed25519/SHA-512), `ObjectId::try_from` on those bytes
-/// now fails outright ("Cannot instantiate git hash from a digest of
-/// length 64"), and even where byte lengths coincided by chance the value
-/// would never correspond to a real or reconstructible git object.
-/// `ingest()`'s "guess a parent, write, check if the oid matches" search
-/// loop has no predetermined oid left to hit.
-///
-/// Fixing this requires redesigning how `GitStore::ingest` locates/verifies
-/// the destination claim commit — e.g. trusting `verify_claim`/
-/// `verify_publish`'s cryptographic checks plus the (now-real) czd equality
-/// check as the correctness guarantee, instead of exact-oid reconstruction
-/// — which is a genuine AtomStore-level design decision outside this node's
-/// scope (fixing `GitRegistry`/`GitSource`'s czd computation). Tracked at
-/// <https://github.com/axiosoph/axios/issues/64>.
+/// `GitStore::ingest` locates a destination claim commit through its own
+/// ref family (`refs/atom/claims/d/{claim_czd}`,
+/// `docs/specs/git-storage-format.md` `[store-claim-ref]`) rather than by
+/// assuming the signed `PublishPayload.claim` field (a `Czd`) is literally a
+/// git object id (issue #64). This regression-tests that ingest succeeds
+/// with a spec-correct, independently-recomputable czd (sized to the
+/// signing algorithm's hash — e.g. 64 bytes for Ed25519/SHA-512, which
+/// `ObjectId::try_from` cannot even parse), and that the store layout it
+/// writes round-trips back through `GitSource::resolve` to the real czd —
+/// never the claim commit's git oid, and never the ref-name hex segment
+/// used for the store's internal addressing (mirroring
+/// `test_resolve_store_branch_returns_real_czd`, which exercises the same
+/// store layout invariant by hand-writing the refs directly).
 #[tokio::test]
-#[ignore = "GitStore::ingest's claim reconstruction assumes czd == git oid; pre-existing defect \
-            unmasked by the czd fix, needs its own follow-up node — see doc comment"]
 async fn test_local_ingest() {
     // 1. Create registry repository and publish a package version
     let (_reg_dir, reg_repo, reg_genesis_oid) = setup_test_repo();
@@ -703,26 +688,40 @@ async fn test_local_ingest() {
     // Ingest!
     store.ingest(&registry.source).await.unwrap();
 
-    // 3. Verify store references are written by claim czd (Step 5)
-    let claim_czd_hex = ObjectId::from_bytes_or_panic(claim_czd.as_bytes())
-        .to_hex()
-        .to_string();
-    let store_claim_ref_name = format!("refs/atom/claims/d/{}", claim_czd_hex);
-    let store_version_ref_name = format!("refs/atom/d/{}/1.0.0", claim_czd_hex);
-
+    // 3. Verify store references exist and target a real, independently
+    // ingested claim commit — the ref-path hex segment is a store-internal
+    // addressing key, never the czd bytes themselves (`[czd-oid-disjoint]`),
+    // so it can't be reconstructed here from `claim_czd`; assert existence
+    // and identity via the claim commit's own content instead.
     let repo_store = store.source.repo();
-    let store_claim_ref = repo_store
-        .try_find_reference(&store_claim_ref_name)
+    let claim_refs: Vec<_> = repo_store
+        .references()
         .unwrap()
-        .unwrap();
-    let _store_version_ref = repo_store
-        .try_find_reference(&store_version_ref_name)
+        .prefixed("refs/atom/claims/d/")
         .unwrap()
-        .unwrap();
+        .map(|r| r.unwrap().id().detach())
+        .collect();
+    assert_eq!(claim_refs.len(), 1, "expected exactly one ingested claim ref");
+    let store_claim_oid = claim_refs[0];
 
+    let claim_commit = repo_store
+        .find_object(store_claim_oid)
+        .unwrap()
+        .try_into_commit()
+        .unwrap();
+    let claim_envelope: atom_git::source::CozMessageEnvelope =
+        serde_json::from_str(&claim_commit.message_raw_sloppy().to_string()).unwrap();
+    let claim_pay_bytes = serde_json::to_vec(&claim_envelope.pay).unwrap();
+    let recomputed_czd =
+        atom_id::czd_for_alg(&claim_pay_bytes, &claim_envelope.sig, "Ed25519").unwrap();
     assert_eq!(
-        store_claim_ref.id().detach(),
-        ObjectId::from_bytes_or_panic(claim_czd.as_bytes())
+        recomputed_czd, claim_czd,
+        "ingested claim commit's own signed content must recompute to the real claim czd"
+    );
+    assert_ne!(
+        recomputed_czd.as_bytes(),
+        store_claim_oid.as_bytes(),
+        "the claim czd must not equal the destination claim commit's git oid"
     );
 
     // Verify resolving the store source yields the correct package info
@@ -1235,8 +1234,8 @@ fn map_components_to_path(components: &[u8], kind: u8) -> Option<String> {
     // Limit depth to avoid ridiculously deep trees or stack overflows
     let depth = std::cmp::min(components.len(), 5);
     let mut parts = Vec::new();
-    for i in 0..depth {
-        let name = match components[i] % 4 {
+    for component in components.iter().take(depth) {
+        let name = match component % 4 {
             0 => "dir_a",
             1 => "dir_b",
             2 => "dir_c",
