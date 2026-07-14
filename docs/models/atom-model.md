@@ -229,8 +229,13 @@ design work this model now governs rather than defers:
    is now concretely mechanized by the field classification —
    atom-transactions.md `[amendment-field-classification]` and its
    fact-kind table (`[fact-kind-table]`) — distinguishing appends that
-   set an overwrite-class field (trust-chain-relevant) from appends
-   that add only append-class fact entries (routine).
+   CHANGE THE VALUE of a policy-relevant overwrite-class field (signing
+   identity, `mode` — trust-chain-relevant) from appends that add only
+   append-class fact entries, or that merely re-assert an unchanged
+   overwrite-class value (both routine). The distinction is
+   value-change, not field-presence: every signed tag necessarily sets
+   some overwrite-class fields (e.g. `tmb`, `now`), so a
+   presence-based trigger would fire on every tip move.
 
 ## 5. The signature-anchoring law
 
