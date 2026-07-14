@@ -246,6 +246,43 @@ pub fn is_descendant(
     Ok(false)
 }
 
+/// The tip-stability result of re-checking a ref against an OID observed
+/// earlier in a resolution walk.
+///
+/// Genuinely absent from the spec — neither "moved-tip" nor "acquisition
+/// warning" has any hit in `docs/specs/atom-transactions.md` or
+/// `docs/specs/git-storage-format.md` — so this shape (a signal alongside
+/// the resolved value, not a hard error) is a judgment call grounded in
+/// what a consumer needs: enough information to know their resolved view
+/// may already be stale, without `source.rs`'s read-side resolution
+/// failing outright over a race that may be entirely benign (e.g. an
+/// unrelated version being published concurrently).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TipStability {
+    /// The ref's tip is unchanged since it was first observed.
+    Stable,
+    /// The ref's tip moved to a new OID during resolution — the resolved
+    /// view built from the OID first observed may already be stale.
+    Moved(ObjectId),
+    /// The ref no longer exists — it was deleted or force-updated away
+    /// during resolution.
+    Vanished,
+}
+
+/// Re-read `ref_name` and compare its current tip against `observed_tip`,
+/// the OID first observed when a resolution walk over this ref began.
+pub fn tip_stability(
+    repo: &gix::Repository,
+    ref_name: &str,
+    observed_tip: ObjectId,
+) -> Result<TipStability, GitError> {
+    match repo.try_find_reference(ref_name)? {
+        Some(r) if r.id().detach() == observed_tip => Ok(TipStability::Stable),
+        Some(r) => Ok(TipStability::Moved(r.id().detach())),
+        None => Ok(TipStability::Vanished),
+    }
+}
+
 /// Typed boundary between protocol content digests and git `ObjectId`s.
 ///
 /// `[backend-seam-typed]` (`docs/specs/atom-backend-contract.md`): `Czd`
