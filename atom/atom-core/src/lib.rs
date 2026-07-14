@@ -46,7 +46,7 @@
 #![forbid(unsafe_code)]
 
 pub use atom_id::{
-    Alg, Anchor, AtomDigest, AtomId, Cad, Czd, HashAlg, Label, RawVersion, Thumbprint,
+    Alg, Anchor, AtomDigest, AtomId, Cad, Czd, HashAlg, Label, OwnerRef, RawVersion, Thumbprint,
     VersionScheme,
 };
 
@@ -617,7 +617,10 @@ pub trait AtomRegistry: AtomSource {
     ///
     /// Returns the claim's [`Czd`] (coz digest), which must be passed
     /// to [`publish`](Self::publish) to authorize version publication.
-    fn claim(&self, id: &AtomId, owner: &[u8]) -> Result<Czd, Self::Error>;
+    ///
+    /// `owner` is a single owner-reference (`[claim-owner-single]`) — the
+    /// one identity accountable for this label.
+    fn claim(&self, id: &AtomId, owner: &OwnerRef) -> Result<Czd, Self::Error>;
 
     /// Publish a version against an existing claim.
     ///
@@ -649,10 +652,16 @@ pub trait AtomRegistry: AtomSource {
     ///
     /// # Arguments
     ///
-    /// * `owner` — opaque identity digest of the new/incoming owner
+    /// * `owner` — non-empty set of owner-references recognized under this anchor
+    ///   (`[charter-owner-set]`)
     /// * `src` — source revision demarking the chartering point
     /// * `prior` — czd of the charter this one succeeds, or `None` to found a new atom-set
-    fn charter(&self, owner: &[u8], src: &[u8], prior: Option<&Czd>) -> Result<Czd, Self::Error>;
+    fn charter(
+        &self,
+        owner: &[OwnerRef],
+        src: &[u8],
+        prior: Option<&Czd>,
+    ) -> Result<Czd, Self::Error>;
 }
 
 /// Local accumulation interface (consumer-side).

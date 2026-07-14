@@ -63,13 +63,33 @@ pub fn atom_id(genesis_oid: ObjectId, label: &str) -> AtomId {
     AtomId::new(anchor, Label::try_from(label).expect("valid label"))
 }
 
+/// The `single-key` owner-reference authorizing `registry`'s own signing
+/// key -- the value [`GitRegistry::claim`]/[`GitRegistry::charter`] MUST
+/// see to authorize an act signed by this same registry.
+///
+/// `[owner-authorization-delegated]`: a `single-key` owner's `value` MUST
+/// be the key's thumbprint, not the raw public key -- using an arbitrary
+/// placeholder here would make authorization checks that actually depend
+/// on this value (e.g. claim replacement, [`chartered_atom_id`]'s
+/// bootstrap) fail closed.
+pub fn registry_owner(registry: &GitRegistry) -> atom_id::OwnerRef {
+    let tmb = coz_rs::compute_thumbprint_for_alg(Alg::Ed25519.name(), &registry.pub_key)
+        .expect("Ed25519 is always supported");
+    atom_id::OwnerRef::single_key(&tmb)
+}
+
 /// Charters `registry`'s source (founding, no `prior`) and returns an
 /// `AtomId` anchored at the real founding charter's czd — the fixture
 /// `GitRegistry::claim()` requires, since it verifies the anchor against
 /// an actual resolvable charter, not a bare git OID.
 pub fn chartered_atom_id(registry: &GitRegistry, label: &str) -> AtomId {
+    let owner = registry_owner(registry);
     let founding_czd = registry
-        .charter(&registry.pub_key, b"conformance-fixture-src", None)
+        .charter(
+            std::slice::from_ref(&owner),
+            b"conformance-fixture-src",
+            None,
+        )
         .expect("charter");
     let anchor = Anchor::new(founding_czd.as_bytes().to_vec());
     AtomId::new(anchor, Label::try_from(label).expect("valid label"))

@@ -20,9 +20,8 @@ fn bootstrap_seizure_requires_incumbent_authorization() {
     let file = fixtures::load("bootstrap_seizure.json");
     let founding = &file.charters[0].payload;
     let pre_existing_claim = &file.claims[0].payload;
-    assert_ne!(
-        founding.tmb.as_bytes(),
-        pre_existing_claim.owner.as_slice(),
+    assert!(
+        !pre_existing_claim.owner.authorizes(&founding.tmb),
         "sanity: the fixture models an unauthorized signer, not a coincidental match"
     );
 

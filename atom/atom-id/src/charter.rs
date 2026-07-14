@@ -12,7 +12,7 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use crate::{Alg, Czd, Thumbprint};
+use crate::{Alg, Czd, OwnerRef, Thumbprint, owner_set_authorizes};
 
 /// Transaction type for atom-set charters.
 ///
@@ -49,11 +49,16 @@ pub struct CharterPayload {
     /// ordering — chain position (`prior` links) governs precedence
     /// (`[charter-succession-linear]`).
     pub now: u64,
-    /// Opaque identity digest of the owner (e.g., Coz thumbprint or Cyphr PR).
+    /// Non-empty set of owner-references: the principals recognized under
+    /// this anchor.
     ///
-    /// Spec constraint: `[owner-abstract]`.
-    #[cfg_attr(feature = "serde", serde(with = "crate::serde_b64"))]
-    pub owner: Vec<u8>,
+    /// Spec constraints: `[owner-abstract]`, `[charter-owner-set]`,
+    /// `[charter-owner-set-non-empty]`.
+    #[cfg_attr(
+        feature = "serde",
+        serde(deserialize_with = "crate::deserialize_non_empty_owner_set")
+    )]
+    pub owner: Vec<OwnerRef>,
     /// The czd of the charter this one succeeds. `None` for the founding
     /// charter, which defines the atom-set's anchor.
     ///
@@ -74,15 +79,24 @@ impl CharterPayload {
     ///
     /// Sets `typ` to [`TYP_CHARTER`] automatically. Pass `prior: None` to
     /// construct a founding charter, or `prior: Some(czd)` for a successor.
+    ///
+    /// Rejects an empty `owner` set with [`crate::Error::EmptyOwnerSet`] —
+    /// `[charter-owner-set-non-empty]` is enforced at construction, not
+    /// only at deserialization (see `CharterPayload`'s
+    /// `deserialize_with`), so a charter nobody could ever claim under can
+    /// never be built through this crate's own API either.
     pub fn new(
         alg: Alg,
         now: u64,
-        owner: Vec<u8>,
+        owner: Vec<OwnerRef>,
         prior: Option<Czd>,
         src: Vec<u8>,
         tmb: Thumbprint,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, crate::Error> {
+        if owner.is_empty() {
+            return Err(crate::Error::EmptyOwnerSet);
+        }
+        Ok(Self {
             alg,
             now,
             owner,
@@ -90,7 +104,7 @@ impl CharterPayload {
             src,
             tmb,
             typ: TYP_CHARTER.to_owned(),
-        }
+        })
     }
 }
 
@@ -125,6 +139,39 @@ pub fn verify_charter(
         });
     }
     Ok(payload)
+}
+
+/// Verify a charter's declared thumbprint against its actual signing key —
+/// the charter-side instance of Verification Pipeline step 6.
+///
+/// Checks `tmb(charter.key) == charter.pay.tmb`, exactly mirroring
+/// [`crate::verify_claim_key_thumbprint`]/[`crate::verify_publish_key_thumbprint`]'s
+/// same check for claims/publishes. `charter.tmb` is a self-declared
+/// payload field; a valid signature alone does not establish that it
+/// names the actual signing key — any key can validly sign its own
+/// payload while that payload asserts an unrelated `tmb`. Left unchecked,
+/// this defeats [`verify_succession_chain`]'s per-link authorization: a
+/// successor charter validly signed by an attacker's own key, but
+/// declaring `tmb` equal to a legitimate charter-set member's thumbprint,
+/// would be wrongly authorized — a full anchor takeover, not a narrow
+/// gap, since the forged charter re-anchors the whole set going forward.
+/// A caller MUST call this (or otherwise establish the same binding) for
+/// every charter in a chain before trusting
+/// [`verify_succession_chain`]'s result over it.
+///
+/// Spec constraints: `[charter-succession]`, `[owner-authorization-delegated]`.
+#[cfg(feature = "serde")]
+pub fn verify_charter_key_thumbprint(
+    charter: &CharterPayload,
+    alg: &str,
+    pub_key: &[u8],
+) -> Result<(), crate::VerifyError> {
+    let computed = coz_rs::compute_thumbprint_for_alg(alg, pub_key)
+        .ok_or_else(|| crate::VerifyError::UnsupportedAlgorithm(alg.to_string()))?;
+    if computed != charter.tmb {
+        return Err(crate::VerifyError::ThumbprintMismatch);
+    }
+    Ok(())
 }
 
 /// Verify a succession chain of charters for linearity, authorization,
@@ -200,6 +247,17 @@ pub fn verify_succession_chain(
         return Err(crate::VerifyError::NotFoundingCharter);
     }
 
+    // A parentless element at any position other than the first is
+    // malformed regardless of how the caller ordered the input array --
+    // checked directly here rather than left to be inferred (or missed)
+    // by the positional authorization walk below, which trusts `prior`
+    // ordering rather than re-deriving it.
+    for (index, element) in successors.iter().enumerate() {
+        if element.prior.is_none() {
+            return Err(crate::VerifyError::ParentlessNonFirstElement { index: index + 1 });
+        }
+    }
+
     // [charter-succession-linear]: at most one valid successor per prior.
     for (i, a) in chain.iter().enumerate() {
         let Some(a_prior) = &a.prior else { continue };
@@ -211,11 +269,14 @@ pub fn verify_succession_chain(
         }
     }
 
-    // [charter-succession]: each successor's signer authorized by its
-    // prior charter's owner.
+    // [charter-succession]: each successor's signer authorized by
+    // membership in its prior charter's owner SET
+    // (`[owner-authorization-delegated]`'s set composition rule) --
+    // the same `owner_set_authorizes` helper `registry.rs`'s write-side
+    // succession check calls, so the two never drift apart.
     let mut previous = founding;
     for successor in successors {
-        if successor.tmb.as_bytes() != previous.owner.as_slice() {
+        if !owner_set_authorizes(&previous.owner, &successor.tmb) {
             return Err(crate::VerifyError::Unauthorized);
         }
         previous = successor;
@@ -300,7 +361,7 @@ pub fn verify_bootstrap_gate(
     let Some(claim) = earliest_preexisting_claim else {
         return Ok(());
     };
-    if founding.tmb.as_bytes() != claim.owner.as_slice() {
+    if !claim.owner.authorizes(&founding.tmb) {
         return Err(crate::VerifyError::Unauthorized);
     }
     Ok(())
@@ -344,6 +405,7 @@ pub trait CharterStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::OwnerKind;
 
     fn gen_ed25519_key() -> (Vec<u8>, Vec<u8>, crate::Thumbprint) {
         use coz_rs::Ed25519;
@@ -355,18 +417,65 @@ mod tests {
         (prv, pub_bytes, tmb)
     }
 
+    /// A single-entry `single-key` owner set from raw bytes — the common
+    /// case throughout these tests, none of which exercise multi-member
+    /// sets.
+    fn single_owner(bytes: Vec<u8>) -> Vec<OwnerRef> {
+        vec![OwnerRef::new(OwnerKind::SingleKey, bytes)]
+    }
+
     #[test]
     fn charter_payload_typ_constant() {
         let charter = CharterPayload::new(
             crate::Alg::ES256,
             1000,
-            vec![99],
+            single_owner(vec![99]),
+            None,
+            vec![0; 32],
+            crate::Thumbprint::from_bytes(vec![10, 20, 30]),
+        )
+        .unwrap();
+        assert_eq!(charter.typ, TYP_CHARTER);
+        assert_eq!(charter.typ, "atom/charter");
+    }
+
+    #[test]
+    fn charter_payload_rejects_empty_owner_set() {
+        let result = CharterPayload::new(
+            crate::Alg::ES256,
+            1000,
+            Vec::new(),
             None,
             vec![0; 32],
             crate::Thumbprint::from_bytes(vec![10, 20, 30]),
         );
-        assert_eq!(charter.typ, TYP_CHARTER);
-        assert_eq!(charter.typ, "atom/charter");
+        assert!(
+            matches!(result, Err(crate::Error::EmptyOwnerSet)),
+            "[charter-owner-set-non-empty]: an empty owner set must be rejected at construction: \
+             {result:?}"
+        );
+    }
+
+    #[test]
+    fn charter_payload_owner_deserialize_rejects_empty_set() {
+        // [charter-owner-set-non-empty] enforced at the second entry point:
+        // deserialization, independent of the construction-time check.
+        let charter = CharterPayload::new(
+            crate::Alg::ES256,
+            1000,
+            single_owner(vec![99]),
+            None,
+            vec![0; 32],
+            crate::Thumbprint::from_bytes(vec![10, 20, 30]),
+        )
+        .unwrap();
+        let mut json_val = serde_json::to_value(&charter).unwrap();
+        json_val["owner"] = serde_json::Value::Array(vec![]);
+        let result: Result<CharterPayload, _> = serde_json::from_value(json_val);
+        assert!(
+            result.is_err(),
+            "a charter payload with an empty `owner` array must fail to deserialize: {result:?}"
+        );
     }
 
     #[test]
@@ -374,21 +483,23 @@ mod tests {
         let founding = CharterPayload::new(
             crate::Alg::ES256,
             1000,
-            vec![99],
+            single_owner(vec![99]),
             None,
             vec![0; 32],
             crate::Thumbprint::from_bytes(vec![10, 20, 30]),
-        );
+        )
+        .unwrap();
         assert_eq!(founding.prior, None);
 
         let successor = CharterPayload::new(
             crate::Alg::ES256,
             2000,
-            vec![100],
+            single_owner(vec![100]),
             Some(crate::Czd::from_bytes(vec![1, 2, 3])),
             vec![1; 32],
             crate::Thumbprint::from_bytes(vec![40, 50, 60]),
-        );
+        )
+        .unwrap();
         assert_eq!(successor.prior, Some(crate::Czd::from_bytes(vec![1, 2, 3])));
     }
 
@@ -397,11 +508,12 @@ mod tests {
         let charter = CharterPayload::new(
             crate::Alg::ES256,
             1000,
-            vec![99],
+            single_owner(vec![99]),
             Some(crate::Czd::from_bytes(vec![1, 2, 3])),
             vec![0; 32],
             crate::Thumbprint::from_bytes(vec![10, 20, 30]),
-        );
+        )
+        .unwrap();
         let json = serde_json::to_string(&charter).unwrap();
         let back: CharterPayload = serde_json::from_str(&json).unwrap();
         assert_eq!(back, charter);
@@ -410,8 +522,15 @@ mod tests {
     #[test]
     fn verify_charter_roundtrip() {
         let (prv, pub_bytes, tmb) = gen_ed25519_key();
-        let charter =
-            CharterPayload::new(crate::Alg::Ed25519, 1000, vec![99], None, vec![0; 32], tmb);
+        let charter = CharterPayload::new(
+            crate::Alg::Ed25519,
+            1000,
+            single_owner(vec![99]),
+            None,
+            vec![0; 32],
+            tmb,
+        )
+        .unwrap();
         let pay_json = serde_json::to_vec(&charter).unwrap();
         let (sig, _cad) = coz_rs::sign_json(&pay_json, "Ed25519", &prv, &pub_bytes).unwrap();
 
@@ -424,8 +543,15 @@ mod tests {
     #[test]
     fn verify_charter_wrong_typ() {
         let (prv, pub_bytes, tmb) = gen_ed25519_key();
-        let charter =
-            CharterPayload::new(crate::Alg::Ed25519, 1000, vec![99], None, vec![0; 32], tmb);
+        let charter = CharterPayload::new(
+            crate::Alg::Ed25519,
+            1000,
+            single_owner(vec![99]),
+            None,
+            vec![0; 32],
+            tmb,
+        )
+        .unwrap();
         let mut json_val: serde_json::Value = serde_json::to_value(&charter).unwrap();
         json_val["typ"] = serde_json::Value::String("atom/claim".into());
         let pay_json = serde_json::to_vec(&json_val).unwrap();
@@ -439,33 +565,104 @@ mod tests {
     }
 
     #[test]
+    fn verify_charter_key_thumbprint_accepts_matching_signer() {
+        let (_prv, pub_bytes, tmb) = gen_ed25519_key();
+        let charter = CharterPayload::new(
+            crate::Alg::Ed25519,
+            1000,
+            single_owner(vec![1]),
+            None,
+            vec![0; 32],
+            tmb,
+        )
+        .unwrap();
+        let result = verify_charter_key_thumbprint(&charter, "Ed25519", &pub_bytes);
+        assert!(
+            result.is_ok(),
+            "declared tmb matching the real signing key must pass: {result:?}"
+        );
+    }
+
+    #[test]
+    fn verify_charter_key_thumbprint_rejects_forged_tmb() {
+        // The attack this check exists to close: a charter signed by an
+        // ATTACKER's own key (so `verify_charter`'s signature check passes
+        // fine -- any key can validly sign its own payload), but whose
+        // payload declares `tmb` equal to a legitimate owner's thumbprint
+        // instead of the attacker's own. Left unchecked, a downstream
+        // authorization check trusting `charter.tmb` (e.g.
+        // `verify_succession_chain`'s per-link check) would wrongly
+        // authorize this as the legitimate owner.
+        let (_attacker_prv, attacker_pub, _attacker_tmb) = gen_ed25519_key();
+        let (_victim_prv, _victim_pub, victim_tmb) = gen_ed25519_key();
+
+        let forged = CharterPayload::new(
+            crate::Alg::Ed25519,
+            1000,
+            single_owner(vec![1]),
+            None,
+            vec![0; 32],
+            victim_tmb, // declares the VICTIM's tmb, not the attacker's own
+        )
+        .unwrap();
+
+        // Signature check alone passes: signed by the attacker's own key.
+        let pay_json = serde_json::to_vec(&forged).unwrap();
+        let (sig, _cad) =
+            coz_rs::sign_json(&pay_json, "Ed25519", &_attacker_prv, &attacker_pub).unwrap();
+        let sig_result = verify_charter(&pay_json, &sig, "Ed25519", &attacker_pub);
+        assert!(
+            sig_result.is_ok(),
+            "sanity: the forged charter's signature verifies fine against the attacker's own key: \
+             {sig_result:?}"
+        );
+
+        // The tmb-binding check must catch what the signature check cannot.
+        let result = verify_charter_key_thumbprint(&forged, "Ed25519", &attacker_pub);
+        assert!(
+            matches!(result, Err(crate::VerifyError::ThumbprintMismatch)),
+            "a charter whose declared tmb does not match its actual signing key must be rejected, \
+             even though its signature verifies fine: {result:?}"
+        );
+    }
+
+    #[test]
     fn verify_succession_chain_rejects_divergent_successors() {
         // Two successors both naming the same `prior` is a set-authority
         // fork per [charter-succession-linear] — the walk MUST fail
         // closed rather than pick either branch.
         let (_prv0, _pub0, tmb0) = gen_ed25519_key();
-        let founding =
-            CharterPayload::new(crate::Alg::Ed25519, 1000, vec![1], None, vec![0; 32], tmb0);
+        let founding = CharterPayload::new(
+            crate::Alg::Ed25519,
+            1000,
+            single_owner(vec![1]),
+            None,
+            vec![0; 32],
+            tmb0,
+        )
+        .unwrap();
         let founding_czd = crate::Czd::from_bytes(vec![9, 9, 9]); // stand-in for czd(founding)
 
         let (_prv1, _pub1, tmb1) = gen_ed25519_key();
         let successor_a = CharterPayload::new(
             crate::Alg::Ed25519,
             2000,
-            vec![2],
+            single_owner(vec![2]),
             Some(founding_czd.clone()),
             vec![1; 32],
             tmb1,
-        );
+        )
+        .unwrap();
         let (_prv2, _pub2, tmb2) = gen_ed25519_key();
         let successor_b = CharterPayload::new(
             crate::Alg::Ed25519,
             2001,
-            vec![3],
+            single_owner(vec![3]),
             Some(founding_czd),
             vec![1; 32],
             tmb2,
-        );
+        )
+        .unwrap();
 
         let result = verify_succession_chain(&[founding, successor_a, successor_b], None);
         assert!(result.is_err(), "divergent successors must fail closed");
@@ -479,21 +676,23 @@ mod tests {
         let founding = CharterPayload::new(
             crate::Alg::Ed25519,
             1000,
-            founding_owner.clone(),
+            single_owner(founding_owner.clone()),
             None,
             vec![0; 32],
             crate::Thumbprint::from_bytes(vec![0]),
-        );
+        )
+        .unwrap();
         let founding_czd = crate::Czd::from_bytes(vec![9, 9, 9]); // stand-in for czd(founding)
 
         let successor = CharterPayload::new(
             crate::Alg::Ed25519,
             2000,
-            vec![2],
+            single_owner(vec![2]),
             Some(founding_czd.clone()),
             vec![1; 32],
             crate::Thumbprint::from_bytes(founding_owner), // authorized by founding's owner
-        );
+        )
+        .unwrap();
 
         let result = verify_succession_chain(&[founding, successor], Some(&founding_czd));
         assert!(
@@ -507,8 +706,15 @@ mod tests {
         // A chain that never mentions `recorded_head` (a prefix rollback,
         // per [chain-monotonicity]) must fail closed.
         let (_prv0, _pub0, tmb0) = gen_ed25519_key();
-        let founding =
-            CharterPayload::new(crate::Alg::Ed25519, 1000, vec![1], None, vec![0; 32], tmb0);
+        let founding = CharterPayload::new(
+            crate::Alg::Ed25519,
+            1000,
+            single_owner(vec![1]),
+            None,
+            vec![0; 32],
+            tmb0,
+        )
+        .unwrap();
         let unreached_head = crate::Czd::from_bytes(vec![7, 7, 7]); // never named by this chain
 
         let result = verify_succession_chain(&[founding], Some(&unreached_head));
@@ -521,8 +727,15 @@ mod tests {
     #[test]
     fn verify_bootstrap_gate_passes_with_no_preexisting_claim() {
         let (_prv, _pub, tmb) = gen_ed25519_key();
-        let founding =
-            CharterPayload::new(crate::Alg::Ed25519, 1000, vec![1], None, vec![0; 32], tmb);
+        let founding = CharterPayload::new(
+            crate::Alg::Ed25519,
+            1000,
+            single_owner(vec![1]),
+            None,
+            vec![0; 32],
+            tmb,
+        )
+        .unwrap();
         let result = verify_bootstrap_gate(&founding, None);
         assert!(
             result.is_ok(),
@@ -536,11 +749,12 @@ mod tests {
         let founding = CharterPayload::new(
             crate::Alg::Ed25519,
             1000,
-            vec![1],
+            single_owner(vec![1]),
             None,
             vec![0; 32],
             tmb.clone(), // founding signed by the incumbent's own key
-        );
+        )
+        .unwrap();
         let pre_existing_claim = crate::ClaimPayload::new(
             crate::Alg::Ed25519,
             crate::AtomId::new(
@@ -548,7 +762,7 @@ mod tests {
                 crate::Label::try_from("x").unwrap(),
             ),
             500,
-            tmb.as_bytes().to_vec(), // claim owner == founding's signing tmb
+            OwnerRef::single_key(&tmb), // claim owner == founding's signing tmb
             "cargo".to_string(),
             vec![0; 32],
             tmb,
@@ -567,11 +781,12 @@ mod tests {
         let founding = CharterPayload::new(
             crate::Alg::Ed25519,
             1000,
-            vec![1],
+            single_owner(vec![1]),
             None,
             vec![0; 32],
             tmb_stranger, // signed by a stranger, not the incumbent
-        );
+        )
+        .unwrap();
         let pre_existing_claim = crate::ClaimPayload::new(
             crate::Alg::Ed25519,
             crate::AtomId::new(
@@ -579,7 +794,7 @@ mod tests {
                 crate::Label::try_from("x").unwrap(),
             ),
             500,
-            tmb_incumbent.as_bytes().to_vec(),
+            OwnerRef::single_key(&tmb_incumbent),
             "cargo".to_string(),
             vec![0; 32],
             tmb_incumbent,
@@ -599,22 +814,24 @@ mod tests {
         let founding = CharterPayload::new(
             crate::Alg::Ed25519,
             1000,
-            vec![1], // founding owner
+            single_owner(vec![1]), // founding owner
             None,
             vec![0; 32],
             tmb0,
-        );
+        )
+        .unwrap();
         let founding_czd = crate::Czd::from_bytes(vec![9, 9, 9]); // stand-in for czd(founding)
 
         let (_prv_stranger, _pub_stranger, tmb_stranger) = gen_ed25519_key();
         let successor = CharterPayload::new(
             crate::Alg::Ed25519,
             2000,
-            vec![2],
+            single_owner(vec![2]),
             Some(founding_czd),
             vec![1; 32],
             tmb_stranger, // NOT authorized by founding.owner (vec![1])
-        );
+        )
+        .unwrap();
 
         let result = verify_succession_chain(&[founding, successor], None);
         assert!(
@@ -624,10 +841,97 @@ mod tests {
     }
 
     #[test]
+    fn verify_succession_chain_rejects_parentless_non_first_element() {
+        // A malformed chain where a non-first element also carries no
+        // `prior` (e.g. a caller assembling a chain from an untrusted or
+        // buggy source handed two "founding-shaped" elements) must be
+        // rejected directly -- not merely happen to fail elsewhere
+        // depending on how the positional authorization walk treats it.
+        let (_prv0, _pub0, tmb0) = gen_ed25519_key();
+        let founding = CharterPayload::new(
+            crate::Alg::Ed25519,
+            1000,
+            single_owner(vec![1]),
+            None,
+            vec![0; 32],
+            tmb0.clone(),
+        )
+        .unwrap();
+
+        // A second, parentless "founding-shaped" element at index 1 --
+        // authorized by the founding's own owner, so the positional
+        // authorization check alone would not catch this.
+        let malformed_second = CharterPayload::new(
+            crate::Alg::Ed25519,
+            2000,
+            single_owner(vec![2]),
+            None, // parentless, but NOT first
+            vec![1; 32],
+            tmb0,
+        )
+        .unwrap();
+
+        let result = verify_succession_chain(&[founding, malformed_second], None);
+        assert!(
+            matches!(
+                result,
+                Err(crate::VerifyError::ParentlessNonFirstElement { index: 1 })
+            ),
+            "a parentless non-first element must be rejected directly, regardless of caller \
+             ordering: {result:?}"
+        );
+    }
+
+    #[test]
+    fn verify_succession_chain_accepts_successor_authorized_by_any_set_member() {
+        // [owner-authorization-delegated]'s set composition rule: a
+        // successor authorized by ANY entry in the prior's owner set is
+        // authorized -- not only a first or sole entry.
+        let (_prv0, _pub0, tmb0) = gen_ed25519_key();
+        let (_prv_member2, _pub_member2, tmb_member2) = gen_ed25519_key();
+        let founding = CharterPayload::new(
+            crate::Alg::Ed25519,
+            1000,
+            vec![
+                OwnerRef::new(OwnerKind::SingleKey, vec![1]),
+                OwnerRef::single_key(&tmb_member2),
+            ],
+            None,
+            vec![0; 32],
+            tmb0,
+        )
+        .unwrap();
+        let founding_czd = crate::Czd::from_bytes(vec![9, 9, 9]);
+
+        let successor = CharterPayload::new(
+            crate::Alg::Ed25519,
+            2000,
+            single_owner(vec![2]),
+            Some(founding_czd),
+            vec![1; 32],
+            tmb_member2, // the SECOND set member, not the first
+        )
+        .unwrap();
+
+        let result = verify_succession_chain(&[founding, successor], None);
+        assert!(
+            result.is_ok(),
+            "authorization by any set member must succeed: {result:?}"
+        );
+    }
+
+    #[test]
     fn verify_charter_chain_signatures_accepts_all_valid() {
         let (prv0, pub0, tmb0) = gen_ed25519_key();
-        let founding =
-            CharterPayload::new(crate::Alg::Ed25519, 1000, vec![1], None, vec![0; 32], tmb0);
+        let founding = CharterPayload::new(
+            crate::Alg::Ed25519,
+            1000,
+            single_owner(vec![1]),
+            None,
+            vec![0; 32],
+            tmb0,
+        )
+        .unwrap();
         let founding_json = serde_json::to_vec(&founding).unwrap();
         let (founding_sig, _cad) =
             coz_rs::sign_json(&founding_json, "Ed25519", &prv0, &pub0).unwrap();
@@ -636,11 +940,12 @@ mod tests {
         let successor = CharterPayload::new(
             crate::Alg::Ed25519,
             2000,
-            vec![2],
+            single_owner(vec![2]),
             Some(crate::Czd::from_bytes(vec![9, 9, 9])),
             vec![1; 32],
             tmb1,
-        );
+        )
+        .unwrap();
         let successor_json = serde_json::to_vec(&successor).unwrap();
         let (successor_sig, _cad) =
             coz_rs::sign_json(&successor_json, "Ed25519", &prv1, &pub1).unwrap();
@@ -671,8 +976,15 @@ mod tests {
     #[test]
     fn verify_charter_chain_signatures_rejects_invalid_link_signature() {
         let (prv0, pub0, tmb0) = gen_ed25519_key();
-        let founding =
-            CharterPayload::new(crate::Alg::Ed25519, 1000, vec![1], None, vec![0; 32], tmb0);
+        let founding = CharterPayload::new(
+            crate::Alg::Ed25519,
+            1000,
+            single_owner(vec![1]),
+            None,
+            vec![0; 32],
+            tmb0,
+        )
+        .unwrap();
         let founding_json = serde_json::to_vec(&founding).unwrap();
         let (founding_sig, _cad) =
             coz_rs::sign_json(&founding_json, "Ed25519", &prv0, &pub0).unwrap();
@@ -681,11 +993,12 @@ mod tests {
         let successor = CharterPayload::new(
             crate::Alg::Ed25519,
             2000,
-            vec![2],
+            single_owner(vec![2]),
             Some(crate::Czd::from_bytes(vec![9, 9, 9])),
             vec![1; 32],
             tmb1,
-        );
+        )
+        .unwrap();
         let successor_json = serde_json::to_vec(&successor).unwrap();
         let bad_sig = vec![0u8; 64]; // deliberately invalid signature
 

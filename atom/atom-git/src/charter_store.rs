@@ -41,6 +41,20 @@ pub fn charter_ref_name(czd_bytes: &[u8]) -> String {
 /// Returns `(payload, recomputed_czd)` — the caller decides how to use the
 /// recomputed czd (bind-check against an expected key, or record it while
 /// walking a chain). Never trusts the ref key the commit was found under.
+///
+/// Also closes the tmb-binding soundness gap (Verification Pipeline step
+/// 6, charter side) before returning: `payload.tmb` is a self-declared
+/// field, and `verify_charter` alone only proves SOME valid signature
+/// exists over the payload for the embedded key -- not that the embedded
+/// key is the one `tmb` claims. This is the single choke point every
+/// charter resolver in this module goes through
+/// ([`resolve_founding_charter`] and [`resolve_effective_charter`]'s
+/// chain-candidate enumeration alike), so fixing it here closes the gap
+/// for every charter [`atom_id::verify_succession_chain`] is ever asked
+/// to trust: an unbound `tmb` would otherwise let an attacker sign a
+/// forged successor with their OWN key while declaring a legitimate
+/// charter-set member's thumbprint, defeating the per-link authorization
+/// check -- a full anchor takeover, not a narrow gap.
 fn parse_and_verify_charter_commit(
     repo: &gix::Repository,
     oid: gix::hash::ObjectId,
@@ -64,6 +78,7 @@ fn parse_and_verify_charter_commit(
     // trust a ref key or a bare deserialized payload as proof of identity.
     let computed_czd = atom_id::czd_for_alg(&pay_bytes, &envelope.sig, alg_str)?;
     let payload = atom_id::verify_charter(&pay_bytes, &envelope.sig, alg_str, pub_key)?;
+    atom_id::verify_charter_key_thumbprint(&payload, alg_str, pub_key)?;
 
     Ok((payload, computed_czd))
 }
@@ -118,9 +133,19 @@ pub fn resolve_founding_charter(
 /// are included in the assembled chain (rather than the walk picking a
 /// branch) so `verify_succession_chain`'s own scan detects and rejects the
 /// divergence, propagated here as `Err`.
+///
+/// `recorded_head` is threaded straight through to
+/// [`atom_id::verify_succession_chain`]'s own `[chain-monotonicity]` check
+/// — `None` when the caller has no previously recorded head (or is not yet
+/// persisting one; this function does no persistence of its own, only the
+/// threading), `Some` to enforce that the resolved chain demonstrably
+/// extends past it. See that function's doc comment for the
+/// steady-state-unchanged caveat a caller passing a real recorded head
+/// MUST account for.
 pub fn resolve_effective_charter(
     repo: &gix::Repository,
     anchor: &Anchor,
+    recorded_head: Option<&Czd>,
 ) -> Result<Option<(CharterPayload, Vec<CharterPayload>)>, GitError> {
     let Some(founding) = resolve_founding_charter(repo, anchor)? else {
         return Ok(None);
@@ -184,8 +209,12 @@ pub fn resolve_effective_charter(
 
     // Linearity, authorization, and divergence are `verify_succession_chain`'s
     // authority -- it fails closed (`VerifyError::DivergentSuccessors`) on
-    // exactly the forked-chain shape assembled above.
-    atom_id::verify_succession_chain(&chain, None)?;
+    // exactly the forked-chain shape assembled above. `recorded_head` is
+    // threaded through (not hardcoded `None`) so a caller with a real
+    // persisted head can actually get rollback detection
+    // (`[chain-monotonicity]`) rather than the check being permanently
+    // unreachable in production.
+    atom_id::verify_succession_chain(&chain, recorded_head)?;
 
     let effective = chain
         .last()
@@ -273,6 +302,13 @@ mod tests {
         Keypair { prv, pub_key, tmb }
     }
 
+    /// A single-entry `single-key` owner set from raw bytes -- the common
+    /// case throughout these tests, none of which exercise multi-member
+    /// sets.
+    fn single_owner(bytes: Vec<u8>) -> Vec<atom_id::OwnerRef> {
+        vec![atom_id::OwnerRef::new(atom_id::OwnerKind::SingleKey, bytes)]
+    }
+
     /// Sign a `CharterPayload` and build its `CozMessage` envelope JSON,
     /// mirroring `registry.rs::claim()`'s exact serialize/sign/envelope
     /// idiom.
@@ -329,11 +365,12 @@ mod tests {
         let founding = CharterPayload::new(
             Alg::Ed25519,
             1_700_000_000,
-            owner.pub_key.clone(),
+            single_owner(owner.pub_key.clone()),
             None,
             vec![9u8; 20],
             owner.tmb.clone(),
-        );
+        )
+        .unwrap();
         let (msg, czd) = sign_charter(&founding, &owner.prv, &owner.pub_key);
         write_and_ref_charter(&repo, msg, &czd);
 
@@ -342,6 +379,42 @@ mod tests {
             .expect("resolution must not error")
             .expect("a real founding charter must resolve");
         assert_eq!(resolved, founding);
+    }
+
+    /// Adversarial (tmb-binding, founding): a charter validly signed by an
+    /// ATTACKER's own key, but whose payload declares `tmb` equal to some
+    /// other (victim) key's thumbprint, must be rejected -- signature
+    /// verification alone cannot catch this, since any key can validly
+    /// sign its own payload while lying about which key that is.
+    #[test]
+    fn resolve_founding_charter_rejects_forged_tmb() {
+        let (_dir, repo) = setup_test_repo();
+        let attacker = gen_keypair();
+        let victim = gen_keypair();
+
+        let forged = CharterPayload::new(
+            Alg::Ed25519,
+            1_700_000_000,
+            single_owner(victim.pub_key.clone()),
+            None,
+            vec![9u8; 20],
+            victim.tmb.clone(), // declares the VICTIM's tmb
+        )
+        .unwrap();
+        // ...but is signed by the ATTACKER's own key.
+        let (msg, czd) = sign_charter(&forged, &attacker.prv, &attacker.pub_key);
+        write_and_ref_charter(&repo, msg, &czd);
+
+        let anchor = Anchor::new(czd.as_bytes().to_vec());
+        let result = resolve_founding_charter(&repo, &anchor);
+        assert!(
+            matches!(
+                result,
+                Err(GitError::Verify(atom_id::VerifyError::ThumbprintMismatch))
+            ),
+            "a charter signed by one key but declaring another key's tmb must be rejected, not \
+             silently trusted on its declared tmb alone: {result:?}"
+        );
     }
 
     #[test]
@@ -366,11 +439,12 @@ mod tests {
         let founding = CharterPayload::new(
             Alg::Ed25519,
             1_700_000_000,
-            owner.pub_key.clone(),
+            single_owner(owner.pub_key.clone()),
             None,
             vec![9u8; 20],
             owner.tmb.clone(),
-        );
+        )
+        .unwrap();
         let (msg, real_czd) = sign_charter(&founding, &owner.prv, &owner.pub_key);
 
         // Plant the commit under a DIFFERENT czd-keyed ref than its actual
@@ -397,11 +471,12 @@ mod tests {
         let founding = CharterPayload::new(
             Alg::Ed25519,
             1_700_000_000,
-            successor.pub_key.clone(),
+            single_owner(successor.pub_key.clone()),
             None,
             vec![9u8; 20],
             founder.tmb.clone(),
-        );
+        )
+        .unwrap();
         let (founding_msg, founding_czd) = sign_charter(&founding, &founder.prv, &founder.pub_key);
         write_and_ref_charter(&repo, founding_msg, &founding_czd);
 
@@ -411,11 +486,12 @@ mod tests {
         let successor_payload = CharterPayload::new(
             Alg::Ed25519,
             1_700_000_100,
-            vec![7u8; 4],
+            single_owner(vec![7u8; 4]),
             Some(founding_czd.clone()),
             vec![9u8; 20],
             successor.tmb.clone(),
-        );
+        )
+        .unwrap();
         let (successor_msg, successor_czd) =
             sign_charter(&successor_payload, &successor.prv, &successor.pub_key);
         write_and_ref_charter(&repo, successor_msg, &successor_czd);
@@ -445,38 +521,42 @@ mod tests {
         let founding = CharterPayload::new(
             Alg::Ed25519,
             1000,
-            owner1.tmb.as_bytes().to_vec(), // founding names owner1 (by thumbprint) as next owner
+            single_owner(owner1.tmb.as_bytes().to_vec()), /* founding names owner1 (by
+                                                           * thumbprint) as next owner */
             None,
             vec![1u8; 20],
             owner0.tmb.clone(),
-        );
+        )
+        .unwrap();
         let (founding_msg, founding_czd) = sign_charter(&founding, &owner0.prv, &owner0.pub_key);
         write_and_ref_charter(&repo, founding_msg, &founding_czd);
 
         let mid = CharterPayload::new(
             Alg::Ed25519,
             2000,
-            owner2.tmb.as_bytes().to_vec(),
+            single_owner(owner2.tmb.as_bytes().to_vec()),
             Some(founding_czd.clone()),
             vec![1u8; 20],
             owner1.tmb.clone(), // authorized by founding's owner (owner1's tmb)
-        );
+        )
+        .unwrap();
         let (mid_msg, mid_czd) = sign_charter(&mid, &owner1.prv, &owner1.pub_key);
         write_and_ref_charter(&repo, mid_msg, &mid_czd);
 
         let tail = CharterPayload::new(
             Alg::Ed25519,
             3000,
-            vec![9u8; 4],
+            single_owner(vec![9u8; 4]),
             Some(mid_czd.clone()),
             vec![1u8; 20],
             owner2.tmb.clone(), // authorized by mid's owner (owner2's tmb)
-        );
+        )
+        .unwrap();
         let (tail_msg, tail_czd) = sign_charter(&tail, &owner2.prv, &owner2.pub_key);
         write_and_ref_charter(&repo, tail_msg, &tail_czd);
 
         let anchor = Anchor::new(founding_czd.as_bytes().to_vec());
-        let (effective, chain) = resolve_effective_charter(&repo, &anchor)
+        let (effective, chain) = resolve_effective_charter(&repo, &anchor, None)
             .expect("resolution must not error")
             .expect("a real chain must resolve");
 
@@ -499,44 +579,52 @@ mod tests {
     fn resolve_effective_charter_fails_closed_on_divergent_successor() {
         let (_dir, repo) = setup_test_repo();
         let owner0 = gen_keypair();
-        let owner_a = gen_keypair();
-        let owner_b = gen_keypair();
 
         let founding = CharterPayload::new(
             Alg::Ed25519,
             1000,
-            owner0.tmb.as_bytes().to_vec(), // self-authorizes both forks for this test
+            single_owner(owner0.tmb.as_bytes().to_vec()), /* self-authorizes both forks for this
+                                                           * test */
             None,
             vec![1u8; 20],
             owner0.tmb.clone(),
-        );
+        )
+        .unwrap();
         let (founding_msg, founding_czd) = sign_charter(&founding, &owner0.prv, &owner0.pub_key);
         write_and_ref_charter(&repo, founding_msg, &founding_czd);
 
+        // Both successors are signed by owner0's OWN key and correctly
+        // declare owner0's own tmb -- per spec commentary, "nothing can
+        // prevent a key from signing two successors naming the same
+        // prior"; the fork itself is the thing under test here, not a
+        // forged tmb (a distinct attack, covered by
+        // `verify_charter_key_thumbprint_rejects_forged_tmb`).
         let successor_a = CharterPayload::new(
             Alg::Ed25519,
             2000,
-            vec![1u8; 4],
+            single_owner(vec![1u8; 4]),
             Some(founding_czd.clone()),
             vec![1u8; 20],
             owner0.tmb.clone(),
-        );
-        let (msg_a, czd_a) = sign_charter(&successor_a, &owner_a.prv, &owner_a.pub_key);
+        )
+        .unwrap();
+        let (msg_a, czd_a) = sign_charter(&successor_a, &owner0.prv, &owner0.pub_key);
         write_and_ref_charter(&repo, msg_a, &czd_a);
 
         let successor_b = CharterPayload::new(
             Alg::Ed25519,
             2001,
-            vec![2u8; 4],
+            single_owner(vec![2u8; 4]),
             Some(founding_czd.clone()),
             vec![1u8; 20],
             owner0.tmb.clone(),
-        );
-        let (msg_b, czd_b) = sign_charter(&successor_b, &owner_b.prv, &owner_b.pub_key);
+        )
+        .unwrap();
+        let (msg_b, czd_b) = sign_charter(&successor_b, &owner0.prv, &owner0.pub_key);
         write_and_ref_charter(&repo, msg_b, &czd_b);
 
         let anchor = Anchor::new(founding_czd.as_bytes().to_vec());
-        let result = resolve_effective_charter(&repo, &anchor);
+        let result = resolve_effective_charter(&repo, &anchor, None);
         assert!(
             matches!(
                 result,
@@ -546,6 +634,70 @@ mod tests {
              (verify_succession_chain's own fail-closed check), not silently resolved to one \
              branch or rejected for an unrelated reason: {result:?}"
         );
+    }
+
+    /// Adversarial (tmb-binding, succession -- the anchor-takeover case):
+    /// a successor charter validly signed by an ATTACKER's own key, but
+    /// declaring `tmb` equal to the founding owner's thumbprint, must be
+    /// rejected. Left unchecked, `verify_succession_chain`'s per-link
+    /// authorization check (`owner_set_authorizes(&previous.owner,
+    /// &successor.tmb)`) would trust the declared `tmb` alone and
+    /// authorize the attacker as if they held the legitimate owner's key
+    /// -- full re-anchoring authority over the atom-set, not a narrow
+    /// resolution bug.
+    #[test]
+    fn resolve_effective_charter_rejects_successor_with_forged_tmb() {
+        let (_dir, repo) = setup_test_repo();
+        let owner0 = gen_keypair();
+        let attacker = gen_keypair();
+
+        let founding = CharterPayload::new(
+            Alg::Ed25519,
+            1000,
+            single_owner(owner0.tmb.as_bytes().to_vec()),
+            None,
+            vec![1u8; 20],
+            owner0.tmb.clone(),
+        )
+        .unwrap();
+        let (founding_msg, founding_czd) = sign_charter(&founding, &owner0.prv, &owner0.pub_key);
+        write_and_ref_charter(&repo, founding_msg, &founding_czd);
+
+        // Forged successor: signed by the ATTACKER's own key, but the
+        // payload declares `tmb` equal to owner0's (the only legitimate
+        // charter-set member) -- exactly the forgery
+        // `verify_charter_key_thumbprint` exists to catch.
+        let forged_successor = CharterPayload::new(
+            Alg::Ed25519,
+            2000,
+            single_owner(attacker.pub_key.clone()), // attacker names themself sole future owner
+            Some(founding_czd.clone()),
+            vec![1u8; 20],
+            owner0.tmb.clone(), // forged: declares owner0's tmb, not the attacker's own
+        )
+        .unwrap();
+        let (msg, czd) = sign_charter(&forged_successor, &attacker.prv, &attacker.pub_key);
+        write_and_ref_charter(&repo, msg, &czd);
+
+        let anchor = Anchor::new(founding_czd.as_bytes().to_vec());
+        let result = resolve_effective_charter(&repo, &anchor, None);
+        assert!(
+            matches!(
+                result,
+                Err(GitError::Verify(atom_id::VerifyError::ThumbprintMismatch))
+            ),
+            "a successor signed by an attacker's key but declaring the legitimate owner's tmb \
+             must be rejected before authorization ever trusts the declared tmb -- an anchor \
+             takeover, not a narrow gap, if this is missed: {result:?}"
+        );
+
+        // Confirm the takeover genuinely didn't happen: the founding
+        // charter, not the forged successor, must remain the only
+        // resolvable state for this anchor.
+        let founding_only = resolve_founding_charter(&repo, &anchor)
+            .expect("the founding charter alone must still resolve cleanly")
+            .expect("founding charter must exist");
+        assert_eq!(founding_only, founding);
     }
 
     // -------------------------------------------------------------
@@ -560,11 +712,12 @@ mod tests {
         let founding = CharterPayload::new(
             Alg::Ed25519,
             1_700_000_000,
-            owner.pub_key.clone(),
+            single_owner(owner.pub_key.clone()),
             None,
             vec![9u8; 20],
             owner.tmb.clone(),
-        );
+        )
+        .unwrap();
         let (msg, czd) = sign_charter(&founding, &owner.prv, &owner.pub_key);
         write_and_ref_charter(&repo, msg, &czd);
 
@@ -589,11 +742,12 @@ mod tests {
         let founding = CharterPayload::new(
             Alg::Ed25519,
             1_700_000_000,
-            owner.pub_key.clone(),
+            single_owner(owner.pub_key.clone()),
             None,
             vec![9u8; 20],
             owner.tmb.clone(),
-        );
+        )
+        .unwrap();
         let (msg, real_czd) = sign_charter(&founding, &owner.prv, &owner.pub_key);
 
         let wrong_czd = Czd::from_bytes(vec![0xEE; real_czd.as_bytes().len()]);

@@ -86,10 +86,10 @@ mod backend_ancestry_sound {
     #[ignore = "GAP: backend-ancestry-sound (P15) is used by \
                 [temporal-vector]/[no-backdated-src]/[charter-ancestry] but never stated as an \
                 obligation. atom-git's ancestry primitive (gix_util::is_descendant) does walk \
-                hash-committed commit.parent_ids() — the right shape — but \
-                no spec obligation or machine-checked proof binds that fact yet. Node: \
-                n3-alloy-seam (P15's abstract row) + a doc-amendment sweep item stating the git \
-                argument (parent OIDs are in the hashed preimage)."]
+                hash-committed commit.parent_ids() — the right shape — but no spec obligation or \
+                machine-checked proof binds that fact yet. Node: n3-alloy-seam (P15's abstract \
+                row) + a doc-amendment sweep item stating the git argument (parent OIDs are in the \
+                hashed preimage)."]
     fn ancestry_sound_law_unstated() {
         unreachable!("ignored: see #[ignore] reason — GAP, founding finding of the contract");
     }
@@ -137,7 +137,7 @@ mod backend_ancestry_queryable {
 // ---------------------------------------------------------------------
 mod backend_refs_linearizable {
     use super::*;
-    use crate::common::{chartered_atom_id, new_registry, setup_repo};
+    use crate::common::{chartered_atom_id, new_registry, registry_owner, setup_repo};
 
     /// The mechanism half: gix's per-ref transaction genuinely rejects a
     /// write whose `expected` no longer matches the ref's live value —
@@ -149,7 +149,9 @@ mod backend_refs_linearizable {
         let registry = new_registry(repo.clone(), "cargo");
         let id = chartered_atom_id(&registry, "pkg-a");
 
-        let _ = registry.claim(&id, b"owner").expect("initial claim");
+        let _ = registry
+            .claim(&id, &registry_owner(&registry))
+            .expect("initial claim");
 
         let claim_ref_name = "refs/atom/claims/pub/pkg-a";
         let live_oid = repo
@@ -203,7 +205,7 @@ mod backend_refs_linearizable {
 mod backend_refs_atomic_multi {
     use atom_core::AtomRegistry;
 
-    use crate::common::{chartered_atom_id, new_registry, setup_repo};
+    use crate::common::{chartered_atom_id, new_registry, registry_owner, setup_repo};
 
     /// `claim()` writes the claim ref and its protective src ref through
     /// a single `gix::Repository::edit_references` batch
@@ -215,7 +217,9 @@ mod backend_refs_atomic_multi {
         let registry = new_registry(repo.clone(), "cargo");
         let id = chartered_atom_id(&registry, "pkg-b");
 
-        let _ = registry.claim(&id, b"owner").expect("claim");
+        let _ = registry
+            .claim(&id, &registry_owner(&registry))
+            .expect("claim");
 
         let claim_ref = repo
             .try_find_reference("refs/atom/claims/pub/pkg-b")
@@ -345,7 +349,7 @@ mod backend_carriage_bit_perfect {
 mod backend_chain_append {
     use atom_core::AtomRegistry;
 
-    use crate::common::{chartered_atom_id, new_registry, setup_repo};
+    use crate::common::{chartered_atom_id, new_registry, registry_owner, setup_repo};
 
     /// Claim rotation is append-only: the prior claim commit remains a
     /// retrievable git object after a successor claim lands.
@@ -355,7 +359,9 @@ mod backend_chain_append {
         let registry = new_registry(repo.clone(), "cargo");
         let id = chartered_atom_id(&registry, "pkg-d");
 
-        let _ = registry.claim(&id, b"owner-1").expect("first claim");
+        let _ = registry
+            .claim(&id, &registry_owner(&registry))
+            .expect("first claim");
         let first_claim_oid = repo
             .try_find_reference("refs/atom/claims/pub/pkg-d")
             .unwrap()
@@ -365,7 +371,9 @@ mod backend_chain_append {
 
         // Second claim with the same signing identity — a legitimate
         // rotation/update against the same active claim chain.
-        let _ = registry.claim(&id, b"owner-1").expect("second claim");
+        let _ = registry
+            .claim(&id, &registry_owner(&registry))
+            .expect("second claim");
 
         assert!(
             repo.find_object(first_claim_oid).is_ok(),
@@ -388,7 +396,7 @@ mod backend_chain_append {
 mod backend_enumeration {
     use atom_core::{AtomRegistry, AtomSource, RawVersion};
 
-    use crate::common::{chartered_atom_id, new_registry, setup_repo};
+    use crate::common::{chartered_atom_id, new_registry, registry_owner, setup_repo};
 
     /// A claimed+published atom is discoverable and resolvable purely
     /// from ref/commit-message scans (`GitSource::discover`/`resolve`),
@@ -399,7 +407,9 @@ mod backend_enumeration {
         let registry = new_registry(repo.clone(), "cargo");
         let id = chartered_atom_id(&registry, "pkg-e");
 
-        let claim_czd = registry.claim(&id, b"owner").expect("claim");
+        let claim_czd = registry
+            .claim(&id, &registry_owner(&registry))
+            .expect("claim");
         let empty_tree = repo
             .write_object(gix::objs::Tree {
                 entries: Vec::new(),
@@ -468,7 +478,7 @@ mod backend_refs_sole_mutability {
 mod backend_liveness_protection {
     use atom_core::AtomRegistry;
 
-    use crate::common::{chartered_atom_id, new_registry, setup_repo};
+    use crate::common::{chartered_atom_id, new_registry, registry_owner, setup_repo};
 
     /// After `claim()`, the protective `refs/atom/src/{oid}` ref exists
     /// and its target (the claim's src revision) is retrievable — the
@@ -480,7 +490,9 @@ mod backend_liveness_protection {
         let registry = new_registry(repo.clone(), "cargo");
         let id = chartered_atom_id(&registry, "pkg-f");
 
-        let _ = registry.claim(&id, b"owner").expect("claim");
+        let _ = registry
+            .claim(&id, &registry_owner(&registry))
+            .expect("claim");
 
         let src_ref_name = format!("refs/atom/src/{}", genesis.to_hex());
         let src_ref = repo
@@ -519,14 +531,16 @@ mod backend_substitutable {
     #[ignore = "PARTIAL (atom-backend-contract.md Appendix A, backend-substitutable row): the \
                 property is inherently cross-backend (interchangeability WITH another backend); \
                 git's own determinism (snapshot-deterministic + canonical serialization) \
-                discharges its git-side half, but there is no second conforming backend to \
-                compare against yet, so a golden-trace conformance test cannot run. This row was \
-                MISSING from Appendix A when this crate first landed (a genuine spec defect this \
-                Reserved predicate correctly froze rather than resolved) — the composer added it \
-                directly afterward (PR #77). The ignore verdict is unchanged by that fix; only \
-                the reason has been corrected to match the row that now exists."]
+                discharges its git-side half, but there is no second conforming backend to compare \
+                against yet, so a golden-trace conformance test cannot run. This row was MISSING \
+                from Appendix A when this crate first landed (a genuine spec defect this Reserved \
+                predicate correctly froze rather than resolved) — the composer added it directly \
+                afterward (PR #77). The ignore verdict is unchanged by that fix; only the reason \
+                has been corrected to match the row that now exists."]
     fn substitutable_missing_from_appendix_a() {
-        unreachable!("ignored: see #[ignore] reason — PARTIAL, no second backend to compare against");
+        unreachable!(
+            "ignored: see #[ignore] reason — PARTIAL, no second backend to compare against"
+        );
     }
 }
 
@@ -537,16 +551,17 @@ mod backend_verification_carried {
     #[test]
     #[ignore = "Discharged (implicit) (atom-backend-contract.md Appendix A, \
                 backend-verification-carried row): true of git's local object model by \
-                construction — once fetched, every object reads from the local database with \
-                zero network round-trips — but no git-storage-format.md constraint states this \
-                as a formal obligation, so there is nothing to test against as an integration \
-                check. This row was MISSING from Appendix A when this crate first landed (the \
-                same spec defect as backend-substitutable, correctly frozen rather than \
-                resolved) — the composer added it directly afterward (PR #77). The ignore \
-                verdict is unchanged by that fix; only the reason has been corrected to match \
-                the row that now exists."]
+                construction — once fetched, every object reads from the local database with zero \
+                network round-trips — but no git-storage-format.md constraint states this as a \
+                formal obligation, so there is nothing to test against as an integration check. \
+                This row was MISSING from Appendix A when this crate first landed (the same spec \
+                defect as backend-substitutable, correctly frozen rather than resolved) — the \
+                composer added it directly afterward (PR #77). The ignore verdict is unchanged by \
+                that fix; only the reason has been corrected to match the row that now exists."]
     fn verification_carried_missing_from_appendix_a() {
-        unreachable!("ignored: see #[ignore] reason — Discharged (implicit), nothing to test against");
+        unreachable!(
+            "ignored: see #[ignore] reason — Discharged (implicit), nothing to test against"
+        );
     }
 }
 

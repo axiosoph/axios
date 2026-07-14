@@ -87,7 +87,7 @@ use std::str::FromStr;
 #[cfg(feature = "serde")]
 pub use charter::{
     CharterLink, verify_bootstrap_gate, verify_charter, verify_charter_chain_signatures,
-    verify_succession_chain,
+    verify_charter_key_thumbprint, verify_succession_chain,
 };
 pub use charter::{CharterPayload, CharterStore, TYP_CHARTER};
 pub use coz_rs::{Alg, Cad, Czd, Thumbprint, canonical, canonical_hash_for_alg};
@@ -285,6 +285,209 @@ impl<'de> Deserialize<'de> for AtomId {
 }
 
 // ============================================================================
+// OwnerKind / OwnerRef
+// ============================================================================
+
+/// Which external identity framework interprets an [`OwnerRef`]'s `value`.
+///
+/// Required and explicit on every owner-reference — there is no implicit
+/// default, not even for `SingleKey`; a producer MUST tag every
+/// owner-reference explicitly, and a consumer encountering an absent `kind`
+/// field on the wire MUST treat it as a hard parse error, never a fallback.
+///
+/// `Hierarchical` and `RootedIdentity` are named and reserved — not yet
+/// implemented. A consumer encountering either MUST reject cleanly (treat
+/// the `OwnerRef` as unauthorizable) rather than attempt to interpret
+/// `value`.
+///
+/// Spec constraint: `[owner-kind-required]`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "kebab-case"))]
+pub enum OwnerKind {
+    /// A raw Coz key thumbprint. `value` = key thumbprint bytes. The only
+    /// tier with a working authorization evaluator today.
+    SingleKey,
+    /// OpenPGP-style master key + subkeys. `value` = master key
+    /// fingerprint. Named and reserved — not yet implemented.
+    Hierarchical,
+    /// A Cyphr Principal Root identity. `value` = PR digest. Named and
+    /// reserved — not yet implemented.
+    RootedIdentity,
+}
+
+/// One kind-tagged, opaque identity digest — the protocol's unit of
+/// identity.
+///
+/// `value` MUST be treated as an opaque byte vector; the protocol imposes
+/// no interpretation on its contents beyond what `kind` names.
+/// `ClaimPayload.owner` is a single `OwnerRef` (`[claim-owner-single]`);
+/// `CharterPayload.owner` is a non-empty set of them
+/// (`[charter-owner-set]`) — the two payloads share this same shape at
+/// different cardinalities, not different owner concepts.
+///
+/// Spec constraint: `[owner-abstract]`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct OwnerRef {
+    /// Which identity framework interprets `value`.
+    pub kind: OwnerKind,
+    /// Opaque identity digest, meaning determined entirely by `kind`.
+    #[cfg_attr(feature = "serde", serde(with = "serde_b64"))]
+    pub value: Vec<u8>,
+}
+
+impl OwnerRef {
+    /// Construct an owner-reference.
+    pub fn new(kind: OwnerKind, value: Vec<u8>) -> Self {
+        Self { kind, value }
+    }
+
+    /// Construct a `single-key` owner-reference from a key thumbprint.
+    pub fn single_key(tmb: &Thumbprint) -> Self {
+        Self {
+            kind: OwnerKind::SingleKey,
+            value: tmb.as_bytes().to_vec(),
+        }
+    }
+
+    /// Whether a signing key with thumbprint `tmb` is authorized by this
+    /// owner-reference, under `kind`'s own authorization semantics
+    /// (`[owner-authorization-delegated]`'s per-value rule).
+    ///
+    /// `Hierarchical` and `RootedIdentity` are named and reserved: this
+    /// always returns `false` for them rather than attempting to interpret
+    /// `value` — a clean rejection, not an error, matching
+    /// `[owner-kind-required]`'s "treat as unauthorizable" directive.
+    #[must_use]
+    pub fn authorizes(&self, tmb: &Thumbprint) -> bool {
+        match self.kind {
+            OwnerKind::SingleKey => self.value == tmb.as_bytes(),
+            OwnerKind::Hierarchical | OwnerKind::RootedIdentity => false,
+        }
+    }
+}
+
+/// Whether a signing key with thumbprint `tmb` is authorized by ANY entry
+/// in an owner set, evaluated under each entry's own `kind`.
+///
+/// Set membership is a disjunction over single-valued authorization, never
+/// a distinct mechanism of its own (`[owner-authorization-delegated]`'s set
+/// composition rule, the charter-owner case).
+#[must_use]
+pub fn owner_set_authorizes(owners: &[OwnerRef], tmb: &Thumbprint) -> bool {
+    owners.iter().any(|o| o.authorizes(tmb))
+}
+
+/// Deserialize `CharterPayload.owner`, rejecting an empty set outright.
+///
+/// `[charter-owner-set-non-empty]`: a charter whose owner set would contain
+/// zero entries is a charter nobody could ever claim under. Enforced here
+/// (deserialization) and in [`CharterPayload::new`] (construction) — the
+/// two points data can enter this type.
+#[cfg(feature = "serde")]
+pub(crate) fn deserialize_non_empty_owner_set<'de, D>(
+    deserializer: D,
+) -> Result<Vec<OwnerRef>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let owners: Vec<OwnerRef> = Deserialize::deserialize(deserializer)?;
+    if owners.is_empty() {
+        return Err(serde::de::Error::custom(
+            "charter owner set must be non-empty ([charter-owner-set-non-empty])",
+        ));
+    }
+    Ok(owners)
+}
+
+#[cfg(test)]
+mod owner_tests {
+    use super::*;
+
+    fn tmb(byte: u8) -> Thumbprint {
+        Thumbprint::from_bytes(vec![byte; 4])
+    }
+
+    #[test]
+    fn single_key_authorizes_matching_thumbprint() {
+        let owner = OwnerRef::single_key(&tmb(7));
+        assert!(owner.authorizes(&tmb(7)));
+    }
+
+    #[test]
+    fn single_key_rejects_mismatched_thumbprint() {
+        let owner = OwnerRef::single_key(&tmb(7));
+        assert!(!owner.authorizes(&tmb(9)));
+    }
+
+    #[test]
+    fn hierarchical_and_rooted_identity_never_authorize() {
+        let hierarchical = OwnerRef::new(OwnerKind::Hierarchical, vec![7; 4]);
+        let rooted = OwnerRef::new(OwnerKind::RootedIdentity, vec![7; 4]);
+        // Even a byte-identical `value` to a would-be matching thumbprint
+        // must not authorize -- these tiers have no working evaluator and
+        // MUST reject cleanly rather than fall back to single-key
+        // comparison semantics.
+        assert!(!hierarchical.authorizes(&tmb(7)));
+        assert!(!rooted.authorizes(&tmb(7)));
+    }
+
+    #[test]
+    fn owner_set_authorizes_is_a_disjunction() {
+        let owners = vec![
+            OwnerRef::single_key(&tmb(1)),
+            OwnerRef::single_key(&tmb(2)),
+            OwnerRef::single_key(&tmb(3)),
+        ];
+        assert!(owner_set_authorizes(&owners, &tmb(2)));
+        assert!(!owner_set_authorizes(&owners, &tmb(9)));
+    }
+
+    #[test]
+    fn owner_set_authorizes_rejects_empty_set() {
+        assert!(!owner_set_authorizes(&[], &tmb(1)));
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn owner_kind_has_no_default_and_missing_kind_is_a_parse_error() {
+        // No `kind` field at all on the wire must be a hard parse error --
+        // not a fallback to `single-key` or any other default.
+        let json = serde_json::json!({ "value": "AQID" });
+        let result: Result<OwnerRef, _> = serde_json::from_value(json);
+        assert!(
+            result.is_err(),
+            "an OwnerRef with no `kind` field must fail to deserialize, not default"
+        );
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn owner_kind_wire_names_match_spec() {
+        let owner = OwnerRef::new(OwnerKind::SingleKey, vec![1, 2, 3]);
+        let json = serde_json::to_value(&owner).unwrap();
+        assert_eq!(json["kind"], "single-key");
+
+        let owner = OwnerRef::new(OwnerKind::Hierarchical, vec![1, 2, 3]);
+        let json = serde_json::to_value(&owner).unwrap();
+        assert_eq!(json["kind"], "hierarchical");
+
+        let owner = OwnerRef::new(OwnerKind::RootedIdentity, vec![1, 2, 3]);
+        let json = serde_json::to_value(&owner).unwrap();
+        assert_eq!(json["kind"], "rooted-identity");
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn owner_kind_rejects_unknown_variant() {
+        let json = serde_json::json!({ "kind": "quantum-resistant", "value": "AQID" });
+        let result: Result<OwnerRef, _> = serde_json::from_value(json);
+        assert!(result.is_err());
+    }
+}
+
+// ============================================================================
 // ClaimPayload
 // ============================================================================
 
@@ -321,11 +524,11 @@ pub struct ClaimPayload {
     pub label: Label,
     /// Timestamp (seconds since Unix epoch) for fork disambiguation.
     pub now: u64,
-    /// Opaque identity digest of the owner (e.g., Coz thumbprint or Cyphr PR).
+    /// Single owner-reference: the one identity accountable for this
+    /// label.
     ///
-    /// Spec constraint: `[owner-abstract]`.
-    #[cfg_attr(feature = "serde", serde(with = "serde_b64"))]
-    pub owner: Vec<u8>,
+    /// Spec constraints: `[owner-abstract]`, `[claim-owner-single]`.
+    pub owner: OwnerRef,
     /// PURL type identifying the package ecosystem (e.g., "cargo").
     pub pkg: String,
     /// The czd of the claim this one replaces. `None` for a
@@ -360,7 +563,7 @@ impl ClaimPayload {
         alg: Alg,
         id: AtomId,
         now: u64,
-        owner: Vec<u8>,
+        owner: OwnerRef,
         pkg: String,
         src: Vec<u8>,
         tmb: Thumbprint,
@@ -397,7 +600,7 @@ impl ClaimPayload {
         alg: Alg,
         id: AtomId,
         now: u64,
-        owner: Vec<u8>,
+        owner: OwnerRef,
         pkg: String,
         prior: Czd,
         governance: bool,
@@ -661,6 +864,11 @@ pub enum Error {
     /// Invalid label in atom ID.
     #[error("invalid label in atom ID")]
     InvalidLabel,
+    /// A charter's owner set would contain zero entries.
+    ///
+    /// Spec constraint: `[charter-owner-set-non-empty]`.
+    #[error("charter owner set must be non-empty")]
+    EmptyOwnerSet,
 }
 
 /// Errors produced by transaction verification.
@@ -701,6 +909,17 @@ pub enum VerifyError {
     /// Spec constraint: `[charter-anchor]`.
     #[error("succession chain does not begin with a founding charter")]
     NotFoundingCharter,
+    /// A succession chain element at a position other than the first
+    /// carries no `prior` — a parentless element MUST only ever appear at
+    /// the start of a chain, checked directly rather than inferred from
+    /// caller-supplied ordering.
+    ///
+    /// Spec constraint: `[charter-anchor]`.
+    #[error("succession chain element at index {index} carries no `prior`, but is not first")]
+    ParentlessNonFirstElement {
+        /// The chain index of the offending element.
+        index: usize,
+    },
     /// Two charters in a succession chain name the same `prior` — a
     /// set-authority fork that MUST fail closed rather than pick a branch.
     ///
@@ -827,13 +1046,13 @@ pub fn verify_publish(
 /// authorized by EXACTLY one of the two authorities
 /// `[claim-replacement-authority]` names:
 ///
-/// - **owner replacement** — `replacement.tmb == prior.owner`: the ordinary path, no marking
-///   required.
-/// - **governance replacement** — `replacement.tmb == charter_owner` AND `replacement.governance ==
-///   true`: a signer authorized by the effective charter's owner but NOT marking the replacement as
-///   a governance seizure is treated the same as an unauthorized signer —
-///   `[claim-replacement-authority]`'s "MUST carry `governance: true`" is itself part of the
-///   authority check, not a separate concern.
+/// - **owner replacement** — `prior.owner` authorizes `replacement.tmb`
+///   (`[owner-authorization-delegated]`'s per-value rule): the ordinary path, no marking required.
+/// - **governance replacement** — some entry in `charter_owners` authorizes `replacement.tmb` (the
+///   set composition rule) AND `replacement.governance == true`: a signer authorized by the
+///   effective charter's owner set but NOT marking the replacement as a governance seizure is
+///   treated the same as an unauthorized signer — `[claim-replacement-authority]`'s "MUST carry
+///   `governance: true`" is itself part of the authority check, not a separate concern.
 ///
 /// A signer matching neither path is rejected with
 /// [`VerifyError::Unauthorized`] — the same variant
@@ -853,11 +1072,11 @@ pub fn verify_publish(
 pub fn verify_claim_replacement(
     replacement: &ClaimPayload,
     prior: &ClaimPayload,
-    charter_owner: &[u8],
+    charter_owners: &[OwnerRef],
 ) -> Result<(), VerifyError> {
-    let owner_authorized = replacement.tmb.as_bytes() == prior.owner.as_slice();
+    let owner_authorized = prior.owner.authorizes(&replacement.tmb);
     let governance_authorized =
-        replacement.governance && replacement.tmb.as_bytes() == charter_owner;
+        replacement.governance && owner_set_authorizes(charter_owners, &replacement.tmb);
     if !owner_authorized && !governance_authorized {
         return Err(VerifyError::Unauthorized);
     }
@@ -947,6 +1166,38 @@ pub fn verify_claim_key_thumbprint(
     let computed = coz_rs::compute_thumbprint_for_alg(alg, pub_key)
         .ok_or_else(|| VerifyError::UnsupportedAlgorithm(alg.to_string()))?;
     if computed != claim.tmb {
+        return Err(VerifyError::ThumbprintMismatch);
+    }
+    Ok(())
+}
+
+/// Verify a publish's declared thumbprint against its actual signing key —
+/// the publish-side instance of Verification Pipeline step 6.
+///
+/// Checks `tmb(publish.key) == publish.pay.tmb`, exactly mirroring
+/// [`verify_claim_key_thumbprint`]'s claim-side check. This closes the
+/// soundness precondition [`verify_publish_authorized`]'s own doc comment
+/// names precisely: the Verification Pipeline's step 6 table row is scoped
+/// to "charter/claim," explicitly omitting publish, which is why no
+/// binding check previously existed here — `publish.tmb` is a
+/// self-declared payload field, and a tag carrying its own embedded `key`
+/// (a caller's key-fallback convenience) verifies its signature fine
+/// without this check ever confirming that embedded key matches the
+/// `tmb` the payload claims. A caller MUST call this (or otherwise
+/// establish the same binding) before trusting
+/// [`verify_publish_authorized`]'s result.
+///
+/// Spec constraints: `[owner-authorization-delegated]`,
+/// `[publish-transition]`.
+#[cfg(feature = "serde")]
+pub fn verify_publish_key_thumbprint(
+    publish: &PublishPayload,
+    alg: &str,
+    pub_key: &[u8],
+) -> Result<(), VerifyError> {
+    let computed = coz_rs::compute_thumbprint_for_alg(alg, pub_key)
+        .ok_or_else(|| VerifyError::UnsupportedAlgorithm(alg.to_string()))?;
+    if computed != publish.tmb {
         return Err(VerifyError::ThumbprintMismatch);
     }
     Ok(())
@@ -1053,7 +1304,7 @@ pub fn verify_claim_authorized_by_charter(
     claim: &ClaimPayload,
     effective_charter: &CharterPayload,
 ) -> Result<(), VerifyError> {
-    if claim.tmb.as_bytes() != effective_charter.owner.as_slice() {
+    if !owner_set_authorizes(&effective_charter.owner, &claim.tmb) {
         return Err(VerifyError::Unauthorized);
     }
     Ok(())
@@ -1070,16 +1321,15 @@ pub fn verify_claim_authorized_by_charter(
 ///
 /// **Soundness precondition the caller MUST establish first — this
 /// function does NOT check it.** `publish.tmb` is a self-declared
-/// payload field; nothing in this crate currently binds
-/// `tmb(publish.key) == publish.tmb` (the Verification Pipeline's own
-/// step 6 table row, `docs/specs/atom-transactions.md`, is scoped to
-/// "charter/claim," explicitly omitting publish). Calling this
-/// function without independently establishing that binding — e.g. by
-/// computing the thumbprint of whatever key actually signed the
-/// publish (`coz_rs::compute_thumbprint_for_alg`) and confirming it
-/// equals `publish.tmb` before trusting this check's result — lets an
-/// attacker sign with any key while declaring `publish.tmb =
-/// claim.owner`, and this function will wrongly report "authorized."
+/// payload field; nothing in THIS function binds `tmb(publish.key) ==
+/// publish.tmb` (the Verification Pipeline's own step 6 table row,
+/// `docs/specs/atom-transactions.md`, is scoped to "charter/claim,"
+/// explicitly omitting publish — [`verify_publish_key_thumbprint`] closes
+/// that gap as its own, separate step). Calling this function without
+/// first calling [`verify_publish_key_thumbprint`] (or otherwise
+/// independently establishing that binding) lets an attacker sign with
+/// any key while declaring `publish.tmb = claim.owner`, and this function
+/// will wrongly report "authorized."
 ///
 /// Spec constraints: `[owner-authorization-delegated]`,
 /// `[publish-transition]`.
@@ -1088,7 +1338,7 @@ pub fn verify_publish_authorized(
     publish: &PublishPayload,
     claim: &ClaimPayload,
 ) -> Result<(), VerifyError> {
-    if publish.tmb.as_bytes() != claim.owner.as_slice() {
+    if !claim.owner.authorizes(&publish.tmb) {
         return Err(VerifyError::Unauthorized);
     }
     Ok(())

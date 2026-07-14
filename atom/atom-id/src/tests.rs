@@ -3,7 +3,9 @@
 use std::ffi::OsStr;
 use std::str::FromStr;
 
-use crate::{Anchor, AtomId, Error, Identifier, Label, NAME_MAX, RawVersion, Tag};
+use crate::{
+    Anchor, AtomId, Error, Identifier, Label, NAME_MAX, OwnerKind, OwnerRef, RawVersion, Tag,
+};
 
 // ============================================================================
 // Label
@@ -423,7 +425,7 @@ fn claim_payload_typ_constant() {
         crate::Alg::ES256,
         test_id(),
         1000,
-        vec![99],
+        OwnerRef::new(OwnerKind::SingleKey, vec![99]),
         "cargo".to_string(),
         vec![0; 32],
         test_tmb(),
@@ -455,7 +457,7 @@ fn claim_payload_has_anchor_label() {
         crate::Alg::ES256,
         test_id(),
         1000,
-        vec![99],
+        OwnerRef::new(OwnerKind::SingleKey, vec![99]),
         "cargo".to_string(),
         vec![0; 32],
         test_tmb(),
@@ -487,7 +489,7 @@ fn claim_payload_serde_roundtrip() {
         crate::Alg::ES256,
         test_id(),
         1000,
-        vec![99],
+        OwnerRef::new(OwnerKind::SingleKey, vec![99]),
         "cargo".to_string(),
         vec![0; 32],
         test_tmb(),
@@ -507,7 +509,7 @@ fn claim_payload_ordinary_has_no_replacement() {
         crate::Alg::ES256,
         test_id(),
         1000,
-        vec![99],
+        OwnerRef::new(OwnerKind::SingleKey, vec![99]),
         "cargo".to_string(),
         vec![0; 32],
         test_tmb(),
@@ -526,7 +528,7 @@ fn claim_payload_owner_replacement_construct_and_roundtrip() {
         crate::Alg::ES256,
         test_id(),
         2000,
-        vec![99],
+        OwnerRef::new(OwnerKind::SingleKey, vec![99]),
         "cargo".to_string(),
         crate::Czd::from_bytes(vec![1, 2, 3]),
         false,
@@ -547,7 +549,7 @@ fn claim_payload_governance_replacement_construct_and_roundtrip() {
         crate::Alg::ES256,
         test_id(),
         2000,
-        vec![99],
+        OwnerRef::new(OwnerKind::SingleKey, vec![99]),
         "cargo".to_string(),
         crate::Czd::from_bytes(vec![4, 5, 6]),
         true,
@@ -570,18 +572,18 @@ fn verify_claim_replacement_accepts_owner_replacement() {
         crate::Alg::ES256,
         test_id(),
         1000,
-        vec![1], // prior claim's owner
+        OwnerRef::new(OwnerKind::SingleKey, vec![1]), // prior claim's owner
         "cargo".to_string(),
         vec![0; 32],
         test_tmb(),
     );
-    let charter_owner = vec![2]; // unrelated to prior.owner
+    let charter_owner = vec![OwnerRef::new(OwnerKind::SingleKey, vec![2])]; // unrelated to prior.owner
 
     let replacement = crate::ClaimPayload::new_replacement(
         crate::Alg::ES256,
         test_id(),
         2000, // strictly after prior.now
-        vec![9],
+        OwnerRef::new(OwnerKind::SingleKey, vec![9]),
         "cargo".to_string(),
         crate::Czd::from_bytes(vec![9, 9, 9]),
         false, // unmarked — the ordinary owner-replacement path
@@ -602,18 +604,18 @@ fn verify_claim_replacement_accepts_governance_replacement() {
         crate::Alg::ES256,
         test_id(),
         1000,
-        vec![1], // prior claim's owner
+        OwnerRef::new(OwnerKind::SingleKey, vec![1]), // prior claim's owner
         "cargo".to_string(),
         vec![0; 32],
         test_tmb(),
     );
-    let charter_owner = vec![2];
+    let charter_owner = vec![OwnerRef::new(OwnerKind::SingleKey, vec![2])];
 
     let replacement = crate::ClaimPayload::new_replacement(
         crate::Alg::ES256,
         test_id(),
         2000,
-        vec![9],
+        OwnerRef::new(OwnerKind::SingleKey, vec![9]),
         "cargo".to_string(),
         crate::Czd::from_bytes(vec![9, 9, 9]),
         true, // MUST carry governance: true
@@ -637,18 +639,18 @@ fn verify_claim_replacement_rejects_governance_authorized_but_unmarked() {
         crate::Alg::ES256,
         test_id(),
         1000,
-        vec![1],
+        OwnerRef::new(OwnerKind::SingleKey, vec![1]),
         "cargo".to_string(),
         vec![0; 32],
         test_tmb(),
     );
-    let charter_owner = vec![2];
+    let charter_owner = vec![OwnerRef::new(OwnerKind::SingleKey, vec![2])];
 
     let replacement = crate::ClaimPayload::new_replacement(
         crate::Alg::ES256,
         test_id(),
         2000,
-        vec![9],
+        OwnerRef::new(OwnerKind::SingleKey, vec![9]),
         "cargo".to_string(),
         crate::Czd::from_bytes(vec![9, 9, 9]),
         false, // unmarked, despite being signed by the charter owner
@@ -669,19 +671,19 @@ fn verify_claim_replacement_rejects_stale_now() {
         crate::Alg::ES256,
         test_id(),
         2000,
-        vec![1],
+        OwnerRef::new(OwnerKind::SingleKey, vec![1]),
         "cargo".to_string(),
         vec![0; 32],
         test_tmb(),
     );
-    let charter_owner = vec![2];
+    let charter_owner = vec![OwnerRef::new(OwnerKind::SingleKey, vec![2])];
 
     // Authorized (owner path) but `now` does not exceed prior.now.
     let replacement = crate::ClaimPayload::new_replacement(
         crate::Alg::ES256,
         test_id(),
         2000, // == prior.now, not strictly after
-        vec![9],
+        OwnerRef::new(OwnerKind::SingleKey, vec![9]),
         "cargo".to_string(),
         crate::Czd::from_bytes(vec![9, 9, 9]),
         false,
@@ -708,19 +710,19 @@ fn verify_claim_replacement_rejects_changed_identity() {
         crate::Alg::ES256,
         prior_id,
         1000,
-        vec![1],
+        OwnerRef::new(OwnerKind::SingleKey, vec![1]),
         "cargo".to_string(),
         vec![0; 32],
         test_tmb(),
     );
-    let charter_owner = vec![2];
+    let charter_owner = vec![OwnerRef::new(OwnerKind::SingleKey, vec![2])];
 
     // Authorized and temporally fine, but names a different (anchor, label).
     let replacement = crate::ClaimPayload::new_replacement(
         crate::Alg::ES256,
         other_id,
         2000,
-        vec![9],
+        OwnerRef::new(OwnerKind::SingleKey, vec![9]),
         "cargo".to_string(),
         crate::Czd::from_bytes(vec![9, 9, 9]),
         false,
@@ -747,20 +749,21 @@ fn verify_claim_replacement_rejects_third_authority() {
         crate::Alg::ES256,
         test_id(),
         1000,
-        vec![1], // prior claim's owner
+        OwnerRef::new(OwnerKind::SingleKey, vec![1]), // prior claim's owner
         "cargo".to_string(),
         vec![0; 32],
         test_tmb(),
     );
     let prior_czd = crate::Czd::from_bytes(vec![9, 9, 9]); // stand-in for czd(prior)
-    let charter_owner = vec![2]; // effective charter's owner (unrelated to prior.owner)
+    let charter_owner = vec![OwnerRef::new(OwnerKind::SingleKey, vec![2])]; // effective charter's owner (unrelated to prior.owner)
 
     // Unmarked replacement signed by neither prior.owner nor charter_owner.
     let replacement = crate::ClaimPayload::new_replacement(
         crate::Alg::ES256,
         test_id(),
         2000,
-        vec![3], // third-party owner — authorized by neither authority
+        OwnerRef::new(OwnerKind::SingleKey, vec![3]), /* third-party owner — authorized by
+                                                       * neither authority */
         "cargo".to_string(),
         prior_czd,
         false,
@@ -796,7 +799,7 @@ fn atom_id_from_claim() {
         crate::Alg::ES256,
         test_id(),
         1000,
-        vec![99],
+        OwnerRef::new(OwnerKind::SingleKey, vec![99]),
         "cargo".to_string(),
         vec![0; 32],
         test_tmb(),
@@ -829,7 +832,7 @@ fn both_payloads_same_identity() {
         crate::Alg::ES256,
         id.clone(),
         1000,
-        vec![99],
+        OwnerRef::new(OwnerKind::SingleKey, vec![99]),
         "cargo".to_string(),
         vec![0; 32],
         test_tmb(),
@@ -875,7 +878,7 @@ fn verify_claim_roundtrip() {
         crate::Alg::Ed25519,
         test_id(),
         1000,
-        vec![99],
+        OwnerRef::new(OwnerKind::SingleKey, vec![99]),
         "cargo".to_string(),
         vec![0; 32],
         tmb,
@@ -923,7 +926,7 @@ fn verify_claim_wrong_sig() {
         crate::Alg::Ed25519,
         test_id(),
         1000,
-        vec![99],
+        OwnerRef::new(OwnerKind::SingleKey, vec![99]),
         "cargo".to_string(),
         vec![0; 32],
         tmb,
@@ -946,7 +949,7 @@ fn verify_claim_wrong_typ() {
         crate::Alg::Ed25519,
         test_id(),
         1000,
-        vec![99],
+        OwnerRef::new(OwnerKind::SingleKey, vec![99]),
         "cargo".to_string(),
         vec![0; 32],
         tmb,
@@ -970,7 +973,7 @@ fn verify_claim_unknown_alg() {
         crate::Alg::Ed25519,
         test_id(),
         1000,
-        vec![99],
+        OwnerRef::new(OwnerKind::SingleKey, vec![99]),
         "cargo".to_string(),
         vec![0; 32],
         tmb,
@@ -997,7 +1000,7 @@ fn czd_for_alg_matches_independent_computation() {
         crate::Alg::Ed25519,
         test_id(),
         1000,
-        vec![99],
+        OwnerRef::new(OwnerKind::SingleKey, vec![99]),
         "cargo".to_string(),
         vec![0; 32],
         tmb,
@@ -1024,7 +1027,7 @@ fn czd_for_alg_is_deterministic_and_binds_to_sig() {
         crate::Alg::Ed25519,
         test_id(),
         1000,
-        vec![99],
+        OwnerRef::new(OwnerKind::SingleKey, vec![99]),
         "cargo".to_string(),
         vec![0; 32],
         tmb,
@@ -1060,8 +1063,15 @@ fn czd_for_alg_unknown_alg() {
 #[test]
 fn verify_claim_chains_charter_accepts_matching_anchor() {
     let (prv, pub_bytes, tmb) = gen_ed25519_key();
-    let founding =
-        crate::CharterPayload::new(crate::Alg::Ed25519, 1000, vec![1], None, vec![0; 32], tmb);
+    let founding = crate::CharterPayload::new(
+        crate::Alg::Ed25519,
+        1000,
+        vec![OwnerRef::new(OwnerKind::SingleKey, vec![1])],
+        None,
+        vec![0; 32],
+        tmb,
+    )
+    .unwrap();
     let founding_json = serde_json::to_vec(&founding).unwrap();
     let (founding_sig, _cad) =
         coz_rs::sign_json(&founding_json, "Ed25519", &prv, &pub_bytes).unwrap();
@@ -1071,7 +1081,7 @@ fn verify_claim_chains_charter_accepts_matching_anchor() {
         crate::Alg::ES256,
         AtomId::new(Anchor::new(founding_czd.as_bytes().to_vec()), test_label()),
         2000,
-        vec![99],
+        OwnerRef::new(OwnerKind::SingleKey, vec![99]),
         "cargo".to_string(),
         vec![0; 32],
         test_tmb(),
@@ -1088,8 +1098,15 @@ fn verify_claim_chains_charter_accepts_matching_anchor() {
 #[test]
 fn verify_claim_chains_charter_rejects_mismatched_anchor() {
     let (prv, pub_bytes, tmb) = gen_ed25519_key();
-    let founding =
-        crate::CharterPayload::new(crate::Alg::Ed25519, 1000, vec![1], None, vec![0; 32], tmb);
+    let founding = crate::CharterPayload::new(
+        crate::Alg::Ed25519,
+        1000,
+        vec![OwnerRef::new(OwnerKind::SingleKey, vec![1])],
+        None,
+        vec![0; 32],
+        tmb,
+    )
+    .unwrap();
     let founding_json = serde_json::to_vec(&founding).unwrap();
     let (founding_sig, _cad) =
         coz_rs::sign_json(&founding_json, "Ed25519", &prv, &pub_bytes).unwrap();
@@ -1099,7 +1116,7 @@ fn verify_claim_chains_charter_rejects_mismatched_anchor() {
         crate::Alg::ES256,
         AtomId::new(Anchor::new(vec![0xFF; 32]), test_label()),
         2000,
-        vec![99],
+        OwnerRef::new(OwnerKind::SingleKey, vec![99]),
         "cargo".to_string(),
         vec![0; 32],
         test_tmb(),
@@ -1125,16 +1142,17 @@ fn temporal_triple(
     let charter = crate::CharterPayload::new(
         crate::Alg::ES256,
         charter_now,
-        vec![1],
+        vec![OwnerRef::new(OwnerKind::SingleKey, vec![1])],
         None,
         vec![0; 32],
         test_tmb(),
-    );
+    )
+    .unwrap();
     let claim = crate::ClaimPayload::new(
         crate::Alg::ES256,
         test_id(),
         claim_now,
-        vec![99],
+        OwnerRef::new(OwnerKind::SingleKey, vec![99]),
         "cargo".to_string(),
         vec![0; 32],
         test_tmb(),
@@ -1195,23 +1213,27 @@ fn verify_temporal_ordering_rejects_both_violations() {
 
 #[test]
 fn verify_claim_authorized_by_charter_accepts_matching_owner() {
-    let charter_owner = vec![7];
+    let charter_owner_bytes = vec![7];
     let charter = crate::CharterPayload::new(
         crate::Alg::ES256,
         1000,
-        charter_owner.clone(),
+        vec![OwnerRef::new(
+            OwnerKind::SingleKey,
+            charter_owner_bytes.clone(),
+        )],
         None,
         vec![0; 32],
         test_tmb(),
-    );
+    )
+    .unwrap();
     let claim = crate::ClaimPayload::new(
         crate::Alg::ES256,
         test_id(),
         2000,
-        vec![99],
+        OwnerRef::new(OwnerKind::SingleKey, vec![99]),
         "cargo".to_string(),
         vec![0; 32],
-        crate::Thumbprint::from_bytes(charter_owner),
+        crate::Thumbprint::from_bytes(charter_owner_bytes),
     );
 
     let result = crate::verify_claim_authorized_by_charter(&claim, &charter);
@@ -1226,16 +1248,17 @@ fn verify_claim_authorized_by_charter_rejects_stranger() {
     let charter = crate::CharterPayload::new(
         crate::Alg::ES256,
         1000,
-        vec![7],
+        vec![OwnerRef::new(OwnerKind::SingleKey, vec![7])],
         None,
         vec![0; 32],
         test_tmb(),
-    );
+    )
+    .unwrap();
     let claim = crate::ClaimPayload::new(
         crate::Alg::ES256,
         test_id(),
         2000,
-        vec![99],
+        OwnerRef::new(OwnerKind::SingleKey, vec![99]),
         "cargo".to_string(),
         vec![0; 32],
         crate::Thumbprint::from_bytes(vec![0xAA]), // does not match charter.owner
@@ -1284,6 +1307,7 @@ mod proptests {
             let anchor = Anchor::new(anchor_bytes);
             let id = AtomId::new(anchor, label);
             let tmb = coz_rs::Thumbprint::from_bytes(vec![0; 32]);
+            let owner = OwnerRef::new(OwnerKind::SingleKey, owner);
             let original = ClaimPayload::new(Alg::Ed25519, id, now, owner, pkg, src, tmb);
 
             let serialized = serde_json::to_string(&original).unwrap();
@@ -1336,6 +1360,7 @@ mod proptests {
             let label = Label::try_from(lbl.as_str()).unwrap();
             let anchor = Anchor::new(anchor_bytes);
             let id = AtomId::new(anchor, label);
+            let owner = OwnerRef::new(OwnerKind::SingleKey, owner);
             let claim = ClaimPayload::new(Alg::Ed25519, id, now, owner, pkg, src, tmb);
             let pay_json = serde_json::to_vec(&claim).unwrap();
 

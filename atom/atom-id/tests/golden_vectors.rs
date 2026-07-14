@@ -21,8 +21,8 @@
 //! `[publish-mode]`.
 
 use atom_id::{
-    Alg, Anchor, AtomId, CharterPayload, ClaimPayload, Czd, Label, Mode, PublishPayload,
-    RawVersion, Thumbprint,
+    Alg, Anchor, AtomId, CharterPayload, ClaimPayload, Czd, Label, Mode, OwnerKind, OwnerRef,
+    PublishPayload, RawVersion, Thumbprint,
 };
 use serde::{Deserialize, Serialize};
 
@@ -125,11 +125,12 @@ where
     let charter = CharterPayload::new(
         alg,
         1_000,
-        pub_bytes.clone(),
+        vec![OwnerRef::new(OwnerKind::SingleKey, pub_bytes.clone())],
         None,
         vec![0xC0; 32],
         tmb.clone(),
-    );
+    )
+    .unwrap();
     let (charter_pay_json, charter_sig) = sign(&charter, alg_name, &prv, &pub_bytes);
     let charter_czd = atom_id::czd_for_alg(&charter_pay_json, &charter_sig, alg_name)
         .unwrap_or_else(|e| panic!("{alg_name} charter czd: {e}"));
@@ -147,7 +148,7 @@ where
         alg,
         id,
         2_000,
-        pub_bytes.clone(),
+        OwnerRef::new(OwnerKind::SingleKey, pub_bytes.clone()),
         "cargo".into(),
         vec![0xC1; 32],
         tmb.clone(),
@@ -423,7 +424,7 @@ fn extensibility_claim_payload() -> ClaimPayload {
         Alg::ES256,
         id,
         4_001,
-        pub_bytes,
+        OwnerRef::new(OwnerKind::SingleKey, pub_bytes),
         "cargo".into(),
         vec![0xEA; 32],
         tmb,

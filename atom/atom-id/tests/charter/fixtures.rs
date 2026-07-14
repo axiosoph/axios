@@ -12,7 +12,9 @@
 //! `[charter-succession-linear]`, `[chain-monotonicity]`,
 //! `[claim-replacement-authority]`, `[charter-transition]`.
 
-use atom_id::{Alg, Anchor, AtomId, CharterPayload, ClaimPayload, Czd, Label, Thumbprint};
+use atom_id::{
+    Alg, Anchor, AtomId, CharterPayload, ClaimPayload, Czd, Label, OwnerKind, OwnerRef, Thumbprint,
+};
 use coz_rs::Ed25519;
 use serde::{Deserialize, Serialize};
 
@@ -166,23 +168,39 @@ pub fn save(file_name: &str, file: &CorpusFile) {
 /// binds consumers, not signers.
 pub fn build_divergent_succession() -> CorpusFile {
     let (prv0, pub0, tmb0) = key(1);
-    let founding = CharterPayload::new(Alg::Ed25519, 1_000, pub0.clone(), None, vec![0; 32], tmb0);
+    let founding = CharterPayload::new(
+        Alg::Ed25519,
+        1_000,
+        vec![OwnerRef::new(OwnerKind::SingleKey, pub0.clone())],
+        None,
+        vec![0; 32],
+        tmb0,
+    )
+    .unwrap();
     let (sig0, czd0) = sign(&founding, &prv0, &pub0);
 
     let (_prv_a, pub_a, tmb_a) = key(2);
     let successor_a = CharterPayload::new(
         Alg::Ed25519,
         2_000,
-        pub_a,
+        vec![OwnerRef::new(OwnerKind::SingleKey, pub_a)],
         Some(czd0.clone()),
         vec![1; 32],
         tmb_a,
-    );
+    )
+    .unwrap();
     let (sig_a, _) = sign(&successor_a, &prv0, &pub0);
 
     let (_prv_b, pub_b, tmb_b) = key(3);
-    let successor_b =
-        CharterPayload::new(Alg::Ed25519, 2_001, pub_b, Some(czd0), vec![1; 32], tmb_b);
+    let successor_b = CharterPayload::new(
+        Alg::Ed25519,
+        2_001,
+        vec![OwnerRef::new(OwnerKind::SingleKey, pub_b)],
+        Some(czd0),
+        vec![1; 32],
+        tmb_b,
+    )
+    .unwrap();
     let (sig_b, _) = sign(&successor_b, &prv0, &pub0);
 
     CorpusFile {
@@ -224,22 +242,39 @@ pub fn build_divergent_succession() -> CorpusFile {
 /// detectable rollback below previously observed state.
 pub fn build_prefix_rollback() -> CorpusFile {
     let (prv0, pub0, tmb0) = key(4);
-    let c0 = CharterPayload::new(Alg::Ed25519, 1_000, pub0.clone(), None, vec![0; 32], tmb0);
+    let c0 = CharterPayload::new(
+        Alg::Ed25519,
+        1_000,
+        vec![OwnerRef::new(OwnerKind::SingleKey, pub0.clone())],
+        None,
+        vec![0; 32],
+        tmb0,
+    )
+    .unwrap();
     let (sig0, czd0) = sign(&c0, &prv0, &pub0);
 
     let (prv1, pub1, tmb1) = key(5);
     let c1 = CharterPayload::new(
         Alg::Ed25519,
         2_000,
-        pub1.clone(),
+        vec![OwnerRef::new(OwnerKind::SingleKey, pub1.clone())],
         Some(czd0),
         vec![1; 32],
         tmb1,
-    );
+    )
+    .unwrap();
     let (sig1, czd1) = sign(&c1, &prv0, &pub0); // signed by c0's owner, authorizing transfer
 
     let (_prv2, pub2, tmb2) = key(6);
-    let c2 = CharterPayload::new(Alg::Ed25519, 3_000, pub2, Some(czd1), vec![2; 32], tmb2);
+    let c2 = CharterPayload::new(
+        Alg::Ed25519,
+        3_000,
+        vec![OwnerRef::new(OwnerKind::SingleKey, pub2)],
+        Some(czd1),
+        vec![2; 32],
+        tmb2,
+    )
+    .unwrap();
     let (sig2, _czd2) = sign(&c2, &prv1, &pub1); // signed by c1's owner, authorizing transfer
 
     CorpusFile {
@@ -285,7 +320,7 @@ pub fn build_claim_replacement() -> CorpusFile {
         Alg::Ed25519,
         test_atom_id(),
         1_000,
-        pub_owner.clone(),
+        OwnerRef::new(OwnerKind::SingleKey, pub_owner.clone()),
         "cargo".into(),
         vec![0; 32],
         tmb_owner,
@@ -297,7 +332,7 @@ pub fn build_claim_replacement() -> CorpusFile {
         Alg::Ed25519,
         test_atom_id(),
         2_000,
-        pub_owner2,
+        OwnerRef::new(OwnerKind::SingleKey, pub_owner2),
         "cargo".into(),
         czd0.clone(),
         false,
@@ -312,7 +347,7 @@ pub fn build_claim_replacement() -> CorpusFile {
         Alg::Ed25519,
         test_atom_id(),
         2_001,
-        pub_charter.clone(),
+        OwnerRef::new(OwnerKind::SingleKey, pub_charter.clone()),
         "cargo".into(),
         czd0,
         true,
@@ -371,7 +406,7 @@ pub fn build_bootstrap_seizure() -> CorpusFile {
         Alg::Ed25519,
         test_atom_id(),
         500, // predates the founding charter's `now` below
-        pub_incumbent.clone(),
+        OwnerRef::new(OwnerKind::SingleKey, pub_incumbent.clone()),
         "cargo".into(),
         vec![0xEE; 32], // source revision predating the charter's `src`
         tmb_incumbent,
@@ -382,11 +417,12 @@ pub fn build_bootstrap_seizure() -> CorpusFile {
     let founding_charter = CharterPayload::new(
         Alg::Ed25519,
         1_000,
-        pub_attacker.clone(),
+        vec![OwnerRef::new(OwnerKind::SingleKey, pub_attacker.clone())],
         None,
         vec![0xEE; 32], // same source: the attacker charters over the live, claimed set
         tmb_attacker,
-    );
+    )
+    .unwrap();
     let (sig_charter, _) = sign(&founding_charter, &prv_attacker, &pub_attacker);
 
     CorpusFile {

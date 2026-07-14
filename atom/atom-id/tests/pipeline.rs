@@ -12,9 +12,9 @@
 //! `[symmetric-payloads]`.
 
 use atom_id::{
-    Alg, Anchor, AtomId, ClaimPayload, Czd, Label, PublishPayload, RawVersion, Thumbprint,
-    VerifyError, czd_for_alg, verify_atom_id, verify_claim_key_thumbprint,
-    verify_publish_authorized, verify_publish_chains_claim,
+    Alg, Anchor, AtomId, ClaimPayload, Czd, Label, OwnerKind, OwnerRef, PublishPayload, RawVersion,
+    Thumbprint, VerifyError, czd_for_alg, verify_atom_id, verify_claim_key_thumbprint,
+    verify_publish_authorized, verify_publish_chains_claim, verify_publish_key_thumbprint,
 };
 use coz_rs::Ed25519;
 use serde::Serialize;
@@ -72,7 +72,7 @@ fn build_claim(
         Alg::Ed25519,
         test_atom_id(),
         1_000,
-        owner,
+        OwnerRef::new(OwnerKind::SingleKey, owner),
         "cargo".to_string(),
         vec![0; 32],
         tmb_field,
@@ -132,6 +132,49 @@ fn step6_rejects_claim_whose_declared_tmb_does_not_match_its_signing_key() {
     let (claim, _pay_json, _sig, _pub_bytes) = build_claim(21, vec![0; 4], tmb_b);
 
     let result = verify_claim_key_thumbprint(&claim, "Ed25519", &pub_a);
+    assert!(
+        matches!(result, Err(VerifyError::ThumbprintMismatch)),
+        "mismatched declared tmb must be rejected: {result:?}"
+    );
+}
+
+// ============================================================================
+// Step 6 (publish side) — closes the documented tmb-binding soundness gap
+// ============================================================================
+//
+// `verify_publish_authorized`'s own doc comment names this precondition
+// precisely: nothing bound `tmb(publish.key) == publish.tmb` before this
+// function existed, which is exploitable exactly the way `build_publish`'s
+// `tmb_field` parameter (independent of the actual signing key) already
+// lets these tests construct: a signature that verifies fine while the
+// payload's declared `tmb` names an unrelated key.
+
+#[test]
+fn step6_accepts_publish_whose_declared_tmb_matches_its_signing_key() {
+    let (_prv, pub_a, tmb_a) = key(60);
+    let claim_czd = Czd::from_bytes(vec![1; 32]);
+    let (publish, _pay_json, _sig) = build_publish(60, claim_czd, tmb_a);
+
+    let result = verify_publish_key_thumbprint(&publish, "Ed25519", &pub_a);
+    assert!(
+        result.is_ok(),
+        "declared tmb matching the real signing key must pass: {result:?}"
+    );
+}
+
+#[test]
+fn step6_rejects_publish_whose_declared_tmb_does_not_match_its_signing_key() {
+    // Signed with key 61's real key, but the payload LIES about which key
+    // signed it by declaring key 62's thumbprint instead -- the signature
+    // itself still verifies fine; only the thumbprint-binding check
+    // catches this, exactly the exploit `verify_publish_authorized`'s doc
+    // comment names.
+    let (_prv_a, pub_a, _tmb_a) = key(61);
+    let (_prv_b, _pub_b, tmb_b) = key(62);
+    let claim_czd = Czd::from_bytes(vec![1; 32]);
+    let (publish, _pay_json, _sig) = build_publish(61, claim_czd, tmb_b);
+
+    let result = verify_publish_key_thumbprint(&publish, "Ed25519", &pub_a);
     assert!(
         matches!(result, Err(VerifyError::ThumbprintMismatch)),
         "mismatched declared tmb must be rejected: {result:?}"

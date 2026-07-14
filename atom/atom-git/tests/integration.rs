@@ -101,8 +101,62 @@ fn create_commit(
 /// only kind of anchor `claim()` will accept, since the anchor is given
 /// and verified against a real charter, never derived from git ancestry.
 fn found_anchor(registry: &GitRegistry, pub_key: &[u8], src: &[u8]) -> atom_core::Anchor {
-    let czd = registry.charter(pub_key, src, None).unwrap();
+    let czd = registry.charter(&[owner_ref(pub_key)], src, None).unwrap();
     atom_core::Anchor::new(czd.as_bytes().to_vec())
+}
+
+/// `GitStore::ingest` (atom-git/src/store.rs, outside this node's surface)
+/// does not yet propagate the charter chain into the destination store --
+/// only `refs/atom/claims/d/*`, `refs/atom/d/*`, and dev refs. Resolution
+/// now correctly requires a resolvable charter
+/// (`[claim-charter-authorization]`), so tests that ingest into a fresh
+/// store and then resolve from it must replant the SAME founding charter
+/// directly, to stay isolated from that separate, already-known gap.
+fn replant_charter(
+    source_repo: &gix::Repository,
+    dest_repo: &gix::Repository,
+    anchor: &atom_core::Anchor,
+) {
+    let ref_name = atom_git::charter_store::charter_ref_name(anchor.as_bytes());
+    let charter_ref = source_repo
+        .try_find_reference(&ref_name)
+        .unwrap()
+        .expect("the fixture's own charter() call must have written this ref");
+    let charter_msg = source_repo
+        .find_object(charter_ref.id().detach())
+        .unwrap()
+        .try_into_commit()
+        .unwrap()
+        .message_raw_sloppy()
+        .to_string();
+    let dest_oid = atom_git::gix_util::write_charter_commit(dest_repo, charter_msg).unwrap();
+    let dest_ref_fullname = gix::refs::FullName::try_from(ref_name.as_str()).unwrap();
+    dest_repo
+        .edit_reference(gix::refs::transaction::RefEdit {
+            change: gix::refs::transaction::Change::Update {
+                log: gix::refs::transaction::LogChange::default(),
+                expected: gix::refs::transaction::PreviousValue::Any,
+                new: gix::refs::Target::Object(dest_oid),
+            },
+            name: dest_ref_fullname,
+            deref: false,
+        })
+        .unwrap();
+}
+
+/// A `single-key` owner-reference authorizing the key with these raw
+/// public-key bytes -- the common case throughout these tests, none of
+/// which exercise multi-member sets or non-`single-key` tiers.
+///
+/// `[owner-authorization-delegated]`: a `single-key` `OwnerRef.value` MUST
+/// be the key's THUMBPRINT (`signer.tmb == o.value`), never the raw public
+/// key -- these are different byte strings, and using the raw key here
+/// would make every authorization check comparing against this owner-ref
+/// silently fail closed.
+fn owner_ref(pub_key: &[u8]) -> atom_id::OwnerRef {
+    let tmb = coz_rs::compute_thumbprint_for_alg("Ed25519", pub_key)
+        .expect("Ed25519 is always supported");
+    atom_id::OwnerRef::single_key(&tmb)
 }
 
 /// F23: `claim()`'s anchor check resolves a real founding charter
@@ -132,7 +186,7 @@ fn test_claim_rejects_unchartered_anchor() {
     let label = Label::try_from("my-package").unwrap();
     let id = AtomId::new(anchor, label);
 
-    let res = registry.claim(&id, &pub_key);
+    let res = registry.claim(&id, &owner_ref(&pub_key));
     assert!(
         matches!(&res, Err(GitError::Validation(msg)) if msg.contains("founding charter")),
         "claim into an unchartered anchor must be rejected with a clear error: {res:?}"
@@ -162,7 +216,7 @@ fn test_claim_accepts_chartered_anchor() {
     let id = AtomId::new(anchor, label);
 
     let _claim_czd = registry
-        .claim(&id, &pub_key)
+        .claim(&id, &owner_ref(&pub_key))
         .expect("claim against a properly chartered anchor must succeed");
 }
 
@@ -217,7 +271,7 @@ fn test_claim_and_key_rotation() {
     let id = AtomId::new(anchor, label);
 
     // Initial claim
-    let claim_czd = registry.claim(&id, &pub_key).unwrap();
+    let claim_czd = registry.claim(&id, &owner_ref(&pub_key)).unwrap();
 
     // Verify claim reference was created — located by its ref name (label),
     // never by reinterpreting the returned czd as a git object id.
@@ -258,7 +312,13 @@ fn test_claim_and_key_rotation() {
         "cargo".to_string(),
     );
 
-    let next_claim_czd = registry_rotated.claim(&id, &next_pub).unwrap();
+    // [claim-replacement-authority]'s owner-replacement path: the
+    // replacement is signed by the OUTGOING owner's key (`registry`, still
+    // holding `pub_key`), authorizing the transition -- naming `next_pub`
+    // as the new owner going forward. `registry_rotated` cannot sign this
+    // replacement itself: `next_pub` is not yet an authorized owner of
+    // anything until this very call makes it one.
+    let next_claim_czd = registry.claim(&id, &owner_ref(&next_pub)).unwrap();
     assert_ne!(claim_czd, next_claim_czd);
 
     // Check that the next claim has the previous claim as a parent (claim
@@ -309,7 +369,7 @@ fn test_publish_and_tag_chain() {
     let id = AtomId::new(anchor, label);
 
     // 1. Claim package
-    let claim_czd = registry.claim(&id, &pub_key).unwrap();
+    let claim_czd = registry.claim(&id, &owner_ref(&pub_key)).unwrap();
 
     // Create a version workspace state tree
     let ver_commit_oid = create_commit(
@@ -392,7 +452,7 @@ fn test_publish_rejects_fabricated_oid_czd() {
     let label = Label::try_from("my-package").unwrap();
     let id = AtomId::new(anchor, label);
 
-    let claim_czd = registry.claim(&id, &pub_key).unwrap();
+    let claim_czd = registry.claim(&id, &owner_ref(&pub_key)).unwrap();
 
     let claim_ref = repo
         .try_find_reference("refs/atom/claims/pub/my-package")
@@ -474,7 +534,7 @@ async fn test_resolve_registry_branch_returns_real_czd() {
     let label = Label::try_from("my-package").unwrap();
     let id = AtomId::new(anchor, label);
 
-    let claim_czd = registry.claim(&id, &pub_key).unwrap();
+    let claim_czd = registry.claim(&id, &owner_ref(&pub_key)).unwrap();
     let claim_ref = repo
         .try_find_reference("refs/atom/claims/pub/my-package")
         .unwrap()
@@ -523,6 +583,97 @@ async fn test_resolve_registry_branch_returns_real_czd() {
     );
 }
 
+/// Adversarial (tmb-binding): a claim validly signed by an ATTACKER's own
+/// key, but whose payload declares `tmb` equal to a LEGITIMATE charter
+/// owner's thumbprint, must be rejected by `resolve()`'s REGISTRY branch
+/// before `verify_claim_authorized_by_charter` ever trusts the declared
+/// `tmb`. `verify_claim`'s signature check alone cannot catch this: the
+/// attacker's own key validly signs the attacker's own payload regardless
+/// of what `tmb` field it asserts.
+#[tokio::test]
+async fn test_resolve_registry_branch_rejects_claim_with_forged_tmb() {
+    let (_dir, repo, _genesis_oid) = setup_test_repo();
+
+    let victim_sk = SigningKey::<Ed25519>::generate();
+    let victim_pub = victim_sk.verifying_key().public_key_bytes().to_vec();
+    let victim_tmb = coz_rs::compute_thumbprint_for_alg("Ed25519", &victim_pub).unwrap();
+
+    let attacker_sk = SigningKey::<Ed25519>::generate();
+    let attacker_prv = attacker_sk.private_key_bytes().to_vec();
+    let attacker_pub = attacker_sk.verifying_key().public_key_bytes().to_vec();
+
+    // A real charter, whose owner set names the VICTIM as the sole
+    // authorized principal.
+    let registry_for_charter = GitRegistry::new(
+        repo,
+        attacker_prv.clone(), // irrelevant to founding; any key may found a virgin source
+        attacker_pub.clone(),
+        Alg::Ed25519,
+        "cargo".to_string(),
+    );
+    let founding_czd = registry_for_charter
+        .charter(
+            std::slice::from_ref(&atom_id::OwnerRef::single_key(&victim_tmb)),
+            b"src-rev",
+            None,
+        )
+        .unwrap();
+    let repo = registry_for_charter.source.repo();
+    let anchor = atom_core::Anchor::new(founding_czd.as_bytes().to_vec());
+    let label = Label::try_from("my-package").unwrap();
+    let id = AtomId::new(anchor, label);
+
+    // Forged claim: signed by the ATTACKER's own key, but declares `tmb`
+    // equal to the VICTIM's -- the only charter-set member --
+    // impersonating the one signer `verify_claim_authorized_by_charter`
+    // would accept.
+    let forged_claim = atom_id::ClaimPayload::new(
+        Alg::Ed25519,
+        id.clone(),
+        1_000,
+        atom_id::OwnerRef::single_key(&victim_tmb),
+        "cargo".to_string(),
+        b"src-rev".to_vec(),
+        victim_tmb.clone(), // forged: declares the victim's tmb
+    );
+    let pay_val = serde_json::to_value(&forged_claim).unwrap();
+    let pay_map: indexmap::IndexMap<String, serde_json::Value> =
+        serde_json::from_value(pay_val).unwrap();
+    let pay_bytes = serde_json::to_vec(&pay_map).unwrap();
+    let (sig, _cad) =
+        coz_rs::sign_json(&pay_bytes, "Ed25519", &attacker_prv, &attacker_pub).unwrap();
+    let envelope = atom_git::source::CozMessageEnvelope {
+        pay: pay_map,
+        sig,
+        key: Some(attacker_pub.clone()),
+    };
+    let claim_msg = serde_json::to_string(&envelope).unwrap();
+    let claim_oid = atom_git::gix_util::write_claim_commit(&repo, claim_msg, None).unwrap();
+    let claim_ref_fullname =
+        gix::refs::FullName::try_from("refs/atom/claims/pub/my-package").unwrap();
+    repo.edit_reference(gix::refs::transaction::RefEdit {
+        change: gix::refs::transaction::Change::Update {
+            log: gix::refs::transaction::LogChange::default(),
+            expected: gix::refs::transaction::PreviousValue::Any,
+            new: gix::refs::Target::Object(claim_oid),
+        },
+        name: claim_ref_fullname,
+        deref: false,
+    })
+    .unwrap();
+
+    let source = GitSource::new(gix::open(repo.path()).unwrap());
+    let result = source.resolve(&id).await;
+    assert!(
+        matches!(
+            result,
+            Err(GitError::Verify(atom_id::VerifyError::ThumbprintMismatch))
+        ),
+        "a claim signed by an attacker's key but declaring the victim's tmb must be rejected \
+         before authorization ever trusts the declared tmb: {result:?}"
+    );
+}
+
 /// Regression: `GitSource::resolve`'s STORE branch
 /// (`refs/atom/claims/d/*` + `refs/atom/d/*/*`) must also return the real,
 /// independently-recomputable czd — not the claim commit's git oid, and
@@ -541,7 +692,50 @@ async fn test_resolve_store_branch_returns_real_czd() {
     let prv = sk.private_key_bytes().to_vec();
     let pub_key = sk.verifying_key().public_key_bytes().to_vec();
 
-    let anchor = atom_core::Anchor::new(vec![1u8; 20]);
+    // `resolve()`'s store branch now resolves and checks the charter chain
+    // (`[claim-charter-authorization]`) same as the registry branch --
+    // hand-sign and hand-write a real founding charter (mirroring
+    // `GitRegistry::charter()`'s construction, matching this test's own
+    // "mirrors what GitRegistry does internally" idiom) rather than an
+    // arbitrary stand-in anchor with no charter behind it.
+    let tmb = coz_rs::compute_thumbprint_for_alg("Ed25519", &pub_key).unwrap();
+    let charter_payload = atom_id::CharterPayload::new(
+        Alg::Ed25519,
+        500,
+        vec![atom_id::OwnerRef::single_key(&tmb)],
+        None,
+        vec![0u8; 20],
+        tmb.clone(),
+    )
+    .unwrap();
+    let charter_pay_val = serde_json::to_value(&charter_payload).unwrap();
+    let charter_pay_map: indexmap::IndexMap<String, serde_json::Value> =
+        serde_json::from_value(charter_pay_val).unwrap();
+    let charter_pay_bytes = serde_json::to_vec(&charter_pay_map).unwrap();
+    let (charter_sig, _cad) =
+        coz_rs::sign_json(&charter_pay_bytes, "Ed25519", &prv, &pub_key).unwrap();
+    let charter_envelope = atom_git::source::CozMessageEnvelope {
+        pay: charter_pay_map,
+        sig: charter_sig.clone(),
+        key: Some(pub_key.clone()),
+    };
+    let charter_msg = serde_json::to_string(&charter_envelope).unwrap();
+    let charter_czd = atom_id::czd_for_alg(&charter_pay_bytes, &charter_sig, "Ed25519").unwrap();
+    let charter_oid = atom_git::gix_util::write_charter_commit(&repo, charter_msg).unwrap();
+    let charter_ref_name = atom_git::charter_store::charter_ref_name(charter_czd.as_bytes());
+    let charter_ref_fullname = gix::refs::FullName::try_from(charter_ref_name.as_str()).unwrap();
+    repo.edit_reference(gix::refs::transaction::RefEdit {
+        change: gix::refs::transaction::Change::Update {
+            log: gix::refs::transaction::LogChange::default(),
+            expected: gix::refs::transaction::PreviousValue::Any,
+            new: gix::refs::Target::Object(charter_oid),
+        },
+        name: charter_ref_fullname,
+        deref: false,
+    })
+    .unwrap();
+
+    let anchor = atom_core::Anchor::new(charter_czd.as_bytes().to_vec());
     let label = Label::try_from("store-pkg").unwrap();
     let id = AtomId::new(anchor.clone(), label.clone());
 
@@ -567,12 +761,11 @@ async fn test_resolve_store_branch_returns_real_czd() {
         .detach();
 
     // Hand-sign a claim, mirroring GitRegistry::claim's construction.
-    let tmb = coz_rs::compute_thumbprint_for_alg("Ed25519", &pub_key).unwrap();
     let claim_payload = atom_id::ClaimPayload::new(
         Alg::Ed25519,
         AtomId::new(anchor.clone(), label.clone()),
         1_000,
-        vec![9, 9],
+        atom_id::OwnerRef::single_key(&tmb),
         "cargo".to_string(),
         src_oid.as_bytes().to_vec(),
         tmb.clone(),
@@ -717,7 +910,7 @@ async fn test_local_ingest() {
     let label = Label::try_from("pkg").unwrap();
     let id = AtomId::new(anchor.clone(), label.clone());
 
-    let claim_czd = registry.claim(&id, &pub_key).unwrap();
+    let claim_czd = registry.claim(&id, &owner_ref(&pub_key)).unwrap();
 
     let ver_commit_oid = create_commit(
         &reg_repo,
@@ -751,6 +944,7 @@ async fn test_local_ingest() {
 
     // Ingest!
     store.ingest(&registry.source).await.unwrap();
+    replant_charter(&reg_repo, &store.source.repo(), &anchor);
 
     // 3. Verify store references exist and target a real, independently
     // ingested claim commit — the ref-path hex segment is a store-internal
@@ -876,7 +1070,7 @@ fn test_failures_and_forbidden_states() {
     assert!(matches!(res, Err(GitError::NoActiveClaim(_))));
 
     // Now establish a claim
-    let real_claim_czd = registry.claim(&id, &pub_key).unwrap();
+    let real_claim_czd = registry.claim(&id, &owner_ref(&pub_key)).unwrap();
 
     // 2. Attempting to publish with a backdated src commit (not a descendant of claim src) should
     //    fail
