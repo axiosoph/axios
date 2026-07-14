@@ -873,6 +873,19 @@ pub fn verify_publish_chains_claim(
 /// frameworks (hierarchical, rooted-identity) resolve authorization
 /// differently and are a caller concern this crate does not implement.
 ///
+/// **Soundness precondition the caller MUST establish first — this
+/// function does NOT check it.** `publish.tmb` is a self-declared
+/// payload field; nothing in this crate currently binds
+/// `tmb(publish.key) == publish.tmb` (the Verification Pipeline's own
+/// step 6 table row, `docs/specs/atom-transactions.md`, is scoped to
+/// "charter/claim," explicitly omitting publish). Calling this
+/// function without independently establishing that binding — e.g. by
+/// computing the thumbprint of whatever key actually signed the
+/// publish (`coz_rs::compute_thumbprint_for_alg`) and confirming it
+/// equals `publish.tmb` before trusting this check's result — lets an
+/// attacker sign with any key while declaring `publish.tmb =
+/// claim.owner`, and this function will wrongly report "authorized."
+///
 /// Spec constraints: `[owner-authorization-delegated]`,
 /// `[publish-transition]`.
 #[cfg(feature = "serde")]
