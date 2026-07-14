@@ -123,8 +123,8 @@ TYPE  SignerRole = "builder" | "assertor"
       -- (atom-model.md §4); this spec binds to that classification.
 
 TYPE  SignerRef = tmb(Tmb) | owner
-      -- `owner` matches any key the atom's effective charter/claim
-      -- ownership authorizes ([trust-owner-selector])
+      -- `owner` matches the atom's effective CLAIM owner (single
+      -- value, never the charter's owner set) ([trust-owner-selector])
 
 TYPE  TrustAnchor = {
         signer:  SignerRef,
@@ -241,26 +241,36 @@ kind per the classification table of
 [atom-model.md §5](../models/atom-model.md).
 `VERIFIED: unverified`
 
-**[trust-owner-selector]**: The `owner` signer reference matches a
-record's signer iff that key is authorized by the atom's effective
-charter/claim ownership at the record's chain position, under the
-same succession and delegation semantics the protocol already
-verifies for intent
-([atom-transactions.md](atom-transactions.md)
-`[claim-charter-authorization]`, `[owner-authorization-delegated]`).
-The selector introduces no new authorization machinery — it reuses
-the protocol's own judgment, evaluated per chain position so that a
-later ownership change does not retroactively re-classify old
-appends. When a record's signer matches BOTH an explicit `tmb(_)`
-entry and the `owner` selector, the explicit entry MUST govern
-alone — roles and quorum both: per-key curation is more specific
-than the blanket selector, and the precedence must be stated because
-`TrustAnchorSet` is unordered — without it, two conforming
-implementations could apply different quorums to the same record,
-violating `[trust-policy-pure]`. _Rationale (delegated decision):
-"trust the publisher's own builds" is the single most common real
-policy; without this selector it would require per-atom anchor
-maintenance that tracks every key rotation by hand._
+**[trust-owner-selector]** _(disambiguated 2026-07-14 — charter vs.
+claim ownership no longer share one shape)_: The `owner` signer
+reference matches a record's signer iff that key equals (or is
+authorized under) the atom's EFFECTIVE CLAIM's `owner` —
+`ClaimPayload.owner`, a single `OwnerRef`
+([atom-transactions.md](atom-transactions.md) `[claim-owner-single]`)
+— at the record's chain position, under
+`[owner-authorization-delegated]`'s per-value semantics. This is
+deliberately the CLAIM layer, never the charter layer: charter
+ownership is now a non-empty SET of principals
+(`[charter-owner-set]`, atom-transactions.md) governing who MAY hold
+a claim under this anchor (`[claim-charter-authorization]`) — a
+decision already made and recorded at claim-authorization time, not
+a pool of keys this selector re-checks per record. "Effective charter
+ownership" and "claim ownership" are therefore two distinct concepts
+with two distinct shapes (set vs. single value); `owner` here always
+means the latter. The selector introduces no new authorization
+machinery — it reuses the protocol's own claim-level judgment,
+evaluated per chain position so that a later claim replacement does
+not retroactively re-classify old appends. When a record's signer
+matches BOTH an explicit `tmb(_)` entry and the `owner` selector, the
+explicit entry MUST govern alone — roles and quorum both: per-key
+curation is more specific than the blanket selector, and the
+precedence must be stated because `TrustAnchorSet` is unordered —
+without it, two conforming implementations could apply different
+quorums to the same record, violating `[trust-policy-pure]`.
+_Rationale (delegated decision): "trust the publisher's own builds"
+is the single most common real policy; without this selector it
+would require per-atom anchor maintenance that tracks every key
+rotation by hand._
 `VERIFIED: unverified`
 
 **[trust-threshold-rule]**: Acceptance of a derived execution record

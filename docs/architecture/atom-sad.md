@@ -521,8 +521,10 @@ Out of scope for the atom layer:
 | AtomId         | The abstract pair `(anchor, label)` — the identity, not a hash                   |
 | Atom-set       | Atoms sharing a common anchor                                                    |
 | Label          | Human-readable atom name (UAX #31)                                               |
-| Owner          | Opaque identity digest (Coz `tmb`, Cyphr `PR`)                                   |
-| Claim          | Signed `CozMessage` binding `Owner` → `(anchor, label)`                          |
+| OwnerRef       | `{kind, value}` — a `kind`-tagged opaque identity digest (Coz `tmb`, Cyphr `PR`); `kind` names the identity framework (`single-key` implemented; `hierarchical`/`rooted-identity` reserved), `value` stays opaque to the protocol regardless of `kind` |
+| Owner (claim)  | `ClaimPayload.owner` — a single `OwnerRef`: the one identity accountable for a label |
+| Owner (charter) | `CharterPayload.owner` — a non-empty SET of `OwnerRef`s: the team recognized under this anchor, flat and equally authoritative |
+| Claim          | Signed `CozMessage` binding an `OwnerRef` → `(anchor, label)`                    |
 | Publish        | Signed `CozMessage` recording a version; references a claim `czd`                |
 | czd            | Coz message digest (multihash); `publish_czd`, `claim_czd`                       |
 | dig            | Hash of the reproducible atom snapshot (in the publish payload)                  |
@@ -580,6 +582,21 @@ SHOULD→MUST plus the seam/ancestry/immutability statements against
 `git-storage-format.md` (backend contract Appendix B). Until those land,
 the manifests in the two new documents are the authoritative drift record
 for their items — deliberate, enumerated, not silent.
+
+The 2026-07-14 owner-set amendment (`atom-transactions.md`
+`[owner-kind-required]`, `[claim-owner-single]`, `[charter-owner-set]`)
+generalizes `CharterPayload.owner` from a single opaque digest to a
+non-empty set of `kind`-tagged owner-references, and adds the
+`owner_kind` discriminator required to interpret any owner-reference's
+value; `ClaimPayload.owner` stays a single owner-reference. This has
+been propagated across `atom-transactions.md` and `trust-model.md`
+(`[trust-owner-selector]`'s claim/charter disambiguation) and into
+this SAD's terminology (Appendix A). One deliberate, explicitly marked
+gap remains: `docs/specs/tla/AtomCharter.tla` still encodes
+single-owner charter semantics and has not been reworked for
+set-valued ownership — atom-transactions.md's Verification section
+names precisely which `machine (TLC)` rows this affects — tracked as
+follow-on design work, not silent drift.
 
 ## Appendix E: Stale Documentation
 
