@@ -6,7 +6,9 @@
 use std::time::SystemTime;
 
 use atom_core::{AtomContent, AtomId, AtomRegistry, AtomSource, ContentEntry, Czd, RawVersion};
-use atom_id::{Anchor, CharterPayload, ClaimPayload, PublishPayload};
+#[cfg(test)]
+use atom_id::Anchor;
+use atom_id::{CharterPayload, ClaimPayload, PublishPayload};
 use gix::refs::transaction::{Change, LogChange, PreviousValue, RefEdit, RefLog};
 use gix::refs::{FullName, Target};
 
@@ -227,14 +229,16 @@ impl AtomRegistry for GitRegistry {
             .map_err(|e| GitError::Init(format!("Failed to resolve HEAD: {}", e)))?
             .detach();
 
-        // 1. Derive anchor and verify it matches the ID
-        let derived_anchor_oid = crate::gix_util::derive_anchor(&repo, head_oid)?;
-        let expected_anchor = Anchor::new(derived_anchor_oid.as_bytes().to_vec());
-        if expected_anchor != *id.anchor() {
-            return Err(GitError::InvalidAnchor {
-                derived: expected_anchor.to_b64(),
-                expected: id.anchor().to_b64(),
-            });
+        // 1. Verify the ID's anchor resolves to a real founding charter.
+        // `[anchor-resolvable]`: the anchor is given (in the `AtomId`),
+        // never derived from git history -- claiming into a set with no
+        // founding charter is a correct rejection, not a derivation
+        // failure.
+        if crate::charter_store::resolve_founding_charter(&repo, id.anchor())?.is_none() {
+            return Err(GitError::Validation(format!(
+                "no founding charter exists for anchor {}",
+                id.anchor().to_b64()
+            )));
         }
 
         // 2. Determine claim chain parenting

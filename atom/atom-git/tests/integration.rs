@@ -96,17 +96,74 @@ fn create_commit(
         .detach()
 }
 
+/// Charter a virgin source via the real `charter()` API and return the
+/// resulting founding anchor -- under `[anchor-resolvable]` this is the
+/// only kind of anchor `claim()` will accept, since the anchor is given
+/// and verified against a real charter, never derived from git ancestry.
+fn found_anchor(registry: &GitRegistry, pub_key: &[u8], src: &[u8]) -> atom_core::Anchor {
+    let czd = registry.charter(pub_key, src, None).unwrap();
+    atom_core::Anchor::new(czd.as_bytes().to_vec())
+}
+
+/// F23: `claim()`'s anchor check resolves a real founding charter
+/// (`crate::charter_store::resolve_founding_charter`) rather than deriving
+/// one from git ancestry. An anchor with no founding charter behind it must
+/// be rejected cleanly, not accepted just because it happens to name a real
+/// git commit.
 #[test]
-fn test_anchor_discovery() {
+fn test_claim_rejects_unchartered_anchor() {
     let (_dir, repo, genesis_oid) = setup_test_repo();
 
-    // Create a commit path
-    let c1 = create_commit(&repo, "commit 1", "f1.txt", b"c1", vec![genesis_oid]);
-    let c2 = create_commit(&repo, "commit 2", "f2.txt", b"c2", vec![c1]);
+    let sk = SigningKey::<Ed25519>::generate();
+    let prv = sk.private_key_bytes().to_vec();
+    let pub_key = sk.verifying_key().public_key_bytes().to_vec();
 
-    // Derive anchor from c2
-    let anchor = atom_git::gix_util::derive_anchor(&repo, c2).unwrap();
-    assert_eq!(anchor, genesis_oid);
+    let registry = GitRegistry::new(
+        repo,
+        prv,
+        pub_key.clone(),
+        Alg::Ed25519,
+        "cargo".to_string(),
+    );
+
+    // A real commit, but never chartered -- no `refs/atom/charter/d/*`
+    // entry exists for it.
+    let anchor = atom_core::Anchor::new(genesis_oid.as_bytes().to_vec());
+    let label = Label::try_from("my-package").unwrap();
+    let id = AtomId::new(anchor, label);
+
+    let res = registry.claim(&id, &pub_key);
+    assert!(
+        matches!(&res, Err(GitError::Validation(msg)) if msg.contains("founding charter")),
+        "claim into an unchartered anchor must be rejected with a clear error: {res:?}"
+    );
+}
+
+/// F23: a properly chartered source's anchor resolves and `claim()`
+/// succeeds.
+#[test]
+fn test_claim_accepts_chartered_anchor() {
+    let (_dir, repo, _genesis_oid) = setup_test_repo();
+
+    let sk = SigningKey::<Ed25519>::generate();
+    let prv = sk.private_key_bytes().to_vec();
+    let pub_key = sk.verifying_key().public_key_bytes().to_vec();
+
+    let registry = GitRegistry::new(
+        repo,
+        prv,
+        pub_key.clone(),
+        Alg::Ed25519,
+        "cargo".to_string(),
+    );
+
+    let anchor = found_anchor(&registry, &pub_key, b"src-rev");
+    let label = Label::try_from("my-package").unwrap();
+    let id = AtomId::new(anchor, label);
+
+    let _claim_czd = registry
+        .claim(&id, &pub_key)
+        .expect("claim against a properly chartered anchor must succeed");
 }
 
 #[test]
@@ -140,7 +197,7 @@ fn test_deterministic_commits() {
 
 #[test]
 fn test_claim_and_key_rotation() {
-    let (_dir, repo, genesis_oid) = setup_test_repo();
+    let (_dir, repo, _genesis_oid) = setup_test_repo();
 
     // Set up coz credentials
     let sk = SigningKey::<Ed25519>::generate();
@@ -155,7 +212,7 @@ fn test_claim_and_key_rotation() {
         "cargo".to_string(),
     );
 
-    let anchor = atom_core::Anchor::new(genesis_oid.as_bytes().to_vec());
+    let anchor = found_anchor(&registry, &pub_key, b"src-rev");
     let label = Label::try_from("my-package").unwrap();
     let id = AtomId::new(anchor, label);
 
@@ -247,7 +304,7 @@ fn test_publish_and_tag_chain() {
 
     let repo = registry.source.repo();
 
-    let anchor = atom_core::Anchor::new(genesis_oid.as_bytes().to_vec());
+    let anchor = found_anchor(&registry, &pub_key, b"src-rev");
     let label = Label::try_from("my-package").unwrap();
     let id = AtomId::new(anchor, label);
 
@@ -331,7 +388,7 @@ fn test_publish_rejects_fabricated_oid_czd() {
     );
     let repo = registry.source.repo();
 
-    let anchor = atom_core::Anchor::new(genesis_oid.as_bytes().to_vec());
+    let anchor = found_anchor(&registry, &pub_key, b"src-rev");
     let label = Label::try_from("my-package").unwrap();
     let id = AtomId::new(anchor, label);
 
@@ -413,7 +470,7 @@ async fn test_resolve_registry_branch_returns_real_czd() {
     );
     let repo = registry.source.repo();
 
-    let anchor = atom_core::Anchor::new(genesis_oid.as_bytes().to_vec());
+    let anchor = found_anchor(&registry, &pub_key, b"src-rev");
     let label = Label::try_from("my-package").unwrap();
     let id = AtomId::new(anchor, label);
 
@@ -656,7 +713,7 @@ async fn test_local_ingest() {
 
     let reg_repo = registry.source.repo();
 
-    let anchor = atom_core::Anchor::new(reg_genesis_oid.as_bytes().to_vec());
+    let anchor = found_anchor(&registry, &pub_key, b"src-rev");
     let label = Label::try_from("pkg").unwrap();
     let id = AtomId::new(anchor.clone(), label.clone());
 
@@ -800,7 +857,7 @@ fn test_failures_and_forbidden_states() {
 
     let repo = registry.source.repo();
 
-    let anchor = atom_core::Anchor::new(genesis_oid.as_bytes().to_vec());
+    let anchor = found_anchor(&registry, &pub_key, b"src-rev");
     let label = Label::try_from("bad-package").unwrap();
     let id = AtomId::new(anchor, label);
 
@@ -979,98 +1036,12 @@ fn test_store_claim_cleanup_bare_refs_skip_orphan_check() {
 
 #[cfg(test)]
 mod proptests {
-    use atom_git::gix_util;
-    use gix::objs::{Commit, Tree};
     use proptest::prelude::*;
     use tempfile::TempDir;
 
     use super::*;
 
     proptest! {
-        #[test]
-        fn test_anchor_derivation_pbt(
-            root_count in 1..5usize,
-            extra_commits in 0..10usize,
-            oldest_root_index in 0..5usize,
-        ) {
-            let dir = TempDir::new().unwrap();
-            let repo = gix::init(dir.path()).unwrap();
-            let empty_tree_oid = repo.write_object(Tree { entries: Vec::new() }).unwrap().detach();
-
-            let actual_root_count = root_count;
-            let target_oldest_index = oldest_root_index % actual_root_count;
-
-            let mut roots = Vec::new();
-            for i in 0..actual_root_count {
-                let timestamp = if i == target_oldest_index {
-                    1000 // Oldest timestamp
-                } else {
-                    2000 + i as u32 * 100 // Newer timestamps
-                };
-
-                let sig = gix::actor::Signature {
-                    name: "test".into(),
-                    email: "test@example.com".into(),
-                    time: gix::date::Time {
-                        seconds: timestamp as i64,
-                        offset: 0,
-                    },
-                };
-
-                let root_commit = Commit {
-                    tree: empty_tree_oid,
-                    parents: Vec::new().into(),
-                    author: sig.clone(),
-                    committer: sig,
-                    encoding: None,
-                    message: "root commit".into(),
-                    extra_headers: Vec::new(),
-                };
-
-                let root_oid = repo.write_object(root_commit).unwrap().detach();
-                roots.push(root_oid);
-            }
-
-            // Create branch tips linking back to the roots
-            let mut branch_tips = roots.clone();
-            for i in 0..extra_commits {
-                let root_idx = i % branch_tips.len();
-                let parent = branch_tips[root_idx];
-
-                let sig = gix_util::blank_signature();
-                let commit = Commit {
-                    tree: empty_tree_oid,
-                    parents: vec![parent].into(),
-                    author: sig.clone(),
-                    committer: sig,
-                    encoding: None,
-                    message: format!("commit {}", i).into(),
-                    extra_headers: Vec::new(),
-                };
-
-                let commit_oid = repo.write_object(commit).unwrap().detach();
-                branch_tips[root_idx] = commit_oid;
-            }
-
-            // Merge all branches to guarantee reachability from a single head
-            let sig = gix_util::blank_signature();
-            let final_merge_commit = Commit {
-                tree: empty_tree_oid,
-                parents: branch_tips.into(),
-                author: sig.clone(),
-                committer: sig,
-                encoding: None,
-                message: "final merge".into(),
-                extra_headers: Vec::new(),
-            };
-            let final_merge_oid = repo.write_object(final_merge_commit).unwrap().detach();
-
-            // Derive anchor from the final merge commit
-            let derived = atom_git::gix_util::derive_anchor(&repo, final_merge_oid).unwrap();
-            let expected_oldest_root = roots[target_oldest_index];
-            prop_assert_eq!(derived, expected_oldest_root);
-        }
-
         // Under the flat `refs/atom/d/{blake3(publish_czd)}` scheme,
         // claim-cleanup ownership is only discoverable from a real
         // publish tag payload (deterministically covered by

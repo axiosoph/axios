@@ -124,7 +124,11 @@ async fn ingest_two_versions() -> (TempDir, GitStore, String, String) {
     );
     let reg_repo = registry.source.repo();
 
-    let anchor = atom_core::Anchor::new(reg_genesis_oid.as_bytes().to_vec());
+    // `claim()`'s anchor check now resolves a real founding charter
+    // (`[anchor-resolvable]`) rather than deriving one from git ancestry --
+    // charter the source first via the real API.
+    let founding_czd = registry.charter(&pub_key, b"src-rev", None).unwrap();
+    let anchor = atom_core::Anchor::new(founding_czd.as_bytes().to_vec());
     let label = Label::try_from("pkg").unwrap();
     let id = AtomId::new(anchor.clone(), label.clone());
 

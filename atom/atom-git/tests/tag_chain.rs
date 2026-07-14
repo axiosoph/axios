@@ -89,12 +89,14 @@ fn test_atom_id() -> AtomId {
 /// fail to build against a `gix_util.rs` that still defined them under a
 /// name this test could accidentally shadow or re-trigger.
 ///
-/// `derive_anchor` is deliberately NOT covered here: P1-orphans-confirmed
-/// was refuted for it at dispatch time — it has a live, reachable caller
-/// in `registry.rs::claim()` (also exercised by `integration.rs`'s
-/// `test_anchor_discovery`), both out of this node's declared surface.
-/// Deleting it is halted pending a composer decision; see this node's
-/// final report.
+/// `derive_anchor` was deliberately NOT covered here: at this node's
+/// dispatch time it still had a live, reachable caller in
+/// `registry.rs::claim()`, out of this node's declared surface, so
+/// P1-orphans-confirmed was refuted for it and its deletion was halted
+/// pending a composer decision. `n3-registry-anchor-fix` (closing F23)
+/// carried out that deletion: `claim()`'s anchor check now resolves a
+/// real founding charter instead, and `derive_anchor` itself is gone from
+/// `gix_util.rs`.
 #[test]
 fn orphaned_seam_constructor_is_gone() {
     // No runtime assertion is possible for an absence; the fact that this
@@ -259,7 +261,11 @@ async fn resolve_reports_stable_tip_for_untouched_chain() {
     );
     let repo = registry.source.repo();
 
-    let anchor = atom_core::Anchor::new(genesis_oid.as_bytes().to_vec());
+    // `claim()`'s anchor check now resolves a real founding charter
+    // (`[anchor-resolvable]`) rather than deriving one from git ancestry --
+    // charter the source first via the real API.
+    let founding_czd = registry.charter(&pub_key, b"src-rev", None).unwrap();
+    let anchor = atom_core::Anchor::new(founding_czd.as_bytes().to_vec());
     let label = Label::try_from("my-package").unwrap();
     let id = AtomId::new(anchor, label);
 
