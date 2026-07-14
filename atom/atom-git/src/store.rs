@@ -445,6 +445,27 @@ impl AtomStore for GitStore {
                         ));
                     }
 
+                    // Consumer-level MUST-verify-when-present
+                    // (`[content-hash-obligation]` tier 2): a publish
+                    // carrying `content_hash` is rejected on
+                    // recomputation mismatch. Absent is unaffected -- no
+                    // rehash is ever forced (tier 1, schema-optional).
+                    if let Some(expected_content_hash) = &publish_payload.content_hash {
+                        let computed_content_hash = atom_core::content_hash(&content_entries)
+                            .map_err(|e| {
+                                GitError::Validation(format!(
+                                    "Cannot compute content_hash over resolved content: {}",
+                                    e
+                                ))
+                            })?;
+                        if computed_content_hash.as_slice() != expected_content_hash.as_slice() {
+                            return Err(GitError::Validation(
+                                "content_hash does not match recomputed digest of resolved content"
+                                    .into(),
+                            ));
+                        }
+                    }
+
                     // Reconstruct/write deterministic atom commit
                     let publish_src_oid =
                         crate::gix_util::seam::oid_from_src_field(publish_payload.src.as_slice())
