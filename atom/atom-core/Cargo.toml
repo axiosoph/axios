@@ -10,3 +10,4 @@ serde   = ["atom-id/serde"]
 
 [dependencies]
 atom-id = { path = "../atom-id" }
+blake3  = "1"
