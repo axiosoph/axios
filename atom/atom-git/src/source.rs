@@ -7,7 +7,7 @@ use gix::hash::ObjectId;
 use serde::{Deserialize, Serialize};
 
 use crate::error::GitError;
-use crate::gix_util::is_descendant;
+use crate::gix_util::{TipStability, is_descendant, tip_stability};
 
 /// Opaque module for custom base64 serialization.
 mod option_b64 {
@@ -79,6 +79,12 @@ pub struct GitVersionEntry {
     pub publish_sig: Option<Vec<u8>>,
     /// Raw publish public key bytes, if signed.
     pub publish_pubkey: Option<Vec<u8>>,
+    /// Whether this version's publish-tag-chain ref tip changed between
+    /// when its resolution walk began and when verification completed for
+    /// it — [`TipStability::Moved`]/[`TipStability::Vanished`] signal the
+    /// fields above may already be stale. Not a spec-named constraint;
+    /// see [`TipStability`]'s doc comment for why this shape was chosen.
+    pub moved_tip: TipStability,
 }
 
 /// Resolved atom entry returned by a [`GitSource`].
@@ -165,7 +171,8 @@ impl AtomSource for GitSource {
                     }
 
                     // Walk the publish tag chain starting from the reference OID
-                    let mut current_oid = reference.id().detach();
+                    let observed_tip = reference.id().detach();
+                    let mut current_oid = observed_tip;
                     let mut tag_messages = Vec::new();
 
                     let dig_oid = loop {
@@ -301,6 +308,12 @@ impl AtomSource for GitSource {
                         ))
                     })?;
 
+                    // Re-read the ref immediately before returning this
+                    // version's resolution: if it moved (or vanished)
+                    // since `observed_tip` was captured at the start of
+                    // the walk, the fields above may already be stale.
+                    let moved_tip = tip_stability(&repo, &ref_name, observed_tip)?;
+
                     versions.push(GitVersionEntry {
                         version: RawVersion::new(version_str.to_string()),
                         dig: dig_oid.as_bytes().to_vec(),
@@ -313,6 +326,7 @@ impl AtomSource for GitSource {
                         publish_msg: tip_publish_msg,
                         publish_sig: tip_publish_sig,
                         publish_pubkey: tip_publish_pubkey,
+                        moved_tip,
                     });
                 }
             }
@@ -371,7 +385,8 @@ impl AtomSource for GitSource {
                     }
 
                     // Walk the publish tag chain starting from the reference OID
-                    let mut current_oid = v_ref.id().detach();
+                    let observed_tip = v_ref.id().detach();
+                    let mut current_oid = observed_tip;
                     let mut tag_messages = Vec::new();
 
                     let dig_oid = loop {
@@ -499,6 +514,12 @@ impl AtomSource for GitSource {
                         ))
                     })?;
 
+                    // Re-read the ref immediately before returning this
+                    // version's resolution: if it moved (or vanished)
+                    // since `observed_tip` was captured at the start of
+                    // the walk, the fields above may already be stale.
+                    let moved_tip = tip_stability(&repo, &v_ref_name, observed_tip)?;
+
                     versions.push(GitVersionEntry {
                         version: RawVersion::new(version_str.to_string()),
                         dig: dig_oid.as_bytes().to_vec(),
@@ -511,6 +532,7 @@ impl AtomSource for GitSource {
                         publish_msg: tip_publish_msg,
                         publish_sig: tip_publish_sig,
                         publish_pubkey: tip_publish_pubkey,
+                        moved_tip,
                     });
                 }
             }
@@ -551,6 +573,10 @@ impl AtomSource for GitSource {
                     publish_msg: None,
                     publish_sig: None,
                     publish_pubkey: None,
+                    // Dev resolution has no tag chain to walk -- the ref
+                    // is read once and used immediately, so there is no
+                    // window in which its tip could move mid-resolution.
+                    moved_tip: TipStability::Stable,
                 });
             }
         }

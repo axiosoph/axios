@@ -1,5 +1,6 @@
 use std::collections::{HashSet, VecDeque};
 
+use atom_id::PublishPayload;
 use gix::actor::Signature;
 use gix::date::Time;
 use gix::hash::ObjectId;
@@ -166,6 +167,53 @@ pub fn write_publish_tag(
     Ok(oid)
 }
 
+/// Append a new publish tag onto an existing tag chain, enforcing
+/// write-side semantic-immutability before creating the tag object.
+///
+/// Wraps [`write_publish_tag`], always targeting `previous_tag_oid` (the
+/// existing chain tip) as a [`gix::object::Kind::Tag`] — that is what a
+/// chain append always targets (`registry.rs::publish()`'s existing
+/// version-ref-exists branch already does this implicitly, but performs
+/// no check between the two payloads first). Rejects with
+/// [`GitError::Validation`] if `(label, version, dig, src, path)` differ
+/// between `previous_payload` and `new_payload`; `mode`, `meta`, `claim`,
+/// `tmb`, `now`, and signing-key metadata MAY differ freely (e.g. a
+/// `witnessed` -> `reproducible` mode transition on re-publish).
+///
+/// This closes the write-side half of `[tag-chain-semantic-immutable]`
+/// (`docs/specs/git-storage-format.md:758-768`); the read-side half is
+/// enforced separately in `source.rs`'s resolution walk.
+pub fn write_chain_append_tag(
+    repo: &gix::Repository,
+    tag_name: &str,
+    previous_tag_oid: ObjectId,
+    previous_payload: &PublishPayload,
+    new_payload: &PublishPayload,
+    tagger: Signature,
+    publish_message: String,
+) -> Result<ObjectId, GitError> {
+    if previous_payload.label != new_payload.label
+        || previous_payload.version != new_payload.version
+        || previous_payload.dig != new_payload.dig
+        || previous_payload.src != new_payload.src
+        || previous_payload.path != new_payload.path
+    {
+        return Err(GitError::Validation(format!(
+            "Semantic immutability violation: chain-append payload for tag {tag_name} changes an \
+             immutable field (label/version/dig/src/path) from the previous tag"
+        )));
+    }
+
+    write_publish_tag(
+        repo,
+        tag_name,
+        previous_tag_oid,
+        gix::object::Kind::Tag,
+        tagger,
+        publish_message,
+    )
+}
+
 /// Walk the parent chain of a commit lineage to assert descendants.
 ///
 /// Returns `true` if `descendant` is at or after `ancestor` in Git history.
@@ -198,6 +246,43 @@ pub fn is_descendant(
     Ok(false)
 }
 
+/// The tip-stability result of re-checking a ref against an OID observed
+/// earlier in a resolution walk.
+///
+/// Genuinely absent from the spec — neither "moved-tip" nor "acquisition
+/// warning" has any hit in `docs/specs/atom-transactions.md` or
+/// `docs/specs/git-storage-format.md` — so this shape (a signal alongside
+/// the resolved value, not a hard error) is a judgment call grounded in
+/// what a consumer needs: enough information to know their resolved view
+/// may already be stale, without `source.rs`'s read-side resolution
+/// failing outright over a race that may be entirely benign (e.g. an
+/// unrelated version being published concurrently).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TipStability {
+    /// The ref's tip is unchanged since it was first observed.
+    Stable,
+    /// The ref's tip moved to a new OID during resolution — the resolved
+    /// view built from the OID first observed may already be stale.
+    Moved(ObjectId),
+    /// The ref no longer exists — it was deleted or force-updated away
+    /// during resolution.
+    Vanished,
+}
+
+/// Re-read `ref_name` and compare its current tip against `observed_tip`,
+/// the OID first observed when a resolution walk over this ref began.
+pub fn tip_stability(
+    repo: &gix::Repository,
+    ref_name: &str,
+    observed_tip: ObjectId,
+) -> Result<TipStability, GitError> {
+    match repo.try_find_reference(ref_name)? {
+        Some(r) if r.id().detach() == observed_tip => Ok(TipStability::Stable),
+        Some(r) => Ok(TipStability::Moved(r.id().detach())),
+        None => Ok(TipStability::Vanished),
+    }
+}
+
 /// Typed boundary between protocol content digests and git `ObjectId`s.
 ///
 /// `[backend-seam-typed]` (`docs/specs/atom-backend-contract.md`): `Czd`
@@ -212,7 +297,6 @@ pub fn is_descendant(
 /// call site MUST route through one of them, naming which sort it
 /// asserts of its input.
 pub mod seam {
-    use atom_core::Czd;
     use gix::hash::{Error, ObjectId};
 
     /// Interpret a transaction payload's `src` field as a git [`ObjectId`].
@@ -235,23 +319,8 @@ pub mod seam {
         ObjectId::try_from(dig)
     }
 
-    /// Quarantine a `Czd` — never an OID-sorted value — into an [`ObjectId`].
-    ///
-    /// This is exactly the ILLEGAL-shaped conversion `[backend-seam-typed]`
-    /// forbids. It exists only because `GitStore::ingest` (issue #64)
-    /// currently keys claim-commit reconstruction on git object ids
-    /// derived from claim `Czd`s instead of from the store's own object
-    /// graph. Every call site is a defect site being carried forward, not
-    /// a legal seam; `n2-ingest-fix` deletes this function along with its
-    /// callers.
-    pub fn assume_czd_is_oid_issue64(czd: &Czd) -> Result<ObjectId, Error> {
-        ObjectId::try_from(czd.as_bytes())
-    }
-
     #[cfg(test)]
     mod tests {
-        use atom_core::Czd;
-
         use super::*;
 
         // atom-git compiles gix with both `sha1` and `sha256` (see
@@ -307,38 +376,9 @@ pub mod seam {
         }
 
         #[test]
-        fn assume_czd_is_oid_issue64_rejects_wrong_length() {
-            for len in INVALID_LENS {
-                let czd = Czd::from_bytes(vec![0u8; len]);
-                assert!(
-                    assume_czd_is_oid_issue64(&czd).is_err(),
-                    "expected Err for {len}-byte Czd"
-                );
-            }
-        }
-
-        #[test]
-        fn assume_czd_is_oid_issue64_accepts_20_bytes() {
-            let czd = Czd::from_bytes(vec![0u8; 20]);
-            assert!(assume_czd_is_oid_issue64(&czd).is_ok());
-        }
-
-        #[test]
-        fn assume_czd_is_oid_issue64_is_the_named_defect_a_sha256_czd_quietly_fits() {
-            // Documents exactly why this constructor is loudly-named and
-            // quarantined: a 32-byte (SHA-256) Czd is bytewise
-            // indistinguishable from a valid SHA-256 git OID, so this
-            // "succeeds" despite the two being disjoint protocol sorts.
-            // Only lengths matching no configured git hash are caught.
-            let sha256_shaped_czd = Czd::from_bytes(vec![0u8; 32]);
-            assert!(assume_czd_is_oid_issue64(&sha256_shaped_czd).is_ok());
-        }
-
-        #[test]
         fn constructors_never_panic_on_empty_input() {
             assert!(oid_from_src_field(&[]).is_err());
             assert!(oid_from_dig_field(&[]).is_err());
-            assert!(assume_czd_is_oid_issue64(&Czd::from_bytes(Vec::new())).is_err());
         }
     }
 }
