@@ -161,15 +161,25 @@ pub fn verify_charter(
 /// progressed beyond it. A chain that never mentions `recorded_head` is
 /// treated as a regression (rollback) and rejected.
 ///
-/// *Known limitation:* this cannot distinguish "the chain ends exactly at
-/// `recorded_head`, unchanged since last observation" from "the chain
-/// never reaches it" — doing so would require the served chain's own
-/// tail czd, which this function cannot compute (`CharterPayload` carries
-/// no raw signature bytes; see below). A caller that must accept an
-/// unchanged head needs to additionally compare `recorded_head` against
-/// the served chain's tail czd itself (which the caller — having
-/// resolved the chain from its git-ref-keyed storage — already has for
-/// free) before calling this function.
+/// *Known limitation — a false-positive footgun, not a mere ambiguity.*
+/// When the served chain is legitimately unchanged since the caller's
+/// last observation (`recorded_head` equals the chain's own current tail
+/// czd — the common steady-state poll, not a corner case), **no element
+/// of the chain can name its own tail as a `prior`**, so the
+/// extends-past check below is unconditionally `false` and this function
+/// returns `Err(VerifyError::ChainRegression)` — a false "rollback
+/// detected" — on every such call. This parameter proves only "the chain
+/// grew past `recorded_head`"; it can NEVER confirm "no regression
+/// happened" for an unchanged chain. Distinguishing the two would
+/// require the served chain's own tail czd, which this function cannot
+/// compute (`CharterPayload` carries no raw signature bytes; see below).
+///
+/// **A caller MUST peel off the unchanged case itself before calling:**
+/// compare `recorded_head` against the served chain's own tail czd
+/// (which the caller — having resolved the chain from its git-ref-keyed
+/// storage — already has for free) and skip this call entirely when they
+/// match. Passing an unchanged chain's own tail as `recorded_head` and
+/// trusting this function to report "no regression" WILL misfire.
 ///
 /// **Out of scope.** This function does not itself re-verify each
 /// payload's Coz signature — a `CharterPayload` here is assumed to have
