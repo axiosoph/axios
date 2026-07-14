@@ -263,13 +263,18 @@ async fn resolve_reports_stable_tip_for_untouched_chain() {
 
     // `claim()`'s anchor check now resolves a real founding charter
     // (`[anchor-resolvable]`) rather than deriving one from git ancestry --
-    // charter the source first via the real API.
-    let founding_czd = registry.charter(&pub_key, b"src-rev", None).unwrap();
+    // charter the source first via the real API. `[owner-authorization-
+    // delegated]`: a `single-key` owner's `value` MUST be the key's
+    // thumbprint, not the raw public key.
+    let owner = atom_id::OwnerRef::single_key(sk.thumbprint());
+    let founding_czd = registry
+        .charter(std::slice::from_ref(&owner), b"src-rev", None)
+        .unwrap();
     let anchor = atom_core::Anchor::new(founding_czd.as_bytes().to_vec());
     let label = Label::try_from("my-package").unwrap();
     let id = AtomId::new(anchor, label);
 
-    let claim_czd = registry.claim(&id, &pub_key).unwrap();
+    let claim_czd = registry.claim(&id, &owner).unwrap();
 
     let blob_tree = {
         let blob_oid = repo

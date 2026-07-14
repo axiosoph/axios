@@ -118,9 +118,19 @@ pub fn resolve_founding_charter(
 /// are included in the assembled chain (rather than the walk picking a
 /// branch) so `verify_succession_chain`'s own scan detects and rejects the
 /// divergence, propagated here as `Err`.
+///
+/// `recorded_head` is threaded straight through to
+/// [`atom_id::verify_succession_chain`]'s own `[chain-monotonicity]` check
+/// — `None` when the caller has no previously recorded head (or is not yet
+/// persisting one; this function does no persistence of its own, only the
+/// threading), `Some` to enforce that the resolved chain demonstrably
+/// extends past it. See that function's doc comment for the
+/// steady-state-unchanged caveat a caller passing a real recorded head
+/// MUST account for.
 pub fn resolve_effective_charter(
     repo: &gix::Repository,
     anchor: &Anchor,
+    recorded_head: Option<&Czd>,
 ) -> Result<Option<(CharterPayload, Vec<CharterPayload>)>, GitError> {
     let Some(founding) = resolve_founding_charter(repo, anchor)? else {
         return Ok(None);
@@ -184,8 +194,12 @@ pub fn resolve_effective_charter(
 
     // Linearity, authorization, and divergence are `verify_succession_chain`'s
     // authority -- it fails closed (`VerifyError::DivergentSuccessors`) on
-    // exactly the forked-chain shape assembled above.
-    atom_id::verify_succession_chain(&chain, None)?;
+    // exactly the forked-chain shape assembled above. `recorded_head` is
+    // threaded through (not hardcoded `None`) so a caller with a real
+    // persisted head can actually get rollback detection
+    // (`[chain-monotonicity]`) rather than the check being permanently
+    // unreachable in production.
+    atom_id::verify_succession_chain(&chain, recorded_head)?;
 
     let effective = chain
         .last()
@@ -273,6 +287,13 @@ mod tests {
         Keypair { prv, pub_key, tmb }
     }
 
+    /// A single-entry `single-key` owner set from raw bytes -- the common
+    /// case throughout these tests, none of which exercise multi-member
+    /// sets.
+    fn single_owner(bytes: Vec<u8>) -> Vec<atom_id::OwnerRef> {
+        vec![atom_id::OwnerRef::new(atom_id::OwnerKind::SingleKey, bytes)]
+    }
+
     /// Sign a `CharterPayload` and build its `CozMessage` envelope JSON,
     /// mirroring `registry.rs::claim()`'s exact serialize/sign/envelope
     /// idiom.
@@ -329,11 +350,12 @@ mod tests {
         let founding = CharterPayload::new(
             Alg::Ed25519,
             1_700_000_000,
-            owner.pub_key.clone(),
+            single_owner(owner.pub_key.clone()),
             None,
             vec![9u8; 20],
             owner.tmb.clone(),
-        );
+        )
+        .unwrap();
         let (msg, czd) = sign_charter(&founding, &owner.prv, &owner.pub_key);
         write_and_ref_charter(&repo, msg, &czd);
 
@@ -366,11 +388,12 @@ mod tests {
         let founding = CharterPayload::new(
             Alg::Ed25519,
             1_700_000_000,
-            owner.pub_key.clone(),
+            single_owner(owner.pub_key.clone()),
             None,
             vec![9u8; 20],
             owner.tmb.clone(),
-        );
+        )
+        .unwrap();
         let (msg, real_czd) = sign_charter(&founding, &owner.prv, &owner.pub_key);
 
         // Plant the commit under a DIFFERENT czd-keyed ref than its actual
@@ -397,11 +420,12 @@ mod tests {
         let founding = CharterPayload::new(
             Alg::Ed25519,
             1_700_000_000,
-            successor.pub_key.clone(),
+            single_owner(successor.pub_key.clone()),
             None,
             vec![9u8; 20],
             founder.tmb.clone(),
-        );
+        )
+        .unwrap();
         let (founding_msg, founding_czd) = sign_charter(&founding, &founder.prv, &founder.pub_key);
         write_and_ref_charter(&repo, founding_msg, &founding_czd);
 
@@ -411,11 +435,12 @@ mod tests {
         let successor_payload = CharterPayload::new(
             Alg::Ed25519,
             1_700_000_100,
-            vec![7u8; 4],
+            single_owner(vec![7u8; 4]),
             Some(founding_czd.clone()),
             vec![9u8; 20],
             successor.tmb.clone(),
-        );
+        )
+        .unwrap();
         let (successor_msg, successor_czd) =
             sign_charter(&successor_payload, &successor.prv, &successor.pub_key);
         write_and_ref_charter(&repo, successor_msg, &successor_czd);
@@ -445,38 +470,42 @@ mod tests {
         let founding = CharterPayload::new(
             Alg::Ed25519,
             1000,
-            owner1.tmb.as_bytes().to_vec(), // founding names owner1 (by thumbprint) as next owner
+            single_owner(owner1.tmb.as_bytes().to_vec()), /* founding names owner1 (by
+                                                           * thumbprint) as next owner */
             None,
             vec![1u8; 20],
             owner0.tmb.clone(),
-        );
+        )
+        .unwrap();
         let (founding_msg, founding_czd) = sign_charter(&founding, &owner0.prv, &owner0.pub_key);
         write_and_ref_charter(&repo, founding_msg, &founding_czd);
 
         let mid = CharterPayload::new(
             Alg::Ed25519,
             2000,
-            owner2.tmb.as_bytes().to_vec(),
+            single_owner(owner2.tmb.as_bytes().to_vec()),
             Some(founding_czd.clone()),
             vec![1u8; 20],
             owner1.tmb.clone(), // authorized by founding's owner (owner1's tmb)
-        );
+        )
+        .unwrap();
         let (mid_msg, mid_czd) = sign_charter(&mid, &owner1.prv, &owner1.pub_key);
         write_and_ref_charter(&repo, mid_msg, &mid_czd);
 
         let tail = CharterPayload::new(
             Alg::Ed25519,
             3000,
-            vec![9u8; 4],
+            single_owner(vec![9u8; 4]),
             Some(mid_czd.clone()),
             vec![1u8; 20],
             owner2.tmb.clone(), // authorized by mid's owner (owner2's tmb)
-        );
+        )
+        .unwrap();
         let (tail_msg, tail_czd) = sign_charter(&tail, &owner2.prv, &owner2.pub_key);
         write_and_ref_charter(&repo, tail_msg, &tail_czd);
 
         let anchor = Anchor::new(founding_czd.as_bytes().to_vec());
-        let (effective, chain) = resolve_effective_charter(&repo, &anchor)
+        let (effective, chain) = resolve_effective_charter(&repo, &anchor, None)
             .expect("resolution must not error")
             .expect("a real chain must resolve");
 
@@ -505,38 +534,42 @@ mod tests {
         let founding = CharterPayload::new(
             Alg::Ed25519,
             1000,
-            owner0.tmb.as_bytes().to_vec(), // self-authorizes both forks for this test
+            single_owner(owner0.tmb.as_bytes().to_vec()), /* self-authorizes both forks for this
+                                                           * test */
             None,
             vec![1u8; 20],
             owner0.tmb.clone(),
-        );
+        )
+        .unwrap();
         let (founding_msg, founding_czd) = sign_charter(&founding, &owner0.prv, &owner0.pub_key);
         write_and_ref_charter(&repo, founding_msg, &founding_czd);
 
         let successor_a = CharterPayload::new(
             Alg::Ed25519,
             2000,
-            vec![1u8; 4],
+            single_owner(vec![1u8; 4]),
             Some(founding_czd.clone()),
             vec![1u8; 20],
             owner0.tmb.clone(),
-        );
+        )
+        .unwrap();
         let (msg_a, czd_a) = sign_charter(&successor_a, &owner_a.prv, &owner_a.pub_key);
         write_and_ref_charter(&repo, msg_a, &czd_a);
 
         let successor_b = CharterPayload::new(
             Alg::Ed25519,
             2001,
-            vec![2u8; 4],
+            single_owner(vec![2u8; 4]),
             Some(founding_czd.clone()),
             vec![1u8; 20],
             owner0.tmb.clone(),
-        );
+        )
+        .unwrap();
         let (msg_b, czd_b) = sign_charter(&successor_b, &owner_b.prv, &owner_b.pub_key);
         write_and_ref_charter(&repo, msg_b, &czd_b);
 
         let anchor = Anchor::new(founding_czd.as_bytes().to_vec());
-        let result = resolve_effective_charter(&repo, &anchor);
+        let result = resolve_effective_charter(&repo, &anchor, None);
         assert!(
             matches!(
                 result,
@@ -560,11 +593,12 @@ mod tests {
         let founding = CharterPayload::new(
             Alg::Ed25519,
             1_700_000_000,
-            owner.pub_key.clone(),
+            single_owner(owner.pub_key.clone()),
             None,
             vec![9u8; 20],
             owner.tmb.clone(),
-        );
+        )
+        .unwrap();
         let (msg, czd) = sign_charter(&founding, &owner.prv, &owner.pub_key);
         write_and_ref_charter(&repo, msg, &czd);
 
@@ -589,11 +623,12 @@ mod tests {
         let founding = CharterPayload::new(
             Alg::Ed25519,
             1_700_000_000,
-            owner.pub_key.clone(),
+            single_owner(owner.pub_key.clone()),
             None,
             vec![9u8; 20],
             owner.tmb.clone(),
-        );
+        )
+        .unwrap();
         let (msg, real_czd) = sign_charter(&founding, &owner.prv, &owner.pub_key);
 
         let wrong_czd = Czd::from_bytes(vec![0xEE; real_czd.as_bytes().len()]);

@@ -159,6 +159,22 @@ impl AtomSource for GitSource {
 
             // Verify that anchor matches
             if claim_payload.anchor == *id.anchor() {
+                // Resolve the charter chain and check the claim's signer
+                // is authorized by the effective charter's owner set
+                // (Verification Pipeline steps 2/3/7/10) -- previously
+                // never resolved at all in production; every claim's
+                // authorization was silently unchecked.
+                let (effective_charter, _chain) =
+                    crate::charter_store::resolve_effective_charter(&repo, id.anchor(), None)?
+                        .ok_or_else(|| {
+                            GitError::Validation(format!(
+                                "no charter resolves for anchor {} -- an unauthorized claim \
+                                 cannot be trusted",
+                                id.anchor().to_b64()
+                            ))
+                        })?;
+                atom_id::verify_claim_authorized_by_charter(&claim_payload, &effective_charter)?;
+
                 // Find all version refs in refs/atom/pub/{label}/*
                 let prefix_str = format!("refs/atom/pub/{}/", id.label());
                 let references = repo.references()?;
@@ -253,6 +269,19 @@ impl AtomSource for GitSource {
                             pub_key_bytes,
                         )?;
 
+                        // Close the documented tmb-binding soundness gap
+                        // (Verification Pipeline step 6, publish side)
+                        // BEFORE trusting this tag's payload for anything
+                        // downstream: `pub_key_bytes` may be a tag's own
+                        // embedded `key` (the fallback above), and nothing
+                        // else confirms it actually matches the payload's
+                        // declared `tmb`.
+                        atom_id::verify_publish_key_thumbprint(
+                            &pub_payload,
+                            pub_alg_str,
+                            pub_key_bytes,
+                        )?;
+
                         // Invariant [tag-chain-semantic-immutable]: immutable fields must match
                         // across updates
                         if prev_publish_payload.as_ref().is_some_and(|prev| {
@@ -313,6 +342,18 @@ impl AtomSource for GitSource {
                             version_str
                         ))
                     })?;
+
+                    // Verification Pipeline steps 9 and 11: the tip
+                    // publish's signer is authorized by the claim's owner,
+                    // and charter.now < claim.now < publish.now holds
+                    // strictly. Both were previously unchecked in
+                    // production -- only exercised by test-only calls.
+                    atom_id::verify_publish_authorized(&pub_payload, &claim_payload)?;
+                    atom_id::verify_temporal_ordering(
+                        &effective_charter,
+                        &claim_payload,
+                        &pub_payload,
+                    )?;
 
                     // Re-read the ref immediately before returning this
                     // version's resolution: if it moved (or vanished)
@@ -432,6 +473,24 @@ impl AtomSource for GitSource {
                 continue;
             }
 
+            // Resolve the charter chain and check the claim's signer is
+            // authorized by the effective charter's owner set
+            // (Verification Pipeline steps 2/3/7/10) -- see the REGISTRY
+            // resolution branch above for the identical rationale; store
+            // resolution resolves the claim per-version-ref rather than
+            // once per label, so this check is repeated per iteration
+            // here too.
+            let (effective_charter, _chain) =
+                crate::charter_store::resolve_effective_charter(&repo, id.anchor(), None)?
+                    .ok_or_else(|| {
+                        GitError::Validation(format!(
+                            "no charter resolves for anchor {} -- an unauthorized claim cannot be \
+                             trusted",
+                            id.anchor().to_b64()
+                        ))
+                    })?;
+            atom_id::verify_claim_authorized_by_charter(&claim_payload, &effective_charter)?;
+
             // Verify that the atom commit has the src header matching publish
             let atom_obj = repo.find_object(dig_oid)?;
             let atom_commit = atom_obj.try_into_commit()?;
@@ -475,6 +534,13 @@ impl AtomSource for GitSource {
                     pub_alg_str,
                     pub_key_bytes,
                 )?;
+
+                // Close the documented tmb-binding soundness gap
+                // (Verification Pipeline step 6, publish side) BEFORE
+                // trusting this tag's payload for anything downstream --
+                // see the REGISTRY resolution branch above for the
+                // identical rationale.
+                atom_id::verify_publish_key_thumbprint(&pub_payload, pub_alg_str, pub_key_bytes)?;
 
                 // Invariant [tag-chain-semantic-immutable]: immutable fields must match
                 // across updates
@@ -523,6 +589,11 @@ impl AtomSource for GitSource {
             let pub_payload = prev_publish_payload.ok_or_else(|| {
                 GitError::Validation(format!("No publish tag found for store ref {}", v_ref_name))
             })?;
+
+            // Verification Pipeline steps 9 and 11 -- see the REGISTRY
+            // resolution branch above for the identical rationale.
+            atom_id::verify_publish_authorized(&pub_payload, &claim_payload)?;
+            atom_id::verify_temporal_ordering(&effective_charter, &claim_payload, &pub_payload)?;
 
             // Re-read the ref immediately before returning this version's
             // resolution: if it moved (or vanished) since `observed_tip`

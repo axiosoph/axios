@@ -5,7 +5,9 @@
 
 use std::time::SystemTime;
 
-use atom_core::{AtomContent, AtomId, AtomRegistry, AtomSource, ContentEntry, Czd, RawVersion};
+use atom_core::{
+    AtomContent, AtomId, AtomRegistry, AtomSource, ContentEntry, Czd, OwnerRef, RawVersion,
+};
 #[cfg(test)]
 use atom_id::Anchor;
 use atom_id::{CharterPayload, ClaimPayload, PublishPayload};
@@ -105,6 +107,39 @@ fn parse_and_verify_charter(
 
     let computed_czd = atom_id::czd_for_alg(&pay_bytes, &envelope.sig, alg_str)?;
     let payload = atom_id::verify_charter(&pay_bytes, &envelope.sig, alg_str, pub_key)?;
+
+    Ok((payload, computed_czd))
+}
+
+/// Parse a claim commit's `CozMessage` body, verify its signature and
+/// shape, and recompute its czd from the actual signed bytes.
+///
+/// Mirrors [`parse_and_verify_charter`] for claims — needed by `claim()`'s
+/// replacement path to resolve and authorize against the PRIOR claim,
+/// which `publish()`'s own inline claim-parsing block (this file) does not
+/// expose as a reusable function.
+fn parse_and_verify_claim(
+    repo: &gix::Repository,
+    oid: gix::hash::ObjectId,
+) -> Result<(ClaimPayload, Czd), GitError> {
+    let obj = repo.find_object(oid)?;
+    let commit = obj.try_into_commit()?;
+    let msg_str = commit.message_raw_sloppy().to_string();
+
+    let envelope: CozMessageEnvelope = serde_json::from_str(&msg_str)?;
+    let pay_bytes = serde_json::to_vec(&envelope.pay)?;
+    let pub_key = envelope
+        .key
+        .as_ref()
+        .ok_or_else(|| GitError::Validation("Claim CozMessage is missing the key field".into()))?;
+    let alg_str = envelope
+        .pay
+        .get("alg")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| GitError::Validation("Claim alg field is missing or invalid".into()))?;
+
+    let computed_czd = atom_id::czd_for_alg(&pay_bytes, &envelope.sig, alg_str)?;
+    let payload = atom_id::verify_claim(&pay_bytes, &envelope.sig, alg_str, pub_key)?;
 
     Ok((payload, computed_czd))
 }
@@ -222,24 +257,28 @@ fn find_earliest_claim(repo: &gix::Repository) -> Result<Option<ClaimPayload>, G
 }
 
 impl AtomRegistry for GitRegistry {
-    fn claim(&self, id: &AtomId, owner: &[u8]) -> Result<Czd, Self::Error> {
+    fn claim(&self, id: &AtomId, owner: &OwnerRef) -> Result<Czd, Self::Error> {
         let repo = self.source.repo();
         let head_oid = repo
             .head_id()
             .map_err(|e| GitError::Init(format!("Failed to resolve HEAD: {}", e)))?
             .detach();
 
-        // 1. Verify the ID's anchor resolves to a real founding charter.
+        // 1. Resolve the effective charter for the ID's anchor.
         // `[anchor-resolvable]`: the anchor is given (in the `AtomId`),
         // never derived from git history -- claiming into a set with no
         // founding charter is a correct rejection, not a derivation
-        // failure.
-        if crate::charter_store::resolve_founding_charter(&repo, id.anchor())?.is_none() {
-            return Err(GitError::Validation(format!(
-                "no founding charter exists for anchor {}",
-                id.anchor().to_b64()
-            )));
-        }
+        // failure. Subsumes the old "founding charter exists" check: no
+        // effective charter resolves iff no founding charter exists.
+        let (effective_charter, _chain) =
+            crate::charter_store::resolve_effective_charter(&repo, id.anchor(), None)?.ok_or_else(
+                || {
+                    GitError::Validation(format!(
+                        "no founding charter exists for anchor {}",
+                        id.anchor().to_b64()
+                    ))
+                },
+            )?;
 
         // 2. Determine claim chain parenting
         let claim_ref_name = format!("refs/atom/claims/pub/{}", id.label());
@@ -251,20 +290,75 @@ impl AtomRegistry for GitRegistry {
         let tmb = coz_rs::compute_thumbprint_for_alg(self.alg.name(), &self.pub_key)
             .ok_or_else(|| GitError::Coz("Failed to compute key thumbprint".into()))?;
 
-        let now = SystemTime::now()
+        let current_time = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
 
-        let claim_payload = ClaimPayload::new(
-            self.alg,
-            id.clone(),
-            now,
-            owner.to_vec(),
-            self.pkg.clone(),
-            head_oid.as_bytes().to_vec(),
-            tmb,
-        );
+        // Verification Pipeline step 9 requires charter.now < claim.now
+        // strictly; mirror publish()'s own now-bump idiom so a claim
+        // authored within the same wall-clock second as its charter does
+        // not spuriously fail temporal ordering at resolve time.
+        let now = if current_time <= effective_charter.now {
+            effective_charter.now + 1
+        } else {
+            current_time
+        };
+
+        // 3b. Construct + authorize, branching on founding vs. replacement.
+        // `[claim-charter-authorization]` (founding): the signer must be
+        // authorized by the effective charter's owner SET.
+        // `[claim-replacement-authority]` (replacement): only the
+        // owner-replacement path is reachable through this API -- `claim()`
+        // has no `governance` parameter, so `verify_claim_replacement` is
+        // called with `governance: false` fixed, which makes its
+        // governance-branch unreachable here by construction (not a gap:
+        // a governance seizure requires its own, separate entry point).
+        let claim_payload = match parent_oid {
+            None => {
+                let candidate = ClaimPayload::new(
+                    self.alg,
+                    id.clone(),
+                    now,
+                    owner.clone(),
+                    self.pkg.clone(),
+                    head_oid.as_bytes().to_vec(),
+                    tmb,
+                );
+                atom_id::verify_claim_authorized_by_charter(&candidate, &effective_charter)?;
+                candidate
+            },
+            Some(parent) => {
+                let (prior_payload, prior_czd) = parse_and_verify_claim(&repo, parent)?;
+                // Mirror `publish()`'s own now-bump idiom: a replacement's
+                // `now` MUST strictly exceed the prior's
+                // (`[claim-replacement-transition]` PRE), and two claims
+                // authored within the same wall-clock second would
+                // otherwise collide.
+                let now = if now <= prior_payload.now {
+                    prior_payload.now + 1
+                } else {
+                    now
+                };
+                let candidate = ClaimPayload::new_replacement(
+                    self.alg,
+                    id.clone(),
+                    now,
+                    owner.clone(),
+                    self.pkg.clone(),
+                    prior_czd,
+                    false, // governance seizure is not reachable through this API
+                    head_oid.as_bytes().to_vec(),
+                    tmb,
+                );
+                atom_id::verify_claim_replacement(
+                    &candidate,
+                    &prior_payload,
+                    &effective_charter.owner,
+                )?;
+                candidate
+            },
+        };
 
         // 4. Serialize, sign, and envelope
         let pay_val = serde_json::to_value(&claim_payload)?;
@@ -554,7 +648,12 @@ impl AtomRegistry for GitRegistry {
         Ok(())
     }
 
-    fn charter(&self, owner: &[u8], src: &[u8], prior: Option<&Czd>) -> Result<Czd, Self::Error> {
+    fn charter(
+        &self,
+        owner: &[OwnerRef],
+        src: &[u8],
+        prior: Option<&Czd>,
+    ) -> Result<Czd, Self::Error> {
         let repo = self.source.repo();
 
         let tmb = coz_rs::compute_thumbprint_for_alg(self.alg.name(), &self.pub_key)
@@ -577,7 +676,8 @@ impl AtomRegistry for GitRegistry {
                     None,
                     src.to_vec(),
                     tmb.clone(),
-                );
+                )
+                .map_err(|e| GitError::Validation(format!("invalid charter owner set: {e}")))?;
                 let earliest_claim = find_earliest_claim(&repo)?;
                 atom_id::verify_bootstrap_gate(&candidate, earliest_claim.as_ref())?;
                 candidate
@@ -594,12 +694,15 @@ impl AtomRegistry for GitRegistry {
                 })?;
 
                 // [charter-succession]: the signer must be authorized by
-                // the prior charter's owner -- the same per-link check
-                // `verify_succession_chain` performs, applied directly
-                // since `prior_payload` need not itself be the chain's
-                // founding charter (which that function requires of
-                // `chain[0]`).
-                if tmb.as_bytes() != prior_payload.owner.as_slice() {
+                // membership in the prior charter's owner SET
+                // (`[owner-authorization-delegated]`'s set composition
+                // rule) -- the same `owner_set_authorizes` helper
+                // `verify_succession_chain`'s own per-link check calls, so
+                // the two never drift apart. Applied directly here (rather
+                // than via `verify_succession_chain` itself) since
+                // `prior_payload` need not itself be the chain's founding
+                // charter, which that function requires of `chain[0]`.
+                if !atom_id::owner_set_authorizes(&prior_payload.owner, &tmb) {
                     return Err(GitError::Verify(atom_id::VerifyError::Unauthorized));
                 }
                 if now <= prior_payload.now {
@@ -631,6 +734,7 @@ impl AtomRegistry for GitRegistry {
                     src.to_vec(),
                     tmb.clone(),
                 )
+                .map_err(|e| GitError::Validation(format!("invalid charter owner set: {e}")))?
             },
         };
 
@@ -748,6 +852,13 @@ mod charter_tests {
         )
     }
 
+    /// A single-entry `single-key` owner set from raw bytes -- the common
+    /// case throughout these tests, none of which exercise multi-member
+    /// sets.
+    fn single_owner(bytes: Vec<u8>) -> Vec<OwnerRef> {
+        vec![atom_id::OwnerRef::new(atom_id::OwnerKind::SingleKey, bytes)]
+    }
+
     /// Plant a charter directly via the write-side primitive, bypassing
     /// `GitRegistry::charter()` -- used to construct adversarial/synthetic
     /// prior charters (e.g. an artificial `now`) that the real API cannot
@@ -805,7 +916,7 @@ mod charter_tests {
             Alg::Ed25519,
             id,
             now,
-            owner_tmb.as_bytes().to_vec(),
+            atom_id::OwnerRef::single_key(owner_tmb),
             "cargo".to_string(),
             vec![0u8; 20],
             kp.tmb.clone(),
@@ -853,7 +964,7 @@ mod charter_tests {
         let registry = registry_for(&repo, &founder);
 
         let czd = registry
-            .charter(&founder.pub_key, b"src-rev", None)
+            .charter(&single_owner(founder.pub_key.clone()), b"src-rev", None)
             .expect("founding a virgin source must succeed trivially");
 
         let ref_name = crate::charter_store::charter_ref_name(czd.as_bytes());
@@ -876,7 +987,7 @@ mod charter_tests {
         plant_claim(&repo, "some-label", 500, &incumbent.tmb, &incumbent);
 
         let registry = registry_for(&repo, &incumbent);
-        let result = registry.charter(&incumbent.pub_key, b"src-rev", None);
+        let result = registry.charter(&single_owner(incumbent.pub_key.clone()), b"src-rev", None);
         assert!(
             result.is_ok(),
             "a founder authorized by the earliest pre-existing claim's owner must succeed: \
@@ -892,7 +1003,7 @@ mod charter_tests {
         plant_claim(&repo, "some-label", 500, &incumbent.tmb, &incumbent);
 
         let registry = registry_for(&repo, &stranger);
-        let result = registry.charter(&stranger.pub_key, b"src-rev", None);
+        let result = registry.charter(&single_owner(stranger.pub_key.clone()), b"src-rev", None);
         assert!(
             matches!(
                 result,
@@ -915,15 +1026,20 @@ mod charter_tests {
         let founding = CharterPayload::new(
             Alg::Ed25519,
             1_000,
-            successor.tmb.as_bytes().to_vec(),
+            single_owner(successor.tmb.as_bytes().to_vec()),
             None,
             b"src-rev".to_vec(),
             founder.tmb.clone(),
-        );
+        )
+        .unwrap();
         let founding_czd = plant_charter(&repo, &founding, &founder);
 
         let registry = registry_for(&repo, &successor);
-        let result = registry.charter(&successor.pub_key, b"src-rev-2", Some(&founding_czd));
+        let result = registry.charter(
+            &single_owner(successor.pub_key.clone()),
+            b"src-rev-2",
+            Some(&founding_czd),
+        );
         assert!(
             result.is_ok(),
             "a successor authorized by the prior owner with a later now must succeed: {result:?}"
@@ -946,15 +1062,20 @@ mod charter_tests {
         let founding = CharterPayload::new(
             Alg::Ed25519,
             1_000,
-            intended_successor.tmb.as_bytes().to_vec(),
+            single_owner(intended_successor.tmb.as_bytes().to_vec()),
             None,
             b"src-rev".to_vec(),
             founder.tmb.clone(),
-        );
+        )
+        .unwrap();
         let founding_czd = plant_charter(&repo, &founding, &founder);
 
         let registry = registry_for(&repo, &stranger);
-        let result = registry.charter(&stranger.pub_key, b"src-rev-2", Some(&founding_czd));
+        let result = registry.charter(
+            &single_owner(stranger.pub_key.clone()),
+            b"src-rev-2",
+            Some(&founding_czd),
+        );
         assert!(
             matches!(
                 result,
@@ -976,15 +1097,20 @@ mod charter_tests {
         let founding = CharterPayload::new(
             Alg::Ed25519,
             9_999_999_999,
-            successor.tmb.as_bytes().to_vec(),
+            single_owner(successor.tmb.as_bytes().to_vec()),
             None,
             b"src-rev".to_vec(),
             founder.tmb.clone(),
-        );
+        )
+        .unwrap();
         let founding_czd = plant_charter(&repo, &founding, &founder);
 
         let registry = registry_for(&repo, &successor);
-        let result = registry.charter(&successor.pub_key, b"src-rev-2", Some(&founding_czd));
+        let result = registry.charter(
+            &single_owner(successor.pub_key.clone()),
+            b"src-rev-2",
+            Some(&founding_czd),
+        );
         assert!(
             matches!(result, Err(GitError::Validation(_))),
             "a successor whose now does not strictly exceed the prior's must be rejected: \
@@ -1008,18 +1134,27 @@ mod charter_tests {
         let founding = CharterPayload::new(
             Alg::Ed25519,
             1_000,
-            successor.tmb.as_bytes().to_vec(),
+            single_owner(successor.tmb.as_bytes().to_vec()),
             None,
             b"src-rev".to_vec(),
             founder.tmb.clone(),
-        );
+        )
+        .unwrap();
         let founding_czd = plant_charter(&repo, &founding, &founder);
 
         let registry = registry_for(&repo, &successor);
-        let first = registry.charter(&successor.pub_key, b"src-rev-2", Some(&founding_czd));
+        let first = registry.charter(
+            &single_owner(successor.pub_key.clone()),
+            b"src-rev-2",
+            Some(&founding_czd),
+        );
         assert!(first.is_ok(), "the first successor must succeed: {first:?}");
 
-        let second = registry.charter(&successor.pub_key, b"src-rev-3", Some(&founding_czd));
+        let second = registry.charter(
+            &single_owner(successor.pub_key.clone()),
+            b"src-rev-3",
+            Some(&founding_czd),
+        );
         assert!(
             matches!(second, Err(GitError::Validation(_))),
             "a second successor naming the same prior must be rejected at write time: {second:?}"
@@ -1038,7 +1173,11 @@ mod charter_tests {
 
         let registry = registry_for(&repo, &founder);
         let founding_czd = registry
-            .charter(successor.tmb.as_bytes(), b"src-rev", None)
+            .charter(
+                &single_owner(successor.tmb.as_bytes().to_vec()),
+                b"src-rev",
+                None,
+            )
             .expect("founding must succeed");
 
         // `now` is second-granularity wall-clock time and
@@ -1050,17 +1189,22 @@ mod charter_tests {
 
         let registry_successor = registry_for(&repo, &successor);
         let successor_czd = registry_successor
-            .charter(b"next-owner", b"src-rev-2", Some(&founding_czd))
+            .charter(
+                &single_owner(b"next-owner".to_vec()),
+                b"src-rev-2",
+                Some(&founding_czd),
+            )
             .expect("succession must succeed");
 
         let anchor = Anchor::new(founding_czd.as_bytes().to_vec());
-        let (effective, chain) = crate::charter_store::resolve_effective_charter(&repo, &anchor)
-            .unwrap()
-            .expect(
-                "the full founding+succession chain must resolve through n3-charter-store's \
-                 read-side primitives, using only the czds returned by the public \
-                 AtomRegistry::charter() calls above",
-            );
+        let (effective, chain) =
+            crate::charter_store::resolve_effective_charter(&repo, &anchor, None)
+                .unwrap()
+                .expect(
+                    "the full founding+succession chain must resolve through n3-charter-store's \
+                     read-side primitives, using only the czds returned by the public \
+                     AtomRegistry::charter() calls above",
+                );
         assert_eq!(chain.len(), 2, "founding + one succession");
         assert_eq!(
             effective.prior,

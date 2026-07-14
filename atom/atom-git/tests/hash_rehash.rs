@@ -138,12 +138,17 @@ fn publish_then_resign_with_content_hash(
     );
     let reg_repo = registry.source.repo();
 
-    let founding_czd = registry.charter(&pub_key, b"src-rev", None).unwrap();
+    // `[owner-authorization-delegated]`: a `single-key` owner's `value`
+    // MUST be the key's thumbprint, not the raw public key.
+    let owner = atom_id::OwnerRef::single_key(sk.thumbprint());
+    let founding_czd = registry
+        .charter(std::slice::from_ref(&owner), b"src-rev", None)
+        .unwrap();
     let anchor = atom_core::Anchor::new(founding_czd.as_bytes().to_vec());
     let label = Label::try_from("pkg").unwrap();
     let id = AtomId::new(anchor, label.clone());
 
-    let claim_czd = registry.claim(&id, &pub_key).unwrap();
+    let claim_czd = registry.claim(&id, &owner).unwrap();
 
     let ver_commit_oid = create_commit(
         &reg_repo,
@@ -252,6 +257,44 @@ async fn ingest_accepts_matching_content_hash() {
         .ingest(&registry.source)
         .await
         .expect("ingest must accept a matching content_hash");
+
+    // `GitStore::ingest` (atom-git/src/store.rs, outside this node's
+    // surface) does not yet propagate the charter chain into the
+    // destination store -- only `refs/atom/claims/d/*`, `refs/atom/d/*`,
+    // and dev refs. Resolution now correctly requires a resolvable charter
+    // (`[claim-charter-authorization]`), so replant the SAME founding
+    // charter this fixture already wrote into the source registry,
+    // directly into the store repo, to keep this content-hash-focused
+    // test isolated from that separate, already-known gap.
+    let reg_repo = registry.source.repo();
+    let source_charter_ref_name = atom_git::charter_store::charter_ref_name(id.anchor().as_bytes());
+    let charter_ref = reg_repo
+        .try_find_reference(&source_charter_ref_name)
+        .unwrap()
+        .expect("the fixture's own charter() call must have written this ref");
+    let charter_msg = reg_repo
+        .find_object(charter_ref.id().detach())
+        .unwrap()
+        .try_into_commit()
+        .unwrap()
+        .message_raw_sloppy()
+        .to_string();
+    let store_repo = store.source.repo();
+    let store_charter_oid =
+        atom_git::gix_util::write_charter_commit(&store_repo, charter_msg).unwrap();
+    let store_charter_ref_name = atom_git::charter_store::charter_ref_name(id.anchor().as_bytes());
+    let store_charter_ref_fullname = FullName::try_from(store_charter_ref_name.as_str()).unwrap();
+    store_repo
+        .edit_reference(RefEdit {
+            change: Change::Update {
+                log: LogChange::default(),
+                expected: PreviousValue::Any,
+                new: Target::Object(store_charter_oid),
+            },
+            name: store_charter_ref_fullname,
+            deref: false,
+        })
+        .unwrap();
 
     use atom_core::AtomSource;
     let resolved = store.resolve(&id).await.unwrap();

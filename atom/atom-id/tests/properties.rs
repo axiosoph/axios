@@ -16,8 +16,8 @@
 //!    not.
 
 use atom_id::{
-    Alg, Anchor, AtomDigest, AtomId, CharterPayload, ClaimPayload, Czd, HashAlg, Label, Thumbprint,
-    VerifyError, verify_bootstrap_gate, verify_succession_chain,
+    Alg, Anchor, AtomDigest, AtomId, CharterPayload, ClaimPayload, Czd, HashAlg, Label, OwnerKind,
+    OwnerRef, Thumbprint, VerifyError, verify_bootstrap_gate, verify_succession_chain,
 };
 use proptest::prelude::*;
 
@@ -65,11 +65,12 @@ fn build_valid_chain(len: usize) -> Vec<CharterPayload> {
             CharterPayload::new(
                 Alg::ES256,
                 1_000 + i as u64,
-                owner,
+                vec![OwnerRef::new(OwnerKind::SingleKey, owner)],
                 prior,
                 vec![0x11; 4],
                 tmb,
             )
+            .expect("owner_bytes(i) is always non-empty, so the set is non-empty")
         })
         .collect()
 }
@@ -230,11 +231,13 @@ fn build_founding(tmb_bytes: Vec<u8>) -> CharterPayload {
     CharterPayload::new(
         Alg::ES256,
         1_000,
-        vec![0x22], // owner is irrelevant to the bootstrap gate check
+        vec![OwnerRef::new(OwnerKind::SingleKey, vec![0x22])], /* owner is irrelevant to the
+                                                                * bootstrap gate check */
         None,
         vec![0x33; 4],
         Thumbprint::from_bytes(tmb_bytes),
     )
+    .expect("non-empty owner set")
 }
 
 fn build_preexisting_claim(owner_bytes: Vec<u8>) -> ClaimPayload {
@@ -242,7 +245,7 @@ fn build_preexisting_claim(owner_bytes: Vec<u8>) -> ClaimPayload {
         Alg::ES256,
         bootstrap_atom_id(),
         500,
-        owner_bytes,
+        OwnerRef::new(OwnerKind::SingleKey, owner_bytes),
         "cargo".to_string(),
         vec![0x44; 4],
         Thumbprint::from_bytes(vec![0x55]), // tmb is irrelevant to the gate check

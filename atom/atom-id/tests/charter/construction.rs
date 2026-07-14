@@ -136,8 +136,9 @@ fn bootstrap_seizure_transactions_verify() {
         pre_existing.now < founding.now,
         "the claim predates the founding charter — it is the pre-existing context"
     );
-    assert_ne!(
-        founding.owner, pre_existing.owner,
-        "the founding signer is NOT the incumbent claim's owner — the seizure attempt"
+    assert!(
+        !pre_existing.owner.authorizes(&founding.tmb),
+        "the founding signer is NOT authorized by the incumbent claim's owner — the seizure \
+         attempt"
     );
 }

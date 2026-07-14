@@ -126,13 +126,18 @@ async fn ingest_two_versions() -> (TempDir, GitStore, String, String) {
 
     // `claim()`'s anchor check now resolves a real founding charter
     // (`[anchor-resolvable]`) rather than deriving one from git ancestry --
-    // charter the source first via the real API.
-    let founding_czd = registry.charter(&pub_key, b"src-rev", None).unwrap();
+    // charter the source first via the real API. `[owner-authorization-
+    // delegated]`: a `single-key` owner's `value` MUST be the key's
+    // thumbprint, not the raw public key.
+    let owner = atom_id::OwnerRef::single_key(sk.thumbprint());
+    let founding_czd = registry
+        .charter(std::slice::from_ref(&owner), b"src-rev", None)
+        .unwrap();
     let anchor = atom_core::Anchor::new(founding_czd.as_bytes().to_vec());
     let label = Label::try_from("pkg").unwrap();
     let id = AtomId::new(anchor.clone(), label.clone());
 
-    let claim_czd = registry.claim(&id, &pub_key).unwrap();
+    let claim_czd = registry.claim(&id, &owner).unwrap();
 
     let mut keys = Vec::new();
     let mut parent = reg_genesis_oid;
