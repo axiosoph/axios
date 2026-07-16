@@ -152,11 +152,19 @@ has doesn't.
 ## A shape Git already almost has
 
 This isn't a novel invention that needs the industry to learn to
-trust — it's the same shape that's secured exactly this class of
+trust — it's the same broad shape that's secured exactly this class of
 problem at internet scale for over a decade. Certificate Transparency
 logs are signed, append-only Merkle logs that publicly account for
-every certificate ever issued; Atom's record log is that same pattern,
-aimed at package versions instead of certificates.
+every certificate ever issued; Atom's record log follows that same
+premise, aimed at package versions instead of certificates. The exact
+construction has since diverged from Certificate Transparency's own
+specific recursive definition — Atom's log is built on
+[`eml`](https://github.com/Cyphrme/eml), an independently-designed,
+MMR-derived, multi-way (k-ary) Merkle log, not a reimplementation of
+Certificate Transparency's tree — but the property that made this
+class of system trustworthy in the first place, a single append-only
+log with proofs of inclusion and consistency, carries over regardless
+of the exact recursion underneath.
 
 What makes it land so naturally on Git specifically: a chain of Git
 commits is already, in shape, a chain of checkpoints over history —

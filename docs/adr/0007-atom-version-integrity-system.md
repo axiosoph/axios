@@ -13,8 +13,10 @@
   how records, closures, and facts are actually laid out as git
   objects — and found it awkward and redundant. That second pass is
   what this revision folds in: one unified append-only record log per
-  anchor (an RFC 6962-shaped Merkle tree over git tree objects, wrapped
-  in checkpoint commits), a clean separation between the immutable
+  anchor (an `eml`-backed, MMR-derived k-ary Merkle tree, single-root
+  canonicalized, over git tree objects, wrapped in checkpoint commits —
+  RFC 6962 was this construction's starting point, since significantly
+  diverged, §7.2), a clean separation between the immutable
   publish closure and the ongoing fact stream, and the discovery that
   most of §15 and all of §21's bespoke liveness/GC machinery become
   unnecessary once content hangs directly off structurally reachable
@@ -146,10 +148,12 @@ only the first was ever actually rejected.
   genesis record itself. Nothing is ever deleted or mutated; "removing"
   something means signing a new fact that supersedes or retracts an
   earlier one (§3).
-- **The record log** — one append-only, RFC 6962-shaped Merkle tree per
-  anchor, containing every charter, claim, publish, and fact this anchor
-  has ever signed, in true chronological order. The sole source of
-  truth for order and validity (§7, §9).
+- **The record log** — one append-only, `eml`-backed k-ary Merkle tree
+  per anchor (MMR-derived, single-root canonicalized — RFC 6962 was the
+  starting point, since significantly diverged, §7.2), containing every
+  charter, claim, publish, and fact this anchor has ever signed, in
+  true chronological order. The sole source of truth for order and
+  validity (§7, §9).
 - **Leaf** — one signed record's position in the record log.
 - **Checkpoint** — the git commit wrapping the record log's Merkle root
   after a given append; one checkpoint per leaf (§7).
@@ -603,9 +607,9 @@ to dozens of records over a project's whole life); a rare CAS retry on
 the log's one moving tip is cheap, invisible plumbing, not worth
 preserving multi-log complexity to avoid.
 
-**7.2. Shape: RFC 6962-style, not a Merkle Mountain Range, not a
-generic/updatable tree.** Two structural choices, evaluated and not
-merely assumed:
+**7.2. Shape: append-only, single-root, k-ary — MMR-derived, not a
+generic/updatable tree; RFC 6962 was the starting point, not the
+mechanism.** Two structural choices, evaluated and not merely assumed:
 
 - **Append-only, never a generic/updatable structure** (sparse tree,
   Patricia trie). The property this system needs is not "tamper-evident
@@ -619,25 +623,22 @@ merely assumed:
   document's own `retracts`-not-delete discipline (§3) — the tree shape
   makes that protocol rule structurally inevitable rather than a
   convention layered on top.
-- **RFC 6962's single-root shape over a Merkle Mountain Range,
-  specifically for this domain.** RFC 6962's tree hash is one value —
-  the top tree's own git OID, directly fetchable, directly the thing
-  `under`/`prior` name. An MMR's root is a *derived* value (bag the
-  peaks), corresponding to no single fetchable object — a real seam
-  against this design's own discipline that identity always equals a
-  content-address you can fetch. MMR's actual advantage (cheap amortized
-  appends at large scale) does not engage at this domain's real
-  cardinality — RFC 6962's worst-case-every-append cost and MMR's
-  amortized cost are the same handful of objects here. RFC 6962 also has
-  one canonical, published, unambiguous definition, where MMR peak-
-  bagging conventions have genuinely fragmented across real
-  implementations — a better fit for a system whose whole premise is a
-  signed, provable, unambiguous state, and a better fit for eventually
-  stating this as a clean inductive definition in Lean or TLA+ (Open
-  Items). At n=1 — the common case, since most publishes never accrue a
-  fact — RFC 6962's tree hash degenerates to literally the leaf hash, no
-  internal node needed at all: cheapest possible case for the common
-  case, by construction.
+- **A single, directly fetchable root — not a raw Merkle Mountain
+  Range's bag of peaks.** This design's own discipline is that identity
+  always equals a content-address you can fetch; a raw MMR's root is a
+  *derived* value (bag the peaks), corresponding to no single fetchable
+  object — a real seam against that discipline. RFC 6962 was this
+  requirement's original reference point (one canonical tree hash, the
+  top tree's own fetchable identity) but is not the mechanism actually
+  used here — see the next bullet for what `eml` actually does, which is
+  internally MMR-shaped and gets to a single root by a different route.
+  Raw MMR's actual advantage (cheap amortized appends at large scale)
+  does not engage at this domain's real cardinality regardless — a
+  worst-case-every-append cost and an amortized cost are the same
+  handful of objects here. At n=1 — the common case, since most
+  publishes never accrue a fact — the tree hash degenerates to
+  literally the leaf hash, no internal node needed at all: cheapest
+  possible case for the common case, by construction.
 - **The root is computed by our own algorithm, never git's.** An earlier
   position in this exploration treated git's native tree-hashing as
   providing the Merkle structure directly — a git tree's own OID
@@ -654,9 +655,14 @@ merely assumed:
   driver, not specified at the protocol level — Open Items).
   What actually resolves the original MMR-vs-single-root tension (Alt
   8) is `eml`'s own canonicalization — collapse and promotion fold the
-  frontier down to one root, regardless of whether that root also
-  happens to equal any external specification's exact recursive
-  definition. An earlier version of this clause additionally claimed
+  frontier down to one root. This is a materially different mechanism
+  from RFC 6962's own recursive definition, not a reformulation of it:
+  RFC 6962 was this construction's starting point — specifically for
+  wanting one fetchable root rather than a derived bagged value — and
+  the actual construction has significantly diverged from it since,
+  independent of whether the folded root ever happens to equal any
+  external specification's exact recursive definition. An earlier
+  version of this clause additionally claimed
   `eml`'s k=2 root was machine-checked equal to RFC 6962 §2.1's MTH
   recursion, citing a theorem (`rfc9162_mth_bridge`) — **that citation
   was wrong and has been removed** (2026-07-16, caught by adversarial
@@ -1649,8 +1655,9 @@ inert fields, git-native signing slots never checked).
 
 Rejected registry-side (§9) and store-side (§21) in the original draft,
 for cardinality-related and semantic reasons respectively. **This
-revision's RFC 6962 tree (§7.2) is a real, different instance of
-"taking control of the tree object," worth distinguishing explicitly
+revision's append-only Merkle tree (§7.2) is a real, different
+instance of "taking control of the tree object," worth distinguishing
+explicitly
 from what Alt 2 rejected.** Alt 2 proposed a tree as a *container* —
 using tree entries to index a set of otherwise-unrelated objects, purely
 for ref-count economy, a purpose git trees are not semantically suited
@@ -1729,9 +1736,9 @@ Alt 7's three original rejection reasons, revisited:
 3. **The problem bundling solves may not exist** — remains true of
    Alt 7's specific proposal (optimizing round-trip count against a
    primitive that was never the bottleneck) but does not apply to §7's
-   design, whose actual justification (RFC 6962 inclusion/consistency
-   proofs, structural GC via ordinary reachability, §21) is a real
-   capability gain, not a round-trip optimization.
+   design, whose actual justification (the log's own inclusion/
+   consistency proofs, structural GC via ordinary reachability, §21) is
+   a real capability gain, not a round-trip optimization.
 
 Net: Alt 7's proposed *mechanism* (a flat JSONL blob) remains rejected,
 for reason 1 and 3 above. Its *contention* objection (reason 2), which
