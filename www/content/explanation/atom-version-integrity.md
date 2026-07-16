@@ -7,7 +7,7 @@ audience = "Architects and engineers who want to understand why Atom's version-i
 +++
 
 > **Status.** This page describes the design specified in
-> [ADR-0007](../architecture/0007-atom-version-integrity-system.md),
+> [ADR-0007](../architecture/0007-atom-version-integrity-system.html),
 > currently under review. See that document for the full decision
 > record, forces, and open items.
 
@@ -188,7 +188,7 @@ scratch.
 ## Where this fits
 
 For the full decision record, the forces, and everything left open,
-see [ADR-0007](../architecture/0007-atom-version-integrity-system.md).
+see [ADR-0007](../architecture/0007-atom-version-integrity-system.html).
 For related context on Atom's trust model, see
 [Supply chain security](supply-chain-security.md). For the record
 envelope's exact wire format, see [Coz](https://github.com/Cyphrme/Coz).
