@@ -36,6 +36,15 @@ This project is strictly spec-driven. Agents must regularly consult the specific
 
 ## Project Overview
 
+> [!IMPORTANT]
+> **Read the FAQ first for whole-system context.** The
+> [whole-project FAQ](www/content/explanation/faq.md) covers the entire
+> project in one place: what each layer is for, why the design is shaped
+> the way it is, the verification/evidence discipline, and an honest map
+> of what actually runs today versus what is only specified. It is
+> written for both humans and agents — treat it as the fastest route to
+> comprehending the full scope before diving into specs or code.
+
 Axios is a decentralized, content-addressed source publishing stack decomposed
 into three independent Cargo workspaces mapped to a six-layer architecture:
 
