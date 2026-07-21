@@ -877,6 +877,17 @@ it?_
 
 In true FAQ tradition, everyone asks.
 
+- **Axios** was never meant to be a name — it was the label on the
+  repository that happened to hold all the pieces, and names have a
+  way of hardening once other people start using them. It deserved to
+  stick, though. _Axios_ is Greek for "worthy," borrowed from
+  _axiosophy_ — "worthy wisdom" — a coinage from writings that predate
+  this project, and a deliberate step past philosophy: not the love of
+  wisdom, but wisdom that proves out. A system whose entire thread is
+  that checking replaces trusting (Part 0) ended up named, by
+  accident, for the demand that worth be demonstrated. Some accidents
+  you keep. (The GitHub organization, `axiosoph`, carries the same
+  root — say it aloud and there's a wink at "axiosoft.")
 - **Atom** began as nothing deeper than a name that wasn't "flake":
   something physically smaller than even a snowflake, with the right
   connotation. It ended up more descriptive than originally imagined.
