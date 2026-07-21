@@ -464,10 +464,12 @@ freshness heartbeat) and who may sign it.
 Two previously-conflated concepts, now separated — and one of them is
 deliberately *not* a field:
 
-- **Anchor** — which project this leaf belongs to, `= czd(the anchor's
-  one charter genesis leaf)`. Not a declared field anywhere — not even
-  on the charter genesis leaf itself, which cannot self-reference the
-  value in question. Discovered, never carried: walk `pay.prior` back
+- **Anchor** — which project this leaf belongs to: the scope the
+  anchor's one charter genesis leaf establishes, *referenced* by that
+  leaf's czd. The czd names the anchor — it is not the anchor itself,
+  which is the linking role the charter fills (see `docs/glossary.md`).
+  Not a declared field anywhere — not even on the charter genesis leaf
+  itself, which cannot self-reference the value in question. Discovered, never carried: walk `pay.prior` back
   to the log's first leaf. This costs nothing extra in practice, because
   the whole record log is fetched as one unit (§9) and the genesis leaf
   is always present in it. A root commit is often near-empty and carries
