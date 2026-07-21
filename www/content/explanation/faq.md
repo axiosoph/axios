@@ -197,8 +197,10 @@ Nothing, by itself. Each component has real, separate significance: a
 structural anchor into the repository, and a human-readable name within
 a project's scope. But the fused pair has no role anywhere except the
 unclaimed-development case above, where the two values combine exactly
-once, as the preimage of one digest. Inside a claim record they persist
-as fields among others: metadata, not structure.
+once, as the preimage of one digest. Inside a claim record the two
+never travel as a unit: the label is a declared field, while the
+anchor is what the record's signed chain links commit to — the claim
+is anchored to it, not annotated with it.
 
 ### 4. Why does signing matter so much?
 
@@ -215,9 +217,10 @@ around that pivot.
 
 A project's standing identity. In its primordial form, the genesis
 commit (entry 2). In the current model, the project's **charter**: a
-signed founding record whose own content-address is the project's
-anchor (`anchor = czd(charter₀)`, a property of the signed record
-rather than of any git object, hence backend-agnostic). The charter
+signed founding record that itself becomes the project's anchor,
+referenced and verified by its own content-address — a property of
+the signed record rather than of any git object, hence
+backend-agnostic. The charter
 strengthens the primordial anchor rather than replacing what it means:
 more entropy, pinned to a point in time, still linked back to the
 origin commit, and carrying meaningful metadata (canonical source
