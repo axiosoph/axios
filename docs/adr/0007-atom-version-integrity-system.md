@@ -119,9 +119,9 @@ only the first was ever actually rejected.
   anchors MAY both use the label `"quill"` — a feature, not a
   collision. The label's real identity, once claimed, is the czd of
   that specific claim record — the same discipline as anchor, below.
-  `(anchor, label)` is the human-convenient lookup path a consumer uses
-  to *discover* that czd (genesis-once, §10, makes the lookup
-  unambiguous); it is never the identity itself. A deliberate rejection
+  Within a verified anchor's own record log, a claim is found by its
+  label alone (genesis-once, §10, makes that lookup unambiguous) — the
+  label names the claim; the czd is what it is. A deliberate rejection
   of a crates.io/npm-style central namespace authority, not an
   oversight (clarified 2026-07-16).
 - **Charter** — the anchor's single genesis record: owner-key set,
@@ -475,10 +475,10 @@ deliberately *not* a field:
   construction and the ownership claim *is* the identity. **The same
   discipline generalizes to every scope, not just anchor:** a label's
   real identity, once claimed, is the czd of its own claim record; a
-  version's real identity is the czd of its own publish record. Human-
-  readable descriptors — a label string, an `(anchor, label)` pair — are
-  lookup conveniences a consumer resolves *through* (made unambiguous by
-  genesis-once, §10), never the identity being resolved *to*. **Not
+  version's real identity is the czd of its own publish record. A label
+  string is a lookup convenience a consumer resolves *through* — within
+  an anchor's record log, the claim is found by label, made unambiguous
+  by genesis-once (§10) — never the identity being resolved *to*. **Not
   redundant terminology, even though `anchor = czd(charter)` makes the
   two numerically identical:** `charter`, `claim`, and `publish` each
   name a specific signed *record*; `anchor`, and a label's or version's

@@ -10,11 +10,15 @@ The `atom` workspace contains the foundational crates of the Axios content-addre
 Dependencies in the Axios stack flow strictly downward: `ion` (L4) -> `eos` (L3) -> `atom` (L1).
 Therefore, **crates in `atom` must never import anything from `eos` or `ion`.**
 
-> **Identity model:** `AtomId` is the abstract pair `(anchor, label)` — not a
-> hash of it. Atoms are referenced by `publish_czd`; lock entries are
-> `(set, label) → {version, publish_czd}`. There is no hashed atom id. See
-> [atom-sad.md](../docs/architecture/atom-sad.md) Appendix A for the full
-> keystone identity model.
+> **Identity model:** An atom's identity is the czd of its claim record —
+> the signed record that binds a label to an anchor, exactly once. Anchor
+> and label persist inside that record as separate fields, never a fused
+> unit; only for an unclaimed dev atom does identity degenerate to a digest
+> computed from the two together. Lock entries are
+> `(set, label) → {version, publish_czd}`. See
+> [ADR-0007](../docs/adr/0007-atom-version-integrity-system.md) (Identity,
+> §2) and the [FAQ](../www/content/explanation/faq.md) (Part I) for the
+> full model.
 
 ### Subcrates
 
