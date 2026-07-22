@@ -3,7 +3,7 @@
 _2026-07-22. Status: v0.1 — the source-level verification ceiling of
 the atom plane, given its own formal model. This document defines the
 objects (dependency closure, classification, trust surface, assumption
-basis, `Total`, the source-class gate, the forced generator), states
+basis, $\mathrm{Total}$, the source-class gate, the forced generator), states
 the ceiling theorems over them, and reports the machine-checked safety
 result. Substance is drawn from the landed atom corpus
 ([Atom Model](atom-model.md), [ADR-0007](../adr/0007-atom-version-integrity-system.md),
@@ -28,7 +28,7 @@ the syntactically detectable launderings, and nothing more is soundly
 decidable), and an accounting half (everything past the decidable
 frontier is booked, fail-closed, into an enumerated trust surface —
 nothing is silently trusted). The model exists so that the system's
-central verdict, `Total`, is a machine-derived function of signed
+central verdict, $\mathrm{Total}$, is a machine-derived function of signed
 evidence with a precisely bounded meaning, rather than a slogan.
 
 ## 1. The dependency closure
@@ -41,14 +41,14 @@ publish**, **fact** (with `pay.fact_type`), **Record closure**, and
 [Atom Model](atom-model.md) §4–§6.
 
 > **Definition (dependency closure).** The **dependency closure** of
-> an atom `a`, written `depclosure(a)`, is the least set of artifacts
+> an atom $a$, written $\mathrm{depclosure}(a)$, is the least set of artifacts
 > (atoms and raw fetched byte-payloads) closed under the "is a build
-> input of" relation starting from `a`'s build record: the build
+> input of" relation starting from $a$'s build record: the build
 > record names an input-closure; each atom-typed input contributes its
 > own build record's inputs, recursively; each non-atom input (a
 > promoted fetch pin, an adopted-lockfile pin, any content-addressed
 > byte-payload) contributes itself as a leaf. A **closure member** is
-> any element of `depclosure(a)`. `depclosure` is reflexive: `a` is a
+> any element of $\mathrm{depclosure}(a)$. $\mathrm{depclosure}$ is reflexive: $a$ is a
 > member of its own dependency closure.
 
 Concretely, the dependency closure is what walking the lock's
@@ -71,6 +71,37 @@ depends on this acyclicity, and the machine-checked model (§10)
 demonstrates that it is load-bearing, not decorative.
 
 ## 2. The classification function
+
+Before defining `classify`, it is worth being precise about what a
+verifier is ultimately asking, and why it cannot ask it directly.
+
+> **Definition (genuine).** A closure member is **genuine** iff its
+> _actual_ membership in its _declared_ source class $c$ matches its
+> _claimed_ membership: its input tree was authored or produced in $c$
+> honestly, not laundered into presenting as $c$. Membership in $c$ is
+> fixed by $c$'s own criterion — the format and parse gates of §5.1 —
+> so genuineness is **bivalent**: a member either is or is not honestly
+> in $c$, with no third value. Graded or mixed authorship (human-written
+> versus tool-generated content, within $c$) is out of frame; the system
+> adjudicates class membership, never authorship proportion, and the
+> absence of a graded verdict here is not a gap in what follows.
+
+> **Lemma (underdetermination).** Genuineness is not a function of a
+> member's bytes. The map from history (an authored tree together with
+> a build plan) to output bytes is many-to-one, and — the stronger,
+> load-bearing half — genuineness is not constant within a fiber: the
+> same bytes can sit in the preimage of both an honest history and a
+> laundering history. §8.3's compressed-blob witness supplies exactly
+> this non-constancy — the same emitted bytes are reachable by a
+> genuine parameterized transformation and by a hand-rigged, finite-
+> range emitter, and only the history (which one actually ran) decides
+> which. Cardinality alone would leave open the possibility that
+> genuineness is still constant on each fiber, and hence recoverable as
+> some other function of the bytes; the witness forecloses that. So no
+> decidable gate operating on bytes alone can settle genuineness — which
+> is why `classify` below never asks "is this genuine" as a direct byte
+> predicate, and instead assembles the located, attributable evidence of
+> §5 into the bucket a member can mechanically earn.
 
 > **Definition (classification).** `classify : Artifact → Bucket` is a
 > **total** function assigning every closure member exactly one
@@ -95,10 +126,10 @@ demonstrates that it is load-bearing, not decorative.
 > ```
 >
 > `classify` is evaluated against two explicit parameters (§7): the
-> consumer's **admission policy `P`** (which signers count as
+> consumer's **admission policy $P$** (which signers count as
 > corroborating builders and as source-class vouchers) and the
-> **evidence snapshot `σ`** (which signed records — build records,
-> vouches, retractions — exist at evaluation time). Given `(P, σ)`,
+> **evidence snapshot $\sigma$** (which signed records — build records,
+> vouches, retractions — exist at evaluation time). Given $(P, \sigma)$,
 > `classify` is a deterministic, machine-derived function of signed
 > records.
 
@@ -110,27 +141,29 @@ residue bucket. There is no "unclassified", "pending", or "unknown"
 state — unclassifiability is resolved _to a residue bucket_ by the
 default.
 
-**Membership.** A member `m` is `ReproducibleCASource` iff all five
+**Membership.** A member $m$ is `ReproducibleCASource` iff all five
 positive conditions hold — written `Established_RCAS(m)`:
 
-- **(i)** `m` is an atom carrying a build record;
+- **(i)** $m$ is an atom carrying a build record;
 - **(ii)** the build record's plan is declared `reproducible`
   ([atom-transactions](../specs/atom-transactions.md)
   `[publish-mode]`) **and** the declaration is empirically
-  corroborated: at least one independent `record_core`-equal rebuild
-  from a distinct policy-admitted builder exists
+  corroborated: independent `record_core`-equal rebuilds from distinct
+  policy-admitted builders meet the corroboration quorum
   ([trust model](../specs/trust-model.md) `[trust-threshold-rule]`;
   [Atom Model](atom-model.md) §6) — see §6;
 - **(iii)** the output is content-addressed by the digest of its
   bytes;
-- **(iv)** `m`'s declared source class is **established** (§5): its
+- **(iv)** $m$'s declared source class is **established** (§5): its
   input tree passes the hard gates against a gate-executable declared
   class, **and** at least one anchored, unretracted source-class-vouch
   for that (member, class) pair from a policy-admitted voucher exists
-  in `σ`. Gate passage against a self-declared class is NOT sufficient
+  in $\sigma$. Gate passage against a self-declared class is NOT sufficient
   on its own;
-- **(v)** recursively, every member of _`m`'s own_ dependency closure
-  is itself `ReproducibleCASource` or a permanent genesis seed (§4).
+- **(v)** recursively, every member of $m$'s dependency closure _other
+  than $m$ itself_ ($\mathrm{depclosure}(m) \setminus \{m\}$ — $m$'s
+  inputs transitively; $m$ does not self-certify) is itself
+  `ReproducibleCASource` or a permanent genesis seed (§4).
 
 The bucket has no other entry path:
 
@@ -164,7 +197,7 @@ hard-gate failure lands in clause 2 rather than ejecting the member
 from the domain: gate failure additionally triggers downstream
 _refusal_, but refusal is a policy consequence — classification stays
 total. A clause-3 (v)-failure cascades: every ancestor resting on a
-dirty member books in residue too, which is harmless for `Total` and
+dirty member books in residue too, which is harmless for $\mathrm{Total}$ and
 load-bearing for the accounting a consumer reads when deciding what
 moves if a signer is revoked.
 
@@ -180,14 +213,14 @@ Exhaustive(a)  ≜  ∀ m ∈ depclosure(a) :
 ```
 
 The second conjunct is the fail-closed law: negation of the positive
-conditions _forces_ a residue bucket. `Exhaustive` is the safety
+conditions _forces_ a residue bucket. $\mathrm{Exhaustive}$ is the safety
 invariant the machine-checked model asserts for every atom in scope
 (§10); a counterexample would be a member escaping all four buckets.
 
 ## 3. The trust surface and the assumption basis
 
 > **Definition (trust surface — residue set).** The **trust surface**
-> of an atom `a` is the union of the three residue buckets over its
+> of an atom $a$ is the union of the three residue buckets over its
 > dependency closure:
 >
 > ```
@@ -195,7 +228,7 @@ invariant the machine-checked model asserts for every atom in scope
 >            {TrustImport, AttestationResidue, SourceClassResidue} }
 > ```
 >
-> Equivalently, `T(a)` is `depclosure(a)` minus its
+> Equivalently, $T(a)$ is $\mathrm{depclosure}(a)$ minus its
 > `ReproducibleCASource` members. It is machine-derived by the closure
 > walk, never testimony. The three residue buckets are the three ways
 > source-level verification fails to close, kept distinct because
@@ -203,7 +236,7 @@ invariant the machine-checked model asserts for every atom in scope
 > non-deterministic build, a self-classified tree.
 
 > **Definition (assumption basis).** The **assumption basis** of an
-> atom `a`, written `B(a)`, is the derived set of policy-admitted
+> atom $a$, written $B(a)$, is the derived set of policy-admitted
 > signature evidence that the walk's _non-residue_ classifications
 > rest on:
 >
@@ -215,9 +248,9 @@ invariant the machine-checked model asserts for every atom in scope
 >          ∪ { the genesis-seed identities the closure grounds in }
 > ```
 
-`B(a)` is **the enumerated, attributable, policy-admitted trust the
+$B(a)$ is **the enumerated, attributable, policy-admitted trust the
 verdict rests on**. It is computed by the same closure walk that
-computes `T(a)`: machine-derived, and complete **over
+computes $T(a)$: machine-derived, and complete **over
 admission-dependent evidence** — every signature whose policy
 admission the verdict depends on appears in it. Its two signature
 classes are distinct evidence species, and a basis reading keeps them
@@ -226,16 +259,16 @@ execution record, falsifiable by `record_core` comparison — while a
 counted vouch is an **asserted** fact — pure keyed judgment, with no
 `record_core` for independent parties to agree on ([Atom
 Model](atom-model.md) §4). A basis reads "3 corroborations + 2
-vouches", never "5 signatures". `B(a)` is exactly what a consumer who
+vouches", never "5 signatures". $B(a)$ is exactly what a consumer who
 ceases to admit a signer must recompute.
 
-**The verification floor.** `B(a)` does not (and does not claim to)
+**The verification floor.** $B(a)$ does not (and does not claim to)
 enumerate the record-verification substrate the walk itself
 presupposes: the hash and signature schemes under which every czd and
 every signature verifies at all, the verifier's own implementation,
 and the verification of the genesis records themselves. Those are the
 protocol's floor — the assumed base every classification sits above —
-not admissions of `P`. Every claim in this model is scoped above that
+not admissions of $P$. Every claim in this model is scoped above that
 floor.
 
 ## 4. Total and the genesis seeds
@@ -245,12 +278,12 @@ floor.
 > stage0/hex0-style tiny binary). It is an in-protocol, permanent
 > member of `TrustImport`; each subsequent toolchain generation is an
 > ordinary `ReproducibleCASource` output of a build record referencing
-> the previous one. `GenesisSeeds` is the set of all such seeds a
+> the previous one. $\mathrm{GenesisSeeds}$ is the set of all such seeds a
 > dependency closure grounds in — one per not-yet-unified toolchain
 > lineage (C's hex0 line, Rust's blessed prebuilt compiler, and so
-> on), so `|GenesisSeeds| = N`, never assumed to be 1.
+> on), so $|\mathrm{GenesisSeeds}| = N$, never assumed to be 1.
 
-> **Definition (Total).** An atom `a` is **Total** iff its trust
+> **Definition (Total).** An atom $a$ is **Total** iff its trust
 > surface contains no members other than permanent genesis seeds:
 >
 > ```
@@ -262,12 +295,12 @@ floor.
 
 The subset form is deliberate: every steady-state closure's regress is
 walkable to a genesis seed, which correctly _is_ a `TrustImport` (it
-fails the source gate, and must), so `T(a)` is never empty for real
+fails the source gate, and must), so $T(a)$ is never empty for real
 software and an empty-surface definition would be unsatisfiable.
-`Total` does not mean trust reduced to zero. It means the residue is
+$\mathrm{Total}$ does not mean trust reduced to zero. It means the residue is
 reduced to the permanent, named genesis seed(s), and every other grain
 of trust the verdict admits is located: named, signed,
-policy-admitted, enumerated in the assumption basis `B(a)` — above the
+policy-admitted, enumerated in the assumption basis $B(a)$ — above the
 protocol's verification floor (§3), which the verdict presupposes
 rather than enumerates.
 
@@ -279,16 +312,16 @@ this model lives in exactly one of them:
    closure member lands in exactly one bucket, fail-closed, with or
    without any vouch ever having been issued. The safety theorem —
    no laundered member ever classifies as `ReproducibleCASource`, and
-   no atom resting on one presents as `Total` (§10) — holds in this
+   no atom resting on one presents as $\mathrm{Total}$ (§10) — holds in this
    sense alone. Under a policy admitting no vouchers, the theorem is
    still sound; real software is simply all residue.
-2. **`Total(a)` is an atom-level predicate — the satisfiability
+2. **$\mathrm{Total}(a)$ is an atom-level predicate — the satisfiability
    sense.** Whether any real (non-seed) atom can actually satisfy
-   `Total` is a different question, and the answer is: only because
+   $\mathrm{Total}$ is a different question, and the answer is: only because
    establishment (§5) is reachable — that is, only because the
    source-class-vouch exists. Without it, every real member's
    sourcehood rests on self-declaration, lands in
-   `SourceClassResidue`, and no real atom is ever `Total`: the
+   `SourceClassResidue`, and no real atom is ever $\mathrm{Total}$: the
    predicate would be vacuously safe and empirically empty.
 
 Sense 1 is a theorem about the classifier; sense 2 is a reachability
@@ -349,7 +382,7 @@ The residual frontier — a tree that parses in a permissive-but-wrong
 declared class — is not mechanically closable in general (choosing a
 parse-compatible class is undetectable syntactically), which is
 precisely why closing it takes a _signature_ rather than a gate, and
-why the closing signature is itself booked in `B(a)` rather than
+why the closing signature is itself booked in $B(a)$ rather than
 vanishing from the accounting.
 
 ### 5.3 The source-class-vouch and establishment
@@ -373,8 +406,8 @@ mechanics (anchoring requirement included) are
 [ADR-0008](../adr/0008-surety-of-source.md)'s decision; this model
 consumes them.
 
-For a member `m` with declared class `c`, under policy `P` and
-snapshot `σ`:
+For a member $m$ with declared class $c$, under policy $P$ and
+snapshot $\sigma$:
 
 ```
 established(m)  ≜  gateExecutable(c)
@@ -386,7 +419,7 @@ established(m)  ≜  gateExecutable(c)
                        ∧ signer(v) ∈ P.admittedVouchers
 ```
 
-A member with `established(m)` and a build record proceeds past
+A member with $\mathrm{established}(m)$ and a build record proceeds past
 precedence clause 2 to the reproducibility conditions; a member
 without it — self-declared only, vouched only by non-admitted signers,
 vouched for a different class than declared, gate-failing, or
@@ -395,13 +428,36 @@ per-(member, class) and per-consumer: the same atom can be established
 for one consumer and residue for another (§7).
 
 **Every counted vouch enters the accounting.** A vouch counted by
-`established(m)` for any member of `depclosure(a)` enters `B(a)`: the
+$\mathrm{established}(m)$ for any member of $\mathrm{depclosure}(a)$ enters $B(a)$: the
 trust the verdict rests on is enumerated, signed, and attributable —
 moved from an invisible self-declaration to a named signature — never
 erased from the books. A voucher who vouches a laundering tree has
 signed a permanent, czd-addressed record of that judgment.
 
 ## 6. The reproducibility mode is empirically grounded
+
+**Two edges, not one signal.** Reproducibility and genuineness are two
+distinct trust concerns, and this model is careful not to let a rebuild
+answer a question it is structurally incapable of answering. Process-
+consistency — that the declared plan really does reproduce the
+committed output from the committed tree — is what a rebuild verifies.
+Under A1's hermeticity (§9.2), the output is a pure function of the
+committed tree and plan alone; nothing about whether the tree was
+honestly authored enters that computation. A rebuild therefore adds
+confidence that the plan is deterministic and reproducible, and adds
+exactly zero evidence about genuineness — the two facts are unrelated
+by construction, not merely unmeasured in practice. Genuineness is
+closed on the other edge entirely: the source-class-vouch (§5.3) is the
+only evidence in this model that speaks to it at all, and it is
+testimony — a signed correlate of the tree's history, not a rebuild of
+it and not an intervention that could produce or falsify that history
+directly. The two edges close by different mechanisms accordingly:
+process-consistency by the corroboration quorum
+(`[trust-threshold-rule]`, below); genuineness by the vouch's own
+admission threshold — a single admitted, unretracted, anchored voucher
+suffices, no count quorum applies (§5.3). Neither edge is a
+probabilistic posterior over "is this genuine"; both are deterministic,
+fail-closed admission tests over signed evidence.
 
 The `ReproducibleCASource` bucket turns on condition (ii), and the
 reproducibility mode is a signed self-declaration
@@ -415,7 +471,7 @@ policy-admitted builder ([trust model](../specs/trust-model.md)
 `[trust-threshold-rule]`). A member declared reproducible but not yet
 corroborated falls, fail-closed, into `AttestationResidue`. Membership
 is determined by what independently happened, not by what was
-declared; otherwise a laundering publisher would present as `Total` on
+declared; otherwise a laundering publisher would present as $\mathrm{Total}$ on
 testimony. The declaration still does real work — it is signed intent
 with defined violation semantics, enabling the
 `[trust-mode-rule]` alarm — but it gates _policy_, not _bucket
@@ -433,55 +489,65 @@ independence of their signers is itself a theorem.
 
 ## 7. What every verdict is relative to
 
-> **Relativity statement.** `classify`, `T(a)`, `B(a)`, and `Total(a)`
-> are functions of `(depclosure(a), P, σ)`: the consumer's admission
-> policy `P` (which signer keys count as corroborating builders and as
+> **Relativity statement.** `classify`, $T(a)$, $B(a)$, and $\mathrm{Total}(a)$
+> are functions of $(\mathrm{depclosure}(a), P, \sigma)$: the consumer's admission
+> policy $P$ (which signer keys count as corroborating builders and as
 > source-class vouchers, and any corroboration quorum it demands) and
-> the evidence snapshot `σ` (which signed records exist, net of
+> the evidence snapshot $\sigma$ (which signed records exist, net of
 > retractions, at evaluation time). There is no policy-free, timeless
-> `Total` for real software, and this model does not pretend one
+> $\mathrm{Total}$ for real software, and this model does not pretend one
 > exists.
 
 This does not break "derived, not asserted" — the property the trust
-surface exists to guarantee. Given `(P, σ)`, the classification is a
+surface exists to guarantee. Given $(P, \sigma)$, the classification is a
 deterministic, machine-derived function of signed records; no unsigned
 claim enters anywhere, and the checked party's self-declarations
-(class, mode) gate nothing by themselves. `P` decides _which signers
+(class, mode) gate nothing by themselves. $P$ decides _which signers
 count_, never _what the records say_ — the same sovereignty a consumer
 already exercises in anchor curation. The contrast that matters is
 **asserted-Total vs derived-Total**, not relative vs absolute: every
 alternative system's "trusted" verdict is also relative to somebody's
 policy; the difference here is that the policy surface is explicit and
 minimal, and the entire remainder is machine-derived with the residue
-(`T(a)`) and basis (`B(a)`) enumerated.
+($T(a)$) and basis ($B(a)$) enumerated.
 
 ## 8. The forced generator and degeneracy
 
 ### 8.1 The objects
 
 > **Definition (admissible-tree language).** For a gate-executable
-> declared class `c`, `L_c` is the set of trees the hard gates admit:
-> those passing the format gate and parsing in `c`.
+> declared class $c$, $L_c$ is the set of trees the hard gates admit:
+> those passing the format gate and parsing in $c$.
 
 > **Definition (forced generator).** When a laundering atom's
 > committed tree evades the hard gates yet its build plan reconstructs
-> a chosen target binary `B`, the tree necessarily contains a program
-> `G` — committed, permanently recorded, signed, attributable to a key
-> — whose execution under the atom's build plan produces `B`.
-> (Forcing lemma: under hermeticity (A1, §9.2), `B`'s bytes are the
+> a chosen target binary $B$, the tree necessarily contains a program
+> $G$ — committed, permanently recorded, signed, attributable to a key
+> — whose execution under the atom's build plan produces $B$.
+> (Forcing lemma: under hermeticity (A1, §9.2), $B$'s bytes are the
 > image of committed closure bytes under the plan's composed programs;
 > if no committed literal carries them, a committed program computed
 > them. Evaluator: prose dataflow argument from A1.)
 
 > **Definition (degeneracy).** A generator is considered with its
-> nominal, unbounded input signature; `[G]` is the partial function it
-> computes. `G` is **degenerate** iff `range([G])` is finite —
-> emission from a finite table, uniformly covering the constant
-> emitter and the lookup-table emitter — as opposed to a genuine
-> parameterized transformation, whose range over an unbounded domain
-> is infinite. The unbounded domain is load-bearing: over any finite
-> domain every function is a lookup table and the property
-> trivializes.
+> nominal, unbounded input signature. Write $⟦G⟧$ for its denotation —
+> the partial computable function $G$ computes — the same operator
+> that denotes $⟦c⟧$ compositions
+> ([composition-model.md](composition-model.md) §2) and $⟦req⟧$
+> execution requests ([execution-model.md](execution-model.md) §2.2): a
+> generator is one more thing this corpus assigns a meaning to, not a
+> new formalism. **Degeneracy** is defined extensionally, over that
+> denotation alone — $\mathrm{degenerate}(G) \triangleq \mathrm{finite}(\mathrm{range}(⟦G⟧))$ — emission
+> from a finite table, uniformly covering the constant emitter and the
+> lookup-table emitter, as opposed to a genuine parameterized
+> transformation, whose range over an unbounded domain is infinite. The
+> unbounded domain is load-bearing: over any finite domain every
+> function is a lookup table and the property trivializes. Depending
+> only on $⟦G⟧$ — never on $G$'s syntax, size, or the particular
+> program text chosen to compute it — is exactly Rice's theorem's
+> precondition (§8.2, §9.1): degeneracy is a semantic, extensional
+> property of the function computed, not a syntactic property of the
+> generator's source.
 
 > **Definition (laundering — operational scope).** **Laundering** is
 > presenting an atom whose output bytes were not derived, via the
@@ -513,7 +579,7 @@ and no claim below is about the historical origin of any factoring.
 Rice's theorem requires a **semantic** property: a property of the
 function computed, invariant under every I/O-preserving rewrite, and
 non-trivial. Degeneracy qualifies on all three counts: finiteness of
-`range([G])` depends only on `[G]`; degenerate emitters and genuine
+$\mathrm{range}(⟦G⟧)$ depends only on $⟦G⟧$; degenerate emitters and genuine
 transformations are both non-empty classes; neither is all programs.
 The contrast object fails the precondition, and the distinction
 carries the whole model: **"is this tree genuine source" is not a
@@ -533,19 +599,19 @@ well-definedness argument).
 provably reached the generator stage. One does:
 
 > **Witness (compressed-blob generator).** Target: a ~100 KB ELF
-> binary `B`. The launderer ships an atom declaring source class C and
+> binary $B$. The launderer ships an atom declaring source class C and
 > committing one file `gen.c` containing a
 > `static const unsigned char z[]` holding the zlib-compressed bytes
-> of `B`, and a `main` that inflates `z` to stdout. The build plan
-> compiles and runs it; the captured stdout — `B` — is the output.
+> of $B$, and a `main` that inflates $z$ to stdout. The build plan
+> compiles and runs it; the captured stdout — $B$ — is the output.
 >
 > Gate accounting: **(a)** passes — the tree contains no
-> executable-container magic bytes; `z` is a zlib stream, not a
+> executable-container magic bytes; $z$ is a zlib stream, not a
 > container. **(b)** passes — `gen.c` is valid C. **(c)** does not
-> hard-fail — `B`'s bytes are not present as a literal (only the
-> compressed form is; `B` is the _computed_ output of `inflate`), so
+> hard-fail — $B$'s bytes are not present as a literal (only the
+> compressed form is; $B$ is the _computed_ output of `inflate`), so
 > the emission-correlation clause has no literal to correlate, and the
-> opacity flag is soft. The only channel through which `B` entered is
+> opacity flag is soft. The only channel through which $B$ entered is
 > the committed `inflate(z)` program: the forced generator is real,
 > and the residual question — genuine parameterized decompressor, or a
 > hand-rigged one-shot emitter with finite range — is exactly the
@@ -562,9 +628,9 @@ provably reached the generator stage. One does:
 
 Under the vouch mechanism the witness's fate sharpens: either no
 admitted voucher signs its class claim — it sits in
-`SourceClassResidue` and never presents as `Total` — or one does, and
+`SourceClassResidue` and never presents as $\mathrm{Total}$ — or one does, and
 the undecidable residue is pinned to a named, permanent, czd-addressed
-signature in `B(a)`. The undecidability does not move; the
+signature in $B(a)$. The undecidability does not move; the
 accountability for accepting it does. Both outcomes are exercised in
 the machine-checked model (§10).
 
@@ -579,27 +645,27 @@ no scale — and are never bundled into one claim.
 
 ### 9.1 Theorem 1 — generator impossibility
 
-> **Theorem 1.** Let `c` be a declared source class whose language is
+> **Theorem 1.** Let $c$ be a declared source class whose language is
 > Turing-complete and whose generators are admitted without
 > restriction. Then:
 >
-> **(i)** `{ G : range([G]) is finite }` is undecidable — no algorithm
+> **(i)** $\{ G : \mathrm{finite}(\mathrm{range}(⟦G⟧)) \}$ is undecidable — no algorithm
 > decides, for an arbitrary committed generator, whether it is a
 > degenerate finite-table emitter or a genuine parameterized
 > transformation; and
 >
 > **(ii) (promise refinement)** undecidability persists on the
 > verifier's actual epistemic position: it remains undecidable on the
-> promise subclass `{ G : G(z) = B }` of generators already observed
-> to emit the atom's output `B` on the committed input `z`. Knowing
+> promise subclass $\{ G : G(z) = B \}$ of generators already observed
+> to emit the atom's output $B$ on the committed input $z$. Knowing
 > the one input/output pair the build exhibited buys the verifier
 > nothing.
 
 Proof: (i) is Rice's theorem applied to the index set of the
 finite-range partial computable functions (extensionality is immediate
 from the definition; non-triviality from §8.3). (ii) is a reduction
-from the halting problem into the promise class: given machine `M` and
-input `x`, define
+from the halting problem into the promise class: given machine $M$ and
+input $x$, define
 
 ```
 G_{M,x}(w)  ≜  if w = z then B
@@ -607,14 +673,14 @@ G_{M,x}(w)  ≜  if w = z then B
                      if halted, output B, else output w
 ```
 
-Then `G_{M,x}(z) = B` always, so the promise holds; if `M` halts on
-`x`, `range([G_{M,x}])` is finite (degenerate); if `M` never halts,
-`[G_{M,x}]` is the identity off `z` — infinite range. A degeneracy
+Then $G_{M,x}(z) = B$ always, so the promise holds; if $M$ halts on
+$x$, $\mathrm{range}(⟦G_{M,x}⟧)$ is finite (degenerate); if $M$ never halts,
+$⟦G_{M,x}⟧$ is the identity off $z$ — infinite range. A degeneracy
 decider on the promise class therefore decides halting. Evaluator:
 proof — (i) by citation, (ii) by the reduction above.
 
 Consequence for the construction: gate (c) cannot be promoted to a
-hard gate (§5.1), and what the construction does instead is force `G`
+hard gate (§5.1), and what the construction does instead is force $G$
 into existence as a permanent, signed, czd-addressed, inspectable
 artifact — converting an undecidable question into preserved evidence
 (Theorem 3). Falsification signpost: a decision procedure for
@@ -642,11 +708,13 @@ signpost:
 > theorem defect)._
 
 > **A2 (provenance-realizability).** Every admissible atom — every
-> `(t, p, B)` with tree `t ∈ L_c` and `B` the hermetic result of
-> running plan `p` over `t` — is realizable as genuinely authored:
+> $(t, p, B)$ with tree $t \in L_c$ and $B$ the hermetic result of
+> running plan $p$ over $t$ — is realizable as genuinely authored:
 > some possible history honestly wrote exactly these bytes as source
-> in `c` and honestly ran this plan. Equivalently: genuineness is not
-> a computable function of the atom's bytes. _Signpost: exhibiting an
+> in $c$ and honestly ran this plan. Equivalently: genuineness is not a
+> function of the atom's bytes at all — the bytes underdetermine it
+> (§2's lemma), not merely resist computation from it. _Signpost:
+> exhibiting an
 > admissible hermetic triple that provably cannot be genuine would
 > falsify A2 — and would simultaneously license a new hard gate on
 > exactly that set, advancing the syntactic frontier without changing
@@ -659,7 +727,7 @@ signpost:
 >
 > **(i) (upper bound)** for every unrestricted sound verifier, every
 > decidable rejection predicate rejects only atoms whose committed
-> source tree is not in the declared class's language `L_c`. The
+> source tree is not in the declared class's language $L_c$. The
 > quantification is over atoms rejected _by inspection of the
 > committed tree_: A1 makes the output a function of (tree, plan), so
 > rejection for output mismatch against the committed plan is an
@@ -667,7 +735,7 @@ signpost:
 > inside it.
 >
 > **(ii) (achievement)** gates (a)/(b) decide membership in the
-> complement of `L_c` exactly.
+> complement of $L_c$ exactly.
 >
 > Hence the hard-gate tier achieves the maximum sound decidable
 > rejection available to any unrestricted verifier: every
@@ -690,27 +758,78 @@ transduction is effectively regular, and finiteness of a regular
 language is decidable. Totality of the generator language is NOT
 sufficient for this and must not be cited as the witness: degeneracy
 remains undecidable even for primitive-recursive generators (take
-`f_M(n) = B` if `M` halts within `n` steps, else `n` — primitive
-recursive, degenerate iff `M` halts), so "run a total program to see
+$f_M(n) = B$ if $M$ halts within $n$ steps, else $n$ — primitive
+recursive, degenerate iff $M$ halts), so "run a total program to see
 if it ignores its input" decides nothing about the unbounded domain.
 
 **Division of labor with Theorem 1.** A2 closes the byte-level exit
-(no sound rejection inside `L_c` by looking at bytes); the one
-remaining bytes-grounded signal inside `L_c` is the committed
+(no sound rejection inside $L_c$ by looking at bytes); the one
+remaining bytes-grounded signal inside $L_c$ is the committed
 generator's behavior, and Theorem 1 closes that behavior-level exit.
 The two results are complements: without A2, Theorem 1 alone would
-permit sound syntactic rejection inside `L_c`; without Theorem 1, A2
+permit sound syntactic rejection inside $L_c$; without Theorem 1, A2
 alone would permit a sound behavioral adjudicator. The ceiling is
 their conjunction.
+
+**A2 is not Rice's undecidability, and the difference is not
+stylistic.** Theorem 1 concerns a property the bytes of a program _do_
+fix but that is uncomputable to extract — even a halting oracle would
+decide it, because it is a genuine fact about the function computed. A2
+says something categorically prior: the bytes of an atom do not fix
+genuineness at all. A halting oracle would not help recover which
+history produced a given tree, because there is no fact about the bytes
+for a decider to compute — the map from history to bytes is many-to-one
+with a non-constant fiber (§2's lemma). Underdetermination is therefore
+not "merely uncomputable"; it is a prior and strictly stronger failure
+mode, grounded in cardinality rather than in computability. Conflating
+the two understates A2: the claim is not that a decision procedure for
+genuineness is hard to build, but that no fact for a decision procedure
+to compute exists in the bytes in the first place.
+
+**Grounding, not formal content: non-identifiability.** A2's
+underdetermination claim is not a novel supposition; it is a specific
+instance of **non-identifiability**, a limit result established
+independently in basic statistics and in Pearl's causal inference —
+both name the same fact, that a generating process cannot in general be
+recovered from an observation lying in the support of more than one
+candidate process. The citation is orientation only, at footnote grade,
+and never enters the formal object: A2 remains a plain, deterministic
+axiom, stated as a fact about a many-to-one map with a non-constant
+fiber (§2), not as a computed uncertainty — this note imports no
+probability, likelihood, or posterior into the model. (Pearl,
+_Causality_, 2009, ch. 3 and 7; Bareinboim, Correa, Ibeling & Icard, "On
+Pearl's Hierarchy and the Foundations of Causal Inference," 2022 — the
+Causal Hierarchy Theorem.)
+
+**Why the class-$c$ definition, and not some byte-derived property —
+demonstrated, not asserted.** A2's status as the load-bearing axiom
+rests on more than plausibility: every attempt to define genuineness as
+a property of an atom's bytes collapses on the §8.3 witness (the
+compressed-blob generator). Reproducibility-based ("a deterministic
+re-run of the committed plan over the committed tree reproduces these
+bytes") classifies the witness genuine — it is, by construction,
+perfectly reproducible, and it is laundered. Entropy- or
+compressibility-based classification produces both false positives (an
+honestly-embedded high-entropy resource) and false negatives (a small,
+hand-typed malicious payload), degrading to a heuristic with an
+irreducible error rate — precisely the byte-level determination A2
+rules out. Degeneracy-freedom-based classification ("genuine iff no
+finite-range generator sits in the causal chain") is vacuous on a
+directly-committed malicious literal, which has no generator to be
+degenerate, and so classifies it genuine too. Each candidate fails on
+the same witness, for a different reason, which is what makes the
+definition adopted in §2 — genuineness as membership in the declared,
+class-$c$ provenance, never a function of bytes — forced rather than
+merely preferred.
 
 ### 9.3 Theorem 3 — forced attributability (two registers)
 
 > **Theorem 3a (completeness of the accounting — formal, finite,
-> machine-checkable).** For every atom `a` and every `(P, σ)`: every
-> member of `depclosure(a)` is booked in exactly one bucket
-> (`Exhaustive`, §2), and if `Total(a)` then `T(a) ⊆ GenesisSeeds` and
+> machine-checkable).** For every atom $a$ and every $(P, \sigma)$: every
+> member of $\mathrm{depclosure}(a)$ is booked in exactly one bucket
+> ($\mathrm{Exhaustive}$, §2), and if $\mathrm{Total}(a)$ then $T(a) \subseteq \mathrm{GenesisSeeds}$ and
 > every admission-dependent grain of evidence the verdict rests on is
-> enumerated in `B(a)` — no positive classification rests on an
+> enumerated in $B(a)$ — no positive classification rests on an
 > unenumerated signature. "Maximal forced attributability" means
 > exactly this universality: there is no third status — every closure
 > member is either mechanically closed with its closing evidence
@@ -720,15 +839,15 @@ Evaluator: the Alloy model checker, in bounded scope (§10) — not
 prose. Falsification signpost: in the model, basis-completeness holds
 by construction, so the model itself cannot refute it; the refutation
 surface is an _implementation_ of the closure walk whose computed
-`B(a)` omits a signature the classification counted. Any conforming
-implementation must expose `B(a)` so that check is possible.
+$B(a)$ omits a signature the classification counted. Any conforming
+implementation must expose $B(a)$ so that check is possible.
 
 > **Theorem 3b (attributability forcing — economic argument, not a
 > theorem).** Any laundering (§8.1 sense) that survives the hard gates
 > faces a forced dilemma: remain in residue forever — never presenting
-> as `Total`, visible in `T(a)` — or purchase establishment, which
+> as $\mathrm{Total}$, visible in $T(a)$ — or purchase establishment, which
 > costs permanent, non-repudiable, czd-addressed signatures entering
-> `B(a)`: the committed generator (signed, inspectable, preserved) and
+> $B(a)$: the committed generator (signed, inspectable, preserved) and
 > an admitted voucher's source-class-vouch. Evasion past the decidable
 > frontier is not prevented; it is priced in permanent attributable
 > evidence, and the price is levied automatically by the
@@ -745,10 +864,10 @@ once — is design rationale, not mathematics.
 
 | Frontier                                    | What bounds it                                                                                                                                                                  | What the construction does at it                                                                                              |
 | :------------------------------------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | :---------------------------------------------------------------------------------------------------------------------------- |
-| **Syntactic** (artifact form)               | A2 — genuineness is not bytes-determined; sound rejection stops at `L_c`                                                                                                        | Gates (a)/(b) decide to exactly this line (Theorem 2); gate (c) contributes evidence, never decisions                         |
-| **Semantic** (artifact behavior)            | Theorem 1 — degeneracy of the forced generator is undecidable, even under the observed-pair promise                                                                             | Forces `G` into permanent signed existence; books the atom in residue unless establishment is purchased attributably          |
-| **Substrate** (the verifier)                | The trusting-trust regress: the walk's own toolchain closure regresses; diverse double-compilation _detects_ divergence under stated assumptions — it reduces, never eliminates | The regress terminates in named, permanent, in-protocol trust-imports: the genesis seeds, inside `T(a)` — counted, not hidden |
-| **Governance** (who says the class is true) | Not an impossibility at all — an authorization gap                                                                                                                              | Closed by mechanism: gate-executability fail-closure + the source-class-vouch; the closing signature is booked in `B(a)`      |
+| **Syntactic** (artifact form)               | A2 — genuineness is not bytes-determined; sound rejection stops at $L_c$                                                                                                        | Gates (a)/(b) decide to exactly this line (Theorem 2); gate (c) contributes evidence, never decisions                         |
+| **Semantic** (artifact behavior)            | Theorem 1 — degeneracy of the forced generator is undecidable, even under the observed-pair promise                                                                             | Forces $G$ into permanent signed existence; books the atom in residue unless establishment is purchased attributably          |
+| **Substrate** (the verifier)                | The trusting-trust regress: the walk's own toolchain closure regresses; diverse double-compilation _detects_ divergence under stated assumptions — it reduces, never eliminates | The regress terminates in named, permanent, in-protocol trust-imports: the genesis seeds, inside $T(a)$ — counted, not hidden |
+| **Governance** (who says the class is true) | Not an impossibility at all — an authorization gap                                                                                                                              | Closed by mechanism: gate-executability fail-closure + the source-class-vouch; the closing signature is booked in $B(a)$      |
 
 The two impossibility axes are distinct in kind: the semantic frontier
 is Rice's theorem applied to an artifact the construction itself
@@ -758,10 +877,29 @@ sentence: decidable detection to the syntactic frontier; attributable,
 permanent evidence at the semantic frontier; diversity-based
 reduction, never elimination, at the substrate frontier; and beyond
 all three, nothing but explicit, named, signed trust — the seeds in
-`T(a)`, the admitted evidence in `B(a)`, the admission choices in `P`.
+$T(a)$, the admitted evidence in $B(a)$, the admission choices in $P$.
 Above the protocol's verification floor, no grain of trust the verdict
 admits is unlocated — that, and not "no trust", is the theorem-shaped
-content of `Total`.
+content of $\mathrm{Total}$.
+
+**Self-certifying proof formats do not open a new frontier.** A
+zkVM-style embedded proof that a committed generator $G$ produced a
+given output — a proof of $⟦G⟧(\mathrm{input}) = B$ — certifies a computational
+fact, never a historical one: it says nothing about whether $G$ was
+honestly authored or the $\mathrm{input}$ it consumed was genuine source. The
+genuineness question re-emerges unchanged at the proof's own inputs:
+either they trace to a further committed generator, whose degeneracy
+sits in Theorem 1's Rice-undecidable domain, or they terminate in an
+irreducible hand-authored claim, where A2 applies natively. Any
+external trust the proof itself imports (key custody over the proving
+system) is booked in the accounting — $B(a)$ — not resolved by
+possessing the proof. The regress is finite and reduces to exactly the
+syntactic (A2) and semantic (Theorem 1) frontiers already mapped above;
+it opens no new one, and in particular it is not the substrate frontier
+of toolchain regress — that frontier concerns the _verifier's own_
+compiler lineage grounding in a genesis seed, a different question from
+what a proof format can certify about a _committed generator's_
+history.
 
 ## 10. The machine-checked safety result
 
@@ -778,7 +916,7 @@ every push and pull request (the repository's `model-check` workflow,
 re-verified against the committed model on each change rather than
 asserted once. The model carries the artifact/evidence
 sorts, the four-bucket classification with its precedence cascade and
-the `Established_RCAS` biconditional, `T(a)`, `B(a)`, `Total`, the
+the `Established_RCAS` biconditional, $T(a)$, $B(a)$, $\mathrm{Total}$, the
 acyclicity axiom on the input relation, and the admission policy as
 free signer sets (the checker explores all valuations, including
 empty). Laundering is rendered by its structural signature — a member
@@ -789,22 +927,22 @@ to 8 and up to 10 artifacts and evidence records):
 
 - **Safety (sense 1) holds — no counterexample found.** No
   laundered-shaped member ever classifies `ReproducibleCASource`, and
-  no atom whose dependency closure contains one presents as `Total`
+  no atom whose dependency closure contains one presents as $\mathrm{Total}$
   (`NoSilentLaundering`, `LaunderedNeverPresentsAsTotal`).
   Specifically encoded and held: a member with no build record — a
   promoted fetch pin included — is forced into `TrustImport` and
-  defeats `Total` anywhere in a closure; no testimony-only path
+  defeats $\mathrm{Total}$ anywhere in a closure; no testimony-only path
   reaches the closed bucket (declaration alone never closes); vouches
   from non-admitted signers change no classification; every real
-  `Total` verdict carries its admitted vouch enumerated in `B(a)`. A
+  $\mathrm{Total}$ verdict carries its admitted vouch enumerated in $B(a)$. A
   vacuity guard (an instance inhabiting all four buckets
   simultaneously) confirms the checks are not green over a starved
   theory.
 - **Satisfiability (sense 2) holds and is vouch-dependent.** A
-  non-seed atom _can_ be `Total`, grounded through a genesis seed at
+  non-seed atom _can_ be $\mathrm{Total}$, grounded through a genesis seed at
   the closure base; and with the admitted-voucher set empty, no
-  non-seed atom is ever `Total` (unsatisfiable) — mechanically
-  confirming that the vouch mechanism alone makes `Total` non-vacuous
+  non-seed atom is ever $\mathrm{Total}$ (unsatisfiable) — mechanically
+  confirming that the vouch mechanism alone makes $\mathrm{Total}$ non-vacuous
   for real software, and that safety never needed it. The §8.3
   witness's fate is exercised directly: gate-evading, corroborated,
   content-addressed, but unvouched, it sits in `SourceClassResidue`.
@@ -812,7 +950,7 @@ to 8 and up to 10 artifacts and evidence records):
   circular-justification instance exists (two members classified
   closed by citing each other). With it removed, the checker exhibits
   both the admitted cycle and an ungrounded cyclic closure that
-  presents as `Total` with no seed anywhere — exactly the spurious
+  presents as $\mathrm{Total}$ with no seed anywhere — exactly the spurious
   fixed point the axiom exists to exclude.
 
 Honest bounds of the result: bounded-scope model checking is
@@ -827,7 +965,7 @@ property is the policy boundary §7 names: a laundering tree that
 passes the hard gates and obtains an admitted voucher's signature and
 corroboration classifies closed — for that consumer, by that
 consumer's own admission — and the compensation (the laundering is
-pinned to the voucher's permanent signature in `B(a)`, never silent)
+pinned to the voucher's permanent signature in $B(a)$, never silent)
 is itself machine-checked. The forced generator appears in the model
 only through its structural consequence (a witness-shaped atom is
 decided purely by vouch admission); its degeneracy is never computed —
