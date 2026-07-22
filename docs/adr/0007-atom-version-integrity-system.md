@@ -4,6 +4,9 @@
   current landed atom model; do not commit until reconciled)
 - **Date**: 2026-07-15, revised 2026-07-16
 - **Deciders**: nrd
+- **Extended by**: [ADR-0008](0008-surety-of-source.md) — surety of
+  source: the source-class-vouch fact type, vouch anchoring, and the
+  totality / trust-surface accounting
 - **Source**: a first-principles re-derivation of atom's model, conducted
   incrementally over an extended session (2026-07-14 through 2026-07-16),
   including two rounds of decorrelated adversarial review (refuter,
