@@ -765,9 +765,18 @@ content of `Total`.
 
 ## 10. The machine-checked safety result
 
-The classification law of §2–§7 is encoded as a relational model and
-checked with the Alloy Analyzer (version 5.1.0, SAT4J solver,
-bounded-exhaustive search). The model carries the artifact/evidence
+The classification law of §2–§7 is encoded as a relational model —
+[`surety_classification.als`](../specs/alloy/surety_classification.als),
+which `open`s the shared core
+[`surety_core.als`](../specs/alloy/surety_core.als), with the acyclicity
+differential carried in
+[`surety_no_f1.als`](../specs/alloy/surety_no_f1.als) — and checked with
+the Alloy Analyzer (version 5.1.0, SAT4J solver, bounded-exhaustive
+search). Both entry modules are checked in continuous integration on
+every push and pull request (the repository's `model-check` workflow,
+`.github/workflows/model-check.yml`), so the results below are
+re-verified against the committed model on each change rather than
+asserted once. The model carries the artifact/evidence
 sorts, the four-bucket classification with its precedence cascade and
 the `Established_RCAS` biconditional, `T(a)`, `B(a)`, `Total`, the
 acyclicity axiom on the input relation, and the admission policy as
