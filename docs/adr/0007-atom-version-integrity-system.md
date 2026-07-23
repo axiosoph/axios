@@ -226,9 +226,10 @@ this document elaborates, not a metaphor:
    verified by different mechanisms (§7, §9).
 2. **The verified content tree** — once the record closure verifies,
    subjects materialize (composed via the composition model's `⊕`
-   disjointness law where more than one subject is declared), identified
-   unambiguously by `content_hash` regardless of which physical object
-   store holds the bytes.
+   disjointness law where more than one subject is declared), each
+   identified unambiguously by its own `content_hash` (that subject's
+   content-tree digest, §5) regardless of which physical object store
+   holds the bytes.
 3. **The built artifact / runtime closure** — what HTC's execution layer
    composes from the verified tree, per the record closure's
    description. Layer 3 itself has (at least) three representations,
@@ -515,19 +516,29 @@ independently-declared position per subject.
   `path`), checkable in O(path-depth) by anyone holding `position`
   (exactly `git rev-parse {position}:{path}`); `content_hash` serves
   verifiers without upstream access. `path` is authoritative for both
-  verification and placement — declared, never searched. **The
-  top-level content commitment embedded in the closure (§7.4) is not
-  each subject's flat `content_hash` in isolation — it is a root
-  computed by `eml` (the formally verified Merkle library this whole
-  design is built on — introduced fully in §7.2) over the ordered list
-  of declared subjects, leaf `i` = subject `i`'s own `content_hash`.**
-  No new signed field: this is
-  *derived* from the existing subject list, the same "derive, don't
-  declare, when derivable" discipline the anchor-identity rule (§4)
-  already uses. At the common single-subject publish this costs exactly
-  what a flat hash costs — an `eml` tree's root at `n = 1` is defined as
-  literally the leaf's own hash, no internal node computed. The
-  multi-subject case (§6) is where the extra structure earns its keep:
+  verification and placement — declared, never searched. **`content_hash`
+  is this subject's own content-tree Merkle digest, not a flat hash of its
+  bytes** — an `eml` root over the subject's content tree, computed by
+  atom's own algorithm over git's tree structure rather than trusting git's
+  native tree OID: recursively, each directory's digest is the `eml` root
+  over its sorted `(mode, name, child-digest)` entries (§7.2's no-prefix,
+  positional discipline, applied here to filesystem-shaped content). This is
+  exactly the *content-tree digest* the glossary defines; a single-file
+  subject degenerates to the `eml` root at `n = 1` — literally the leaf's
+  own hash, no internal node computed.
+
+  **The closure-level content commitment is a distinct object one level up,
+  named separately so the two are never conflated: `content_commitment`
+  (leaf0 of the §7.4 closure tree) is an `eml` root over the *ordered list
+  of declared subjects*, leaf `i` = subject `i`'s own `content_hash`.** It
+  is never any single subject's `content_hash` — the two coincide only in
+  the common single-subject case, where this outer `eml` root at `n = 1` is
+  again literally that one subject's `content_hash`, so the closure costs
+  exactly what a flat hash would have. No new signed field:
+  `content_commitment` is *derived* from the existing subject list, the same
+  "derive, don't declare, when derivable" discipline the anchor-identity
+  rule (§4) already uses. The multi-subject case (§6) is where the extra
+  structure earns its keep:
   per-subject inclusion proofs become available for free, letting a
   consumer verify one declared subject's inclusion without touching any
   other subject's content — a real capability, not merely a tidier data
@@ -747,8 +758,9 @@ closure is a **2-leaf `eml` tree**:
 
 ```
 closure-tree (eml, k=2)
-  leaf0 = content commitment    -- §5: an eml root over the declared
-                                    subjects, not a flat hash
+  leaf0 = content_commitment    -- §5: an eml root over the declared
+                                    subjects (leaf i = subject i's own
+                                    content_hash), never a flat hash
   leaf1 = R_anchor@K             -- embedded, opaque: the anchor record
                                     log's own root at leaf-count K, the
                                     exact moment this closure was created
@@ -1155,9 +1167,10 @@ subject's content came from — a meaningful, checkable fact for anyone
 who wants to independently confirm it against the original project
 history, when that history happens to still be reachable — but no part
 of ongoing verification requires the original `position` commit object
-to remain fetchable anywhere. Content verification (`content_hash`
-against the closure's own tree) never re-derives from `position` after
-publish time. This is a real narrowing of what the registry is obligated
+to remain fetchable anywhere. Content verification (recomputing each
+subject's own `content_hash` and folding them into the closure's
+`content_commitment`, §5, against the closure's own tree) never
+re-derives from `position` after publish time. This is a real narrowing of what the registry is obligated
 to uphold, made explicitly here rather than left implicit, since it is a
 new call this revision is making, not a restatement of the original
 draft's own liveness-pins section.
@@ -1307,9 +1320,10 @@ store MUST NOT attempt Phase B for a subject until that subject's
 governing closure — and the chain of authority behind it (charter/claim
 validity, resolved from Phase A) — has passed full signature and chain
 verification. Fetch success alone is not sufficient for admission
-either: once content is fetched, its `content_hash` must be recomputed
-and compared against what the closure's tree actually contains; only a
-match admits the content into the store's served space.
+either: once content is fetched, each declared subject's own
+`content_hash` must be recomputed and folded into the closure's
+`content_commitment` (§5), which MUST equal leaf0 of the closure tree;
+only a match admits the content into the store's served space.
 
 ### 21. Store ref format and GC: ordinary git reachability, nothing bespoke [atom-store-refs-and-gc]
 
