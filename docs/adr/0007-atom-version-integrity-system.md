@@ -1,8 +1,12 @@
 # ADR-0007: Atom as a Version Integrity System — The Compositional Unit
 
-- **Status**: PROPOSED (DRAFT — not yet reviewed by nrd against the
-  current landed atom model; do not commit until reconciled)
-- **Date**: 2026-07-15, revised 2026-07-16
+- **Status**: ACCEPTED (contingent on nrd's ratification of the
+  2026-07-22 freshen pass — the §7 verification fixes and the model/spec
+  reconciliation folded in below; reviewed against the landed atom model
+  in `docs/models/atom-model.md` and the glossary, objects mapping
+  cleanly). The §7 git-representation layer's residual open items remain
+  visible in Open Items.
+- **Date**: 2026-07-15, revised 2026-07-16, freshened 2026-07-22
 - **Deciders**: nrd
 - **Extended by**: [ADR-0008](0008-surety-of-source.md) — surety of
   source: the source-class-vouch fact type, vouch anchoring, and the
@@ -25,16 +29,23 @@
   unnecessary once content hangs directly off structurally reachable
   git objects instead of being referenced obliquely through signed
   fields.
-- **Supersedes**: TBD, deliberately left open. This ADR was drafted
-  without re-reading `docs/models/atom-model.md`,
-  `docs/architecture/atom-sad.md`, or the atom specs
-  (`atom-transactions.md`, `git-storage-format.md`,
-  `atom-backend-contract.md`, `trust-model.md`, `lock-file-schema.md`)
-  — a deliberate choice, not an oversight, to avoid the same document
-  contaminating the derivation it is meant to replace. The comparison
-  pass — reading the current model against this draft and enumerating
-  exactly what changes — is the explicit next step after this document
-  is reviewed, not a prerequisite to writing it.
+- **Supersedes**: none. ADR-0007 opens a decision area (atom as a
+  version-integrity system, at the git-object layer) that ADRs 0001–0006
+  do not cover; ADRs 0005/0006 remain Related, not superseded. "Supersedes"
+  in this repo's convention names a prior *ADR decision* replaced — there
+  is none.
+- **Obligates amendment of**: the atom specs and formal artifacts this
+  ADR was deliberately drafted without re-reading, which its `eml`-backed
+  single-log representation (§7), unified fact mechanism (§3), and
+  genesis-once discipline (§10) change — `git-storage-format.md`,
+  `atom-transactions.md`, `atom-backend-contract.md`,
+  `lock-file-schema.md`, `docs/models/atom-model.md` §2 (still teaching
+  the repudiated `AtomId = (anchor, label)`), and the stale formal models
+  that machine-check the superseded design (`AtomCharter_Succession.cfg`,
+  `atom_structure.als`). This spec-amendment obligation is distinct from
+  ADR supersession — the same relation `docs/models/atom-model.md` §8
+  already models as a first-class "doc amendments this model obligates"
+  manifest — and is the spec-drafting pass tracked in Open Items.
 - **Related**: [Composition Model](../models/composition-model.md),
   [Execution Model](../models/execution-model.md),
   [Storage Model](../models/storage-model.md),
@@ -1675,9 +1686,15 @@ to one doesn't force a change to another.
   graph it needs to address collision-safely across mutually-untrusted
   registries has changed.
 - **The adversarial review pass over the full 2026-07-16 revision** (the
-  git-representation layer rework and the `eml` integration) has not yet
-  been run, unlike the 2026-07-15 draft's two completed rounds. Should
-  happen before or alongside downstream spec amendment.
+  git-representation layer rework and the `eml` integration) **ran
+  2026-07-22** — decorrelated rounds over §7 and over the whole document,
+  outside §7 — and its fixes are folded into this freshen revision: the
+  §7.4 verification rewrite (B1/B2/B3) and §8 carve-out, the per-entry
+  head-monotonicity MUST (§11), the EON re-scoping of static
+  fork/freshness claims (§10, §16, Context), and the stale-residue purge.
+  The two surety-layer findings it surfaced — the `B(a)` anchor-admission
+  enumeration overclaim and the Alloy `srcEstablished` anchoring gap —
+  are deferred to the surety mechanization, not this ADR.
 - **The formal Lean spine, revised scope (2026-07-16).** The structural
   canonicality and inclusion-soundness proofs this item originally
   called for already exist, sorry-free, in `eml`'s own corpus
