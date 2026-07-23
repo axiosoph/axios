@@ -1,11 +1,11 @@
 # ADR-0007: Atom as a Version Integrity System — The Compositional Unit
 
-- **Status**: ACCEPTED (contingent on nrd's ratification of the
-  2026-07-22 freshen pass — the §7 verification fixes and the model/spec
-  reconciliation folded in below; reviewed against the landed atom model
-  in `docs/models/atom-model.md` and the glossary, objects mapping
-  cleanly). The §7 git-representation layer's residual open items remain
-  visible in Open Items.
+- **Status**: ACCEPTED. Ratified after the 2026-07-22 freshen pass —
+  the §7 verification fixes and the model/spec reconciliation folded in
+  below; reviewed against the landed atom model in
+  `docs/models/atom-model.md` and the glossary, objects mapping cleanly.
+  The §7 git-representation layer's residual open items remain visible
+  in Open Items.
 - **Date**: 2026-07-15, revised 2026-07-16, freshened 2026-07-22
 - **Deciders**: nrd
 - **Extended by**: [ADR-0008](0008-surety-of-source.md) — surety of
