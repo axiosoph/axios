@@ -552,15 +552,23 @@ independently-declared position per subject.
   (exactly `git rev-parse {position}:{path}`); `content_hash` serves
   verifiers without upstream access. `path` is authoritative for both
   verification and placement — declared, never searched. **`content_hash`
-  is this subject's own content-tree Merkle digest, not a flat hash of its
-  bytes** — an `eml` root over the subject's content tree, computed by
-  atom's own algorithm over git's tree structure rather than trusting git's
-  native tree OID: recursively, each directory's digest is the `eml` root
-  over its sorted `(mode, name, child-digest)` entries (§7.2's no-prefix,
-  positional discipline, applied here to filesystem-shaped content). This is
-  exactly the *content-tree digest* the glossary defines; a single-file
-  subject degenerates to the `eml` root at `n = 1` — literally the leaf's
-  own hash, no internal node computed.
+  is a Merkle root computed over the subject's *loaded content* — its file
+  bytes and their in-tree structure (paths, modes) — by a supported,
+  pluggable hash algorithm (`eml`'s k-ary construction, §7.2, as the
+  default), and is *explicitly independent of git's own object/tree
+  hashing.*** The subject's git tree is loaded and its contents are
+  re-Merkleized under an algorithm *we* choose to support; git is pure
+  storage here, never the hasher, and git's native tree OID is never reused
+  as this value — that OID is a separately-kept, checked cache (the `tree`
+  field below), never the integrity root. It is not a flat hash of the
+  bytes either; a single-file subject degenerates to the k-ary root at
+  `n = 1`, literally the leaf's own content digest, no internal node
+  computed. **Rationale:** re-Merkleizing loaded content under our own
+  algorithm decouples content integrity from any particular storage
+  backend and its hash choice, and is what lets `content_hash` map cleanly
+  onto the composition model's content-addressed values — a
+  git-tree-OID-derived hash would instead bind the model to one backend's
+  hash function and its versioning.
 
   **The closure-level content commitment is a distinct object one level up,
   named separately so the two are never conflated: `content_commitment`
@@ -585,6 +593,50 @@ independently-declared position per subject.
   exactly like any other false signed claim. This is the same object
   that becomes the closure's own content tree (§7) — the same OID,
   referenced a second time, at zero additional storage cost.
+
+**Hash agility and the SHA-1 residual (scoping note, not a normative
+MUST).** Because `content_hash` is our own Merkle root over loaded content
+(above), **content integrity is fully decoupled from git's object hash**:
+a SHA-1 collision in the underlying repository cannot forge a subject's
+content, since the served bytes are checked against a signed hash computed
+by an algorithm independent of git's. The catastrophic case — serving
+different bytes under the same identity — is off the table by
+construction, and this is a primary motivation for the Merkle-root
+`content_hash`.
+
+The residual SHA-1 exposure is confined to the `position` OIDs (§4) — the
+pins into the *upstream* project's git history, on repositories that are
+still SHA-1. SHA-1 chosen-prefix collisions are practical ("SHA-1 is a
+Shambles," 2019), so the realistic attack is a prepared collision: sign a
+benign commit `B`, later substitute a malicious `M` sharing its OID. But
+since `content_hash` is independently signed over the actual content, `M`
+can differ from `B` only in commit *metadata* — parent links/ancestry,
+timestamp, message. The blast radius is therefore temporal / ancestry /
+provenance claims (the `[temporal-vector]` and legacy/native ordering,
+§8), never content.
+
+Mitigants, in order of strength: git's hardened SHA-1 (`sha1dc`,
+collision-detecting) raises the bar in practice; the ancestry check's
+failure mode is already bounded and fail-closed (§8's carve-out); and a
+SHA-256 repository (git ≥ 2.29) has *zero* residual here. Security-critical
+deployments should prefer SHA-256 upstreams where available. Fully
+decoupling the *history pin* as well (not just content) would mean
+re-Merkleizing the entire upstream history, which is impractical — so for
+SHA-1 repositories the provenance residual is inherent, scoped rather than
+eliminated.
+
+*Possible future hardening, deliberately not adopted:* additionally
+pinning each `position` by a strong hash of its commit object
+(`H_strong(commit)`) would close endpoint substitution — an attacker with
+a SHA-1 OID collision could no longer swap the pinned commit for one with
+forged metadata, shrinking the residual to the already-bounded, soft
+between-pins ancestry path. It is not adopted because the git OID must stay
+in `position` for native lookup regardless, so the strong hash is purely
+additive (sign and store both) — extra complexity for a residual that is
+already bounded and non-load-bearing, since the upstream ancestry is soft
+corroboration and the anchor's own record log gives the authoritative
+ordering. Recorded as an option the design leaves open, not a requirement;
+the normative `position` definition (§4) is unchanged.
 
 ### 6. Multi-tree subjects, scoped and bounded to a sibling neighborhood [atom-multi-tree]
 
@@ -972,11 +1024,14 @@ themselves *signed* `position` fields, so an attacker cannot substitute a
 different commit without breaking the signature; forging a false ancestry
 edge between two fixed content-addressed OIDs is a preimage/collision break
 of the same class every other guarantee here already assumes away
-(collision-bound in the forgeable direction); and the sole remaining
-residue — a host withholding the intervening commit objects so the ancestry
-query cannot complete — **fails closed** (the record is treated as
-unverifiable and rejected), a denial-of-service, never the acceptance of a
-false ordering. So the principle is precise: git *object identity and type*
+(collision-bound in the forgeable direction — strongly so under SHA-256 or
+`sha1dc`-hardened SHA-1, and reduced but not eliminated under raw SHA-1,
+whose chosen-prefix collisions are practical; even there the exposure is
+confined to this ordering/provenance claim and never to content, per §5's
+hash-agility note); and the sole remaining residue — a host withholding the
+intervening commit objects so the ancestry query cannot complete — **fails
+closed** (the record is treated as unverifiable and rejected), a
+denial-of-service, never the acceptance of a false ordering. So the principle is precise: git *object identity and type*
 never bear on security; git *ancestry between signed `position` OIDs* bears
 on exactly one ordering check, fail-closed, and nowhere else.
 

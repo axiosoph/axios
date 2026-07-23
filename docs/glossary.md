@@ -222,10 +222,12 @@ atom composes at three layers: the **record closure** (charter + claim
 
 - publish, verified together, plus the content they authorize), the
   **verified content tree** (the exact bytes, identified by a
-  content-**tree** digest — a Merkle root over the tree, per-directory
-  digests of sorted (mode, name, child-digest) triples, never a flat
-  hash — computed by Atom's own algorithm over git's tree structure
-  rather than trusting git's hashing), and the **built artifact** (what
+  content-**tree** digest — a Merkle root over the subject's loaded
+  content, its bytes and in-tree structure, computed by a supported,
+  pluggable algorithm (eml's k-ary construction by default) that is
+  explicitly independent of git's own object/tree hashing: never a flat
+  hash, and never git's tree OID reused as the digest), and the **built
+  artifact** (what
   the build substrate produces from the verified tree). The record is
   the quantum; the atom is the composition. (ADR-0007 §1; FAQ entry 1.)
 
