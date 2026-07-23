@@ -130,5 +130,114 @@ theorem negAtom_not_total : ¬ Total gateExec pol negSnap negAtom :=
   laundered_never_total gateExec pol negSnap negAtom negAtom
     (self_mem_depclosure negAtom) negAtom_laundered
 
+-- ===========================================================================
+-- §3. Base-bounded witness — `Total` in its characteristic form: a
+--     NON-EMPTY trust surface whose every member is a genesis seed, rather
+--     than `posAtom`'s empty-surface (zero-trust) case. This is what makes
+--     the ceiling's "trust bounded to a minimal known base" claim concrete:
+--     a real, non-vacuous, irreducible trust residue that is nonetheless
+--     confined to the genesis layer.
+--
+--     Mechanism: `classify` on a `.leaf` is unconditionally `.trustImport`
+--     (`C1_fetchPin_forced_to_trustImport`) — a leaf is NEVER `RCAS`, seed
+--     or not. So any genesis seed reachable in `depclosure a` is guaranteed
+--     to survive `trustSurface`'s `≠ .RCAS` filter no matter what `σ` says.
+--     Pairing that seed as a build INPUT of an otherwise-`posAtom`-shaped
+--     atom (established, corroborated, so the atom itself classifies
+--     `RCAS` and is filtered OUT) leaves exactly the seed behind: a
+--     one-element, all-seed trust surface. `Total` is not forced into the
+--     empty-surface case — this is the base-bounded case it is meant to
+--     express.
+-- ===========================================================================
+
+/-- The genesis seed `baseBoundAtom` cites as its sole build input. -/
+def baseSeed : Artifact C := .leaf 10 true
+
+/-- The witness atom: id 3, `posAtom`-shaped (established, corroborated,
+    every gate/mode/CA flag true) but with ONE build input — `baseSeed` —
+    rather than `posAtom`'s empty input list. `classify`'s `recClosed`
+    condition (v) is satisfied through the seed disjunct (`GenesisSeed
+    baseSeed`), never through `baseSeed` itself classifying `RCAS` — it
+    can't (`baseSeed_trustImport` below): this is exactly the base-bounded
+    admission path, not the closed-residue one. -/
+def baseBoundAtom : Artifact C := .atom 3 () true true true true [baseSeed]
+
+/-- The snapshot: an admitted corroboration and an admitted vouch, both
+    targeting `baseBoundAtom`'s own id — conditions (ii) and (iv)'s
+    witnesses. No evidence targets `baseSeed`: a genesis seed needs none,
+    classifying `trustImport` regardless of `σ`. -/
+def baseBoundSnap : Snapshot Sg C := [.corroboration () 3, .vouch () 3 ()]
+
+theorem baseBoundAtom_not_seed : GenesisSeed baseBoundAtom = false := rfl
+
+theorem baseSeed_is_seed : GenesisSeed baseSeed = true := rfl
+
+theorem baseBoundAtom_established :
+    srcEstablished gateExec pol baseBoundSnap () true true baseBoundAtom = true := by
+  simp [srcEstablished, baseBoundSnap, gateExec, pol, baseBoundAtom, Artifact.id]
+
+theorem baseBoundAtom_corroborated :
+    corroborated pol baseBoundSnap baseBoundAtom = true := by
+  simp [corroborated, baseBoundSnap, pol, baseBoundAtom, Artifact.id]
+
+/-- `baseSeed` classifies `trustImport`, unconditionally — the general
+    C1 theorem, instantiated, so the `recClosed`/trust-surface computations
+    below have it available directly rather than re-deriving it inline. -/
+theorem baseSeed_trustImport :
+    classify gateExec pol baseBoundSnap baseSeed = .trustImport :=
+  C1_fetchPin_forced_to_trustImport gateExec pol baseBoundSnap 10 true
+
+/-- `baseBoundAtom` classifies `RCAS`: established + corroborated hold by
+    construction, and `recClosed` holds via the seed disjunct
+    (`baseSeed_is_seed`) — never via `baseSeed` classifying `RCAS`, which
+    `baseSeed_trustImport` shows it never does. -/
+theorem baseBoundAtom_rcas :
+    classify gateExec pol baseBoundSnap baseBoundAtom = .RCAS := by
+  simp [classify, srcEstablished, corroborated, baseBoundSnap, baseBoundAtom, baseSeed,
+    gateExec, pol, Artifact.id, GenesisSeed]
+
+theorem baseBoundAtom_depclosure :
+    depclosure baseBoundAtom = [baseBoundAtom, baseSeed] := by
+  simp [depclosure, baseBoundAtom, baseSeed]
+
+/-- The trust surface is `[baseSeed]` — NON-EMPTY, unlike `posAtom_trustSurface`
+    (`= []`). `baseBoundAtom` itself is filtered out (it is `RCAS`);
+    `baseSeed` survives the filter because a leaf is never `RCAS`. -/
+theorem baseBoundAtom_trustSurface :
+    trustSurface gateExec pol baseBoundSnap baseBoundAtom = [baseSeed] := by
+  simp [trustSurface, baseBoundAtom_depclosure, baseBoundAtom_rcas, baseSeed_trustImport]
+
+theorem baseBoundAtom_trustSurface_nonempty :
+    trustSurface gateExec pol baseBoundSnap baseBoundAtom ≠ [] := by
+  rw [baseBoundAtom_trustSurface]
+  simp
+
+/-- Every member of the (non-empty) trust surface is a genesis seed — the
+    literal content of `Total`, stated standalone before the `Total`
+    packaging below so the "non-empty but all-seed" shape is visible on its
+    own. -/
+theorem baseBoundAtom_trustSurface_all_seeds :
+    ∀ m ∈ trustSurface gateExec pol baseBoundSnap baseBoundAtom, GenesisSeed m = true := by
+  rw [baseBoundAtom_trustSurface]
+  intro m hm
+  rw [List.mem_singleton] at hm
+  subst hm
+  exact baseSeed_is_seed
+
+/-- **The base-bounded `Total` witness.** `Total` in its characteristic
+    "irreducible trust = the genesis base, non-empty but bounded" form —
+    the case `posAtom` (empty surface, §1) does not exercise. -/
+theorem baseBoundAtom_total : Total gateExec pol baseBoundSnap baseBoundAtom :=
+  baseBoundAtom_trustSurface_all_seeds
+
+/-- Cross-check: `total_carries_vouch_in_basis` still fires on this
+    base-bounded instantiation, exactly as it did on `posAtom` in §1 — a
+    non-empty, seed-only surface does not disturb the vouch-in-basis
+    guarantee. -/
+example :
+    ∃ e ∈ basis gateExec pol baseBoundSnap baseBoundAtom, ∃ s t c, e = .vouch s t c :=
+  total_carries_vouch_in_basis gateExec pol baseBoundSnap baseBoundAtom
+    baseBoundAtom_total baseBoundAtom_not_seed
+
 end Nonvacuity
 end Surety
