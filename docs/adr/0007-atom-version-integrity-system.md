@@ -834,11 +834,13 @@ so a verifier instead *reconstructs each leaf from independently trusted,
 signed data* and confirms the closure's presented leaf equals that
 reconstruction:
 
-- **leaf0** — recompute `content_commitment` per §5 (fold the declared
-  subjects' own recomputed `content_hash`es) and confirm it equals the
-  closure tree's leaf0. Content trust flows from this recomputation off
-  signed subject fields, never from the leaf the untrusted closure
-  presents — the earlier "confirm the root matches what was signed"
+- **leaf0** — recompute `content_commitment` per §5 by folding the
+  publish record's own *signed* declared `content_hash`es (so leaf0 is
+  checkable from signed data in Phase A, before any content is fetched;
+  the bytes are separately re-derived against those same signed
+  `content_hash`es at Phase B, §20) and confirm the fold equals the
+  closure tree's leaf0. Content trust flows from that signed-field
+  recomputation, never from the leaf the untrusted closure presents — the earlier "confirm the root matches what was signed"
   phrasing let a literal implementation trust `leaf0`/content straight off
   the closure, so a mirror could swap content plus a matching `leaf0`,
   keep the honest `leaf1`, and pass (B1, adversarial review 2026-07-22).
