@@ -131,6 +131,16 @@ Two anchoring placements satisfy the requirement:
   when the target's charter has not declared the voucher — the
   anchoring law requires _some_ atom's chain, not the target's.
 
+These two roles are distinct and must not be conflated: the `attesters`
+role (ADR-0007 §3, charter-declared) authorizes a third party's vouch to
+*anchor* in the target's own log, while the `assertor` role (§1, [trust
+model](../specs/trust-model.md) `[trust-role-authorization]`) is the
+consumer-side policy admission that decides whether an anchored vouch
+*counts* for that consumer. Anchoring is valid placement; assertor
+admission is whether the verdict credits it — a vouch can be validly
+anchored yet admitted by no consumer, and neither substitutes for the
+other.
+
 Verifiers evaluating establishment MUST consume only anchored,
 unretracted vouches, however transported. The transport surface for
 out-of-log vouches — how a consumer discovers vouches anchored on
