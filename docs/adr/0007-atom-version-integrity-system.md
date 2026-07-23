@@ -129,11 +129,17 @@ only the first was ever actually rejected.
   atom redesign sits beneath and completes the trichotomy of (storage /
   composition / execution), per
   [ADR-0005](0005-hermetic-transactional-composition.md).
-- **Anchor** — a project's standing identity: the czd (a record's own
-  content-address, incorporating its signature — defined precisely in
-  §2) of its one and only `charter` genesis record. Permanent. The only
-  way to get a new one is a genuine fork — a deliberate, out-of-band new
-  identity, never an in-protocol succession.
+- **Anchor** — a project's standing identity: the *scope of ongoing
+  authority* its one and only `charter` genesis record establishes (the
+  anchor's record log, owner-fold, and anchor-scope facts). The charter's
+  czd (a record's own content-address, incorporating its signature — §2)
+  **names** the anchor and is the handle every consumer verifies against,
+  but is not the anchor itself: the anchor is the linking role the charter
+  fills, recomputed from the signed chain, never read off a trusted field
+  (see `docs/glossary.md`; the older `anchor = czd(charter)` equation is
+  glossary-repudiated). Permanent. The only way to get a new one is a
+  genuine fork — a deliberate, out-of-band new identity, never an
+  in-protocol succession.
 - **Label** — the human-chosen name a project publishes atoms under
   (e.g. `"quill"`). A `claim` record binds a label exclusively to one
   anchor — exclusively *within that anchor's own claim*, not globally:
@@ -1160,9 +1166,12 @@ how many labels an anchor publishes.
 
 **Scoped to the label's latest version, not every version's fact
 history.** A label's per-entry shape is `{latest_publish: czd,
-fact_commitment: czd}`, where `fact_commitment` is the current tip of
-*`latest_publish`'s own* fact-tag chain (§7.5) — not an aggregate over
-every version's fact history. Both fields are governed by §11's per-entry
+fact_commitment: czd}`, where `fact_commitment` is the czd of the latest
+signed fact leaf on *`latest_publish`'s own* fact stream — not the git
+tag OID at the tip of its fact-tag chain (the tag chain, §7.5, is an
+untrusted discovery accelerator; the czd names the signed record-log leaf,
+keeping this field czd-typed and backend-agnostic like every other
+identity here), and not an aggregate over every version's fact history. Both fields are governed by §11's per-entry
 monotonicity MUST: neither may regress for a label across the heads a
 consumer accepts, independent of the bundle's global freshness ordinal.
 Tier 2 freshness therefore covers the
@@ -1510,10 +1519,12 @@ to one doesn't force a change to another.
      provide cheap, discoverable, git-native "something is attached
      here" signaling, also never trust (§7.5). Trees are used only where
      they represent genuine filesystem-shaped content — published
-     subject trees (§5, §7.4) — nowhere else; the record log's own
-     Merkle structure (§7.2) deliberately reuses tree objects for their
-     content-addressed, structurally-shared properties, explicitly not
-     to represent a filesystem.
+     subject trees (§5, §7.4) — nowhere else. The record log's own Merkle
+     structure is **`eml`'s, computed by `eml` over data persisted through
+     its `Storage` trait (§7.2), never git's own tree hashing**; whatever
+     git objects the backend driver uses to store those bytes are pure,
+     opaque storage, not the Merkle structure itself. (An earlier draft had
+     git trees *be* the record-log Merkle structure — superseded by §7.2.)
    - **Decomplecting identity from transport.** czd is the only identity
      a record has; git OIDs, ref names, commit ancestry, and tag chains
      are all pure, interchangeable transport/query conveniences that
@@ -1803,14 +1814,17 @@ from what Alt 2 rejected.** Alt 2 proposed a tree as a *container* —
 using tree entries to index a set of otherwise-unrelated objects, purely
 for ref-count economy, a purpose git trees are not semantically suited
 for (a tree is filesystem-shaped; a flat index of unrelated records
-isn't). §7.2's Merkle tree is not a container in that sense — it is
-using a tree's actual content-addressed, structurally-shared, type-
-prefixed-hash properties to *be* a Merkle tree, which is a semantically
-correct use of the primitive, not a repurposing of it. The two proposals
-are structurally similar (both put multiple objects under one tree) and
-motivationally opposite (Alt 2 wanted cardinality economy that was never
-actually needed; §7.2 wants genuine append-only history with inclusion/
-consistency proofs, a property no other available primitive provides).
+isn't). §7.2's Merkle log is not a container in that sense either — but
+the sharper correction is that it is **not a git tree used as a Merkle
+tree at all**: the Merkle structure is `eml`'s, computed by `eml` (§7.2,
+deliberately *without* git's own tree hashing, and without any
+leaf/internal domain-separation prefix), and whatever git objects a
+backend driver persists it through are opaque storage, not the structure.
+What distinguishes §7.2 from Alt 2 is therefore not "correct vs. incorrect
+reuse of the git tree primitive" but that §7.2 buys a genuine capability
+(append-only history with inclusion/consistency proofs) no git-native
+primitive provides — at the cost of an external library — while Alt 2
+bought cardinality economy that was never actually needed.
 
 ### Alt 3: Foreign-`src` multi-subject composition (cross-repository atoms)
 
