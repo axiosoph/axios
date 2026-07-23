@@ -86,14 +86,19 @@ lock↔composition isomorphism (htc-sad §6.9 — `name → signed content
 pointer`, one layer apart) is the same duality observed at the binding
 level: the two reifications carry the one algebra.
 
-**Identity names the composite, not a reification.** `AtomId = (anchor,
-label)` — the abstract pair, permanent across versions, owners, and
-keys (atom-sad §6.1, `[identity-content-addressed]`,
-`[identity-stability]`) — names the composite through time. One
-publish (one `publish_czd`) names one intent instance; one composition
-root names one artifact instance. The olog's identity-stability diagram
+**Identity names the composite, not a reification.** A composite's
+permanent, through-time identity is its **claim record's czd** — the
+label-scope genesis, stable across versions, owners, and keys (glossary,
+_Claim_ and _Atom identity_; ADR-0007 §3–§4). The older `AtomId =
+(anchor, label)` pair is **not** that identity: the fused pair has no
+role outside the pre-signature preimage of an unclaimed development atom,
+and naming it as identity is glossary-repudiated (2026-07-18). Identity
+stability holds regardless — it is now carried by the claim czd rather
+than the abstract pair. One publish (one `publish_czd`) names one intent
+instance; one composition root names one artifact instance. The olog's
+identity-stability diagram
 ([publishing-stack-layers](publishing-stack-layers.md) §1) commutes
-unchanged under this reading.
+unchanged under this reading — the stable node is the claim czd.
 
 **Closures are projections — one determined, one bounded.** The
 composite "includes the formal closure of all dependencies" in a
@@ -117,7 +122,7 @@ model's own (§4.2–§4.4):
   pure function of intent.
 
 Neither touches identity: closure roots feed `action_id` (Execution
-Model §2.4), never `AtomId`.
+Model §2.4), never the composite's identity (the claim czd).
 
 **Tripwire (what the determination claim rests on).** The build-closure
 leg: `[lock-sufficiency]`, `[lock-groundness]`,
