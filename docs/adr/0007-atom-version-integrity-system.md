@@ -1096,6 +1096,27 @@ today — it requires every Tier-2 implementation to check it before Tier
 2 is meaningfully deployed at all (caught by adversarial review,
 2026-07-16).
 
+**The global ordinal is necessary but not sufficient — a second,
+per-entry MUST closes a per-label rollback (added 2026-07-22).** Because a
+head bundles many per-label entries (§12) under one ordinal, the
+strictly-greater check above blocks only whole-head replay; it does not
+stop a compromised freshness-delegate from signing a *genuinely fresh*
+head (ordinal T+1, not the blocked replay case) whose entry for a victim
+label names an *older* `latest_publish` or `fact_commitment` than the
+consumer last saw — silently hiding a recent publish, yank, deprecation,
+or owner-rotation, the exact threat this section exists to defeat. The
+completeness scan (§7.5) does not save it: a hostile mirror can serve a
+truncated-but-internally-consistent prefix. Therefore, on every head a
+consumer accepts, **for each label entry, alongside the global-ordinal
+check: the `latest_publish` it names MUST be at or after (in the anchor
+log's own `prior` order) the last `latest_publish` this consumer observed
+for that label, and `fact_commitment` MUST NOT regress below the last
+fact-tip observed for that label's `latest_publish`.** A head that
+regresses any per-label entry is rejected exactly as a stale-ordinal head
+is; the monotonicity is enforced per label, not merely on the bundle's one
+freshness ordinal (soundness/security convergence, adversarial review
+2026-07-22).
+
 ### 12. Head set-scoped, one ref per registry [atom-head-scope]
 
 Exactly one head ref per registry (`refs/atom/head`), bundling every
@@ -1112,7 +1133,10 @@ how many labels an anchor publishes.
 history.** A label's per-entry shape is `{latest_publish: czd,
 fact_commitment: czd}`, where `fact_commitment` is the current tip of
 *`latest_publish`'s own* fact-tag chain (§7.5) — not an aggregate over
-every version's fact history. Tier 2 freshness therefore covers the
+every version's fact history. Both fields are governed by §11's per-entry
+monotonicity MUST: neither may regress for a label across the heads a
+consumer accepts, independent of the bundle's global freshness ordinal.
+Tier 2 freshness therefore covers the
 actively published version specifically; a consumer resolving an older,
 non-latest version gets Tier 0/1 guarantees for recency about that
 specific version (though, per §16, unconditional completeness
