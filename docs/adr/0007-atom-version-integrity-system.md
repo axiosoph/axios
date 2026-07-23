@@ -983,10 +983,12 @@ verification regardless of what a tag claimed.
 **Closing the completeness gap, unconditionally.** The tag chain alone
 cannot catch a lie by omission — a mirror simply not appending a new
 fact-tag even though the record legitimately exists in the log. The
-fix: after walking the tag chain to its last known record-log pointer
-(leaf K), a consumer performs a bounded scan of the record log from leaf
-K+1 to the log's current tip, checking whether anything in that delta
-targets this (label, version). This is cheap because the delta is
+fix is a named hard invariant, `[completeness-scan-mandatory]`, with the
+same standing as `[verify-before-fetch]`: on **every** resolution of a
+`refs/atom/pub/{label}/{version}` ref, after walking the tag chain to its
+last known record-log pointer (leaf K), a consumer MUST perform a bounded
+scan of the record log from leaf K+1 to the log's current tip, checking
+whether anything in that delta targets this (label, version). This is cheap because the delta is
 typically zero (nothing happened since last check) or small (bounded by
 the whole log's own small size at this domain's cardinality) — never a
 scan from genesis. It composes for free with the two-phase store-
@@ -1134,7 +1136,9 @@ original draft's two-request scheme). Instead:
   earlier "holds under adversarial conditions regardless" overclaimed
   static fork-resolution.)
 - **Completeness** (§7.5): the bounded delta-scan from a fact-tag
-  chain's last known point to the log's current tip.
+  chain's last known point to the log's current tip — the
+  `[completeness-scan-mandatory]` hard invariant, run on every ref
+  resolution.
 
 In practice a consumer or store typically fetches the whole record log
 for an anchor at once — it is small at this domain's cardinality — making
