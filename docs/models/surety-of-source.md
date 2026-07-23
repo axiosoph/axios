@@ -689,6 +689,35 @@ artifact — converting an undecidable question into preserved evidence
 finite-range degeneracy over the promise class refutes Theorem 1 as
 stated.
 
+**Rice's theorem bounds decidability, not certifiability — Rice–Shapiro
+is the tool for the latter, and it is why the vouch is never retired.**
+(i) alone shows no algorithm decides finite-range membership; it does
+not, by itself, show no *certificate* of non-degeneracy could exist.
+Undecidable and uncertifiable are different failures: the halting
+problem is undecidable yet recursively enumerable ($\Sigma_1$) — a
+machine that halts is certified by exhibiting its halting trace, a
+finite witness any fixed checker can verify. If finite-range degeneracy
+were similarly $\Sigma_1$, a genuine generator could in principle carry
+a finite non-degeneracy certificate, and the construction's reliance on
+a permanent, signed vouch in place of one (§5.3, §9.3) would be a
+design choice rather than a forced move. It is forced:
+$\{G : \mathrm{finite}(\mathrm{range}(⟦G⟧))\}$ is $\Sigma_2$-complete and its
+complement is $\Pi_2$-complete in the arithmetical hierarchy — both fail
+$\Sigma_1$, so neither the property nor its negation admits a finite
+witness checkable by any fixed procedure. **Rice–Shapiro's theorem**
+supplies the index-set criterion behind this: a $\Sigma_1$ index set
+must consist exactly of the indices whose function extends some finite
+subfunction already known (from a finite fragment of its graph) to
+belong to the set — informally, $\Sigma_1$ membership must be
+witnessable from a finite observation. Finite-range fails this outright:
+no finite fragment of $⟦G⟧$'s graph ever forecloses an infinite range,
+since every finite observation is consistent with the generator later
+producing a fresh output. This — not the plain undecidability of (i) —
+is the actual ground for "no certificate at any size retires the
+question": the construction's move to a permanent signed vouch (Theorem
+3) is not a stopgap for a merely-hard check but the only route left once
+$\Sigma_1$-certifiability itself is foreclosed.
+
 ### 9.2 Theorem 2 — maximal sound decidable rejection (conditional)
 
 Named premises, assumed not proven, each with a falsification
