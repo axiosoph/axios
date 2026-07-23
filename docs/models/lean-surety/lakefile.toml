@@ -1,0 +1,24 @@
+name = "SuretyEonEalm"
+version = "0.1.0"
+keywords = ["math"]
+defaultTargets = ["SuretyEonEalm"]
+
+[leanOptions]
+pp.unicode.fun = true # pretty-prints `fun a ↦ b`
+relaxedAutoImplicit = false
+
+# The determination-gate instantiation (statement-v0.3.md §4) needs only
+# EonEalm's Layer-L core (Model/Axes/Schemes/Result1) — no eml commitment
+# instance, no Mathlib. Path requires, not git requires: this repo
+# (axiosoph/axios) and Cyphrme/Cyphr are sibling checkouts under the same
+# `github.com/` parent, cited by relative path rather than vendored or
+# pinned to a rev — mirroring Cyphr's own cross-repo
+# `docs/models/lean-eml-bridge` package, which cites eml's Lean corpus the
+# same way. Deliberately unshipped: a standalone package, not wired into
+# either corpus's own build.
+[[require]]
+name = "EonEalm"
+path = "../../../../../Cyphrme/Cyphr/docs/models/lean"
+
+[[lean_lib]]
+name = "SuretyEonEalm"
