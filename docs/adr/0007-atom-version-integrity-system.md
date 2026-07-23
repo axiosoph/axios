@@ -312,6 +312,8 @@ top-level `kind`/`signer` fields exist or are needed, because Coz's own
 ```
 pay.typ    -- "charter" | "claim" | "publish" | "fact" | "head" — Coz's
               own free-form type-discriminator field, used here as kind
+              ("head" is a pay.typ value but structurally distinct from
+              the other four: not chained, not a log leaf — §3, §11)
 pay.tmb    -- thumbprint of the signer's key — Coz's own field, resolved
               against the charter's active owner set
 pay.alg, pay.now, pay.rvk -- Coz core fields (algorithm, signing
@@ -480,10 +482,11 @@ freshness-delegate role already makes for head rotation (§11) — routine,
 frequent signing shouldn't need to expose the same key that governs
 owner rotation, label transfer, and threshold membership.
 
-**`head` is not part of this taxonomy — a sixth, structurally distinct
-category, not a seventh scope and not a `fact_type`.** Charter, claim,
-and publish are genesis records; fact is the one amendment mechanism
-layered on top of them; head is neither. It carries no `pay.prior`, is
+**`head` is not part of this genesis/fact taxonomy — the fifth `pay.typ`
+value, but structurally distinct from the other four, and neither a
+genesis scope nor a `fact_type`.** Charter, claim, and publish are genesis
+records; fact is the one amendment mechanism layered on top of them; head
+is neither. It carries no `pay.prior`, is
 never chained, and is not a leaf in the anchor's record log at all —
 see §11-§12 for what it actually is (a replace-semantics, TTL-bounded
 freshness heartbeat) and who may sign it.
@@ -498,8 +501,10 @@ deliberately *not* a field:
   leaf's czd. The czd names the anchor — it is not the anchor itself,
   which is the linking role the charter fills (see `docs/glossary.md`).
   Not a declared field anywhere — not even on the charter genesis leaf
-  itself, which cannot self-reference the value in question. Discovered, never carried: walk `pay.prior` back
-  to the log's first leaf. This costs nothing extra in practice, because
+  itself, which cannot self-reference the value in question. Discovered,
+  never carried: walk `pay.prior` back to the log's first leaf, which MUST
+  be a `charter` genesis — a log whose first leaf is anything else is
+  invalid and names no anchor. This costs nothing extra in practice, because
   the whole record log is fetched as one unit (§9) and the genesis leaf
   is always present in it. A root commit is often near-empty and carries
   no ownership claim; the charter's own hash is high-entropy by
@@ -510,8 +515,11 @@ deliberately *not* a field:
   string is a lookup convenience a consumer resolves *through* — within
   an anchor's record log, the claim is found by label, made unambiguous
   by genesis-once (§10) — never the identity being resolved *to*. **Not
-  redundant terminology, even though `anchor = czd(charter)` makes the
-  two numerically identical:** `charter`, `claim`, and `publish` each
+  redundant terminology, even though the charter's czd is the value that
+  numerically names the anchor (the repudiated `anchor = czd(charter)`
+  equation reified exactly this coincidence; see `docs/glossary.md`):**
+  `charter`,
+  `claim`, and `publish` each
   name a specific signed *record*; `anchor`, and a label's or version's
   real identity, name the *scope of ongoing authority* that record
   establishes — an anchor's record log, an anchor-scope fact, an
@@ -520,9 +528,11 @@ deliberately *not* a field:
   reason, at every level (clarified 2026-07-16).
 - **`position`** — where in the project's own git history a record
   (charter, claim, or publish) was issued. A commit OID. Governs the
-  named invariant `[temporal-vector]` (not a section-anchor tag, unlike
-  every other bracketed name in this document): `charter.position ≤
-  claim.position ≤ publish.position`, checked by ordinary git ancestry.
+  named invariant `[temporal-vector]` (an invariant name, not a
+  section-anchor tag — like `[verify-before-fetch]` and
+  `[k-derivation-signed-only]`, and unlike the section-heading brackets):
+  `charter.position ≤ claim.position ≤ publish.position`, checked by
+  ordinary git ancestry (a verifier obligation, §10; §8's carve-out).
   Facts carry no
   `position` of their own — they are about an already-published subject,
   not a new one.
@@ -590,10 +600,14 @@ its own independently-verified subject.
 dirname(main_subject.path)`, where the main subject is whichever is
 declared first. Every additional declared subject's `path` MUST lie
 under `P` — a direct sibling of the main tree, or nested arbitrarily
-deep beneath one — and MUST NOT reach above `P`. This is a plain prefix
-check against `path` fields every subject already declares; no new
-field is needed, and no separate "primary subject" flag is needed
-either, since declaration order settles it.
+deep beneath one — and MUST NOT reach above `P`. This is a
+**path-segment containment** check, not a raw string-prefix one: normalize
+both `P` and each subject `path` first (resolve `.`/`..`, reject any that
+escapes the repo root), then require each subject path to equal `P` or lie
+under it *at a component boundary* — `P = foo` contains `foo/bar` but not
+`foobar`, the string-prefix footgun a naive check leaves open. No new
+field is needed, and no separate "primary subject" flag is needed either,
+since declaration order settles it.
 
 This closes a real gap the unconstrained version left open: composing
 subjects from arbitrary, unrelated repository locations either drags in
@@ -892,9 +906,12 @@ The object *type* at the ref's tip does the discovery work for free: a
 bare commit means nothing has ever happened, zero further lookups
 needed; a tag means something happened, and a consumer is structurally
 forced to see that — there is no way to peel past a tag layer without
-acknowledging it exists. Git's native peeling (`ref^{commit}`) still
-gets a consumer straight to the content regardless of chain depth for
-the common "I just want the content" case. This yields exactly one
+acknowledging it exists. Git's native peeling (`ref^{commit}`)
+recursively dereferences every tag layer straight to the closure-commit
+regardless of chain depth, for the common "I just want the content" case
+— but it deliberately bypasses the fact chain, so a consumer that needs
+current trust status MUST walk the tags (and run the §7.5 completeness
+scan), never substitute the peel for that. This yields exactly one
 mutable ref per version, ever — not a ref per fact plus a separate ref
 per version, which an earlier position in this exploration proposed and
 was wrong to.
