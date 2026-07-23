@@ -748,7 +748,13 @@ mechanism to add).
 **7.4. The closure artifact: an `eml` tree embedding the content
 commitment and the anchor's authorization state, wrapped in a bare
 commit.** `refs/atom/pub/{label}/{version}` is a **separate**, permanent
-ref, written once at publish time, never touched again.
+ref, pinned at creation and never rewritten to a *different* history: its
+target only ever advances forward along the §7.5 CAS-gated fact-tag chain
+(bare closure-commit → `tag_1` → … as facts land), so a consumer MUST
+re-check the ref for tip movement on each resolution rather than caching
+the first object it resolves. ("Written once, never touched again"
+described only the steady state where no fact ever lands, and misread
+against §7.5 as a cache license — corrected here.)
 
 An earlier position in this exploration made the closure a bare commit
 — `tree` = content only, plus a nonstandard header line recording a
@@ -781,26 +787,41 @@ fetched separately at build time. Fetched only in Phase B (§20),
 completely unaffected by this change — embedding lives entirely inside
 Phase A's already-small, always-fetched territory.
 
-Verification is now genuinely two independent checks, not one check
-plus an unverified hint: recompute the closure-tree's root from its two
-leaves and confirm it matches what was signed (cheap — two digests),
-and separately confirm leaf1 actually equals the anchor log's real
-historical root at size K. **K is never read off the closure itself —
-the verifier derives it independently**, from the corresponding publish
-record's own position in the anchor log — concretely, walking `pay.prior`
-from the publish leaf back to genesis and counting leaves gives K, the
-identical traversal §4 already uses to discover an anchor, cheap at this
-domain's stated cardinality (§7.1). Without this, the closure's own
-claim would only prove K is *some* real
-historical size, never that it is the *correct* one for this specific
-publish — the closure artifact is deliberately unsigned (below), so an
-attacker with no signing key could otherwise pair a real, honestly-
-computed `R_anchor` at the wrong K with a genuine content commitment and
-pass both checks exactly as originally described. Binding K to the
-verifier's own independent derivation, never to the closure's own
-unsigned assertion, closes this (caught by adversarial review,
-2026-07-16). A forged or stale reference is now a hard verification
-failure, not a cosmetic mismatch nobody was required to check.
+Verification is genuinely two independent checks — and, correcting the
+2026-07-16 draft, **neither compares the closure tree's root to any
+signed field, because there is none: the closure artifact is deliberately
+unsigned (below).** The 2-leaf tree carries no signature to match against,
+so a verifier instead *reconstructs each leaf from independently trusted,
+signed data* and confirms the closure's presented leaf equals that
+reconstruction:
+
+- **leaf0** — recompute `content_commitment` per §5 (fold the declared
+  subjects' own recomputed `content_hash`es) and confirm it equals the
+  closure tree's leaf0. Content trust flows from this recomputation off
+  signed subject fields, never from the leaf the untrusted closure
+  presents — the earlier "confirm the root matches what was signed"
+  phrasing let a literal implementation trust `leaf0`/content straight off
+  the closure, so a mirror could swap content plus a matching `leaf0`,
+  keep the honest `leaf1`, and pass (B1, adversarial review 2026-07-22).
+- **leaf1** — recompute `R_anchor@K`, the anchor log's real historical
+  root at leaf-count K, from the verifier's *own* `pay.prior` walk (§7.1;
+  §10 inclusion) and confirm it equals the closure tree's leaf1.
+
+**K is a signed historical index, never a git-structural quantity
+[k-derivation-signed-only].** K is *the count of signed `pay.prior` hops*
+from this publish's own leaf back to the anchor's charter genesis, the
+same signed chain §4 walks to discover an anchor: genesis is leaf 1, the
+publish leaf is the K-th, and `R_anchor@K` is the log root as of that
+publish leaf (the off-by-one pinned here rather than left to a reader).
+K is **never** the count of git checkpoint-commit ancestors (§7.3) and
+**never** the log's write-time tip — both are attacker-influenceable
+backend structure a malicious host could fabricate to pair a real,
+honestly-computed `R_anchor` at the wrong K with a genuine content
+commitment and otherwise pass (B2). Binding K to the verifier's own
+`pay.prior` count, and reconstructing both leaves from signed data, is
+what closes that pairing attack. A forged or stale reference is a hard
+verification failure, not a cosmetic mismatch nobody was required to
+check.
 
 This recomputation stays cheap and stable as the log grows past K —
 `eml`'s durable witnesses mean a leaf's inclusion path to its mountain
@@ -894,6 +915,27 @@ mechanism. This principle now also governs the choice of git object
 *type* at a ref's tip (§7.5's bare-commit-vs-tag discriminator) — the
 same rule, one level more general than the original draft stated it.
 
+**The one carve-out, stated rather than glossed:** this document's broader
+"git structure carries zero security weight" (Context, §7.2) has exactly
+one exception, and naming it is more honest than an absolute that is false
+as written. The `[temporal-vector]` invariant (`charter.position ≤
+claim.position ≤ publish.position`, §4) and the legacy/native gate
+(`is-ancestor(charter.position, publish.position)`, §14) both *do* consult
+git ancestry to reach a verification decision — the one git-structural
+relation anywhere in the design that does. It is safe, by an argument the
+rest of the document's blanket phrasing skips: the OIDs being compared are
+themselves *signed* `position` fields, so an attacker cannot substitute a
+different commit without breaking the signature; forging a false ancestry
+edge between two fixed content-addressed OIDs is a preimage/collision break
+of the same class every other guarantee here already assumes away
+(collision-bound in the forgeable direction); and the sole remaining
+residue — a host withholding the intervening commit objects so the ancestry
+query cannot complete — **fails closed** (the record is treated as
+unverifiable and rejected), a denial-of-service, never the acceptance of a
+false ordering. So the principle is precise: git *object identity and type*
+never bear on security; git *ancestry between signed `position` OIDs* bears
+on exactly one ordering check, fail-closed, and nowhere else.
+
 ### 9. Ref format: one log, one ref per publish [atom-ref-format]
 
 Applying §8's principle now that the record shape and git object model
@@ -954,6 +996,15 @@ original draft's two-request scheme). Instead:
   scope's history (§3) — unchanged in substance from the original draft,
   now walked against one unified log instead of several ref-enumerated
   families.
+- **Position ordering** (`[temporal-vector]`, §4): confirm
+  `charter.position ≤ claim.position ≤ publish.position` by git ancestry
+  over the signed `position` OIDs, and, for a legacy publish, the §14
+  legacy/native gate. Named here as an actual verifier obligation rather
+  than left implicit in §4: it is the one git-structural relation
+  verification consults, safe and fail-closed for the reasons §8's
+  carve-out states — a withheld intervening object makes the ordering
+  unverifiable and the record is rejected, never accepted on an
+  unprovable order.
 - **Genesis-once**: for any scope whose identity is a permanent genesis
   (charter, claim, publish, §3), the *canonical* genesis is the first
   such leaf encountered in the anchor's `prior`-chain order from anchor
