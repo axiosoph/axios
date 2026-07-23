@@ -5,15 +5,17 @@ the atom plane, given its own formal model. This document defines the
 objects (dependency closure, classification, trust surface, assumption
 basis, $\mathrm{Total}$, the source-class gate, the forced generator), states
 the ceiling theorems over them, and reports the machine-checked safety
-result. Substance is drawn from the landed atom corpus
+result — the Alloy bounded-scope check (§10) and, since, an independent
+Lean 4 mechanization proving the same ceiling theorems unconditionally
+(§11). Substance is drawn from the landed atom corpus
 ([Atom Model](atom-model.md), [ADR-0007](../adr/0007-atom-version-integrity-system.md),
 [trust model](../specs/trust-model.md),
 [lock spec](../specs/lock-file-schema.md) — cited, never restated).
 The normative decisions this model grounds — the source-class-vouch,
 vouch anchoring, and the trust-surface accounting — are recorded in
 [ADR-0008](../adr/0008-surety-of-source.md). Every claim below names
-its evaluator: proof, the Alloy model checker, or prose argument —
-never an unmarked assertion._
+its evaluator: proof, the Alloy model checker, Lean 4, or prose
+argument — never an unmarked assertion._
 
 ---
 
@@ -970,3 +972,165 @@ is itself machine-checked. The forced generator appears in the model
 only through its structural consequence (a witness-shaped atom is
 decided purely by vouch admission); its degeneracy is never computed —
 the model does not decide the undecidable.
+
+## 11. The Lean mechanization
+
+A second, independent evaluator over the same classification law:
+[`docs/models/lean-surety/`](lean-surety/SuretyCeiling.lean) mechanizes
+§1–§8 as executable Lean 4 definitions and proves the ceiling theorems
+as universally quantified proofs, rather than the Alloy Analyzer's
+bounded-scope search (§10). The two checks are complementary, not
+redundant: Alloy's relational model finds counterexamples, or their
+absence, within a finite scope; the Lean model, once a definition is
+accepted as faithful, proves the corresponding claim for every
+instance, with no scope bound at all. Six files, in the order they
+were built:
+
+- [`SuretyEonEalm.lean`](lean-surety/SuretyEonEalm.lean) — the
+  determination gate (§2's Lemma, restated over EON/EALM's own
+  determination-gate machinery, a distinct upstream formal system from
+  the five files below): `genuineness_admits_no_snapshot_scheme` proves
+  that if genuineness is not record-determined
+  (`hfiber : ¬ Determined genuineness` — the §8.3-style fiber witness,
+  carried as an explicit hypothesis, never proved or smuggled in as an
+  axiom), then genuineness admits no snapshot-sound evidence scheme
+  over any commitment: no verifier certifying from committed bytes
+  alone can characterize it.
+- [`SuretyCeiling/Basic.lean`](lean-surety/SuretyCeiling/Basic.lean) —
+  `classify` (§2) as a total, computable Lean function over an
+  inductive `Artifact` whose two constructors (`.leaf`, `.atom`) make
+  acyclicity (§1) true by the shape of the type, not an asserted axiom.
+- [`SuretyCeiling/Ceiling.lean`](lean-surety/SuretyCeiling/Ceiling.lean)
+  — `trustSurface` ($T(a)$), `basis` ($B(a)$), `Total`, and the ceiling
+  theorems as proofs: `laundered_never_total` and
+  `total_carries_vouch_in_basis` (Theorem 3a, §9.3 — universally
+  quantified rather than bounded-scope-checked), plus
+  `no_silent_laundering`, `declaration_alone_never_closes`, and
+  `seeds_are_trustImports`.
+- [`SuretyCeiling/Generator.lean`](lean-surety/SuretyCeiling/Generator.lean)
+  — the forced generator (§8.1): `degenerate`/`genuine` over an
+  abstract denotation $⟦\cdot⟧$, `degenerate_extensional` (the semantic
+  property Rice's theorem requires, proved rather than assumed), and
+  `bounded_domain_trivializes` (why the unbounded-domain clause is
+  load-bearing, per §8.1).
+- [`SuretyCeiling/Grounding.lean`](lean-surety/SuretyCeiling/Grounding.lean)
+  — binds the generator model to the ceiling: `rcas_forces_established`
+  (every `RCAS` verdict forces the vouch clause of `srcEstablished`
+  true, with no premise about the generator at all) and
+  `genuineness_underdetermined` (a concrete genuine generator and a
+  concrete degenerate one realizing the identical output — the tangible
+  form of Theorem 1(ii)'s "knowing the one input/output pair the build
+  exhibited buys the verifier nothing," §9.1).
+- [`SuretyCeiling/Nonvacuity.lean`](lean-surety/SuretyCeiling/Nonvacuity.lean)
+  — concrete witnesses proving the ceiling theorems bite on reachable
+  configurations, not merely hold vacuously: a non-seed atom that is
+  `RCAS`, `Total`, and carries a real vouch in its basis, in both the
+  empty-trust-surface case and the characteristic base-bounded case
+  ($\mathrm{Total}$ via a non-empty surface whose sole member is a
+  genesis seed); and a non-seed atom whose establishment fails, shown
+  never $\mathrm{Total}$ by direct application of
+  `laundered_never_total`.
+
+### 11.1 The decoupling: classification is vouch-decided, not degeneracy-decided
+
+A correspondence between `launderedShape` (§9.3's structural signature)
+and `degenerate` (§8.1) — "a laundered atom's forced generator is
+degenerate" — was sought while building `Grounding.lean` and is
+**false in both directions**, not merely unproved:
+
+- **`degenerate` does not imply `launderedShape`.** The §8.3
+  compressed-blob generator is exercised under both fates in the model
+  (§10's satisfiability result): unvouched, it sits in
+  `SourceClassResidue` (`launderedShape = true`); vouched by one
+  admitted, unretracted, anchored signer, it establishes and classifies
+  `RCAS` (`launderedShape = false`). The same degenerate generator
+  produces opposite classifications, decided entirely by vouch
+  admission.
+- **`launderedShape` does not imply `degenerate`.** A raw fetched
+  payload (a `.leaf`, precedence clause 1) is `launderedShape` whenever
+  it is not a genesis seed, and carries no generator — degenerate or
+  otherwise — to be a witness for.
+- **No term of the model can even state the correspondence.**
+  `Artifact` has exactly two constructors, `.leaf` and `.atom`, and
+  neither carries a generator, input, output, or denotation field:
+  there is no way to extract "this atom's forced generator" from an
+  `Artifact` value at all.
+
+This is the mechanized form of what §5.3 and §8.3 already say in
+prose — establishment substitutes a signed vouch for exactly the check
+Theorem 1 forecloses — sharpened from "the gate does not attempt this
+check" to "the classification function's type admits no such check to
+attempt." `rcas_forces_established`'s content is exactly this:
+`classify` reaches `RCAS` only through `srcEstablished`'s vouch
+clause, and the theorem needs no premise about degeneracy — not
+because one was assumed away, but because none is in scope for a
+generator-free, `Bool`-valued function to depend on.
+
+### 11.2 Proven here vs. cited: Theorem 1 is not mechanized
+
+Theorem 1 (§9.1 — Rice's theorem applied to the index set of
+finite-range partial computable functions, plus the promise
+refinement) is **cited in prose, never mechanized in this Lean
+corpus**, by design: `Generator.lean` carries no computation model, no
+program-size notion, and no `Decidable` instance for `degenerate` —
+there is nothing for an undecidability theorem to be stated *about* as
+an internal Lean fact. No theorem in `Grounding.lean` or elsewhere
+takes an undecidability hypothesis, because none of the mechanized
+results need one: `rcas_forces_established` holds unconditionally
+(§11.1), and `genuineness_underdetermined` is a concrete existential —
+an actual exhibited pair, the identity map against a constant map on
+the same input/output value — never a claim resting on Rice's theorem
+being assumed. Mechanizing Theorem 1 itself would require a
+computation model this corpus deliberately does not build; that is
+future work, not a gap silently papered over here.
+
+Proven footprint, all `#print axioms` reporting no `sorryAx`
+(`SuretyEonEalm.lean`'s one theorem additionally depends on
+`[Context, Entry]`, EON/EALM's own abstract model types treated as
+opaque parameters — not a classical or quotient axiom): the
+determination-gate instantiation; `classify`/`trustSurface`/`basis`/
+$\mathrm{Total}$ and the ceiling theorems, universally quantified
+rather than bounded-scope; the generator/degeneracy model and its two
+structural lemmas; the decoupling and underdetermination results; and
+the three concrete non-vacuity witnesses. One property is strictly
+stronger here than in Alloy: `Ceiling.lean` has no counterpart to
+`surety_no_f1.als`'s bounded-scope circular-justification differential
+to state at all, because an `.atom`'s inputs are strictly-smaller
+subterms of itself — a circular-justification instance has no
+term-level witness, unsatisfiable at every scope by the type itself,
+not merely absent within Alloy's bound.
+
+### 11.3 The assumption base
+
+Two premises the whole surety result rests on, distinct in kind and
+never conflated:
+
+- **`hfiber : ¬ Determined genuineness`**
+  ([`SuretyEonEalm.lean`](lean-surety/SuretyEonEalm.lean)) — a modeling
+  hypothesis about this system's own genuineness claim, carried as an
+  explicit argument to every theorem that needs it, never a fresh
+  axiom and never proved: proving it would mean fixing a concrete
+  genuineness predicate and a concrete pair of contexts, which is
+  exactly the §8.3-style ratification this file is scoped not to
+  prejudge.
+- **Theorem 1 / Rice's theorem on finite-range indices** (§9.1) —
+  cited mathematics, entering the surrounding prose as a proof by
+  citation. It never appears as a Lean hypothesis anywhere in this
+  corpus, because no mechanized theorem needs it as one (§11.2).
+
+Every claim in §11 is scoped above the same verification floor §3
+already names for the rest of this model (the hash/signature schemes,
+the verifier's own implementation) — the Lean mechanization adds
+nothing below that floor and does not attempt to.
+
+### 11.4 Honest bounds
+
+Unlike the Alloy models (§10), re-verified in continuous integration on
+every push and pull request (the repository's `model-check` workflow,
+`.github/workflows/model-check.yml`), the Lean corpus under
+`docs/models/lean-surety/` is not yet wired into CI: the results above
+are re-verifiable by `lake build` against this repository state, not
+continuously re-checked on every change. This is a gap to close, not a
+property of the mechanization itself, and does not weaken any theorem
+above — it means the freshness guarantee §10 states for the Alloy
+result does not yet extend to this one.
