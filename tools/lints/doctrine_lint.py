@@ -44,6 +44,7 @@ WAIVERS_PATH = os.path.join(SELF_DIR, "waivers.toml")
 # forbid them. Not a silent scope-narrowing: these are the doctrine source and
 # the lint machinery itself, recorded here in the open.
 DOCTRINE_SOURCE = "AGENTS.md"  # root glossary + the .scratch/.sketches rule
+GLOSSARY_SOURCE = "docs/glossary.md"  # canonical glossary; its ban list must name the banned
 LINT_DIR_PREFIX = "tools/lints/"  # the lint scripts + waiver inventory
 
 
@@ -217,7 +218,11 @@ def glossary_added_line(
     ambiguous alias, (2) the unambiguous token ``Blake3Hash`` (zero legitimate
     uses), (3) exact banned phrases.
     """
-    if path == DOCTRINE_SOURCE or path.startswith(LINT_DIR_PREFIX):
+    if (
+        path == DOCTRINE_SOURCE
+        or path == GLOSSARY_SOURCE
+        or path.startswith(LINT_DIR_PREFIX)
+    ):
         return []
     out: list[Violation] = []
     decl_terms = "|".join(re.escape(t) for t in cfg["decl_terms"])
