@@ -84,8 +84,16 @@ all-or-nothing notion of history. Once atom is understood as a version-
 integrity system in its own right, with git as one (excellent,
 deliberately chosen, but not structurally required) implementation of
 its storage substrate, the bootstrap problem, the equivocation problem,
-and the freshness problem all resolve as instances of the same small set
-of laws rather than needing separate, ad hoc mechanisms each.
+and the freshness problem reduce to instances of the same small set of
+laws rather than needing separate, ad hoc mechanisms each — with one
+honesty the rest of this document holds to: equivocation and freshness
+are *located and bounded* by those laws, not *statically resolved* by
+them. Their non-monotone residue (which authentic head is current, has
+anyone forked) is settled only by trusting the charter's signed
+canonical-source declaration — the coordination point the charter names,
+optionally decentralized to a threshold quorum of its declared trusted
+mirrors/witnesses — never by structure a lone consumer can check offline
+(§10, §16, §17-L4).
 
 ### The second reframing: git structure is a backend, not a trust boundary
 
@@ -1020,10 +1028,20 @@ original draft's two-request scheme). Instead:
   doesn't hold — a buggy client, a dishonest one, or any writer whose
   key has been compromised — and the write gate (§19) additionally
   helps prevent it cheaply at one registry in the honest case; but
-  this verification rule is what actually makes genesis-once hold
-  under adversarial conditions regardless, since ref-existence CAS at
-  one host is not, by this document's own thesis, part of the trust
-  boundary (caught by adversarial review, 2026-07-16).
+  this verification rule is what makes genesis-once hold *within any
+  single, shared view of the log* — a second genesis is void wherever the
+  first is also visible, and ref-existence CAS at one host is correctly
+  not part of the trust boundary. What it does **not** do, and must not
+  claim to, is statically resolve a *fork*: an equivocating source can
+  show two consumers two different "first" genesis leaves for the same
+  scope, and no offline check against one view detects the other. That
+  residue is the same equivocation residue §16 and §17 disclose —
+  settled not by this rule but by trusting the charter's signed
+  canonical-source declaration (optionally a threshold quorum of its
+  declared mirrors/witnesses), and bounded, never fully closed, against a
+  fully-targeted victim partition (§17-L4). (Re-scoped 2026-07-22; the
+  earlier "holds under adversarial conditions regardless" overclaimed
+  static fork-resolution.)
 - **Completeness** (§7.5): the bounded delta-scan from a fact-tag
   chain's last known point to the log's current tip.
 
@@ -1279,14 +1297,25 @@ specific moment. But *completeness* ("given whatever view I already
 have, did I miss anything it claims to cover") is a property of the
 record log being append-only and checkpoint-chained plus one cheap local
 scan against a log a consumer has already fetched — it needs no
-freshness apparatus at all, and holds at Tier 0. A Tier 0 consumer who
-fetches an anchor's record log gets a complete, provably-nothing-omitted
-view of everything that anchor has ever signed as of the moment of that
-fetch; what Tier 0 genuinely lacks is any guarantee about how stale that
-fetch already was the moment it completed. Chosen tradeoff, restated
-precisely: sovereignty and legible absence of *recency* guarantees over
-Go-sumdb-style mandatory central infrastructure — never absence of
-*completeness* guarantees, which this model provides unconditionally.
+freshness apparatus at all, and holds at Tier 0 — **relative to the
+source a consumer queried.** A Tier 0 consumer who fetches an anchor's
+record log gets a view that is *complete with respect to the branch that
+source served*: provably nothing was omitted from, removed from, or
+reordered within it, as of the moment of that fetch (the append-only /
+consistency-proof guarantee, §10). What the scan does **not** prove — and
+must not be read as proving — is that the source is not *equivocating*,
+maintaining a second, forked branch this consumer never sees; completeness
+proves append-only extension of the source queried, never immunity to an
+undetected single-branch fork. That residue is the same fork residue
+§17-L4 discloses, located at the charter's canonical-source declaration
+(optionally a threshold quorum of its declared mirrors/witnesses), and not
+closed by the scan. What Tier 0 *additionally* lacks is any guarantee
+about how stale that (complete-relative-to-its-source) fetch already was
+the moment it completed. Chosen tradeoff, restated precisely: sovereignty
+and legible absence of *recency* guarantees over Go-sumdb-style mandatory
+central infrastructure — never absence of the *completeness* guarantee
+this model provides unconditionally, understood as completeness relative
+to the queried source, not detection of a hidden fork.
 
 **Named explicitly, not left implicit:** this is a real divergence from
 TUF's own baseline, where mandatory metadata expiration applies to
@@ -1518,7 +1547,8 @@ to one doesn't force a change to another.
 - Canonical source is a genuine opt-in enhancement for recency
   specifically, never a hard dependency for completeness or validity
   (§16) — a stronger claim than the original draft could make, since
-  completeness is now unconditional.
+  completeness (relative to the queried source, not fork-detection —
+  §16) is now unconditional.
 - Ref count no longer scales with fact count at all (§9) — a strict
   reduction from the original draft's per-record ref families.
 - Garbage collection on the store side requires no bespoke mechanism
