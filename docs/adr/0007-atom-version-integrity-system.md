@@ -38,7 +38,7 @@
   ADR was deliberately drafted without re-reading, which its `eml`-backed
   single-log representation (§7), unified fact mechanism (§3), and
   genesis-once discipline (§10) change — `git-storage-format.md`,
-  `atom-transactions.md`, `atom-backend-contract.md`,
+  `atom-transactions.md`, `atom-backend-contract.md`, `trust-model.md`,
   `lock-file-schema.md`, `docs/models/atom-model.md` §2 (still teaching
   the repudiated `AtomId = (anchor, label)`), and the stale formal models
   that machine-check the superseded design (`AtomCharter_Succession.cfg`,
