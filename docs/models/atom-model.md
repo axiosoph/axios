@@ -594,13 +594,15 @@ holding a different fact view.
 
 #### [fold-inputs-on-spine]
 
-Every input to an authorization fold is a `spine-chain-complete` spine
-record. Otherwise the fold is coverage-dependent and non-monotone, and
-nothing downstream is offline-verifiable.
+Every input to an authorization fold is a
+[spine-chain-complete](#spine-chain-complete) spine record. Otherwise the
+fold is coverage-dependent and non-monotone, and nothing downstream is
+offline-verifiable.
 
 ```claim
 kind: invariant
 evaluator: none
+depends: [spine-chain-complete]
 ```
 
 **The cloud holds fact** — yank, deprecation, advisories, attestations,
@@ -638,23 +640,25 @@ happened after the store was populated.
 
 #### [store-sufficiency]
 
-A store holding an atom's closure — `spine-chain-complete` records,
-`withdrawal-terminal` facts, and content — suffices for every operation
-except discovery.
+A store holding an atom's closure — [spine-chain-complete](#spine-chain-complete)
+records, [withdrawal-terminal](#withdrawal-terminal) facts, and content —
+suffices for every operation except discovery.
 
 ```claim
 kind: invariant
 evaluator: none
+depends: [spine-chain-complete, withdrawal-terminal]
 ```
 
 #### [discover-one-question]
 
 Coordination is required for exactly one kind of question: what exists
-now that I do not already know about — the one bound `store-sufficiency`
-names as the store's own limit. Every operation is offline-correct over
-what it already holds.
+now that I do not already know about — the one bound
+[store-sufficiency](#store-sufficiency) names as the store's own limit.
+Every operation is offline-correct over what it already holds.
 
 ```claim
 kind: invariant
 evaluator: none
+because: [store-sufficiency]
 ```

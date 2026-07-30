@@ -67,14 +67,16 @@ walk past the carrier to the spine itself.
 #### [publish-inclusion-required]
 
 Verification MUST prove the publish record's czd is included in the
-`spine-chain-complete` spine, against a root the consumer pinned or
-TOFU'd. Without this proof a record is self-certifying and, under the
+[spine-chain-complete](../models/atom-model.md#spine-chain-complete)
+spine, against a root the consumer pinned or TOFU'd. Without this proof a
+record is self-certifying and, under the
 [record realization](../models/surety-of-source.md#4-total-and-the-genesis-seeds)'s
 seed rule, classifies as a **seed**.
 
 ```claim
 kind: constraint
 evaluator: none
+depends: [spine-chain-complete]
 ```
 
 Verification against the spine proceeds without ever querying what else
@@ -85,13 +87,15 @@ exists — it walks a closure the consumer already holds or is given, never
 
 No operation on the verification path — signature check, czd
 recomputation, inclusion proof, content-digest recomputation, governance
-fold — takes a discovery capability (`discover-one-question`).
+fold — takes a discovery capability
+([discover-one-question](../models/atom-model.md#discover-one-question)).
 Verification is offline-correct over a store already holding the
 publish's closure.
 
 ```claim
 kind: constraint
 evaluator: none
+depends: [discover-one-question]
 ```
 
 ### The store
@@ -115,11 +119,12 @@ evaluator: none
 
 #### [fact-keyed-by-own-czd]
 
-A fact is keyed by its own czd, the same `store-keyed-by-czd` map every
-other object lives in; the subject index is derived, local, and never
-fetched or trusted.
+A fact is keyed by its own czd, the same
+[store-keyed-by-czd](#store-keyed-by-czd) map every other object lives
+in; the subject index is derived, local, and never fetched or trusted.
 
 ```claim
 kind: constraint
 evaluator: none
+because: [store-keyed-by-czd]
 ```

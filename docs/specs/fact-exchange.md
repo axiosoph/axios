@@ -67,12 +67,14 @@ answers strictly over what a queried source chose to advertise.
 
 #### [fact-exchange-advertised-only]
 
-The exchange, bounded the same way as `fact-exchange-subject-scoped`,
-answers over the **advertised** set, not the held set.
+The exchange, bounded the same way as
+[fact-exchange-subject-scoped](#fact-exchange-subject-scoped), answers
+over the **advertised** set, not the held set.
 
 ```claim
 kind: constraint
 evaluator: none
+because: [fact-exchange-subject-scoped]
 ```
 
 ### Ingestion
@@ -84,11 +86,14 @@ artifacts while the metadata to evaluate them lives elsewhere.
 
 #### [ingest-closure-complete]
 
-Ingestion, over the same `fact-exchange-subject-scoped` channel, is
-closure-complete over records, facts, **and** content. A store full of
-artifacts but empty of facts MUST NOT be treated as a populated store.
+Ingestion, over the same
+[fact-exchange-subject-scoped](#fact-exchange-subject-scoped) channel,
+is closure-complete over records, facts, **and** content. A store full
+of artifacts but empty of facts MUST NOT be treated as a populated
+store.
 
 ```claim
 kind: constraint
 evaluator: none
+because: [fact-exchange-subject-scoped]
 ```
