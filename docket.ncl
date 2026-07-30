@@ -28,5 +28,6 @@
     { path = "docs/models/**",       kinds = ["invariant"],   quadrant = "reference" },
     { path = "docs/architecture/**", kinds = ["requirement"], quadrant = "reference" },
     { path = "docs/adr/**",          kinds = [],              quadrant = "explanation" },
+    { path = "docs/glossary.md",     kinds = [],              quadrant = "reference" },
   ],
 }
