@@ -469,6 +469,31 @@ returning `refname→OID` with no object download — the standard git protocol-
 primitive. This is spec-mandated; axios's own implementation is a build task (the
 PoC's `get_atoms` proves the pattern). See Appendix D.
 
+### 6.9 The Store Format Is a Public Contract (ADR-0009)
+
+_Added 2026-07-30. This section is scoped narrowly: it cites
+[Atom Model](../models/atom-model.md) and [ADR-0009](../adr/0009-atom-composition-plane.md)
+only, not §6.6 above — `blake3(publish_czd)`-keyed reduction is
+[retired](../specs/atom-store-format.md#store-keyed-by-czd) under the
+spine/cloud split; that revision is separate, still-owed work (ADR-0007's
+own "Obligates amendment of" list), not performed here._ Story 4 of the
+design session that produced ADR-0009 names the audience this obligation
+protects: a consumer holding neither ion nor eos, reading a store
+directly. Treating the on-disk format as ion's implementation detail
+means that audience breaks first — the format has to be specified and
+versioned at this layer, independent of any frontend.
+[Atom Store Format](../specs/atom-store-format.md) is that specification.
+
+#### [store-format-public-contract]
+
+The store's on-disk format is a public, versioned contract, documented
+independently of ion or any other frontend.
+
+```claim
+kind: requirement
+evaluator: none
+```
+
 ## 7. Wire and Storage Formats
 
 | Concern                                                            | Governing spec              |

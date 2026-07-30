@@ -84,6 +84,32 @@ eos contract types; the reverse is forbidden (`layer-boundaries.md`
 and never reaches below the published contract (no direct git-object surgery —
 that is L1's `atom-git`).
 
+### 1.5 Two Clients, One Store (ADR-0009)
+
+_Added 2026-07-30._ Ion is not the only reader of the atom store: eos is
+a second client, on a different axis. Both read and manage the same
+`czd → object` keyspace ([Atom Store Format](../specs/atom-store-format.md)),
+but ion is the **local, single-user** client — tracking few sources per
+subject, over its own closure — while eos **aggregates over many
+sources** for the subjects it serves. Being the aggregator does not
+imply whole-store sync: eos calls `facts.roots` ([Fact
+Exchange](../specs/fact-exchange.md)) against N peers with one subject
+list, the same subject-scoped shape ion uses at one-source scale.
+Divergent roots for one subject from two sources is, for free, an
+equivocation signal — the store is the only place records from multiple
+sources meet.
+
+#### [two-clients-one-store]
+
+Two clients read and manage one store: a local single-user client, and
+an aggregate over many **sources**. They differ on the source axis, not
+the subject axis.
+
+```claim
+kind: requirement
+evaluator: none
+```
+
 ## 2. Container View
 
 ```mermaid
@@ -133,6 +159,28 @@ It is the only ion container that speaks the eos protocol.
 External to ion: the L1 `AtomSource`/`AtomContent` that resolution discovers and
 fetches from, and the L3 daemon that executes the build request. Ion depends on
 both contracts; neither depends on ion.
+
+### 2.6 Ion's Operation Set (ADR-0009)
+
+_Added 2026-07-30._ The premise organizing ion's whole surface (nrd):
+**decouple doing from building**. Nix's derivation is too general —
+entering a devshell may unexpectedly invoke a build, because everything
+routes through one undifferentiated evaluation. Ion's surface is instead
+seven named operations, each classified against the trichotomy's
+`Fetch`/`Discover` capability split
+(`discover-one-question`):
+declare, **resolve** (the only one that coordinates), form, materialize,
+do, publish, inspect. A user-visible promise follows directly: on a
+plane, everything works except adding a new dependency.
+
+#### [seven-operations]
+
+declare, resolve, form, materialize, do, publish, inspect.
+
+```claim
+kind: requirement
+evaluator: none
+```
 
 ## 3. Component View
 
@@ -330,6 +378,75 @@ transmits, what eos expects) is `ion-eos-contract.md`. Authentication is the
 transport layer's concern (the daemon's auth middleware), not ion's — ion holds
 only the capabilities the daemon grants it, and capability possession _is_ the
 authorization (drop the capability, drop the access).
+
+### 6.10 The Composite Plugin Seam (render/apply, ADR-0009)
+
+_Added 2026-07-30. A different plugin axis from §6.5's lock dependency-type
+plugins — this one governs how a composite crosses out of the formal
+core, not what a manifest may depend on._ Below the seam, everything is
+content-addressed and verified; above it, a plugin acts in an open world
+that cannot be closed. The seam is trust-safe by construction because a
+plugin can only be one of two things: a **rendering** (`Composite →
+Rendering`, pure, no trust weight — producing files or a description) or
+an **apply** (a trial, yielding a signed record — ADR-0006's `execute`,
+of which build is already the built-in `do`; deploy-apply is one more
+variant). There is no third thing a plugin can do, and in particular it
+can never produce intent.
+
+#### [plugin-seam-at-composite]
+
+The plugin boundary is the composite. A plugin is either a **rendering**
+(pure, no trust weight) or an **apply** (a trial, yielding a signed
+record). There is no third thing it can be, so it can never produce
+intent.
+
+```claim
+kind: requirement
+evaluator: none
+```
+
+### 6.11 Blast Radius Preview (ADR-0009)
+
+_Added 2026-07-30._ Config is what users spend their attention on, and
+composition-model.md §7's override algebra already computes the readout
+this requirement asks ion-cli to surface: the substitution operator's
+validity is checked per consumer before it is applied, so the set of
+affected consumers — closure size, how much substitutes, how much
+rebuilds — is knowable before the user commits to a change, not
+discovered after a build runs. Without this readout, *decouple doing
+from building* (§2.6) is true of the architecture but invisible to the
+user, who is still surprised by a build, just later than before.
+
+#### [blast-radius-visibility]
+
+Before committing an override or a dependency add, ion-cli MUST report
+its blast radius: closure size, how much substitutes, how much builds.
+
+```claim
+kind: requirement
+evaluator: none
+```
+
+### 6.12 Closure Fault Loop (ADR-0009)
+
+_Added 2026-07-30._ Execution Model §4.4's graceful-degradation loop
+already gives closure faults a policy (denied and logged with the name
+that missed, growing `J`); what has not been stated is that ion-cli owns
+turning that log entry into a user-visible repair path rather than a
+bare error. A closure fault is an observation, not an exception —
+Run → fault → repair → refine is the pathway a user walks, symmetric with
+§6.11's blast-radius preview on the other side of the same commit.
+
+#### [closure-faults-user-loop]
+
+A closure fault is denied and logged with the name that missed, and
+ion-cli MUST present it as a repair step (run → fault → repair →
+refine), never a bare error.
+
+```claim
+kind: requirement
+evaluator: none
+```
 
 ## 7. The Lock Schema
 
