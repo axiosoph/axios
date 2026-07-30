@@ -20,11 +20,17 @@ _LINK_PATTERN = re.compile(
 # (docket's MVP.md §1.1), holding a small flat YAML payload: `kind`
 # (requirement/invariant/constraint), `evaluator` (how firmly it is
 # discharged, a preference-ordered hierarchy from `proof` down to `none`),
-# and an optional `cites` list. sukr's markdown backend has no highlighter
-# for the `claim` language, so left alone it renders as a raw, unstyled
-# code fence — a bare normative statement with no indication of how
-# strongly it is held, which reads as MORE authoritative than the source.
-# Rendering the kind and evaluator as visible badges instead publishes that
+# and two optional reference lists, `depends` and `because` (MVP.md §1.2).
+# The two differ in what deleting their target means: a `depends` target
+# vanishing breaks the claim; a `because` target vanishing leaves the claim
+# standing but under-justified. `cites` (the field these replaced) is no
+# longer accepted — the corpus is authored against the new schema and a
+# parser that still took `cites` would silently swallow a stale document
+# rather than flagging it. sukr's markdown backend has no highlighter for
+# the `claim` language, so left alone it renders as a raw, unstyled code
+# fence — a bare normative statement with no indication of how strongly it
+# is held, which reads as MORE authoritative than the source. Rendering the
+# kind and evaluator as visible badges instead publishes that
 # self-assessment rather than hiding it.
 # --------------------------------------------------------------------------
 
@@ -32,25 +38,33 @@ _CLAIM_FENCE = re.compile(r"```claim\r?\n(.*?)```", re.DOTALL)
 _CLAIM_KEY_LINE = re.compile(r"^([a-zA-Z_][\w-]*)\s*:\s*(.*)$")
 _CLAIM_FLOW_LIST = re.compile(r"^\[(.*)\]$", re.DOTALL)
 
-# Schema per docket's contracts/claim.ncl: `kind` and `evaluator` are closed
-# enums, `evaluator` doubling as a preference order (proof strongest, none
-# weakest) that the CSS strength gradient below mirrors.
+# Schema per docket's MVP.md §1.2: `kind` and `evaluator` are closed enums,
+# `evaluator` doubling as a preference order (proof strongest, none weakest)
+# that the CSS strength gradient below mirrors. `depends` and `because` are
+# the two reference kinds (§1.2): a `depends` target vanishing breaks the
+# claim, a `because` target vanishing leaves it standing but
+# under-justified. `cites` — the field both replaced — is retired rather
+# than kept as a silent alias: the corpus is authored against the new
+# schema, and a parser that still accepted `cites` would let a stale
+# document (or a typo of `depends`/`because`) through unflagged, exactly
+# what "unknown fields are an error" below exists to prevent.
 _CLAIM_KINDS = {"requirement", "invariant", "constraint"}
 _CLAIM_EVALUATORS = {
     "proof", "model-check", "type", "property-test", "test", "example", "none",
 }
+_CLAIM_REF_FIELDS = ("depends", "because")
 
 
-def _parse_claim_flow_list(value):
+def _parse_claim_flow_list(field, value):
     """Parse a YAML flow-sequence `[a, b, c]` of bare/quoted scalars.
 
-    Not a general YAML parser — `cites` is the only field using this shape
-    (docket MVP.md §1.3), so only that shape is supported. Anything else
-    is reported as an error rather than guessed at.
+    Not a general YAML parser — `depends` and `because` are the only fields
+    using this shape (docket MVP.md §1.3), so only that shape is supported.
+    Anything else is reported as an error rather than guessed at.
     """
     match = _CLAIM_FLOW_LIST.match(value.strip())
     if not match:
-        return [], [f"cites: expected a flow list like `[a, b]`, got {value!r}"]
+        return [], [f"{field}: expected a flow list like `[a, b]`, got {value!r}"]
     inner = match.group(1).strip()
     if not inner:
         return [], []
@@ -60,7 +74,7 @@ def _parse_claim_flow_list(value):
         if len(item) >= 2 and item[0] == item[-1] and item[0] in "\"'":
             item = item[1:-1]
         if not item:
-            return [], [f"cites: empty entry in {value!r}"]
+            return [], [f"{field}: empty entry in {value!r}"]
         items.append(item)
     return items, []
 
@@ -103,10 +117,10 @@ def parse_claim_block(raw_yaml):
                     f"evaluator: {value!r} is not one of {sorted(_CLAIM_EVALUATORS)}"
                 )
             fields["evaluator"] = value
-        elif key == "cites":
-            cites, cite_errors = _parse_claim_flow_list(value)
-            errors.extend(cite_errors)
-            fields["cites"] = cites
+        elif key in _CLAIM_REF_FIELDS:
+            refs, ref_errors = _parse_claim_flow_list(key, value)
+            errors.extend(ref_errors)
+            fields[key] = refs
         else:
             errors.append(f"unknown field {key!r}")
 
@@ -114,23 +128,30 @@ def parse_claim_block(raw_yaml):
         errors.append("missing required field `kind`")
     if "evaluator" not in fields:
         errors.append("missing required field `evaluator`")
-    fields.setdefault("cites", [])
+    for field in _CLAIM_REF_FIELDS:
+        fields.setdefault(field, [])
     return fields, errors
 
 
 def _render_claim_html(fields):
     """Render a well-formed claim as a badge callout.
 
-    `cites` are rendered as plain `<code>` text, not links: resolving a
-    citation (claim id or `doc#anchor`) to a URL needs corpus-wide
-    knowledge of every other document's derived path, which is the
-    quadrant/frontmatter derivation's job (out of this surface) — turning
-    a citation into a possibly-broken link here would be inventing scope,
-    not rendering one.
+    `depends` and `because` are rendered as plain `<code>` text, not links:
+    resolving a reference (claim id or `doc#anchor`) to a URL needs
+    corpus-wide knowledge of every other document's derived path, which is
+    the quadrant/frontmatter derivation's job (out of this surface) —
+    turning a reference into a possibly-broken link here would be
+    inventing scope, not rendering one.
+
+    The two are kept on separate lines under distinct labels, not merged
+    into one list, because they mean different things on deletion of the
+    target (docket MVP.md §1.2): a `depends` entry means the claim breaks;
+    a `because` entry means only its stated justification is gone. Both
+    reuse `.claim-cites` for the base line style — extending the existing
+    reference display rather than redesigning it.
     """
     kind = fields["kind"]
     evaluator = fields["evaluator"]
-    cites = fields["cites"]
 
     parts = [
         f'<aside class="claim-block" data-claim-kind="{kind}" '
@@ -140,9 +161,15 @@ def _render_claim_html(fields):
         f'<span class="claim-evaluator-badge">evaluator: {evaluator}</span>'
         "</p>",
     ]
-    if cites:
-        cite_html = ", ".join(f"<code>{html.escape(c)}</code>" for c in cites)
-        parts.append(f'<p class="claim-cites">cites: {cite_html}</p>')
+    for field, label in (("depends", "depends"), ("because", "because")):
+        refs = fields[field]
+        if not refs:
+            continue
+        ref_html = ", ".join(f"<code>{html.escape(r)}</code>" for r in refs)
+        parts.append(
+            f'<p class="claim-cites claim-ref-{field}">'
+            f"<strong>{label}:</strong> {ref_html}</p>"
+        )
     parts.append("</aside>")
     return "".join(parts)
 
