@@ -1,6 +1,10 @@
+import fnmatch
 import html
+import json
 import os
 import re
+import subprocess
+import sys
 
 # Regex for markdown links: [text](path.md) or [text](path.md#hash)
 # Uses [^\[\]]* for link text to avoid catastrophic backtracking on
@@ -193,6 +197,96 @@ def render_claim_blocks(body_content):
 
     return _CLAIM_FENCE.sub(repl, body_content)
 
+# --------------------------------------------------------------------------
+# Quadrant derivation (github.com/axiosoph/axios/issues/103)
+#
+# docket.ncl is the single source of truth for which of the four
+# documentation quadrants each genre serves (see its header comment). The
+# `quadrant` frontmatter emitted for every document is DERIVED from it by
+# matching the document's source path against each genre's `path` glob —
+# never hardcoded here, which is what let every genre carry the same
+# ("Explanation") value regardless of its actual kind. A source path
+# matching zero or more than one genre stops the build rather than
+# guessing: docket.ncl's header requires genre patterns to be disjoint, and
+# a silent default is the defect this replaces.
+# --------------------------------------------------------------------------
+
+# docket.ncl's quadrant names are lowercase; the site's frontmatter
+# convention (see the hand-authored content/how-to/_index.md,
+# content/reference/_index.md) is capitalized/hyphenated.
+_QUADRANT_DISPLAY = {
+    "reference": "Reference",
+    "explanation": "Explanation",
+    "how-to": "How-To",
+    "tutorial": "Tutorial",
+}
+
+
+def load_docket_genres(repo_root):
+    """Load and parse docket.ncl's genre list via `nickel export`.
+
+    No fallback: a missing `nickel` binary, a non-zero exit, or unparseable
+    output all stop the build. Guessing a genre list is the same defect
+    class as guessing a quadrant.
+    """
+    docket_path = os.path.join(repo_root, "docket.ncl")
+    try:
+        result = subprocess.run(
+            ["nickel", "export", "--format", "json", docket_path],
+            capture_output=True, text=True, check=False,
+        )
+    except FileNotFoundError as exc:
+        sys.exit(f"fatal: cannot run `nickel` to read {docket_path}: {exc}")
+    if result.returncode != 0:
+        sys.exit(
+            f"fatal: `nickel export` failed on {docket_path} "
+            f"(exit {result.returncode}):\n{result.stderr}"
+        )
+    try:
+        docket = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        sys.exit(f"fatal: {docket_path} did not export valid JSON: {exc}")
+    genres = docket.get("genres")
+    if not isinstance(genres, list) or not genres:
+        sys.exit(f"fatal: {docket_path} exported no `genres` list")
+    return genres
+
+
+def quadrant_for_source(src_path, repo_root, genres):
+    """Derive the display quadrant for one source path via docket.ncl.
+
+    `src_path` may be a directory (a process_section source) or a single
+    file (a process_file source); both are matched against each genre's
+    glob the same way docket.ncl matches real corpus paths — a directory is
+    probed with a synthetic child so a `docs/specs/**`-style pattern
+    matches it the same way it matches any file beneath it. Zero or
+    multiple matches both stop the build: either is a docket.ncl
+    configuration error, never a precedence question for this script to
+    resolve on its own.
+    """
+    rel = os.path.relpath(os.path.abspath(src_path), repo_root)
+    probe = rel if rel.endswith(".md") else f"{rel}/__probe__"
+    matches = [g for g in genres if fnmatch.fnmatch(probe, g["path"])]
+    if not matches:
+        sys.exit(
+            f"fatal: {rel!r} matches no genre in docket.ncl "
+            f"(checked: {[g['path'] for g in genres]}); "
+            "add a genre row rather than assuming a default quadrant"
+        )
+    if len(matches) > 1:
+        sys.exit(
+            f"fatal: {rel!r} matches multiple genres in docket.ncl "
+            f"({[g['path'] for g in matches]}); genre patterns must be disjoint"
+        )
+    quadrant = matches[0]["quadrant"]
+    if quadrant not in _QUADRANT_DISPLAY:
+        sys.exit(
+            f"fatal: docket.ncl genre for {rel!r} declares unknown quadrant "
+            f"{quadrant!r} (known: {sorted(_QUADRANT_DISPLAY)})"
+        )
+    return _QUADRANT_DISPLAY[quadrant]
+
+
 def rewrite_links(text, section):
     def repl(match):
         text_part = match.group(1)
@@ -234,7 +328,7 @@ def rewrite_links(text, section):
     return _LINK_PATTERN.sub(repl, text)
 
 
-def process_file(src_path, dst_dir, section, description_tpl, default_title="Document", tags=None):
+def process_file(src_path, dst_dir, section, description_tpl, default_title="Document", tags=None, *, quadrant):
     """Process one .md file into dst_dir with frontmatter."""
     os.makedirs(dst_dir, exist_ok=True)
     filename = os.path.basename(src_path)
@@ -265,7 +359,7 @@ def process_file(src_path, dst_dir, section, description_tpl, default_title="Doc
         tags_json = "[" + ", ".join(f'"{t}"' for t in file_tags) + "]"
         tags_str = f"tags = {tags_json}\n"
 
-    frontmatter = f'+++\ntitle = "{title}"\ndescription = "{description_tpl.format(title=title)}"\nquadrant = "Explanation"\naudience = "Developers and architects of the Axios stack"\n{tags_str}+++\n\n'
+    frontmatter = f'+++\ntitle = "{title}"\ndescription = "{description_tpl.format(title=title)}"\nquadrant = "{quadrant}"\naudience = "Developers and architects of the Axios stack"\n{tags_str}+++\n\n'
 
     dst_path = os.path.join(dst_dir, filename)
     with open(dst_path, "w", encoding="utf-8") as f:
@@ -273,7 +367,7 @@ def process_file(src_path, dst_dir, section, description_tpl, default_title="Doc
     print(f"  {filename} -> {title}")
 
 
-def process_section(src_dir, dst_dir, section, description_tpl, default_title="Document", tags=None):
+def process_section(src_dir, dst_dir, section, description_tpl, default_title="Document", tags=None, *, quadrant):
     """Process all .md files from src_dir into dst_dir with frontmatter."""
     if not os.path.isdir(src_dir):
         return
@@ -283,12 +377,14 @@ def process_section(src_dir, dst_dir, section, description_tpl, default_title="D
             continue
         process_file(
             os.path.join(src_dir, filename), dst_dir, section,
-            description_tpl, default_title, tags,
+            description_tpl, default_title, tags, quadrant=quadrant,
         )
 
 
 if __name__ == "__main__":
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    REPO_ROOT = os.path.abspath("..")
+    GENRES = load_docket_genres(REPO_ROOT)
 
     print("specs:")
     def get_spec_tags(filename):
@@ -306,6 +402,7 @@ if __name__ == "__main__":
         "../docs/specs", "content/reference", "reference",
         "Behavioral specification for {title}", "Specification",
         tags=get_spec_tags,
+        quadrant=quadrant_for_source("../docs/specs", REPO_ROOT, GENRES),
     )
 
     print("adrs:")
@@ -313,6 +410,7 @@ if __name__ == "__main__":
         "../docs/adr", "content/architecture", "architecture",
         "Architecture decision record: {title}", "Architecture Decision Record",
         tags=["adr"],
+        quadrant=quadrant_for_source("../docs/adr", REPO_ROOT, GENRES),
     )
 
     print("architecture:")
@@ -320,6 +418,7 @@ if __name__ == "__main__":
         "../docs/architecture", "content/architecture", "architecture",
         "System architecture: {title}", "Architecture Document",
         tags=["sad"],
+        quadrant=quadrant_for_source("../docs/architecture", REPO_ROOT, GENRES),
     )
 
     print("models:")
@@ -327,6 +426,7 @@ if __name__ == "__main__":
         "../docs/models", "content/models", "models",
         "Formal model: {title}", "Formal Model",
         tags=["model"],
+        quadrant=quadrant_for_source("../docs/models", REPO_ROOT, GENRES),
     )
 
     print("glossary:")
@@ -335,6 +435,7 @@ if __name__ == "__main__":
         "Canonical definitions for the project's novel terminology",
         "Glossary",
         tags=["glossary"],
+        quadrant=quadrant_for_source("../docs/glossary.md", REPO_ROOT, GENRES),
     )
 
     # spec-audit.md is superseded (see banner in the source doc) and is no
