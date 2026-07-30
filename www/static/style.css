@@ -1068,6 +1068,92 @@
     font-size: 0.925rem;
   }
 
+  /* Claim blocks (github.com/axiosoph/axios/issues/103) — machine-readable
+     requirement/invariant/constraint markers (docket's `claim` fence).
+     The evaluator badge is color-graded along its preference order (proof
+     > model-check > type > property-test > test > example > none) so how
+     strongly a claim is actually discharged reads at a glance — the kind
+     badge stays neutral because kind carries no strength signal. */
+  .claim-block {
+    --claim-color: var(--fg-muted);
+    margin-block: 1.5rem;
+    padding: 1rem 1.25rem;
+    border-left: 4px solid var(--claim-color);
+    background-color: color-mix(in srgb, var(--claim-color) 6%, var(--bg));
+    border-radius: 0 8px 8px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .claim-badges {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-block-end: 0;
+  }
+
+  .claim-kind-badge,
+  .claim-evaluator-badge {
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-radius: 4px;
+    padding: 0.15rem 0.5rem;
+  }
+
+  .claim-kind-badge {
+    color: var(--fg-muted);
+    background-color: var(--code-bg);
+    border: 1px solid var(--border);
+  }
+
+  .claim-evaluator-badge {
+    color: var(--claim-color);
+    background-color: color-mix(in srgb, var(--claim-color) 12%, transparent);
+    border: 1px solid var(--claim-color);
+  }
+
+  .claim-cites {
+    font-size: 0.85rem;
+    color: var(--fg-muted);
+    margin-block-end: 0;
+  }
+
+  .claim-cites code {
+    font-size: 0.8em;
+  }
+
+  /* Strength gradient: strongest (proof, green) to weakest (none, red) */
+  .claim-block[data-claim-evaluator="proof"]         { --claim-color: light-dark(#1a7f37, #3fb950); }
+  .claim-block[data-claim-evaluator="model-check"]   { --claim-color: light-dark(#0f8a72, #35c9a5); }
+  .claim-block[data-claim-evaluator="type"]          { --claim-color: light-dark(#0969da, #2f81f7); }
+  .claim-block[data-claim-evaluator="property-test"] { --claim-color: light-dark(#6639ba, #a371f7); }
+  .claim-block[data-claim-evaluator="test"]          { --claim-color: light-dark(#9a6700, #d29922); }
+  .claim-block[data-claim-evaluator="example"]       { --claim-color: light-dark(#bc4c00, #db6d28); }
+  .claim-block[data-claim-evaluator="none"]          { --claim-color: light-dark(#cf222e, #f85149); }
+
+  .claim-block-malformed {
+    --claim-color: light-dark(#cf222e, #f85149);
+  }
+
+  .claim-kind-malformed {
+    color: var(--claim-color);
+    border-color: var(--claim-color);
+  }
+
+  .claim-errors {
+    font-size: 0.85rem;
+    color: var(--claim-color);
+  }
+
+  .claim-raw {
+    margin-block-end: 0;
+  }
+
   /* Scroll Progress Bar (Scroll-driven animations) */
   .scroll-progress-bar {
     position: fixed;
