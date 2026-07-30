@@ -116,14 +116,19 @@ line does not have that gap.
 
 The spine is chain-complete: [ADR-0007 §2](0007-atom-version-integrity-system.md)'s existing `pay.prior` field
 chains every spine leaf to its predecessor, so omitting one breaks the
-walk — omission is unconstructible, not merely detectable, the same
-property [ADR-0007 §7.2](0007-atom-version-integrity-system.md) already argued for and Alt 9 already
-rejected the alternative (a generic, updatable tree) for. That argument
-is inherited by citation for the spine, unchanged. It does not transfer
-to the cloud: there, omission by a dishonest or incomplete source is
-already the baseline threat no structure removes, so an append-only
-shape would pay for a guarantee it cannot supply. Mutability follows the
+walk — omission is unconstructible, not merely detectable.
+[ADR-0007's Alt 9](0007-atom-version-integrity-system.md) rejected a
+generic, updatable tree for exactly this reason: such a tree can prove
+an edit happened, never that omitting one didn't matter. That rejection
+holds for the spine unmodified. It does not transfer to the cloud:
+there, omission by a dishonest or incomplete source is already the
+baseline threat no structure removes, so an append-only shape there
+would pay for a guarantee it cannot supply. Mutability follows the
 algebra the content actually has, not a uniform policy across both.
+(§7's own append-only/checkpoint mechanism moves to specification —
+see "What changes, and what does not," below — so this document cites
+the shape's rationale without resting on §7 as still-operative ADR
+content.)
 
 ### 2. Three record classes replace genesis-once/facts-forever [acp-record-classes]
 
@@ -178,23 +183,36 @@ states form a three-element progression with no cycles, so the
 order-freedom Decision 3 relies on is a structural consequence of what
 the field is about, not a policy choice layered on top of it.
 
-### 5. The published object's carrier remains untrusted scaffolding, not a trust boundary [acp-published-object]
+### 5. The published object is verified by inclusion proof against the spine; the closure has no artifact of its own [acp-published-object]
 
-[ADR-0007 §7.3](0007-atom-version-integrity-system.md) and [§7.4](0007-atom-version-integrity-system.md)'s published object — a parentless commit
-whose tree is the source tree at the same OID `position:path` already
-resolves to, and whose message carries a verbatim copy of the publish
-record — is inherited by citation, unaffected: publish remains a spine
-genesis record under Decision 2, and nothing about the spine/cloud split
-touches how a version's content is packaged for transport. What this
-decision depends on explicitly, rather than by inheriting it silently,
-is [ADR-0007's Alt 1](0007-atom-version-integrity-system.md): the carrier's structural shape —
-parent pointers, tree entries, tag targets — carries zero security
-weight, distinguished sharply from a proposal (rejected, unmodified)
-where the carrier's own structure would be part of what a verifier
-reasons about. A record known only from its own carrier is
-self-declaration; the inclusion proof against the spine's own root —
-[ADR-0007 §7.4](0007-atom-version-integrity-system.md)'s step 3, inherited unchanged — is what keeps a
-publish from reducing to exactly that.
+A publish's committed object is a parentless commit whose tree is the
+source tree — the same OID `position:path` already resolves to — and
+whose message carries a verbatim copy of the publish record: a
+transport bundle, never an authority. What this document depends on
+explicitly, rather than by inheriting it silently, is
+[ADR-0007's Alt 1](0007-atom-version-integrity-system.md): the
+carrier's structural shape — parent pointers, tree entries, tag
+targets — carries zero security weight, distinguished sharply from a
+proposal (rejected, unmodified) where the carrier's own structure would
+be part of what a verifier reasons about.
+
+What changes is how a consumer trusts the object. [ADR-0007
+§7.4](0007-atom-version-integrity-system.md)'s closure — a two-leaf
+`eml` tree materialized at publish time, embedding a content commitment
+alongside a snapshot of the anchor log's own historical root — has no
+place in this design and is not carried forward by citation: this
+document's publish verification instead proves inclusion of the
+publish record directly against the spine's own, current root,
+following its `claim`/`anchor`/charter chain to fold governance. There
+is no closure object distinct from that proof; a publish's
+authorization state is a property of (record, spine), computed on
+demand, never a fixed artifact frozen at the moment of publication.
+`[k-derivation-signed-only]` — the rule pinning §7.4's embedded
+snapshot index — has no referent to carry forward for the same reason:
+nothing embeds a snapshot to index. A record known only from its own
+carrier is self-declaration regardless of which of these two
+verification shapes is used; the inclusion proof against the spine is
+what keeps a publish from reducing to exactly that.
 
 ### 6. The store is a flat, content-addressed keyspace, with every index derived [acp-store]
 
@@ -262,45 +280,76 @@ tracked as [issue #101](https://github.com/axiosoph/axios/issues/101),
 filed against the build engine's use of `action_id` as a cache and job
 key, out of this decision's own scope.
 
+### 10. Interface manifests are facts, not mandatory publish content [acp-interface-manifests-are-facts]
+
+[ADR-0007 §13](0007-atom-version-integrity-system.md)'s package-atom
+clause — the built interface/output descriptor is publish's mandatory
+artifact, "verifiable only by building" — is superseded: an interface
+manifest is a fact (derived, signed by its deriving analyzer or
+executor), the same classification [Atom Model
+§4](../models/atom-model.md#4-the-metadata-partition-law) and its
+[§5](../models/atom-model.md#5-the-signature-anchoring-law)
+signature-anchoring table already give it. A store populated with
+content but empty of facts fails to compose while appearing complete,
+since interface resolution cannot run without the manifests it
+needs — the same closure-completeness obligation Decision 7's channel
+exists to make an explicit property of ingestion rather than an
+assumed one. §13's environment/system half — whether a coherence
+certificate remains publish-mandatory for algebraic intent — is not
+addressed by anything in the design this document draws on, and is not
+resolved here (Open Items).
+
 ## What changes, and what does not
 
 Every subsection of [ADR-0007](0007-atom-version-integrity-system.md)
-§§1–21 retains content: none is deleted. This is the full map.
+§§1–21 retains content: none is wholly deleted. Four dispositions
+apply: **survives** (inherited by citation into this document),
+**moves to spec** (normative mechanism content, out of an ADR's genre,
+relocated by a separate pass), **split** (part survives or moves, part
+is superseded), and **superseded and deleted** (refuted outright, no
+destination). This is the full map.
 
-| ADR-0007 §                                              | Fate under this decision                                                                                         |
-| :-------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------ |
-| §1 (compositional unit)                                   | inherited by citation, unaffected                                                                                    |
-| §2 (record envelope)                                       | inherited by citation, unaffected — `pay.prior`/`pay.retracts` reused directly (Decisions 1, 3)                     |
-| §3 (genesis-once, facts-forever)                            | **superseded** — taxonomy replaced by Decision 2; genesis-once reasoning inherited by citation                     |
-| §4 (anchor vs. position)                                    | inherited by citation, unaffected — reasoning only, per this document's own citation discipline                     |
-| §5 (subject shape)                                          | unaffected; retained as ADR-0007's own operative content pending its existing spec-amendment obligation             |
-| §6 (multi-tree subjects)                                    | unaffected, same as §5                                                                                                |
-| §7.1 (one log, every fact at every scope)                    | **superseded in part** — the log now holds spine content (genesis, amendment) only; facts move to Decision 7's channel |
-| §7.2–§7.4 (`eml` shape, checkpoints, closure artifact)        | inherited by citation, unaffected — spine-scoped content (Decision 5)                                               |
-| §7.5 (fact discovery via tag chain)                          | **superseded for facts** (Decision 7 replaces it); unaffected for amendment discovery on the spine                  |
-| §8 (ref-leaf discriminator)                                  | inherited by citation, unaffected                                                                                    |
-| §9 (ref format)                                              | **superseded in part** — `refs/atom/log` now names the spine only; fact discovery no longer resolves through it     |
-| §10 (inclusion/consistency/completeness)                     | inherited by citation for spine content; the completeness scan is spine-scoped, not cloud-scoped                    |
-| §11–§12 (head, per-label freshness)                          | unaffected for spine recency; per-label `fact_commitment` tracking needs reconciliation to the cloud — Open Items    |
-| §13 (interface mandatory)                                    | inherited by citation, unaffected                                                                                    |
-| §14 (legacy/native boundary)                                 | inherited by citation, unaffected                                                                                    |
-| §15 (content liveness)                                       | inherited by citation, unaffected                                                                                    |
-| §16 (degradation ladder)                                     | inherited by citation for spine recency/completeness, unaffected                                                     |
-| §17 (fork proofs)                                            | inherited by citation, unaffected — spine-scoped                                                                    |
-| §18 (signed trusted mirrors)                                 | inherited by citation, unaffected                                                                                    |
-| §19 (write gate)                                             | **superseded** — refuted; replaced by Decision 8                                                                    |
-| §20 (store two-phase fetch)                                  | inherited by citation for spine/closure fetch; the cloud is a further, additive phase, not yet specified            |
-| §21 (store ref format & GC)                                  | inherited by citation, unaffected for the spine/closure; ADR-0007's own already-deferred store-ref-keying pass now additionally covers the cloud |
+| ADR-0007 §                                            | Disposition            | Ground                                                                                                        |
+| :------------------------------------------------------ | :----------------------- | :---------------------------------------------------------------------------------------------------------------- |
+| §1 (compositional unit)                                  | **survives**             | inherited by citation, the founding framing                                                                    |
+| §2 (record envelope)                                     | **survives**             | `pay.prior`/`pay.retracts` reused directly (Decisions 1, 3)                                                     |
+| §3 (genesis-once, facts-forever)                          | **split**                | taxonomy superseded (Decision 2); genesis-once reasoning survives, inherited by citation                        |
+| §4 (anchor vs. position)                                  | **survives**             | inherited by citation; its `[temporal-vector]` ordering rationale is flagged for a later restatement not performed here (Open Items) |
+| §5 (subject shape)                                        | **moves to spec**        | normative field shape, outside this ADR's genre                                                                 |
+| §6 (multi-tree subjects)                                  | **moves to spec**        | same as §5                                                                                                       |
+| §7 (record log, checkpoints, closure, fact-tags)          | **split, three ways**    | the record-log/checkpoint structure moves to spec as the spine's own mechanism; fact-tags are superseded (facts move to the cloud, Decision 7); the closure artifact (§7.4) is deleted with no destination (Decision 5) |
+| §8 (ref-leaf discriminator)                               | **moves to spec**        | a governing rule, not a rationale                                                                               |
+| §9 (ref format)                                           | **moves to spec**        | `refs/atom/pub/{label}/{version}` retained; one log survives as the spine (Decision 8)                          |
+| §10 (inclusion/consistency/completeness)                  | **split**                | inclusion and consistency proofs move to spec; the completeness scan is superseded and deleted outright — it proved nothing was missed from an ordered fact stream that no longer exists |
+| §11–§12 (head, per-label freshness)                       | **split**                | Tier-2 gating superseded together with §16; the completeness role was already gone by §11's own text; recency attestation is the one genuinely open residue (Open Items) |
+| §13 (interface mandatory)                                 | **split**                | interface manifests are facts (Decision 10), superseding the package-atom mandatory-artifact clause; the stratum-aware half is unaddressed (Open Items) |
+| §14 (legacy/native boundary)                              | **split**                | "registries never ingest" survives; the ancestry predicate is superseded by a declared-plus-spine-monotone check |
+| §15 (content liveness)                                    | **survives**             | zero normative keywords; its point — liveness is structural, not bespoke — is preserved by the transport bundle (Decision 5) |
+| §16 (degradation ladder)                                  | **split**                | completeness/recency separability survives; Tier 2's fail-closed default is superseded by a scoped freshness-refusal policy |
+| §17 (fork proofs)                                         | **survives**             | zero normative keywords; divergence-is-not-intent survives, given a second expression by the fact channel's equivocation detection (Decision 7) |
+| §18 (signed trusted mirrors)                              | **survives**             | inherited by citation, unaffected                                                                               |
+| §19 (write gate)                                          | **split**                | the every-append claim is refuted and deleted (Forces); the publish-ref existence CAS point moves to spec       |
+| §20 (store two-phase fetch)                               | **moves to spec**        | verify-before-fetch survives as spec content, extended to ingest-closure-completeness over records, facts, and content |
+| §21 (store ref format & GC)                               | **split**                | the ref-format half is superseded by the store's flat `czd → object` keying (Decision 6); GC by ordinary reachability survives and moves to spec |
 
-The parts marked **superseded** are this decision's actual content:
-Decisions 1–2 and 7–8 above. Every other row is either untouched or
-retained pending the spec-amendment obligation
+Ten of twenty-one split rather than surviving or moving wholesale — a
+binary retire-or-keep would have mis-typed roughly half this table.
+Zero are wholly deleted: every one retains something that survives,
+moves, or is inherited.
+
+This document inherits by citation only §§1, 2, 4, 18, and §3's
+reasoning (Decisions 1–4 above), and carries §19's refutation in
+Forces — the narrowest set that actually supports Decisions 1–10.
+Every other row above is disposition information for the reader, not
+content this document relies on as still-operative ADR-0007 material;
+the sections marked "moves to spec" are, by this document's own genre
+rule, exactly the kind of content an ADR must not carry even by
+citation-with-endorsement. Their relocation is a separate, obligated
+pass — extending, not replacing, the spec-amendment obligation
 [ADR-0007](0007-atom-version-integrity-system.md)'s own "Obligates
-amendment of" header field already
-names (`git-storage-format.md`, `atom-transactions.md`,
-`atom-backend-contract.md`, `trust-model.md`, `lock-file-schema.md`,
-`docs/models/atom-model.md` §2) — this decision extends that existing
-obligation to the cloud's own realization; it does not open a new one.
+amendment of" header field already names (`git-storage-format.md`,
+`atom-transactions.md`, `atom-backend-contract.md`, `trust-model.md`,
+`lock-file-schema.md`, `docs/models/atom-model.md` §2).
 
 ## Consequences
 
@@ -320,6 +369,12 @@ obligation to the cloud's own realization; it does not open a new one.
 - [Composition Model §6](../models/composition-model.md#6-the-fact-set-the-substrates-only-state)'s own requirement for a fact-set snapshot
   name is supplied by the store-level cloud tree (Decision 6), closing a
   gap the prior corpus stated but never filled.
+- [ADR-0007 §21](0007-atom-version-integrity-system.md)'s own
+  already-open question — collision-safety when a store aggregates
+  mutually untrusted registries — is resolved by construction, not
+  merely deferred further: a flat, content-addressed keyspace
+  (Decision 6) has no human-readable namespace for two registries to
+  collide over in the first place.
 
 ### Negative / burden
 
@@ -327,24 +382,24 @@ obligation to the cloud's own realization; it does not open a new one.
   sparse authenticated tree, Decision 6) is new implementation surface
   with no prior art in this corpus's landed mechanism; its structure
   choice is not settled here (Open Items).
-- [ADR-0007 §11–§12](0007-atom-version-integrity-system.md)'s per-label
-  `fact_commitment` freshness check assumes an ordered fact stream that
-  no longer exists once facts are union-merged; reconciling head's
-  freshness apparatus to the cloud is unresolved (Open Items).
-- [ADR-0007 §21](0007-atom-version-integrity-system.md)'s already-open
-  store-ref-keying question now additionally needs to address the
-  cloud's own collision-safety across mutually untrusted sources — an
-  extension of an existing obligation, not a new category of one.
+- [ADR-0007 §§11–12](0007-atom-version-integrity-system.md)'s head
+  mechanism loses two of its three roles outright (Tier-2 gating,
+  completeness) and the third — recency attestation — has no successor
+  named by the design this document draws on (Open Items). A consumer
+  loses head's specific guarantee (a signed, TTL-bounded "as of right
+  now") until that residue is resolved.
 - Decision 9's tension with [ADR-0005 §2](0005-hermetic-transactional-composition.md) stands named and unresolved,
   tracked externally.
 
 ### Neutral
 
-- [ADR-0007](0007-atom-version-integrity-system.md) §§5–8, 13–15
-  (publish mechanics), §10 (verification procedure), §16 (degradation
-  ladder), §17 (fork-proof layering), §18 (mirror set), and §21 (store
-  GC) are unaffected in substance — this decision narrows what the
-  record log covers; it does not redesign any of them.
+- [ADR-0007](0007-atom-version-integrity-system.md) §§15 and §17
+  (content liveness; divergence proves nothing about intent) are
+  unaffected in substance and carry zero normative keywords of their
+  own — this decision neither redesigns nor relocates them. Every
+  other subsection either moves to specification or splits; see "What
+  changes, and what does not" for the full, disposition-by-disposition
+  map — it is not restated here.
 - The `[fact-kind-table]`'s derived-fact kinds (`build-record`,
   `interface-manifest`, `observation-record`, `trial-attestation`) and
   its asserted-fact kinds (`advisory`, `deprecated`, `yanked`,
@@ -354,19 +409,38 @@ obligation to the cloud's own realization; it does not open a new one.
 
 ## Open Items
 
-- **Head's per-label freshness needs reconciliation to the cloud.**
-  [ADR-0007 §12](0007-atom-version-integrity-system.md)'s
-  `fact_commitment` field names "the czd of the latest signed fact leaf
-  on `latest_publish`'s own fact stream" — a concept that presupposes an
-  ordered stream. Under Decision 7, a subject's facts are a set with no
-  total order. Whether head's freshness claim narrows to cover the
-  spine alone (charter/claim/publish/amendment recency), or the cloud
-  gains its own freshness primitive, is not settled by the design this
-  decision draws on, and is not guessed here.
+- **What attests recency is not settled.** [ADR-0007
+  §11](0007-atom-version-integrity-system.md) names three roles for
+  its head mechanism: Tier-2 gating (superseded together with §16's
+  fail-closed default), completeness ("no longer depends on head at
+  all," by §11's own text — already gone before this decision), and
+  recency — head is "the only mechanism" that can prove current state
+  "as of right now." The fact channel's `facts.roots` comparison
+  (Decision 7) detects *divergence* between two sources; it does not
+  *attest* recency, a different property, and §11's own account of a
+  head record — an object that "simply replaces the previous one at
+  its own separate ref" — is an overwrite-at-a-mutable-ref shape this
+  document's move to assertion-plus-withdrawal (Decision 3) and
+  immutable, czd-keyed envelopes (Decision 6) does not have room for.
+  Under the fact channel and a T3-shaped freshness problem, what
+  attests recency is genuinely new design, not a restatement of §11,
+  and it is not settled by anything this document draws on. Not
+  guessed here.
 - **The cloud's store-level tree shape.** Sparse, sorted, and
   history-independent are named constraints (Decision 6); the concrete
   structure (a Merkle search tree, specifically) is not decided at the
   protocol level in this document.
+- **§13's stratum-aware half.** Whether an environment or system
+  atom's coherence certificate remains publish-mandatory, now that
+  manifests generally are reclassified as facts (Decision 10), is not
+  addressed by anything in the design this document draws on.
+- **§4's `[temporal-vector]` rationale.** [ADR-0007
+  §4](0007-atom-version-integrity-system.md)'s position-ordering
+  invariant survives by citation (Decision 1 does not touch it), but
+  its stated rationale is flagged, not restated, as needing a fresh
+  pass once recency attestation (above) is resolved — this document
+  does not have enough settled about that residue to state what the
+  restatement should say, and does not guess.
 - **ADR-0008's anchoring language.** [ADR-0008 §2](0008-surety-of-source.md) permits anchoring
   "in the target's own record log"; under Decision 2, a source-class-
   vouch is a fact and therefore cloud-resident, not spine-resident.
@@ -374,11 +448,6 @@ obligation to the cloud's own realization; it does not open a new one.
   document flags but does not make — [ADR-0008](0008-surety-of-source.md) is Related, not
   superseded, and amending its language is outside this decision's
   surface.
-- **Store ref-keying across mutually untrusted sources.** Already open
-  in [ADR-0007 §21](0007-atom-version-integrity-system.md); this
-  decision extends its scope to the cloud (Consequences, Negative)
-  without resolving it.
-
 ## Alternatives Considered
 
 ### Alt: retain one write-gated log for both spine and cloud content
@@ -397,15 +466,17 @@ about, distinct from using that structure as untrusted scaffolding
 cross-checked against the signed payload. That rejection stands
 unmodified and is load-bearing for Decision 5's published object.
 
-### Alt: a single, uniform freshness mechanism across spine and cloud
+### Alt: retain §11–§12's head record, unchanged, as the recency mechanism
 
-Considered and set aside rather than decided: extending
-[ADR-0007 §11–§12](0007-atom-version-integrity-system.md)'s head
-heartbeat to cover cloud facts would require an ordering the cloud's
-algebra does not have, the same objection Decision 1 raises against an
-append-only cloud generally. Left to the spec-drafting pass (Open
-Items) rather than resolved here, since no candidate design for it
-exists yet to evaluate.
+Considered and rejected rather than merely deferred: [ADR-0007
+§11](0007-atom-version-integrity-system.md)'s head is, by its own
+account, an object that "replaces the previous one at its own separate
+ref" — an overwrite-at-a-mutable-ref shape this document's move to
+assertion-plus-withdrawal (Decision 3) and immutable, czd-keyed
+envelopes (Decision 6) has no room for, independent of whether head is
+scoped to the spine or extended to the cloud. What replaces it for
+recency specifically is not decided here (Open Items), but keeping
+§11–§12 as written is not a live option under Decisions 3 and 6.
 
 ## Related Documents
 
