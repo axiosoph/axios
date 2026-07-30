@@ -505,6 +505,32 @@ makes the whole design tractable under decentralization: replicas
 converge by union, and nothing anyone writes can invalidate what another
 party already consumed (they pinned their snapshot).
 
+### The cloud: a snapshot name for the fact-set
+
+_Added 2026-07-30._ Snapshot pinning above requires a name for "which
+snapshot" — a digest of the fact-set as it stood when a formation
+consumed it. Nothing in this model supplied one until
+[ADR-0009](../adr/0009-atom-composition-plane.md) Decision 6 realized the
+fact-set concretely as a store-level tree, sparse and sorted rather than
+insertion-ordered, per subject. Sortedness is what buys the property
+below: two replicas holding the identical fact-set compute the identical
+root regardless of the order each one happened to receive its appends in
+— exactly the "converge by union" law above, restated as a computable
+digest rather than only as a merge rule. [Fact
+Exchange](../specs/fact-exchange.md) is the protocol that ships this
+tree's roots as a summary without asking anyone to trust it.
+
+#### [cloud-history-independent]
+
+A subject's fact-tree root depends only on the *set* of facts, never on
+arrival order. Two stores holding identical facts compute an identical
+root.
+
+```claim
+kind: invariant
+evaluator: none
+```
+
 ## 7. The override algebra: generators live inside the model
 
 What Nix does with an overlay — an untyped function over the package
