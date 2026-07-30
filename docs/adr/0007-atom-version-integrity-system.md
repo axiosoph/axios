@@ -390,19 +390,6 @@ discipline now applies uniformly to claim (a label's identity) and
 publish (a version's identity) — each is written exactly once, at the
 moment its scope first comes into existence, and never again.
 
-**Everything that happens to a scope after its genesis is a `fact`.**
-Owner-set rotation, threshold changes, and governance-parameter
-amendments are facts on the *anchor's* leaves (`under` absent, since
-nothing encloses the anchor; authorization is fold-based against the
-anchor's own leaf history — see below). Label transfer and per-label
-governance amendments are facts on the *label's* leaves (`under` points
-at the specific charter-scope leaf active at signing time). Yank,
-deprecation, advisories, and attestations are facts on the *version's*
-leaves (`under` points at the specific claim-scope leaf active at
-signing time). One mechanism, one record shape, at every scope — this is
-the actual "same fact scheme everywhere" the original exploration was
-reaching for and did not yet land on.
-
 Nothing is ever deleted. "Removing" a fact means signing a new one that
 `retracts` it — the same succession-by-addition discipline this document
 uses everywhere.
@@ -836,169 +823,6 @@ CAS-updated on every append — git's own ref-update compare-and-swap is
 the entire write-gate mechanism for the log (§19 has no separate
 mechanism to add).
 
-**7.4. The closure artifact: an `eml` tree embedding the content
-commitment and the anchor's authorization state, wrapped in a bare
-commit.** `refs/atom/pub/{label}/{version}` is a **separate**, permanent
-ref, pinned at creation and never rewritten to a *different* history: its
-target only ever advances forward along the §7.5 CAS-gated fact-tag chain
-(bare closure-commit → `tag_1` → … as facts land), so a consumer MUST
-re-check the ref for tip movement on each resolution rather than caching
-the first object it resolves. ("Written once, never touched again"
-described only the steady state where no fact ever lands, and misread
-against §7.5 as a cache license — corrected here.)
-
-An earlier position in this exploration made the closure a bare commit
-— `tree` = content only, plus a nonstandard header line recording a
-pointer into the record log, hashed but explicitly not load-bearing, a
-hint nobody was required to check. **Corrected (2026-07-16):** the
-closure is a **2-leaf `eml` tree**:
-
-```
-closure-tree (eml, k=2)
-  leaf0 = content_commitment    -- §5: an eml root over the declared
-                                    subjects (leaf i = subject i's own
-                                    content_hash), never a flat hash
-  leaf1 = R_anchor@K             -- embedded, opaque: the anchor record
-                                    log's own root at leaf-count K, the
-                                    exact moment this closure was created
-```
-
-using `eml`'s own opaque-leaf-embedding property directly: any tree's
-root can be placed as raw leaf data in another tree, with no
-special-casing and no composite proof type — composition is two
-independent inclusion/root checks. Both leaves are digest-sized values,
-never the actual content; the real subject files remain a wholly
-separate git tree — for a native atom, the *same* tree OID already
-resolved from `position:path` (§5), referenced a second time at zero
-additional storage cost; for a legacy atom, identical, since legacy
-only changes whether the manifest/lock *declaration* is embedded in the
-payload or read in-tree (§14), and has nothing to do with content.
-Dependencies are never embedded either way; they are resolved and
-fetched separately at build time. Fetched only in Phase B (§20),
-completely unaffected by this change — embedding lives entirely inside
-Phase A's already-small, always-fetched territory.
-
-Verification is genuinely two independent checks — and, correcting the
-2026-07-16 draft, **neither compares the closure tree's root to any
-signed field, because there is none: the closure artifact is deliberately
-unsigned (below).** The 2-leaf tree carries no signature to match against,
-so a verifier instead *reconstructs each leaf from independently trusted,
-signed data* and confirms the closure's presented leaf equals that
-reconstruction:
-
-- **leaf0** — recompute `content_commitment` per §5 by folding the
-  publish record's own *signed* declared `content_hash`es (so leaf0 is
-  checkable from signed data in Phase A, before any content is fetched;
-  the bytes are separately re-derived against those same signed
-  `content_hash`es at Phase B, §20) and confirm the fold equals the
-  closure tree's leaf0. Content trust flows from that signed-field
-  recomputation, never from the leaf the untrusted closure presents — the earlier "confirm the root matches what was signed"
-  phrasing let a literal implementation trust `leaf0`/content straight off
-  the closure, so a mirror could swap content plus a matching `leaf0`,
-  keep the honest `leaf1`, and pass (B1, adversarial review 2026-07-22).
-- **leaf1** — recompute `R_anchor@K`, the anchor log's real historical
-  root at leaf-count K, from the verifier's *own* `pay.prior` walk (§7.1;
-  §10 inclusion) and confirm it equals the closure tree's leaf1.
-
-**K is a signed historical index, never a git-structural quantity
-[k-derivation-signed-only].** K is *the count of signed `pay.prior` hops*
-from this publish's own leaf back to the anchor's charter genesis, the
-same signed chain §4 walks to discover an anchor: genesis is leaf 1, the
-publish leaf is the K-th, and `R_anchor@K` is the log root as of that
-publish leaf (the off-by-one pinned here rather than left to a reader).
-K is **never** the count of git checkpoint-commit ancestors (§7.3) and
-**never** the log's write-time tip — both are attacker-influenceable
-backend structure a malicious host could fabricate to pair a real,
-honestly-computed `R_anchor` at the wrong K with a genuine content
-commitment and otherwise pass (B2). Binding K to the verifier's own
-`pay.prior` count, and reconstructing both leaves from signed data, is
-what closes that pairing attack. A forged or stale reference is a hard
-verification failure, not a cosmetic mismatch nobody was required to
-check.
-
-This recomputation stays cheap and stable as the log grows past K —
-`eml`'s durable witnesses mean a leaf's inclusion path to its mountain
-peak never changes once written — **provided** the git-backed storage
-driver keeps every historical node structurally reachable (§21's GC
-discipline must never prune a node this recomputation still needs; a
-real, stated obligation on that not-yet-built driver, not an automatic
-consequence of depending on `eml`).
-
-The wrapping commit's `parent` is still deliberately **none** — no true
-git-structural edge to the record log, for the same reason as always
-(git ancestry carries no security weight anywhere in this design, §7.2)
-— but the closure no longer *needs* a git-level pointer at all,
-structural or otherwise, to establish real provenance: the embedded
-leaf does that job cryptographically.
-
-Keeping the closure separate from the log this way is what makes §1's
-closure/facts distinction real rather than aspirational: the closure
-never needs to duplicate any record content, since the whole authorizing
-chain (charter, claim, publish) is independently resolvable from the
-already-fetched record log by tuple lookup; the closure's own tree only
-ever holds the two things genuinely specific to this publish — content,
-and a provable snapshot of the authorization state that produced it.
-
-**7.5. Fact discovery: a chain of tag objects anchored at the same
-ref.** `refs/atom/pub/{label}/{version}` starts out pointing directly at
-the bare closure-commit — the steady state, since most publishes never
-accrue a fact. The moment the first fact lands, that same ref is
-CAS-updated to point at a new **tag** object whose `object` field is the
-closure-commit; the second fact creates another tag whose `object` field
-is the *first* fact-tag; and so on — `ref → tag_N → ... → tag_1 →
-closure-commit`. Each tag's message body carries a nonstandard, non-
-`parent` pointer to the actual signed leaf in the record log this fact
-corresponds to — the same git-header technique the closure itself used
-before §7.4's embedding upgrade, deliberately retained here rather than
-also upgraded: embedding solves a different problem (provable cross-
-reference) than fact discovery needs (cheap existence signaling), and
-making an *existing* tag more rigorously self-verifying does nothing to
-catch a tag that was never created — the actual threat here. The
-completeness delta-scan below is what closes that gap, not embedding.
-
-The object *type* at the ref's tip does the discovery work for free: a
-bare commit means nothing has ever happened, zero further lookups
-needed; a tag means something happened, and a consumer is structurally
-forced to see that — there is no way to peel past a tag layer without
-acknowledging it exists. Git's native peeling (`ref^{commit}`)
-recursively dereferences every tag layer straight to the closure-commit
-regardless of chain depth, for the common "I just want the content" case
-— but it deliberately bypasses the fact chain, so a consumer that needs
-current trust status MUST walk the tags (and run the §7.5 completeness
-scan), never substitute the peel for that. This yields exactly one
-mutable ref per version, ever — not a ref per fact plus a separate ref
-per version, which an earlier position in this exploration proposed and
-was wrong to.
-
-**Not load-bearing for security — a collection accelerator only.** The
-tag chain's own object-graph order is never trusted as the real ordering
-or as proof of validity; both come from independently verifying each
-pointed-to record's own signed `prior` chain in the log. If a malicious
-or buggy mirror serves an incomplete, reordered, or forged tag chain, the
-worst outcome is a consumer misses a lookup hint or wastes one on
-something that doesn't verify — never that a false fact gets accepted,
-since every record still independently clears signature and chain
-verification regardless of what a tag claimed.
-
-**Closing the completeness gap, unconditionally.** The tag chain alone
-cannot catch a lie by omission — a mirror simply not appending a new
-fact-tag even though the record legitimately exists in the log. The
-fix is a named hard invariant, `[completeness-scan-mandatory]`, with the
-same standing as `[verify-before-fetch]`: on **every** resolution of a
-`refs/atom/pub/{label}/{version}` ref, after walking the tag chain to its
-last known record-log pointer (leaf K), a consumer MUST perform a bounded
-scan of the record log from leaf K+1 to the log's current tip, checking
-whether anything in that delta targets this (label, version). This is cheap because the delta is
-typically zero (nothing happened since last check) or small (bounded by
-the whole log's own small size at this domain's cardinality) — never a
-scan from genesis. It composes for free with the two-phase store-
-ingestion protocol (§20): a store that has already fetched the whole
-anchor's record history before ingesting has this delta sitting in hand
-already, as a local computation; a lightweight single-atom consumer pays
-one small additional delta-fetch. See §16 for why this makes
-completeness — as distinct from recency — unconditional across every
-degradation tier.
-
 ### 8. The ref-leaf discriminator principle [atom-ref-leaf-principle]
 
 **Governing law, applying to every ref-format decision in this
@@ -1135,10 +959,6 @@ original draft's two-request scheme). Instead:
   fully-targeted victim partition (§17-L4). (Re-scoped 2026-07-22; the
   earlier "holds under adversarial conditions regardless" overclaimed
   static fork-resolution.)
-- **Completeness** (§7.5): the bounded delta-scan from a fact-tag
-  chain's last known point to the log's current tip — the
-  `[completeness-scan-mandatory]` hard invariant, run on every ref
-  resolution.
 
 In practice a consumer or store typically fetches the whole record log
 for an anchor at once — it is small at this domain's cardinality — making
@@ -1381,8 +1201,7 @@ default:
   divergence-as-tamper-evidence, signed auditable migration. Still no
   TTL floor.
 - **Tier 2 — canon + freshness-in-force + chained head.** The full
-  hardened recency column (§11-§12); a declared freshness claim strips
-  fail-closed.
+  hardened recency column (§11-§12).
 
 **Revision (2026-07-16): completeness is unconditional, available at
 every tier, and this is a genuine strengthening over what the original
@@ -1468,16 +1287,6 @@ a vibes call.
 A registry is a store, a label index, and a write gate. This is now a
 single mechanism, not two:
 
-- **The record log** (`refs/atom/log`, §7.3, §9) — every append, at
-  every scope, CAS-updates this one ref: a writer reads its current
-  target, chains the new leaf's `pay.prior` to it, constructs the new
-  checkpoint commit, and attempts git's own atomic ref-update
-  compare-and-swap from the old target to the new. A losing writer's CAS
-  fails cleanly and retries against the new tip. Nothing further is
-  needed — the original draft's separate, dedicated "tip" ref for write
-  serialization (distinct from the permanent per-record refs it
-  serialized writes onto) no longer exists, because there are no longer
-  separate per-record refs to serialize writes onto in the first place.
 - **Publish** additionally needs the closure ref itself
   (`refs/atom/pub/{label}/{version}`) to transition from non-existent to
   existing as its own CAS point — unchanged in substance from the
@@ -1528,18 +1337,6 @@ either: once content is fetched, each declared subject's own
 only a match admits the content into the store's served space.
 
 ### 21. Store ref format and GC: ordinary git reachability, nothing bespoke [atom-store-refs-and-gc]
-
-**The store mirrors the registry's own ref shapes directly — no separate
-czd-only addressing scheme is needed anymore.** The original draft's
-store-side design (`refs/atom/rec/d/{czd}`, a flat czd-keyed namespace
-distinct from the registry's human-addressed refs) existed to solve
-collision-safety across many mutually-untrusted registries aggregating
-into one store. That concern is unchanged in principle, but the object
-graph it needs to address has changed enough that this deserves a fresh
-pass rather than a direct restatement — left to the spec-drafting phase
-(Open Items) rather than asserted here without having actually worked
-through the multi-registry collision case against the new closure/
-fact-tag shapes.
 
 **Garbage collection, however, is now settled, and it is a deletion, not
 a simplification.** The original draft's own store-GC section (direct
