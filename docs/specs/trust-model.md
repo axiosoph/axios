@@ -394,6 +394,54 @@ SHOULD record a digest of the policy that made it, so the choice is
 auditable against the configuration that produced it.
 `VERIFIED: unverified`
 
+### Verdict basis and scoped freshness (ADR-0009)
+
+_Added 2026-07-30._ Two extensions to the type declarations and rule
+language above, from [design-of-record §9a](../../.ledger/atom-refinement-2026-07-29.md)
+by way of [ADR-0009](../adr/0009-atom-composition-plane.md): a bare
+`Verdict` tag tells a caller *what* was decided but not *on what basis*,
+and the acceptance procedure has no way yet to express a freshness
+requirement without making refusal-on-stale the global default — which
+Open Question 1 already names as unfixed.
+
+**A verdict without its basis is a lie by omission.** A caller holding
+only `fact` cannot distinguish a pinned anchor from a first-use TOFU
+accept, cannot see how old the fact snapshot the verdict rested on was,
+and cannot see whether the record backing it was a certified lower bound
+or a mere `Declared`-class assertion (`J`'s generating set, per Execution
+Model §4.2, never — on its own — the certified interval). Each of those
+is silently lost the moment `Verdict` erases to a bare tag.
+
+#### [verdict-carries-basis]
+
+A verdict carries its trust surface, its assumption basis, whether its
+anchor was pinned or accepted on first use, and the age of the fact
+snapshot it rests on. No `Into<bool>`.
+
+```claim
+kind: constraint
+evaluator: none
+```
+
+**Refusing offline gains no information.** [ADR-0007
+§16](../adr/0007-atom-version-integrity-system.md)'s Tier 2, read
+literally, makes a stale head refuse — the same Nix TTL-expiry failure
+this whole design exists to avoid, transplanted. The fix is that
+freshness refusal is one more `PolicyRule` field, scoped exactly the way
+`require_mode` already is: a rule MAY require freshness for the scope it
+matches, and no rule refuses staleness it was never asked to.
+
+#### [freshness-refusal-scoped]
+
+Refusal on stale freshness is a scoped policy rule; refuse-on-stale is
+**not** the global default. Refusing offline yields no information — it
+only stops work.
+
+```claim
+kind: constraint
+evaluator: none
+```
+
 ### The acceptance procedure
 
 **[trust-acceptance-procedure]**: A conforming implementation MUST

@@ -295,6 +295,26 @@ violations of this law; see §Verification for what the existing models
 could and could not catch.)
 `VERIFIED: unverified`
 
+#### [czd-oid-phantom-typed]
+
+Protocol digests are phantom-typed by what they address and are
+disjoint from backend object ids, rejected at the type level — the
+constraint form of `Czd ∩ OID = ∅` above.
+
+```claim
+kind: constraint
+evaluator: none
+```
+
+**Checked against the current code, not assumed.** `atom-id/src/digest.rs`'s
+`AtomDigest` is the single, untyped digest representation the crate
+actually ships — its own doc comment states it is "shared by the
+store-level index... and every digest-shaped lock field — coz
+transaction digests, git object ids, and content hashes alike." That is
+the opposite of a disjoint-sorts encoding: one type carries `Czd` and
+`OID` values interchangeably. Grade `none`, not `type`, until a rename or
+a newtype split lands.
+
 **[backend-carriage-bit-perfect]**: The backend MUST carry protocol
 payloads byte-exactly: no re-serialization, reformatting, or
 normalization of `CozMessage` content, ever — verification is

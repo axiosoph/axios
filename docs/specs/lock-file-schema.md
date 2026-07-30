@@ -183,6 +183,7 @@ the effective charter at resolution time. Unlike `anchor`, which is
 immutable for the set's lifetime, `charter_head` MAY advance on
 re-resolution as succession proceeds; it MUST NOT regress.
 `RESIDUE: Phase 2 -- charter_head_is_distinct_from_anchor (ion/ion-lock/src/v2.rs) only shows the two fields CAN hold different values; the substantive non-regression/succession-derivation invariant depends on the chain-monotonicity machinery, which is Phase 1 unimplemented (atom/atom-id/tests/charter/chain_monotonicity.rs)`
+`SUPERSEDED 2026-07-30: charter succession (atom-transactions.md [charter-succession-linear]) no longer exists as a distinct concept under genesis-once; this field's non-regression job is renamed spine_head, per [lock-sets-three-fields](#sets-under-the-spinecloud-split-adr-0009) below.`
 
 **[lock-set-snapshot]**: Each `[sets]` entry MUST record a `snapshot`
 field: the algorithm-prefixed object id of the set repository's tip
@@ -191,6 +192,7 @@ Model §6): re-resolving the same manifest against the same set
 snapshots MUST re-derive the byte-identical lock, making
 [lock-recomputability] auditable rather than aspirational.
 `RESIDUE: Phase 2 -- same digest-format-only reasoning as [lock-set-anchor]; re-derivation determinism depends on the not-yet-implemented resolver`
+`SUPERSEDED 2026-07-30: a whole-repository discovery snapshot has no place under the spine/cloud split — the cloud is a history-independent set with no single tip to snapshot, and a fixed cloud root is not a reproducible pin (composition-model.md #the-cloud-a-snapshot-name-for-the-fact-set). Retired outright, not renamed; see [lock-pins-gating-facts](#sets-under-the-spinecloud-split-adr-0009) below.`
 
 **[lock-set-mirrors]**: The `mirrors` field MUST be an array of
 transport hints: URLs, or the `"::"` sentinel denoting the local
@@ -204,6 +206,65 @@ other source.
 path MUST have an entry under `[sets]`, and every `[sets]` entry MUST be
 referenced by at least one dep entry.
 `VERIFIED: test (ion/ion-lock/tests/v2_corpus.rs::unreferenced_set_is_rejected, undeclared_set_is_rejected -- tests/support/mod.rs::check_closure checks both directions)`
+
+## `[sets]` under the spine/cloud split (ADR-0009)
+
+_Added 2026-07-30._ [ADR-0009](../adr/0009-atom-composition-plane.md)
+retires two premises `[lock-set-charter-head]` and `[lock-set-snapshot]`
+above were written against. **`charter_head` is superseded**:
+`atom-transactions.md`'s `[charter-succession-linear]` — the "effective
+charter" the field tracked — no longer exists as a distinct concept once
+genesis is written once and owner rotation is an ordinary spine
+amendment; the field's job (refuse a served chain that regresses) is now
+tracked as the spine's own amendment-chain head, renamed `spine_head`
+below. **`snapshot` is retired outright**, not renamed: it pinned a
+discovery-time repository tip, which was this design's only notion of
+"the world as of resolution." `[lock-pins-gating-facts]` below replaces
+it with something narrower and reproducible — the specific fact czds
+that gated the decision, never a whole-store root, which
+[cloud-history-independent](../models/composition-model.md#the-cloud-a-snapshot-name-for-the-fact-set)
+already rules out as a stable pin: a cloud root is `(subject, store,
+moment)`-relative, so pinning one would make re-resolution
+irreproducible against a store that has since received more facts for
+the same subject.
+
+#### [lock-sets-three-fields]
+
+A `[sets]` entry carries `anchor`, `spine_head`, `mirrors`. Nothing else.
+
+```claim
+kind: constraint
+evaluator: none
+```
+
+#### [lock-pins-gating-facts]
+
+The lock pins the czds of facts that gated a resolution decision. It
+MUST NOT pin a cloud root — a root is `(subject, store, moment)`-relative
+and irreproducible.
+
+```claim
+kind: constraint
+evaluator: none
+```
+
+The manifest side of this same reconciliation: test and check parameters
+already live outside the lock (`[lock-no-params]` above), but nothing yet
+says they live in a section of their own, separate from build params —
+which is what makes editing a test unable to invalidate a build cache
+entry by construction rather than by scheduler discipline (Execution
+Model §5.2's obligation on the manifest/lock pair).
+
+#### [manifest-test-params-separate]
+
+Test and check parameters live in a manifest section feeding test
+requests only — what makes no-rebuild-on-test-edit structural rather
+than a scheduler courtesy.
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 ## `[deps.<set>.<label>]` — the ground pins
 
@@ -373,14 +434,17 @@ the v1-era `plan_digest` and the job-identity scheme built on it.)
 
 ## Example
 
+_The `[sets.core]` table below shows the [lock-sets-three-fields](#sets-under-the-spinecloud-split-adr-0009)
+shape (`anchor`, `spine_head`, `mirrors`); the pre-ADR-0009 `charter_head`
+and `snapshot` fields shown superseded above do not appear._
+
 ```toml
 schema = 2
 
 [sets.core]
 anchor = "sha256:3fa1c9e0…"
-charter_head = "sha256:3fa1c9e0…"
+spine_head = "sha256:3fa1c9e0…"
 mirrors = ["::", "https://mirror.example.org/core"]
-snapshot = "sha1:b03d55e1…"
 
 [deps.core.gcc]
 publish = "sha256:57de9a02…"
