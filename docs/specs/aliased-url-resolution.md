@@ -149,6 +149,11 @@ position, the input MUST be passed through as `AliasedUrl::Raw` without
 modification.
 `VERIFIED: pass — sigil_present_bare, sigil_absent_raw_*`
 
+```claim
+kind: constraint
+evaluator: test
+```
+
 **[host-position-only]**: The `+` sigil is valid ONLY at a host
 position within the input. To locate the host position, the parser
 MUST:
@@ -166,12 +171,22 @@ A `+` appearing at any other position (e.g., mid-path, as part of
 a username) MUST NOT be treated as an alias sigil.
 `VERIFIED: pass — plus_in_path_not_alias, plus_in_credentials_not_alias, multiple_at_signs_last_wins, scheme_with_plus_in_name`
 
+```claim
+kind: constraint
+evaluator: test
+```
+
 **[alias-name-validated]**: The alias name (characters after `+` until
 the first `/`, `:`, or end of input) MUST be a valid UAX #31 Identifier
 (XID_Start followed by zero or more XID_Continue characters). An
 invalid alias name MUST produce an `InvalidAliasName` error, not a
 fallback to raw.
 `VERIFIED: pass — alias_name_digit_start_rejected, alias_name_empty_rejected, alias_name_unicode_accepted, alias_name_hyphen_rejected, alias_name_dot_rejected, alias_name_underscore_accepted`
+
+```claim
+kind: constraint
+evaluator: test
+```
 
 **[separator-opaque-suffix]**: The character immediately following
 the alias name determines the separator:
@@ -182,6 +197,11 @@ The separator is preserved in the output to maintain the input's
 transport semantics (e.g., `:` for SCP, `/` for URL-style).
 `VERIFIED: pass — separator_slash_url_style, separator_colon_scp_style, separator_none_bare_alias, colon_only_suffix_empty_rest`
 
+```claim
+kind: constraint
+evaluator: test
+```
+
 **[structure-preserving]**: Alias expansion MUST preserve the input's
 structure. Alurl substitutes ONLY the alias name with the resolved
 value. The prefix (scheme, credentials), separator, and suffix are
@@ -190,15 +210,30 @@ is performed. The output is:
 `prefix + resolved_alias + separator + suffix`
 `VERIFIED: pass — preserves_scheme_prefix, preserves_credentials_prefix, preserves_scheme_and_credentials, preserves_git_user_url_style`
 
+```claim
+kind: constraint
+evaluator: test
+```
+
 **[suffix-opaque]**: The suffix (everything after the separator)
 MUST be treated as an opaque string. Alurl MUST NOT validate,
 normalize, or interpret it. The suffix MAY be empty.
 `VERIFIED: pass — suffix_with_port_pattern, suffix_empty_trailing_slash`
 
+```claim
+kind: constraint
+evaluator: test
+```
+
 **[expansion-deterministic]**: Given the same input and the same
 `AliasMap`, `AliasMap::resolve()` MUST produce the same output.
 Alias resolution MUST be a pure function of its inputs.
 `VERIFIED: pass — deterministic_repeated_calls`
+
+```claim
+kind: constraint
+evaluator: test
+```
 
 **[resolution-terminates]**: Recursive alias resolution MUST
 terminate. Alurl MUST enforce termination through cycle detection:
@@ -209,16 +244,31 @@ are guaranteed to terminate. A depth limit MAY be implemented as
 defense-in-depth but is not required.
 `VERIFIED: pass — cycle_detected_two_aliases, self_referencing_alias_detected`
 
+```claim
+kind: constraint
+evaluator: test
+```
+
 **[recursive-transparent]**: If alias expansion produces a result
 that contains a `+` at a valid host position, alurl MUST re-resolve
 it as a new alias. The caller MUST NOT need to loop — recursive
 resolution is alurl's responsibility, not the caller's.
 `VERIFIED: pass — recursive_alias_chain, three_level_recursive_chain`
 
+```claim
+kind: constraint
+evaluator: test
+```
+
 **[raw-preserves-input]**: When the input does not contain a `+` at a
 valid host position, the returned `AliasedUrl::Raw` MUST contain the
 exact input string with no modifications.
 `VERIFIED: pass — raw_preserves_exact_input, empty_input_is_raw`
+
+```claim
+kind: constraint
+evaluator: test
+```
 
 **[expanded-preserves-alias]**: When the input is an alias, the
 returned `AliasedUrl::Expanded` MUST include the **original** alias
@@ -227,15 +277,30 @@ This enables downstream consumers to provide diagnostic messages
 referencing what the user typed.
 `VERIFIED: pass — expanded_preserves_original_alias`
 
+```claim
+kind: constraint
+evaluator: test
+```
+
 **[zero-deps]**: Alurl MUST have zero non-std external dependencies.
 Alias detection and expansion is pure string processing. Unicode
 validation MAY use `unicode-ident` as the sole permitted dependency.
 `VERIFIED: pass — Cargo.toml: only unicode-ident`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[no-io]**: Alurl MUST NOT perform any I/O (filesystem, network,
 environment variables). All external state is provided through the
 `AliasMap` (populated by an `AliasSource` implementor).
 `VERIFIED: pass — code inspection: no std::fs, std::net`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 ### Transitions
 
@@ -247,6 +312,11 @@ the host position and determine whether an alias is present.
   character at the host position is `+`. If yes, extract the alias
   name and separator. If no, return `Raw(input)`.
   `VERIFIED: pass — spec_examples_table, empty_input_is_raw, just_plus_alone_is_invalid`
+
+```claim
+kind: constraint
+evaluator: test
+```
 
 **[resolve-transition]**: Given an alias input and an `AliasMap`,
 `AliasMap::resolve()` MUST expand the alias and reconstruct the output.
@@ -260,6 +330,11 @@ the host position and determine whether an alias is present.
   The final result is returned as `AliasedUrl::Expanded`.
   `VERIFIED: pass — spec_examples_table`
 
+```claim
+kind: constraint
+evaluator: test
+```
+
 ### Forbidden States
 
 **[no-silent-fallback]**: If an input contains `+` at a valid host
@@ -269,16 +344,31 @@ error. A `+` at a host position is an unambiguous declaration of alias
 intent — failure to resolve is an error, not a suggestion.
 `VERIFIED: pass — unknown_alias_errors, invalid_name_errors_not_raw, just_plus_alone_is_invalid`
 
+```claim
+kind: constraint
+evaluator: test
+```
+
 **[no-partial-expansion]**: Alurl MUST NOT return an `AliasedUrl::Expanded`
 whose `url` field still contains an unresolved `+`-prefixed alias at a
 host position. Recursive resolution MUST complete fully or fail entirely.
 `VERIFIED: pass — no_partial_expansion`
+
+```claim
+kind: constraint
+evaluator: test
+```
 
 **[no-scheme-injection]**: Alurl MUST NOT add, remove, or modify the
 scheme component. If the input has no scheme, the output has no scheme.
 If the input has `ssh://`, the output has `ssh://`. Scheme inference is
 the consumer's responsibility.
 `VERIFIED: pass — bare_alias_no_scheme`
+
+```claim
+kind: constraint
+evaluator: test
+```
 
 **[no-alias-in-metadata]**: Alurl types (aliases, alias names)
 MUST NOT appear in persisted protocol state, signed payloads, or
@@ -287,6 +377,11 @@ references MUST use fully expanded URLs. (This constraint is
 enforced by consumers, but alurl's API design SHOULD make it natural
 by separating `AliasedUrl::Expanded.url` as the resolved artifact.)
 `VERIFIED: pass — code inspection: no Serialize derive`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 ### Behavioral Properties
 
@@ -299,6 +394,11 @@ where d is the chain depth, bounded by the alias configuration size.
 - **Type**: Performance
   `VERIFIED: pass — code inspection: O(d×n), HashMap::get is O(1)`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[error-diagnostic]**: All error types MUST carry sufficient
 information for diagnostic messages. `CycleDetected` MUST include
 the full chain of alias names that formed the cycle.
@@ -306,6 +406,11 @@ the full chain of alias names that formed the cycle.
 
 - **Type**: Usability
   `VERIFIED: pass — error_not_found_includes_name, error_cycle_includes_chain`
+
+```claim
+kind: constraint
+evaluator: test
+```
 
 ## Verification Pipeline
 
