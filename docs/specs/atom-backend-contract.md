@@ -165,6 +165,11 @@ analogue; every protocol claim of the form "the ref moved but the old
 object persists" rests on it.)
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[backend-store-injective]**: The backend's content serialization
 MUST be canonical: one content value, one byte serialization, one OID;
 two distinct content values MUST NOT share an OID (up to collision
@@ -174,6 +179,11 @@ any party constructing the same atom content MUST obtain the same
 carrier identity. This is P16, the intent-store analogue of the
 artifact store's P10.
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: test
+```
 
 **[backend-ancestry-sound]**: The ancestry relation `⊑` MUST be sound
 with respect to the backend's content-addressing: `a ⊑ b` MUST hold
@@ -198,6 +208,11 @@ that quantify over it are `[charter-ancestry]`, `[temporal-vector]`,
 transitively pins the genesis."
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[backend-ancestry-queryable]**: A conforming backend MUST support
 ancestry queries (`a ⊑ b`) without transferring or materializing full
 content — revision metadata alone suffices (git discharges this with
@@ -213,6 +228,11 @@ indistinguishable from a true root to a naive walk, so a
 depth-limited fetch MUST NOT serve as the basis for any
 `[temporal-vector]`/`[charter-ancestry]` judgment.
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: test
+```
 
 **[backend-refs-linearizable]**: On the **authoritative store** —
 the registry or store a write transition executes against — each ref
@@ -238,6 +258,11 @@ future work — registered under Open Questions, alongside the
 acceptance-policy spec (Execution Model §9.7).
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[backend-refs-atomic-multi]**: The **authoritative store** MUST
 support atomic multi-ref transactions: a protocol transition that
 writes several names (claim ref + protective src ref; version ref +
@@ -254,6 +279,11 @@ time (`[backend-replica-reads]`).
 Atomicity — promoted here from guidance to law.)
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: test
+```
+
 **[backend-replica-reads]**: Mirrors and replicas are
 eventually-consistent reads of the authoritative store, and their
 lawful behavior is discharged at the protocol layer, cited here rather
@@ -267,6 +297,11 @@ divergence in content is tamper evidence, not a race
 (`[atom-version-identity]`, `[no-conflicting-digest]`,
 `[czd-divergence-handling]` — [atom-sourcing](atom-sourcing.md)).
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 **[backend-seam-typed]**: `Czd` and `OID` MUST be disjoint sorts, in
 the specification and in implementations (distinct types, no implicit
@@ -294,6 +329,11 @@ this clause. (The two landed identity-conflation defects were both
 violations of this law; see §Verification for what the existing models
 could and could not catch.)
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 #### [czd-oid-phantom-typed]
 
@@ -325,6 +365,11 @@ generalizes [git-storage-format](git-storage-format.md)
 the contract level: it binds every backend, not the git encoding.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: test
+```
+
 **[backend-chain-append]**: The backend MUST realize each atom's
 transaction and fact chains as **append-only** structures: appending a
 new chain element (claim replacement, publish update, fact append —
@@ -335,6 +380,11 @@ audit trail ([git-storage-format](git-storage-format.md)
 load-bearing for the plane's laws (atom-model §6, "monotone history is
 the structural cost").
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 **[backend-enumeration]**: Given a source, a zero-trust consumer MUST
 be able to enumerate: candidate charters
@@ -347,6 +397,11 @@ Version discovery MUST be object-free where the transport allows
 carriage and enumeration, never trust.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[backend-refs-sole-mutability]**: Refs MUST be the backend's ONLY
 mutable state: `Store` is immutable (`[backend-store-immutable]`),
 `⊑` is derived from hash-committed structure
@@ -358,6 +413,11 @@ unreachable — and it is the premise `[backend-liveness-protection]`
 leans on.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[backend-liveness-protection]**: State reachable from protocol refs
 MUST be protected from the backend's garbage collection: an object the
 protocol can still name (a locked `publish_czd`'s chain, a claim
@@ -367,6 +427,11 @@ backend's native GC cannot see protocol reachability, the
 instantiation MUST write protective names (git: `refs/atom/src/{oid}`,
 `[store-claim-ref]`'s GC-protection purpose).
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: test
+```
 
 **[backend-hash-strength]**: The `dig` and `src` protocol fields
 inherit the **backend's** hash strength, not the coz layer's: a
@@ -403,6 +468,11 @@ The anchor and all czd-sorted identities are unaffected by
 construction (`[anchor-hash-agile]`).
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 ### Behavioral Properties
 
 **[backend-substitutable]**: Two conforming backends carrying the same
@@ -422,6 +492,11 @@ the tested trace set, never the universally-quantified claim itself.
 - **Type**: Safety
   `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[backend-verification-carried]**: A conforming backend MUST make the
 full local verification pipeline
 ([atom-transactions](atom-transactions.md) §Local Verification, steps
@@ -431,6 +506,11 @@ zero writes and zero further network round-trips once state is local.
 
 - **Type**: Safety
   `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 ## Proof Obligations
 

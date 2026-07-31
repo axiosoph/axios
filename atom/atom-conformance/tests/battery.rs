@@ -45,6 +45,7 @@ mod backend_store_injective {
     /// `root_entries.sort()` (store.rs), the concrete discharge point
     /// Appendix A names ("Tree construction", canonical byte-order
     /// sorting).
+    // docket: backend-store-injective :: cargo test --manifest-path atom/Cargo.toml -p atom-conformance --test battery backend_store_injective::canonical_tree_construction_is_order_independent -- --exact
     #[test]
     fn canonical_tree_construction_is_order_independent() {
         let (_dir, repo, _genesis) = setup_repo();
@@ -120,6 +121,7 @@ mod backend_ancestry_queryable {
     /// (`tree:0`) fetch-advertisement half of this obligation is a
     /// transport concern outside atom-git's local-repository surface
     /// and is not exercised here.
+    // docket: backend-ancestry-queryable :: cargo test --manifest-path atom/Cargo.toml -p atom-conformance --test battery backend_ancestry_queryable::ancestry_check_uses_only_commit_graph -- --exact
     #[test]
     fn ancestry_check_uses_only_commit_graph() {
         let (_dir, repo, genesis) = setup_repo();
@@ -211,6 +213,7 @@ mod backend_refs_atomic_multi {
     /// a single `gix::Repository::edit_references` batch
     /// (registry.rs). Exercises the all-or-nothing outcome on the
     /// success path: after one `claim()` call, both names exist.
+    // docket: backend-refs-atomic-multi :: cargo test --manifest-path atom/Cargo.toml -p atom-conformance --test battery backend_refs_atomic_multi::claim_writes_land_both_refs_together -- --exact
     #[test]
     fn claim_writes_land_both_refs_together() {
         let (_dir, repo, genesis) = setup_repo();
@@ -304,6 +307,7 @@ mod backend_carriage_bit_perfect {
     /// store -> retrieve -> byte-compare, extending `[coz-bit-perfect]`
     /// to the generic content-tree carriage path
     /// (`GitStore::write_content_tree` + `GitSource::content`).
+    // docket: backend-carriage-bit-perfect :: cargo test --manifest-path atom/Cargo.toml -p atom-conformance --test battery backend_carriage_bit_perfect::content_round_trips_byte_exact -- --exact
     #[tokio::test]
     async fn content_round_trips_byte_exact() {
         let (_dir, repo, genesis) = setup_repo();
@@ -484,6 +488,7 @@ mod backend_liveness_protection {
     /// and its target (the claim's src revision) is retrievable — the
     /// mechanism `[store-claim-ref]` relies on to keep GC from
     /// collecting protocol-reachable state.
+    // docket: backend-liveness-protection :: cargo test --manifest-path atom/Cargo.toml -p atom-conformance --test battery backend_liveness_protection::protective_src_ref_exists_and_target_retrievable -- --exact
     #[test]
     fn protective_src_ref_exists_and_target_retrievable() {
         let (_dir, repo, genesis) = setup_repo();
