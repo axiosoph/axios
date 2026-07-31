@@ -119,6 +119,11 @@ Implementations MUST reject the entire resolution if a bijection
 violation is detected.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[atom-version-identity]**: If two mirrors in the same set advertise
 the same atom (same label) at the same version, their atom snapshot
 digests (`dig`) MUST be identical. A mismatch MUST be treated as
@@ -127,6 +132,11 @@ the atom and SHOULD surface the conflicting mirrors and digests in the
 error message.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[mirror-staleness-tolerance]**: One mirror having MORE atoms or
 versions than another mirror in the same set is NOT an error. Mirrors
 MAY sync at different cadences. The invariant constrains conflicting
@@ -134,12 +144,22 @@ content, not missing content. Resolvers SHOULD aggregate availability
 across all mirrors in a set and resolve from the union.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[version-total-order]**: The ecosystem adapter MUST define a total
 order over version strings for each atom type. The protocol treats
 versions as opaque strings; the adapter provides comparison semantics
 (e.g., semver for cargo, PEP 440 for pypi). Resolvers rely on this
 order for constraint satisfaction and highest-match selection.
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: property-test
+```
 
 **[lock-entry-sufficient]**: A lock entry for a **published** atom
 MUST capture at minimum: `set`, `label`, `version`, and
@@ -162,6 +182,11 @@ MUST still capture `set`, `label`, and `version`, and SHOULD indicate
 that the resolution is local-only.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 ### Transitions
 
 **[source-discovery]**: A resolver MAY discover atom sources from
@@ -176,6 +201,11 @@ manifest declarations.
   `VERIFIED: unverified`
   `RESIDUE: Phase 1/2 -- AtomSource/AtomStore/AtomRegistry are defined and implemented (atom/atom-core/src/lib.rs; atom-git's GitSource/GitRegistry/GitStore), but no source-discovery pipeline reading manifest declarations into a MirrorSet exists; the MirrorSet type itself is not defined anywhere in the codebase`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[mirror-validation]**: Before aggregating atoms from a set's mirrors,
 the resolver MUST validate mirror consistency.
 
@@ -188,6 +218,11 @@ the resolver MUST validate mirror consistency.
   (`[mirror-staleness-tolerance]`).
   `VERIFIED: unverified`
   `RESIDUE: Phase 1/2 -- same reasoning as [source-discovery]; the source traits exist and are implemented, but no mirror-validation/aggregation pipeline exists`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 **[lock-capture]**: After version selection, the resolver MUST capture
 the resolution in a lock entry.
@@ -204,6 +239,11 @@ the resolution in a lock entry.
   `VERIFIED: unverified`
   `RESIDUE: Phase 1/2 -- same reasoning as [source-discovery]; the source traits exist and are implemented, but no lock-capture pipeline exists (note: this v1-era LockEntry shape -- genesis-commit "set", "pkg" PURL -- predates and is unreconciled with the v2 lock schema)`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 ### Forbidden States
 
 **[no-cross-set-anchor]**: An anchor MUST NOT appear in more than one
@@ -211,11 +251,21 @@ named set within a single resolution context. If detected, the resolver
 MUST reject the entire resolution — not just the conflicting set.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[no-conflicting-digest]**: Two mirrors in the same set MUST NOT
 advertise the same atom at the same version with different digests. If
 detected, the resolver MUST reject the atom and SHOULD identify the
 conflicting mirrors.
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 **[no-unpublished-dependency]**: An atom MUST NOT be publishable if any
 of its **direct** atom dependencies exist only as local development
@@ -231,6 +281,11 @@ through the publishing chain without resolvers walking the transitive
 closure.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 ### Behavioral Properties
 
 **[aggregation-monotonic]**: Adding a mirror to a set MUST NOT reduce
@@ -241,6 +296,11 @@ This is a consequence of `[mirror-staleness-tolerance]`.
 - **Type**: Safety
   `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[resolution-reproducible]**: Given the same lock file, a resolver
 MUST reproduce the same fetch targets. Lock entries contain sufficient
 information (`set`, `label`, `version`, `publish_czd`, sources) to
@@ -249,6 +309,11 @@ deterministically identify the exact atom version without re-resolving.
 - **Type**: Safety
   `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[concurrent-validation-safe]**: Implementations SHOULD support
 concurrent validation of mirrors within a set for performance.
 Concurrent validation MUST produce the same result as sequential
@@ -256,6 +321,11 @@ validation — the invariant checks are commutative over mirror ordering.
 
 - **Type**: Safety
   `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 **[czd-divergence-handling]**: If two mirrors in the same set advertise
 the same atom at the same version with identical `dig` but different
@@ -271,6 +341,11 @@ reject the atom.
 
 - **Type**: Safety
   `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 ## Sourcing Pipeline
 
@@ -384,6 +459,11 @@ Peer-assisted resolution is a transport-level concern: the atom content enters t
 This ordering ensures that authoritative sources are preferred and that the peer is only consulted when all other options are exhausted.
 `VERIFIED: unverified`
 `RESIDUE: Phase 1/2 -- AtomSource itself is defined and implemented (atom/atom-core/src/lib.rs; atom-git's GitSource), but no peer-specific AtomSource implementation exists, and no priority-ordering/fallback logic (local store -> mirrors -> peer) is implemented anywhere in the codebase`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 ## Verification
 

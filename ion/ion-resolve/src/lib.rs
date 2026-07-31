@@ -89,6 +89,7 @@ mod proptests {
             });
     }
 
+    // docket: version-total-order :: cargo test --manifest-path ion/Cargo.toml -p ion-resolve --lib proptests::test_compare_versions_antisymmetry -- --exact
     #[test]
     fn test_compare_versions_antisymmetry() {
         bolero::check!()
@@ -104,6 +105,7 @@ mod proptests {
             });
     }
 
+    // docket: version-total-order :: cargo test --manifest-path ion/Cargo.toml -p ion-resolve --lib proptests::test_compare_versions_transitivity -- --exact
     #[test]
     fn test_compare_versions_transitivity() {
         bolero::check!()

@@ -196,6 +196,11 @@ policy language would exceed this spec's commission; per-entry role
 and quorum is the minimal shape that covers both._
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[trust-anchor-sort]**: A trust anchor's `tmb(_)` reference is
 `Tmb`-sorted. `Tmb`, `Anchor`, `Czd`, and `OID` are pairwise disjoint
 sorts: a trust anchor is never the atom-set anchor
@@ -208,6 +213,11 @@ the implementation language permits. (This extends
 word "anchor" is an unfortunate collision this constraint exists to
 defuse.)
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 **[trust-anchored-input]**: Only protocol-anchored signed objects
 enter acceptance evaluation: the record MUST verify under the
@@ -222,6 +232,11 @@ rule can admit it. Consuming one is out-of-protocol trust by
 definition, outside this policy language entirely.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[trust-signer-relative]**: Verdicts are per-consumer. An
 implementation MUST compute verdicts against the local
 `AcceptancePolicy` and MUST NOT treat another party's verdict as its
@@ -229,6 +244,11 @@ own input: an imported verdict is at most evidence. (Inherited frame:
 Execution Model §3.4 — the stratification governs what a record _can_
 be; signer trust governs what it _is, to you_.)
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 **[trust-role-authorization]**: An anchored signer's records count
 only within its roles: a `builder`-role entry authorizes derived
@@ -247,6 +267,11 @@ implementation MUST derive the fact class from the record's object
 kind per the classification table of
 [atom-model.md §5](../models/atom-model.md).
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 **[trust-owner-selector]** _(disambiguated 2026-07-14 — charter vs.
 claim ownership no longer share one shape)_: The `owner` signer
@@ -303,6 +328,11 @@ the `assertor` role — there is no `record_core` for independent
 parties to agree on.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[trust-threshold-independence]**: Signer distinctness is the
 enforced independence floor: two records signed by the same `Tmb`
 MUST count as one toward any quorum, and one record MUST NOT be
@@ -312,6 +342,11 @@ is not — it is the consumer's judgment, exercised in anchor
 curation, and this spec states that honestly rather than pretending
 the floor is the ceiling.
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 **[trust-rule-determinism]**: Rule resolution MUST be deterministic:
 the applicable rule for an atom is the FIRST rule in document order
@@ -326,6 +361,11 @@ specificity between `set(_)` and `role(_)` scopes has no natural
 order and would demand a tie-break rule of its own._
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[trust-mode-rule]**: A rule carrying `require_mode: "reproducible"`
 MUST cause verdict `refused` for any derived execution record of an
 in-scope atom whose effective declared mode is not `reproducible`
@@ -338,6 +378,11 @@ declarations has an accountable party behind every tier
 witness counts enter only through `[trust-threshold-rule]`'s
 corroboration of individual records.
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 **[trust-contested-refusal]**: The contested-action hook. A
 **standing divergence finding** exists at action identity `a`, for
@@ -369,6 +414,11 @@ a per-consumer investigation trigger rather than a global verdict
 (atom-model.md §6).
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[trust-finding-derivable]**: Standing divergence findings MUST be
 derivable from chain state plus the local policy alone: a consumer
 holding the atom's publish chain and metadata (enumerable per
@@ -382,6 +432,11 @@ implementation MUST NOT require a coordination service, registry, or
 third-party feed to detect or resolve findings.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[trust-policy-pure]**: Verdict computation MUST be a pure function
 of `(record, fact snapshot, policy)`: the same record evaluated
 against the same chain snapshot under the same policy yields the same
@@ -393,6 +448,11 @@ one layer up. When a witness pick is recorded, the implementation
 SHOULD record a digest of the policy that made it, so the choice is
 auditable against the configuration that produced it.
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 ### Verdict basis and scoped freshness (ADR-0009)
 
@@ -501,6 +561,11 @@ verification, not by this policy — step 1 admits them as chain
 context, not as verdict subjects).
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 ### Behavioral Properties
 
 **[trust-verdict-total]**: For every anchored fact-class signed
@@ -511,6 +576,11 @@ part-fact; no policy state makes the procedure abstain.
 - **Type**: Safety
   `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[trust-no-silent-serve]**: A record MUST NOT be served as a cache
 hit or substitution unless the procedure returned `fact` for it under
 the serving consumer's policy at a snapshot at or after the record's
@@ -519,6 +589,11 @@ record's cryptographic validity.
 
 - **Type**: Safety
   `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 ## Proof Obligations
 
