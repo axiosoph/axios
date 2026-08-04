@@ -152,6 +152,7 @@ modification.
 ```claim
 kind: constraint
 evaluator: test
+depends: [host-position-only]
 ```
 
 **[host-position-only]**: The `+` sigil is valid ONLY at a host
@@ -213,6 +214,7 @@ is performed. The output is:
 ```claim
 kind: constraint
 evaluator: test
+depends: [host-position-only, separator-opaque-suffix]
 ```
 
 **[suffix-opaque]**: The suffix (everything after the separator)
@@ -223,6 +225,7 @@ normalize, or interpret it. The suffix MAY be empty.
 ```claim
 kind: constraint
 evaluator: test
+depends: [separator-opaque-suffix]
 ```
 
 **[expansion-deterministic]**: Given the same input and the same
@@ -258,6 +261,7 @@ resolution is alurl's responsibility, not the caller's.
 ```claim
 kind: constraint
 evaluator: test
+depends: [resolution-terminates]
 ```
 
 **[raw-preserves-input]**: When the input does not contain a `+` at a
@@ -268,6 +272,7 @@ exact input string with no modifications.
 ```claim
 kind: constraint
 evaluator: test
+depends: [sigil-required]
 ```
 
 **[expanded-preserves-alias]**: When the input is an alias, the
@@ -280,6 +285,7 @@ referencing what the user typed.
 ```claim
 kind: constraint
 evaluator: test
+depends: [recursive-transparent]
 ```
 
 **[zero-deps]**: Alurl MUST have zero non-std external dependencies.
@@ -316,6 +322,7 @@ the host position and determine whether an alias is present.
 ```claim
 kind: constraint
 evaluator: test
+depends: [sigil-required, host-position-only]
 ```
 
 **[resolve-transition]**: Given an alias input and an `AliasMap`,
@@ -333,6 +340,7 @@ evaluator: test
 ```claim
 kind: constraint
 evaluator: test
+depends: [structure-preserving, recursive-transparent]
 ```
 
 ### Forbidden States
@@ -347,6 +355,7 @@ intent — failure to resolve is an error, not a suggestion.
 ```claim
 kind: constraint
 evaluator: test
+depends: [host-position-only]
 ```
 
 **[no-partial-expansion]**: Alurl MUST NOT return an `AliasedUrl::Expanded`
@@ -357,6 +366,7 @@ host position. Recursive resolution MUST complete fully or fail entirely.
 ```claim
 kind: constraint
 evaluator: test
+because: [recursive-transparent]
 ```
 
 **[no-scheme-injection]**: Alurl MUST NOT add, remove, or modify the
@@ -368,6 +378,7 @@ the consumer's responsibility.
 ```claim
 kind: constraint
 evaluator: test
+because: [structure-preserving]
 ```
 
 **[no-alias-in-metadata]**: Alurl types (aliases, alias names)

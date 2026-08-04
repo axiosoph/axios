@@ -301,6 +301,7 @@ divergence in content is tamper evidence, not a race
 ```claim
 kind: constraint
 evaluator: none
+depends: [backend-chain-append, mirror-staleness-tolerance, chain-monotonicity, atom-version-identity, no-conflicting-digest, czd-divergence-handling]
 ```
 
 **[backend-seam-typed]**: `Czd` and `OID` MUST be disjoint sorts, in
@@ -344,6 +345,7 @@ constraint form of `Czd ∩ OID = ∅` above.
 ```claim
 kind: constraint
 evaluator: none
+depends: [backend-seam-typed]
 ```
 
 **Checked against the current code, not assumed.** `atom-id/src/digest.rs`'s
@@ -368,6 +370,7 @@ the contract level: it binds every backend, not the git encoding.
 ```claim
 kind: constraint
 evaluator: test
+because: [backend-bit-perfect]
 ```
 
 **[backend-chain-append]**: The backend MUST realize each atom's
@@ -384,6 +387,7 @@ the structural cost").
 ```claim
 kind: constraint
 evaluator: none
+because: [docs/models/atom-model#6]
 ```
 
 **[backend-enumeration]**: Given a source, a zero-trust consumer MUST
@@ -400,6 +404,7 @@ carriage and enumeration, never trust.
 ```claim
 kind: constraint
 evaluator: none
+depends: [anchor-resolvable]
 ```
 
 **[backend-refs-sole-mutability]**: Refs MUST be the backend's ONLY
@@ -416,6 +421,7 @@ leans on.
 ```claim
 kind: constraint
 evaluator: none
+depends: [backend-store-immutable, backend-ancestry-sound]
 ```
 
 **[backend-liveness-protection]**: State reachable from protocol refs
@@ -431,6 +437,7 @@ instantiation MUST write protective names (git: `refs/atom/src/{oid}`,
 ```claim
 kind: constraint
 evaluator: test
+depends: [backend-refs-sole-mutability]
 ```
 
 **[backend-hash-strength]**: The `dig` and `src` protocol fields
@@ -471,6 +478,7 @@ construction (`[anchor-hash-agile]`).
 ```claim
 kind: constraint
 evaluator: none
+depends: [backend-carriage-bit-perfect, content-hash-obligation, content-hash-is-tree-digest, content-hash-algorithm, anchor-hash-agile]
 ```
 
 ### Behavioral Properties
@@ -495,6 +503,7 @@ the tested trace set, never the universally-quantified claim itself.
 ```claim
 kind: constraint
 evaluator: none
+depends: [docs/models/publishing-stack-layers#2.1, docs/models/execution-model#6.1]
 ```
 
 **[backend-verification-carried]**: A conforming backend MUST make the

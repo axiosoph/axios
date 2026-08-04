@@ -185,6 +185,7 @@ that the resolution is local-only.
 ```claim
 kind: constraint
 evaluator: none
+because: [docs/architecture/atom-sad#6.5]
 ```
 
 ### Transitions
@@ -204,6 +205,7 @@ manifest declarations.
 ```claim
 kind: constraint
 evaluator: none
+depends: [set-anchor-bijection]
 ```
 
 **[mirror-validation]**: Before aggregating atoms from a set's mirrors,
@@ -222,6 +224,7 @@ the resolver MUST validate mirror consistency.
 ```claim
 kind: constraint
 evaluator: none
+depends: [set-anchor-bijection, atom-version-identity, mirror-staleness-tolerance]
 ```
 
 **[lock-capture]**: After version selection, the resolver MUST capture
@@ -242,6 +245,7 @@ the resolution in a lock entry.
 ```claim
 kind: constraint
 evaluator: none
+depends: [lock-entry-sufficient]
 ```
 
 ### Forbidden States
@@ -254,6 +258,7 @@ MUST reject the entire resolution — not just the conflicting set.
 ```claim
 kind: constraint
 evaluator: none
+depends: [set-anchor-bijection]
 ```
 
 **[no-conflicting-digest]**: Two mirrors in the same set MUST NOT
@@ -265,6 +270,7 @@ conflicting mirrors.
 ```claim
 kind: constraint
 evaluator: none
+depends: [atom-version-identity]
 ```
 
 **[no-unpublished-dependency]**: An atom MUST NOT be publishable if any
@@ -299,6 +305,7 @@ This is a consequence of `[mirror-staleness-tolerance]`.
 ```claim
 kind: constraint
 evaluator: none
+depends: [mirror-staleness-tolerance]
 ```
 
 **[resolution-reproducible]**: Given the same lock file, a resolver
@@ -312,6 +319,7 @@ deterministically identify the exact atom version without re-resolving.
 ```claim
 kind: constraint
 evaluator: none
+depends: [lock-entry-sufficient]
 ```
 
 **[concurrent-validation-safe]**: Implementations SHOULD support
@@ -345,6 +353,7 @@ reject the atom.
 ```claim
 kind: constraint
 evaluator: none
+because: [claim-payload-extensible]
 ```
 
 ## Sourcing Pipeline

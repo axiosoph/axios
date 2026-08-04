@@ -234,6 +234,7 @@ truncate, or transform them.
 ```claim
 kind: constraint
 evaluator: none
+depends: [charter-succession]
 ```
 
 **[snapshot-deterministic]**: An atom commit MUST be deterministic given
@@ -260,6 +261,7 @@ chain. (Satisfies atom-transactions.md `[atom-detached]`.)
 ```claim
 kind: constraint
 evaluator: none
+because: [atom-detached]
 ```
 
 **[snapshot-src-header]**: An atom commit MUST contain exactly one extra
@@ -315,6 +317,7 @@ treeless commit-only fetching (`tree:0`) for efficiency.
 ```claim
 kind: constraint
 evaluator: test
+depends: [charter-ancestry, backend-ancestry-sound, backend-ancestry-queryable, ancestry-hash-committed]
 ```
 
 **[charter-commit-format]**: A charter transaction MUST be stored as a
@@ -344,6 +347,7 @@ therefore lives in the signed payload alone.
 ```claim
 kind: constraint
 evaluator: test
+depends: [charter-ref-by-czd, charter-succession-via-prior]
 ```
 
 **[charter-message-is-coz]**: The commit message of a charter commit
@@ -357,6 +361,7 @@ SHOULD be present outside the CozMessage JSON. (The charter analogue of
 ```claim
 kind: constraint
 evaluator: test
+because: [claim-message-is-coz]
 ```
 
 **[charter-succession-via-prior]**: A succession chain MUST be walked by
@@ -380,6 +385,7 @@ restate or alter them.
 ```claim
 kind: constraint
 evaluator: test
+because: [charter-succession, charter-succession-linear, charter-ancestry]
 ```
 
 **[charter-src-reachable]**: A resolver MUST be able to obtain the
@@ -418,6 +424,7 @@ charter-descended revisions anchor to `czd(charter₀)` normally
 ```claim
 kind: constraint
 evaluator: none
+depends: [fs-source-contract]
 ```
 
 **[claim-detached]**: A claim commit MUST have the well-known empty
@@ -512,6 +519,7 @@ discharges atom-backend-contract.md `[backend-carriage-bit-perfect]`.)
 ```claim
 kind: constraint
 evaluator: test
+because: [backend-bit-perfect, backend-carriage-bit-perfect]
 ```
 
 **[odb-immutable]**: The backend MUST treat the object database as
@@ -528,6 +536,7 @@ constraint makes the reliance explicit rather than implicit.
 ```claim
 kind: constraint
 evaluator: none
+because: [backend-store-immutable]
 ```
 
 **[refs-sole-mutable]**: Refs are the backend's ONLY mutable protocol
@@ -546,6 +555,8 @@ transfer to the intent store. (Discharges atom-backend-contract.md
 ```claim
 kind: constraint
 evaluator: none
+depends: [odb-immutable, ancestry-hash-committed]
+because: [backend-refs-sole-mutability]
 ```
 
 **[ancestry-hash-committed]**: A git ObjectId commits to its entire
@@ -562,6 +573,7 @@ answer. (Discharges atom-backend-contract.md
 ```claim
 kind: constraint
 evaluator: test
+because: [backend-ancestry-sound]
 ```
 
 **[ancestry-query-path]**: Protocol ancestry queries MUST resolve
@@ -581,6 +593,7 @@ minimal mode — it limits blobs, never ancestry.
 ```claim
 kind: constraint
 evaluator: none
+depends: [ancestry-hash-committed]
 ```
 
 **[czd-oid-disjoint]**: The seam law's git instance
@@ -602,6 +615,7 @@ of raw segments across families is ill-typed.
 ```claim
 kind: constraint
 evaluator: test
+depends: [backend-seam-typed]
 ```
 
 **[oid-hash-inheritance]**: `dig` and `src` inherit the repository's
@@ -626,6 +640,8 @@ for the git instantiation.)
 ```claim
 kind: constraint
 evaluator: none
+depends: [anchor-hash-agile, content-hash-is-tree-digest]
+because: [backend-hash-strength]
 ```
 
 **[src-hash-kind-disambiguated]**: The atom commit's `src` extra
@@ -663,6 +679,7 @@ length or position.
 ```claim
 kind: constraint
 evaluator: none
+depends: [czd-oid-disjoint]
 ```
 
 **[single-active-claim-registry]**: In a registry (source repository),
@@ -715,6 +732,7 @@ label. (Satisfies atom-transactions.md `[atomid-per-source-unique]`.)
 ```claim
 kind: constraint
 evaluator: none
+because: [atomid-per-source-unique]
 ```
 
 **[registry-ref-claim]**: The ref `refs/atom/claims/pub/{label}` MUST
@@ -785,6 +803,7 @@ that tag's ref persists.
 ```claim
 kind: constraint
 evaluator: test
+depends: [publish-update-transition, store-ownership-migration]
 ```
 
 **[store-claim-ref]**: Each ingested claim MUST have a corresponding
@@ -863,6 +882,7 @@ store; ingesting a set fetches its charter chain into the same family.
 ```claim
 kind: constraint
 evaluator: test
+depends: [czd-oid-disjoint, anchor-resolvable, charter-transition]
 ```
 
 ### Transitions
@@ -894,6 +914,7 @@ backend by creating a parentless charter commit.
 ```claim
 kind: constraint
 evaluator: test
+depends: [charter-succession, charter-message-is-coz, charter-transition, charter-commit-format, charter-ref-by-czd, refs-atomic-multi]
 ```
 
 **[claim-transition-git]**: An atom MAY be claimed by creating a
@@ -919,6 +940,7 @@ detached claim commit.
 ```claim
 kind: constraint
 evaluator: test
+depends: [claim-chains-charter]
 ```
 
 **[publish-transition-git]**: A version MAY be published for a
@@ -949,6 +971,8 @@ publish tag.
 ```claim
 kind: constraint
 evaluator: test
+depends: [temporal-vector, snapshot-deterministic]
+because: [backend-refs-linearizable]
 ```
 
 **[ingest-transition]**: Atoms MAY be ingested from a registry (or
@@ -973,6 +997,8 @@ another store) into a store.
 ```claim
 kind: constraint
 evaluator: test
+depends: [verification-local]
+because: [ingest-preserves-identity]
 ```
 
 **[claim-replacement-storage]**: An atom's active claim MAY be
@@ -992,6 +1018,7 @@ replaced (e.g., after key compromise).
 ```claim
 kind: constraint
 evaluator: test
+depends: [temporal-vector]
 ```
 
 **[publish-update-transition]**: A publish tag MAY be updated (e.g.,
@@ -1065,6 +1092,7 @@ chain.
 ```claim
 kind: constraint
 evaluator: none
+depends: [sig-over-pay, claim-owner-single, owner-authorization-delegated, publish-transition, fact-kind-table, trust-role-authorization, fact-claim-owner-gated, trust-signer-relative, tag-chain-immutable]
 ```
 
 **[tag-chain-semantic-immutable]**: The identity-class fields of a
@@ -1097,6 +1125,7 @@ new publish ref — not an update to an existing tag chain.
 ```claim
 kind: constraint
 evaluator: test
+depends: [amendment-field-classification, publish-update-transition, publish-typ, publish-mode, fact-kind-table]
 ```
 
 **[refs-atomic-multi]**: Multi-ref protocol transitions (claim +
@@ -1114,6 +1143,7 @@ atom-backend-contract.md `[backend-refs-atomic-multi]`.)_
 ```claim
 kind: constraint
 evaluator: test
+because: [backend-refs-atomic-multi]
 ```
 
 **[fs-ingest-transition]**: Atoms from a filesystem `AtomSource` MAY
@@ -1141,6 +1171,7 @@ be ingested into a git `AtomStore` without claims or publishes.
 ```claim
 kind: constraint
 evaluator: test
+depends: [fs-source-contract, dev-atom-unchartered-local]
 ```
 
 **[dev-atom-resolution]**: Tooling consuming atoms from a store
@@ -1164,6 +1195,7 @@ matching what downstream consumers would see.
 ```claim
 kind: constraint
 evaluator: none
+depends: [ingest-transition]
 ```
 
 ### Forbidden States
@@ -1188,6 +1220,7 @@ without a corresponding claim commit reachable via
 ```claim
 kind: constraint
 evaluator: none
+because: [no-unclaimed-publish]
 ```
 
 **[no-backdated-src]**: A publish MUST NOT reference a source revision
@@ -1199,6 +1232,7 @@ enforcement mechanism for `[temporal-vector]`.
 ```claim
 kind: constraint
 evaluator: test
+because: [temporal-vector]
 ```
 
 **[no-label-collision-registry]**: Two atoms in the same registry
@@ -1254,6 +1288,7 @@ a "vector of authenticity": charter src → claim src → publish src.
 ```claim
 kind: constraint
 evaluator: test
+depends: [charter-anchor, claim-charter-authorization, charter-ancestry]
 ```
 
 **[ingestion-portable]**: Atom commits, publish tag objects (and their
@@ -1303,6 +1338,7 @@ silently fall back to a different publish.
 ```claim
 kind: constraint
 evaluator: none
+because: [docs/architecture/atom-sad#8]
 ```
 
 **[store-accumulates]**: After ingestion, a store's `resolve` MUST
@@ -1315,6 +1351,7 @@ ingested atom. (Model §2.3, ⊇ condition.)
 ```claim
 kind: constraint
 evaluator: test
+depends: [docs/models/publishing-stack-layers#2.3]
 ```
 
 <!-- [publish-extensible] moved to atom-transactions.md — this is a
