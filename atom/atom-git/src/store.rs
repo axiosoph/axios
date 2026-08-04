@@ -150,6 +150,7 @@ impl GitStore {
     /// Concurrent eviction of the last two versions under the same claim
     /// could leave an orphan claim ref. Callers must serialize evictions
     /// per claim, or a periodic GC pass should sweep orphaned claims.
+    // docket: store-claim-cleanup :: cargo test --manifest-path atom/Cargo.toml -p atom-git --test store_keying -- evict_sibling_scan_flat_refs --exact
     pub fn evict_version(&self, store_key_hex: &str) -> Result<(), GitError> {
         let repo = self.source.repo();
         let version_ref_name = format!("refs/atom/d/{}", store_key_hex);
@@ -407,6 +408,9 @@ impl AtomContent for GitStore {
 }
 
 impl AtomStore for GitStore {
+    // docket: ingest-transition :: cargo test --manifest-path atom/Cargo.toml -p atom-git --test integration -- test_local_ingest test_local_ingest_propagates_full_succession_chain --exact
+    // docket: store-accumulates :: cargo test --manifest-path atom/Cargo.toml -p atom-git --test integration -- test_local_ingest test_local_ingest_propagates_full_succession_chain --exact
+    // docket: fs-ingest-transition :: cargo test --manifest-path atom/Cargo.toml -p atom-git --test integration -- test_fs_dev_ingest --exact
     async fn ingest<S: AtomContent>(&self, source: &S) -> Result<(), Self::Error> {
         let dest_repo = self.source.repo();
 
@@ -668,6 +672,8 @@ impl AtomStore for GitStore {
                     // (`[store-ref-by-publish-czd]`); the version string
                     // lives only in the publish payload now, never in the
                     // ref path.
+                    // docket: store-ref-by-publish-czd :: cargo test --manifest-path atom/Cargo.toml -p atom-git --test store_keying -- store_ref_by_publish_czd --exact
+                    // docket: store-claim-disambiguation :: cargo test --manifest-path atom/Cargo.toml -p atom-git --test store_keying -- store_claim_disambiguation --exact
                     let store_claim_ref = format!("refs/atom/claims/d/{}", claim_czd_hex);
                     let store_version_ref = format!(
                         "refs/atom/d/{}",
