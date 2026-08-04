@@ -122,6 +122,11 @@ layer Lₘ where m > n.
 
 VERIFIED: _pending_
 
+```claim
+kind: constraint
+evaluator: review
+```
+
 ```
 Permitted:     ion → eos-core      (L4 → L3 contract)
 Permitted:     ion → atom-core     (L4 → L1 contract)
@@ -140,6 +145,11 @@ workspace W₂.
 
 VERIFIED: _pending_
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 ```
 Permitted:     ion-cli → eos-core       (contract)
 Permitted:     ion-eos → eos-proto      (contract/wire)
@@ -156,6 +166,12 @@ depended upon by any crate outside their own workspace.
 
 VERIFIED: _pending_
 
+```claim
+kind: constraint
+evaluator: none
+because: [boundary-contract-only]
+```
+
 This is the crate-level corollary of `[boundary-contract-only]`
 but also covers intra-workspace-but-cross-boundary scenarios.
 `atom-git` MUST NOT be depended upon by `eos-core` or `eos-snix`.
@@ -170,6 +186,11 @@ MAY depend on their workspace's contract crates and on each
 other as needed.
 
 VERIFIED: _pending_
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 ```
 Permitted:     eos-snix → eos-core      (impl → contract, same workspace)
@@ -189,6 +210,11 @@ serialized interface artifact between two layers, MUST reside in
 a contract crate of the _consuming_ layer.
 
 VERIFIED: _pending_
+
+```claim
+kind: constraint
+evaluator: review
+```
 
 **Rationale:** The consuming layer defines its input contract. The
 producing layer depends on the consumer's contract crate to
@@ -220,6 +246,11 @@ have no dependency budget.
 
 VERIFIED: _pending_
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **Rationale:** Contract crates define the API surface that every
 consumer must transitively compile. A bloated contract crate
 imposes its dependency tree on the entire downstream graph.
@@ -234,6 +265,11 @@ MUST NOT appear in the public signatures of `eos-core`, `atom-core`,
 or any other contract crate.
 
 VERIFIED: _pending_
+
+```claim
+kind: constraint
+evaluator: review
+```
 
 ```
 FORBIDDEN:     eos-core::BuildEngine<Plan = Derivation>
@@ -406,6 +442,11 @@ an inter-layer contract type.
 
 VERIFIED: _pending_
 
+```claim
+kind: constraint
+evaluator: review
+```
+
 **Rationale — the cargo-atom test:**
 
 If a hypothetical `cargo-atom` frontend published and consumed
@@ -468,6 +509,11 @@ layers. They MUST:
 
 VERIFIED: _pending_
 
+```claim
+kind: constraint
+evaluator: review
+```
+
 `ion-eos` is the canonical bridge crate. It resides in `ion/`,
 depends on `eos-core` and `eos-proto`, and performs two
 adaptations:
@@ -517,6 +563,12 @@ required interface pattern for cache-skip scans (see
 
 VERIFIED: _pending_
 
+```claim
+kind: constraint
+evaluator: none
+because: [boundary-contract-only]
+```
+
 ---
 
 ## §5 — Enforcement
@@ -540,6 +592,12 @@ a standalone Rust/shell script in `tools/`.
 
 VERIFIED: _pending_
 
+```claim
+kind: constraint
+evaluator: none
+depends: [boundary-downward-only, boundary-contract-only, boundary-contract-dep-budget]
+```
+
 ### §5.2 — Crate Classification
 
 **[boundary-crate-metadata]**: Each crate's `Cargo.toml` SHOULD
@@ -561,6 +619,11 @@ by naming convention:
 
 VERIFIED: _pending_
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 ### §5.3 — Violation Budgeting
 
 **[boundary-violation-budget]**: Known violations MAY be
@@ -575,6 +638,11 @@ The enforcement script MUST allow exceptions listed in this file.
 The exception count SHOULD trend toward zero.
 
 VERIFIED: _pending_
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 ---
 
