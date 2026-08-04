@@ -199,6 +199,7 @@ and quorum is the minimal shape that covers both._
 ```claim
 kind: constraint
 evaluator: none
+because: [docs/models/execution-model#3.4, docs/models/atom-model#4]
 ```
 
 **[trust-anchor-sort]**: A trust anchor's `tmb(_)` reference is
@@ -217,6 +218,7 @@ defuse.)
 ```claim
 kind: constraint
 evaluator: none
+depends: [backend-seam-typed]
 ```
 
 **[trust-anchored-input]**: Only protocol-anchored signed objects
@@ -235,6 +237,7 @@ definition, outside this policy language entirely.
 ```claim
 kind: constraint
 evaluator: none
+depends: [docs/models/atom-model#5]
 ```
 
 **[trust-signer-relative]**: Verdicts are per-consumer. An
@@ -248,6 +251,7 @@ be; signer trust governs what it _is, to you_.)
 ```claim
 kind: constraint
 evaluator: none
+because: [docs/models/execution-model#3.4]
 ```
 
 **[trust-role-authorization]**: An anchored signer's records count
@@ -271,6 +275,8 @@ kind per the classification table of
 ```claim
 kind: constraint
 evaluator: none
+depends: [docs/models/atom-model#5]
+because: [docs/architecture/htc-sad#6.10]
 ```
 
 **[trust-owner-selector]** _(disambiguated 2026-07-14 — charter vs.
@@ -331,6 +337,7 @@ parties to agree on.
 ```claim
 kind: constraint
 evaluator: none
+depends: [docs/models/atom-model#6, docs/models/execution-model#3.1]
 ```
 
 **[trust-threshold-independence]**: Signer distinctness is the
@@ -382,6 +389,7 @@ corroboration of individual records.
 ```claim
 kind: constraint
 evaluator: none
+depends: [publish-mode, docs/models/atom-model#6]
 ```
 
 **[trust-contested-refusal]**: The contested-action hook. A
@@ -417,6 +425,7 @@ a per-consumer investigation trigger rather than a global verdict
 ```claim
 kind: constraint
 evaluator: none
+depends: [docs/models/atom-model#6]
 ```
 
 **[trust-finding-derivable]**: Standing divergence findings MUST be
@@ -435,6 +444,7 @@ third-party feed to detect or resolve findings.
 ```claim
 kind: constraint
 evaluator: none
+depends: [backend-enumeration, backend-chain-append]
 ```
 
 **[trust-policy-pure]**: Verdict computation MUST be a pure function
@@ -452,13 +462,14 @@ auditable against the configuration that produced it.
 ```claim
 kind: constraint
 evaluator: none
+because: [docs/models/execution-model#2.2]
 ```
 
 ### Verdict basis and scoped freshness (ADR-0009)
 
 _Added 2026-07-30._ Two extensions to the type declarations and rule
-language above, from [design-of-record §9a](../../.ledger/atom-refinement-2026-07-29.md)
-by way of [ADR-0009](../adr/0009-atom-composition-plane.md): a bare
+language above, from the design-of-record §9a discussion, by way of
+[ADR-0009](../adr/0009-atom-composition-plane.md): a bare
 `Verdict` tag tells a caller *what* was decided but not *on what basis*,
 and the acceptance procedure has no way yet to express a freshness
 requirement without making refusal-on-stale the global default — which
@@ -481,6 +492,7 @@ snapshot it rests on. No `Into<bool>`.
 ```claim
 kind: constraint
 evaluator: none
+because: [docs/models/execution-model#4.2]
 ```
 
 **Refusing offline gains no information.** [ADR-0007
@@ -500,6 +512,7 @@ only stops work.
 ```claim
 kind: constraint
 evaluator: none
+because: [docs/adr/0007-atom-version-integrity-system#16]
 ```
 
 ### The acceptance procedure
@@ -564,6 +577,7 @@ context, not as verdict subjects).
 ```claim
 kind: constraint
 evaluator: none
+depends: [trust-anchored-input, trust-owner-selector, trust-role-authorization, trust-rule-determinism, trust-mode-rule, trust-contested-refusal, trust-threshold-rule]
 ```
 
 ### Behavioral Properties
@@ -579,6 +593,7 @@ part-fact; no policy state makes the procedure abstain.
 ```claim
 kind: constraint
 evaluator: none
+depends: [trust-acceptance-procedure]
 ```
 
 **[trust-no-silent-serve]**: A record MUST NOT be served as a cache
@@ -593,6 +608,7 @@ record's cryptographic validity.
 ```claim
 kind: constraint
 evaluator: none
+depends: [trust-acceptance-procedure]
 ```
 
 ## Proof Obligations
