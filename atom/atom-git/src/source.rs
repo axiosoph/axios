@@ -121,6 +121,7 @@ impl AtomSource for GitSource {
     type Entry = GitEntry;
     type Error = GitError;
 
+    // docket: anchor-vector-authenticity :: cargo test --manifest-path atom/Cargo.toml -p atom-git --test integration -- test_resolve_registry_branch_returns_real_czd test_resolve_registry_branch_rejects_claim_with_forged_tmb --exact
     async fn resolve(&self, id: &AtomId) -> Result<Option<Self::Entry>, Self::Error> {
         let repo = self.repo();
         let mut versions = Vec::new();
@@ -447,6 +448,8 @@ impl AtomSource for GitSource {
             // `[store-claim-ref]`: a publish payload referencing a claim
             // czd with no corresponding claim commit in the store MUST be
             // treated as an error, not silently skipped.
+            // docket: publish-tag-claim-binding :: cargo test --manifest-path atom/Cargo.toml -p atom-git --test integration -- test_resolve_store_branch_returns_real_czd test_local_ingest --exact
+            // docket: store-claim-ref :: cargo test --manifest-path atom/Cargo.toml -p atom-git --test integration -- test_local_ingest_propagates_full_succession_chain test_resolve_store_branch_returns_real_czd --exact
             let claim_ref = repo
                 .try_find_reference(&claim_ref_name)?
                 .ok_or_else(|| GitError::UnclaimedPublish(claim_czd_hex))?;
