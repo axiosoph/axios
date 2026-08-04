@@ -132,6 +132,11 @@ both a `[package]` section and a `[compose]` section. The `[deps]`
 section is OPTIONAL and defaults to empty (no dependencies).
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: test
+```
+
 **[package-identity-required]**: The `[package]` section MUST contain
 a `label` field (a valid `Label`) and a `version` field (a valid
 semantic version as defined by the [Semantic Versioning 2.0.0
@@ -139,20 +144,40 @@ specification](https://semver.org)). The `description` field is
 OPTIONAL.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[set-declaration-completeness]**: Every set name referenced in
 `[deps.from.<set>]` MUST have a corresponding entry in
 `[package.sets]`. A manifest that references an undeclared set MUST
 be rejected during validation.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: test
+```
+
 **[set-mirror-minimum]**: Each set declared in `[package.sets]` MUST
 contain at least one mirror (either a URL or the local sentinel `::`).
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: test
+```
 
 **[composer-set-reference]**: If the composer uses the `with` variant,
 the `from` field MUST reference a set declared in `[package.sets]`.
 The referenced atom MUST be resolvable from that set.
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 **[version-constraint-syntax]**: Version constraints in
 `[deps.from.<set>]` MUST use semantic versioning range syntax as
@@ -162,10 +187,21 @@ atom-sourcing.md) is semver. Examples: `"^1.0.0"`, `">=2.0,<3.0"`,
 `"=1.2.3"`, `"*"`.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+depends: [version-total-order]
+```
+
 **[deny-unknown-fields]**: A valid manifest MUST reject any fields not
 defined by the manifest schema or by registered plugins. This prevents
 silent misconfiguration from typos or deprecated fields.
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: test
+```
 
 **[label-version-uniqueness]**: Within a single atom-set, the pair
 (label, version) MUST uniquely identify an atom snapshot. This is a
@@ -173,6 +209,12 @@ consequence of atom-transactions.md atom identity, restated here for
 manifest clarity: publishing a new snapshot under an existing
 (label, version) pair is forbidden.
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+depends: [atom-version-identity]
+```
 
 ### Direct Dependency Plugin Extension
 
@@ -182,6 +224,11 @@ for non-atom dependencies. Each plugin is identified by a tag (e.g.,
 The schema within each plugin namespace is defined by the plugin, not
 by ion core.
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 **[plugin-lock-contract]**: A direct dependency plugin MUST produce
 lock entries containing at minimum:
@@ -197,12 +244,24 @@ SHA256 for others). Ion core does not interpret the hash — it captures
 it in the lock and passes it through.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+depends: [plugin-extension-point]
+```
+
 **[plugin-lock-type-tag]**: Each lock entry produced by a plugin MUST
 carry a type tag that identifies both the plugin and the specific
 fetch strategy (e.g., `"nix"`, `"nix+git"`, `"nix+tar"`,
 `"nix+build"`). This tag enables eos to select the correct fetch and
 verification strategy without understanding ion's plugin mechanism.
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+depends: [plugin-extension-point]
+```
 
 **[plugin-owner-tracking]**: When a plugin dependency originates from
 a transitive atom dependency (not the root manifest), the lock entry
@@ -212,11 +271,23 @@ graph reconstruction and targeted re-resolution when the owning atom
 updates.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+depends: [plugin-extension-point]
+```
+
 **[plugin-resolution-locality]**: Plugin resolution MUST execute
 within ion (or the plugin itself). Eos MUST NOT be required to
 understand the plugin's resolution logic. Eos consumes only the lock
 output: type tag, name, URL, and hash.
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+depends: [plugin-extension-point]
+```
 
 > **Note (2026-07-05, P4 flag):** The substrate's record-mode fetch
 > proxy (HTC/L2, `htc-sad.md` §4.2) performs fetch _discovery_ during
@@ -240,6 +311,12 @@ any resolution or publish operation.
   manifests MUST be rejected with a diagnostic error.
   `VERIFIED: test (ion/ion-manifest/src/lib.rs::IonManifest::parse -- test_valid_manifest_parsing, test_manifest_missing_required_sections, test_manifest_deny_unknown_fields, test_set_declaration_completeness, ion_manifest_invalid_rejected property test)`
 
+```claim
+kind: constraint
+evaluator: test
+depends: [manifest-required-sections, set-declaration-completeness, composer-set-reference, deny-unknown-fields]
+```
+
 **[manifest-add-dep]**: Adding a dependency via CLI (e.g., `eka add`)
 MUST update the manifest and trigger re-resolution.
 
@@ -251,6 +328,12 @@ MUST update the manifest and trigger re-resolution.
   pipeline. The manifest is re-validated after modification.
   `VERIFIED: unverified`
   `RESIDUE: Phase 1/2 -- no CLI "add" command or re-resolution pipeline exists; ion-manifest only parses/validates a manifest already on disk`
+
+```claim
+kind: constraint
+evaluator: none
+depends: [manifest-parse]
+```
 
 **[manifest-add-mirror]**: Adding a mirror to an existing set MUST
 validate the mirror's anchor against the set's established anchor.
@@ -264,6 +347,12 @@ validate the mirror's anchor against the set's established anchor.
   `VERIFIED: unverified`
   `RESIDUE: Phase 1/2 -- no mirror-add or anchor-bijection-validation logic exists anywhere in the codebase`
 
+```claim
+kind: constraint
+evaluator: none
+depends: [set-anchor-bijection]
+```
+
 ### Forbidden States
 
 **[no-orphaned-set]**: A set declared in `[package.sets]` that is
@@ -273,15 +362,31 @@ This is explicitly NOT forbidden.
 `VERIFIED: unverified`
 `RESIDUE: Uncertain, flagged for review -- IonManifest::parse (ion/ion-manifest/src/lib.rs) never checks the sets-to-deps direction, so an orphaned set is accepted by construction (satisfying this permissive constraint), but no dedicated test asserts that case; the property-based roundtrip test can generate it incidentally but does not name it as the behavior under test. Conservative RESIDUE pending a dedicated positive test.`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[no-undeclared-set-reference]**: A `[deps.from.<set>]` section MUST
 NOT reference a set not declared in `[package.sets]`. Corollary of
 `[set-declaration-completeness]`.
 `VERIFIED: test (ion/ion-manifest/src/lib.rs::IonManifest::parse set-declaration-completeness check -- test_set_declaration_completeness, ion_manifest_invalid_rejected case 1 "undeclared-set-name")`
 
+```claim
+kind: constraint
+evaluator: test
+depends: [set-declaration-completeness]
+```
+
 **[no-self-dependency]**: An atom MUST NOT declare a dependency on
 itself (same label from the local set). Implementations MUST detect
 and reject self-referential dependencies.
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 ### Behavioral Properties
 
@@ -294,6 +399,11 @@ identical.
 - **Type**: Safety
   `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: property-test
+```
+
 **[manifest-validation-total]**: Manifest validation MUST catch all
 constraint violations in a single pass and report all errors, not
 just the first one. This enables users to fix multiple issues without
@@ -302,6 +412,11 @@ repeated parse-fix-parse cycles.
 - **Type**: Liveness (usability)
   `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[plugin-isolation]**: Plugins MUST NOT modify ion core manifest
 sections (`[package]`, `[compose]`, `[deps.from]`). A plugin's scope
 is strictly limited to its own namespace under `[deps.direct.<tag>]`
@@ -309,6 +424,12 @@ and its corresponding lock entries.
 
 - **Type**: Safety
   `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+depends: [plugin-extension-point]
+```
 
 ## Manifest Schema (Informative)
 
