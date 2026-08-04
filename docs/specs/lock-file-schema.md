@@ -126,10 +126,11 @@ semantically-inert lock edit exists to spuriously shift identity.
 ## Top level
 
 **[lock-schema-version]**: The lock MUST contain a top-level integer
-field `schema`, in minimal decimal form. This document specifies
-`schema = 2`. Consumers MUST refuse locks whose schema version they do
-not implement.
-`RESIDUE: Phase 1 -- LockFileV2.schema is a typed u64 field, but no code path rejects an unrecognized schema version; no such check or test exists (ion/ion-lock/src/v2.rs)`
+field `version`, in minimal decimal form. This document specifies
+`version = 0`, denoting a pre-MVP schema: the shape is unstable and no
+compatibility is promised across changes until an MVP fixes it.
+Consumers MUST refuse locks whose version they do not implement.
+`RESIDUE: Phase 1 -- the field exists as a typed u64 but under the superseded v2 framing (named schema, valued 2; ion/ion-lock/src/v2.rs); no code path rejects an unrecognized version, and no such check or test exists`
 
 **[lock-tool-owned]**: The lock is tool-authored; humans review lock
 diffs and never hand-edit them in supported workflows. The canonical
@@ -377,10 +378,13 @@ MUST be byte-identical.
 `RESIDUE: Phase 2 -- LockFileV2::to_canonical is an explicit unimplemented!() stub by design (ion/ion-lock/src/v2.rs); canonical_form_is_byte_exact is a red test (#[ignore], "canonical encoder is unimplemented by design")`
 
 **[lock-atomic-write]**: Every lock mutation MUST be a whole-file
-atomic write. Write phases (resolution; later promotions) land in their
-own sections; independent promotions MUST be reorder-invariant —
-running two independent promotions in either order MUST yield the same
-bytes (Execution Model §8, P6).
+atomic write: after any crash or interruption, either the old lock is
+intact or the new lock has completely replaced it, with no intermediate
+state observable. Implementations SHOULD write to a temporary file and
+rename. Write phases (resolution; later promotions) land in their own
+sections; independent promotions MUST be reorder-invariant — running
+two independent promotions in either order MUST yield the same bytes
+(Execution Model §8, P6).
 `RESIDUE: Phase 2 -- no lock-writing code exists at all; ion-lock is currently a parse/validate-only crate (no LockFileV2 writer, temp-then-rename, or promotion-merge path)`
 
 ## Deliberate absences

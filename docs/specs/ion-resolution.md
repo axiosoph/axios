@@ -101,11 +101,9 @@ patch, then pre-release identifiers. Build metadata is ignored for
 precedence.
 `VERIFIED: unverified`
 
-**[lock-schema-version]**: The lock file MUST contain a `version`
-field. The current schema version is `0`. Implementations MUST reject
-lock files with unrecognized schema versions rather than silently
-misinterpreting them.
-`VERIFIED: unverified`
+The lock's top-level `version` field is specified by
+[lock-file-schema.md](lock-file-schema.md) `[lock-schema-version]`.
+Resolution does not constrain it further.
 
 **[lock-sets-capture]**: The lock file MUST capture the mapping from
 anchors to mirror sets. This is the set-level information required by
@@ -216,15 +214,11 @@ for the current operation. Subsequent reads within the same operation
   `VERIFIED: unverified`
   `RESIDUE: Phase 2 -- depends on the same unimplemented reconciliation pipeline as [reconcile]; no operation-scoped lock-freeze mechanism exists`
 
-**[lock-atomic-write]**: Lock file writes MUST be atomic. A crash or
-interruption during lock file writing MUST NOT corrupt the existing
-lock file. Implementations SHOULD use write-to-temporary-then-rename.
-
-- **PRE**: A new lock file state has been computed.
-- **POST**: Either the old lock file is intact, or the new lock file
-  has completely replaced it. No intermediate state is observable.
-  `VERIFIED: unverified`
-  `RESIDUE: Phase 2 -- no lock-writing code exists at all; ion-lock is currently parse/validate-only (same gap as [lock-atomic-write] in lock-file-schema.md)`
+Lock write atomicity — including the crash-safety guarantee and the
+write-to-temporary-then-rename discipline — is specified by
+[lock-file-schema.md](lock-file-schema.md) `[lock-atomic-write]`.
+Resolution computes the new lock state; it does not specify how that
+state is written.
 
 ### Forbidden States
 
@@ -350,7 +344,6 @@ owner = "<publish-czd-of-owning-atom>"
 | Constraint                       | Method      | Result | Detail                                                  |
 | :------------------------------- | :---------- | :----- | :------------------------------------------------------ |
 | version-semantics-semver         | agent-check | pass   | semver is well-defined; consistent with protocol        |
-| lock-schema-version              | agent-check | pass   | Prevents silent misinterpretation                       |
 | lock-sets-capture                | agent-check | pass   | Consistent with atom-sourcing lock-entry-sufficient     |
 | lock-atom-entry-fields           | agent-check | pass   | Contains all protocol LockEntry fields + ion extensions |
 | lock-requires-graph              | agent-check | pass   | SHOULD level; enables graph reconstruction              |
@@ -380,9 +373,10 @@ ion-manifest.md or atom-sourcing.md. Agent-level verification (Tier 1).
    complete SAT-based resolver with deterministic variable ordering.
    The PoC uses `resolvo`. The spec does not mandate a specific solver.
 
-2. **Lock migration**: The `[lock-schema-version]` field enables
-   future format evolution. Migration logic can detect the version and
-   transform older formats.
+2. **Lock migration**: The lock's `version` field
+   ([lock-file-schema.md](lock-file-schema.md) `[lock-schema-version]`)
+   enables format evolution once an MVP fixes the schema. At
+   `version = 0` no migration path is promised.
 
 3. **Plugin deps in lock**: Plugin lock entries share the `[[deps]]`
    array with atom entries, discriminated by type tag. This is exactly
