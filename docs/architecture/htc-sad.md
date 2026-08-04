@@ -71,6 +71,11 @@ names the mechanism that observes it for the _build/check-phase_ case,
 and §8.1 names the corresponding runtime-side failure mode for a _mounted
 view_ that turns out to be missing something it needs.
 
+```claim
+kind: requirement
+evaluator: none
+```
+
 ### 1.2 External Actors
 
 ```mermaid

@@ -311,6 +311,13 @@ would require per-atom anchor maintenance that tracks every key
 rotation by hand._
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+depends: [claim-owner-single, owner-authorization-delegated]
+because: [charter-owner-set, claim-charter-authorization]
+```
+
 **[trust-threshold-rule]**: Acceptance of a derived execution record
 as `fact` for cache service is quorum-gated. For a candidate record
 `r` at action identity `a`, signed by anchored signer `s` (entry
