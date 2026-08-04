@@ -229,7 +229,6 @@ the founding charter (atom-transactions.md `[charter-succession]`);
 absent succession, the re-hashed repository is a distinct atom-set. The
 backend MUST treat the anchor as opaque bytes and MUST NOT rehash,
 truncate, or transform them.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -245,7 +244,6 @@ to `ATOM_AUTHOR`, (2) timestamps to `ATOM_TIMESTAMP`, (3) commit message
 to `ATOM_MESSAGE`, (4) no parent commits, (5) exactly one extra header
 (`src`) containing the source revision ObjectId, (6) no GPG signatures.
 The commit hash is the `dig` field in the publish payload.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -256,7 +254,6 @@ evaluator: test
 are detached subtrees — they carry no history. Provenance is recorded
 in the `src` extra header and the publish payload, not in git's parent
 chain. (Satisfies atom-transactions.md `[atom-detached]`.)
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -279,7 +276,6 @@ hex text, so "match" means the header's hex-decoded bytes equal the
 payload's raw bytes, not literal string equality. A consumer MAY
 verify this as a quick integrity check before performing full Coz
 signature verification.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -312,7 +308,6 @@ temporal floor — only content at or after the claim is publishable.
 the verifier MUST check that the publish's `src` is genuinely in the
 repository's history and is at or after the claim's `src`. This uses
 treeless commit-only fetching (`tree:0`) for efficiency.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -342,7 +337,6 @@ diverge from the signed truth, and — collapsed onto a single mutable tip
 ref — would hide the divergent-successor fork that
 `[charter-succession-linear]` requires consumers to detect. Succession
 therefore lives in the signed payload alone.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -356,7 +350,6 @@ MUST be a valid, complete `CozMessage` JSON object whose payload has
 pass Coz verification. No additional text, headers, or formatting
 SHOULD be present outside the CozMessage JSON. (The charter analogue of
 `[claim-message-is-coz]`.)
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -380,7 +373,6 @@ set-authority fork directly and MUST fail closed per
 select a winner. This encoding satisfies `[charter-succession]`,
 `[charter-succession-linear]`, and `[charter-ancestry]`; it does not
 restate or alter them.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -399,7 +391,6 @@ repository's commit history; in the common no-succession case there is
 exactly one charter and the cost is O(1). This is the bounded replacement
 for the retired genesis-graph walk (`[anchor-oldest-root]`), which walked
 unbounded commit ancestry.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -419,7 +410,6 @@ only; it carries no protocol trust and cannot be claimed or published
 until the set is chartered, after which atoms built from
 charter-descended revisions anchor to `czd(charter₀)` normally
 (`[fs-ingest-transition]`).
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -436,7 +426,6 @@ message), which contributes to the commit hash. This design ensures
 claims are lightweight (empty tree = no blob download), the full
 ownership history is structurally auditable by walking the chain, and
 claim objects are isolated from the main branch DAG.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -448,7 +437,6 @@ be a valid, complete `CozMessage` JSON object whose payload has
 `typ: "atom/claim"`. The message MUST be parseable as JSON and MUST
 pass Coz verification. No additional text, headers, or formatting
 SHOULD be present outside the CozMessage JSON.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -460,7 +448,6 @@ an atom commit (a deterministic, parentless commit with a `src` extra
 header). An update publish tag MUST target the previous publish tag for
 the same `(label, version)`. A publish tag MUST NOT target a regular
 commit, tree, or blob.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -472,7 +459,6 @@ MUST contain a `claim` field whose value is the czd of the authorizing
 claim. The claim commit is looked up via `refs/atom/claims/d/{czd}`
 (or `refs/atom/claims/pub/{label}` in the originating registry). No
 extra header is needed — the signed payload is the sole binding.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -484,7 +470,6 @@ MUST be a valid, complete `CozMessage` JSON object whose payload has
 `typ: "atom/publish"`. The message MUST be parseable as JSON and MUST
 pass Coz verification. No additional text or formatting SHOULD be
 present outside the CozMessage JSON.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -502,7 +487,6 @@ This ensures: (a) lock files referencing old tag ObjectIds remain
 resolvable, (b) the full update history is structurally represented,
 (c) consumers can reconstruct the complete chain of ownership/signing
 by walking the tag chain.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -514,13 +498,15 @@ evaluator: test
 backend MUST NOT reformat, re-serialize, or alter the JSON in any
 way. (Satisfies atom-transactions.md `[backend-bit-perfect]`;
 discharges atom-backend-contract.md `[backend-carriage-bit-perfect]`.)
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
 evaluator: test
 because: [backend-bit-perfect, backend-carriage-bit-perfect]
 ```
+
+Verification will store a `CozMessage`, retrieve it, and byte-compare
+against the original.
 
 **[odb-immutable]**: The backend MUST treat the object database as
 append-only for protocol objects (charter/claim/atom commits, publish
@@ -531,7 +517,6 @@ garbage collection of protocol-unreachable objects. Git's
 content-addressed object store provides this by construction; the
 constraint makes the reliance explicit rather than implicit.
 (Discharges atom-backend-contract.md `[backend-store-immutable]`.)
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -550,7 +535,6 @@ as a cache reconstructible from refs + objects. This is what makes
 liveness-by-reachability, rollback-by-old-ref, and GC arguments
 transfer to the intent store. (Discharges atom-backend-contract.md
 `[backend-refs-sole-mutability]`.)
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -568,7 +552,6 @@ hash collision. Every ancestry-dependent check in this spec
 the hash-committed one — never over whatever a query layer happens to
 answer. (Discharges atom-backend-contract.md
 `[backend-ancestry-sound]`.)
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -588,7 +571,6 @@ Ancestry verification MUST NOT be attempted against a depth-limited
 root to a naive walk, so the check MUST fail closed rather than pass;
 treeless fetching (`tree:0`, `[temporal-vector]`) is the sanctioned
 minimal mode — it limits blobs, never ancestry.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -610,7 +592,6 @@ dev refs), blake3-hex (`refs/atom/d/{blake3(publish_czd)}`), and
 oid-hex (`refs/atom/src/{oid}`) — each family renders exactly one
 sort, parsing MUST rehydrate the segment to that sort, and comparison
 of raw segments across families is ill-typed.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -635,7 +616,6 @@ irreducible without migrating this repository's history to a stronger
 hash (atom-transactions.md `[content-hash-obligation]`'s "Known
 limit"). (Registers atom-backend-contract.md `[backend-hash-strength]`
 for the git instantiation.)
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -674,7 +654,6 @@ oid-hex family); `content_hash` is a distinctly named field in a
 different structure (the `PublishPayload`, not a git commit header)
 and MUST NOT be inferred from, or cross-checked against, `src`'s
 length or position.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -688,7 +667,6 @@ replaced (e.g., key compromise), the new claim commit's parent MUST
 be the previous claim commit, forming a chain. The ref
 (`refs/atom/claims/pub/{label}`) is updated to point to the new tip.
 All historical claims are reachable by walking the chain from the tip.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -701,7 +679,6 @@ ref layout MUST disambiguate them by `blake3(publish_czd)`. Distinct
 publishes produce distinct publish czds and therefore distinct flat ref
 keys — disambiguation is guaranteed by the cryptographic uniqueness of
 the publish czd, without coordination.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -727,7 +704,6 @@ commits from GC if the originating branch is deleted.
 **[registry-ref-label-unique]**: Within a single registry, the `{label}`
 segment MUST be unique. No two atoms in the same registry MAY share a
 label. (Satisfies atom-transactions.md `[atomid-per-source-unique]`.)
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -741,7 +717,6 @@ is replaced, this ref MUST be updated to point to the new claim commit.
 The old claim commit remains in the repository's history. Claim refs
 are separated from atom version refs to avoid polluting the version
 subtree.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -753,7 +728,6 @@ MUST point to an annotated tag object (the publish tag tip), which
 either directly targets the deterministic atom commit (initial publish)
 or targets a previous tag in the update chain (updates). The
 `{version}` segment is the `RawVersion` string from the publish payload.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -798,7 +772,6 @@ distinct tags, base or amendment, produce distinct publish czds and
 therefore distinct flat ref keys — and ensures a lock pinned to any
 tag in the chain, not only the base, remains resolvable for as long as
 that tag's ref persists.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -817,7 +790,6 @@ The chain also makes the full ownership history locally auditable. If
 a publish tag's payload references a claim czd but no corresponding
 claim commit exists in the object store, this MUST be treated as an
 error.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -830,7 +802,6 @@ publish czds and therefore new flat ref keys
 (`refs/atom/d/{blake3(new_publish_czd)}`). Versions published under
 the old claim remain under their original `blake3(publish_czd)` keys —
 they are still valid artifacts signed by the old claim.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -846,7 +817,6 @@ that claim czd, the backend SHOULD also delete the corresponding
 `refs/atom/claims/d/{claim_czd}` ref to prevent orphaned claim
 accumulation. Git has no cross-namespace reference counting, so this
 cleanup is the backend's responsibility.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -877,7 +847,6 @@ against — the git instance of atom-transactions.md `[charter-transition]`
 POST ("stored in the source's atom refs, enumerable by consumers and
 retrievable by its czd"). The family is identical in a source and a
 store; ingesting a set fetches its charter chain into the same family.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -909,7 +878,6 @@ backend by creating a parentless charter commit.
   enumerable and retrievable by czd, discharging atom-transactions.md
   `[charter-transition]` POST for the git backend. Multi-ref writes
   follow `[refs-atomic-multi]`.
-  `VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -935,7 +903,6 @@ detached claim commit.
   chain). The ref `refs/atom/claims/pub/{label}` points to the new
   tip. A protective ref `refs/atom/src/{src_oid}` is written to
   prevent GC of the claim's source revision.
-  `VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -966,7 +933,6 @@ publish tag.
   longer matches what the signer verified against. Discharges the
   per-name register law, atom-backend-contract.md
   `[backend-refs-linearizable]`.)_
-  `VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -992,7 +958,6 @@ another store) into a store.
   in the ODB during verification, but are invisible to consumers
   until the refs transaction is committed. (Satisfies
   atom-transactions.md `[ingest-preserves-identity]`.)
-  `VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -1013,7 +978,6 @@ replaced (e.g., after key compromise).
   the new claim's `czd` and satisfy `[temporal-vector]` with respect
   to the new claim. Existing publish tags remain valid under the old
   claim. The full claim history is walkable from the new tip.
-  `VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -1087,7 +1051,6 @@ chain.
   (consistent with `[tag-chain-immutable]`). The old tag object
   persists in the object database. Git's tag-peeling resolves the
   chain to the underlying atom commit.
-  `VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -1120,7 +1083,6 @@ atom-transactions.md `[fact-kind-table]`) MAY be set by the base tag or
 by any later tag in the chain. Altering the artifact identity (`dig`),
 version string, or source revision requires a new atom commit and a
 new publish ref — not an update to an existing tag chain.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -1138,7 +1100,6 @@ cross-mirror consistency is convergence, not atomicity
 2026-07-12 from the Atomicity implementation guidance below to a
 tagged constraint; discharges the per-store half of
 atom-backend-contract.md `[backend-refs-atomic-multi]`.)_
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -1166,7 +1127,6 @@ be ingested into a git `AtomStore` without claims or publishes.
   (`[dev-atom-unchartered-local]`). Note: the dev atom's `dig` will inherently
   differ from the published `dig` because published atoms include a
   real `src` extra header — this is by design.
-  `VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -1204,7 +1164,6 @@ depends: [ingest-transition]
 empty tree as its `tree`. If a claim commit has a non-empty tree,
 the backend MUST reject it as malformed. A claim's parent (if present)
 MUST be another claim commit (also with empty tree).
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -1215,7 +1174,6 @@ evaluator: none
 without a corresponding claim commit reachable via
 `refs/atom/claims/pub/{label}` or `refs/atom/claims/d/{claim_czd}`.
 (Satisfies atom-transactions.md `[no-unclaimed-publish]`.)
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -1227,7 +1185,6 @@ because: [no-unclaimed-publish]
 (`src`) that precedes the claim's `src` in the repository's history.
 The publish's `src` MUST be at or after the claim's `src`. This is the
 enforcement mechanism for `[temporal-vector]`.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -1238,7 +1195,6 @@ because: [temporal-vector]
 **[no-label-collision-registry]**: Two atoms in the same registry
 MUST NOT share a label. This is enforced by the ref layout — two
 claim refs for the same label would conflict.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -1262,7 +1218,6 @@ references a claim czd, the corresponding claim commit MUST exist in
 the store's object database and MUST be reachable via
 `refs/atom/claims/d/{claim_czd}`. A missing claim MUST be treated as
 ingestion corruption.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -1283,7 +1238,6 @@ equal to) the effective charter's `src` (`[charter-ancestry]`),
 a "vector of authenticity": charter src → claim src → publish src.
 
 - **Type**: Safety
-  `VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -1299,7 +1253,6 @@ shallow-fetched (without their ancestry) into stores to minimize
 transfer cost.
 
 - **Type**: Safety
-  `VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -1313,7 +1266,6 @@ ref tip. Each tag object in the chain carries its own `CozMessage`,
 enabling verification of the complete signing history.
 
 - **Type**: Safety
-  `VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -1333,7 +1285,6 @@ surface this as a distinct "chain tip unavailable" error and MUST NOT
 silently fall back to a different publish.
 
 - **Type**: Safety
-  `VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -1346,7 +1297,6 @@ return at least what the source's `resolve` returns for every
 ingested atom. (Model §2.3, ⊇ condition.)
 
 - **Type**: Safety
-  `VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -1357,67 +1307,6 @@ depends: [docs/models/publishing-stack-layers#2.3]
 <!-- [publish-extensible] moved to atom-transactions.md — this is a
      protocol-level property of the Coz message format, not a git
      backend concern. -->
-
-## Verification
-
-| Constraint                   | Method           | Result  | Detail                                                 |
-| :--------------------------- | :--------------- | :------ | :----------------------------------------------------- |
-| anchor-is-genesis            | retired          | n/a     | Superseded by `czd(charter₀)`; see Open Questions #5   |
-| anchor-hash-agile            | agent-check      | pending | Anchor is a czd, not an ObjectId; re-hash = succession |
-| snapshot-deterministic       | unit-test        | pending | Same (tree, src) → same commit hash                    |
-| snapshot-parentless          | unit-test        | pending | Atom commit has zero parents                           |
-| snapshot-src-header          | unit-test        | pending | Atom commit has exactly one extra header `src`         |
-| temporal-vector              | integration-test | pending | charter src → claim src → publish src enforced         |
-| charter-commit-format        | unit-test        | pending | Charter: parentless, empty tree, CozMessage message    |
-| charter-message-is-coz       | integration-test | pending | Parse charter from commit message, verify typ          |
-| charter-succession-via-prior | integration-test | pending | Walk signed `prior`; divergent successors fail closed  |
-| charter-src-reachable        | integration-test | pending | Effective charter `src` via head, bounded cost         |
-| charter-ref-by-czd           | integration-test | pending | `charter/d/{czd}` addresses, GC-protects, enumerates   |
-| charter-transition-git       | integration-test | pending | Charter creates parentless commit + `charter/d/` ref   |
-| dev-atom-unchartered-local   | integration-test | pending | Unchartered dev atom = local, sentinel anchor          |
-| claim-detached               | unit-test        | pending | Claim: empty tree, chains to prev if exists            |
-| claim-message-is-coz         | integration-test | pending | Parse claim from commit message, verify                |
-| publish-tag-targets-correct  | integration-test | pending | Tag target is atom commit or previous tag              |
-| publish-tag-claim-binding    | integration-test | pending | Payload `claim` czd resolves to valid claim            |
-| publish-tag-message-is-coz   | integration-test | pending | Tag message is valid CozMessage JSON                   |
-| tag-chain-immutable          | integration-test | pending | Update creates chain, old tags persist                 |
-| coz-bit-perfect              | integration-test | pending | Store → retrieve → byte-compare                        |
-| single-active-claim-registry | integration-test | pending | Second claim for same label replaces ref               |
-| store-claim-disambiguation   | integration-test | pending | Two publishes, same AtomId, distinct blake3 keys       |
-| registry-ref-label-unique    | integration-test | pending | Conflicting labels rejected                            |
-| registry-ref-claim           | integration-test | pending | Ref points to active claim commit                      |
-| registry-ref-version         | integration-test | pending | Ref points to publish tag tip                          |
-| store-ref-by-publish-czd     | integration-test | pending | Store refs keyed by blake3(publish_czd)                |
-| store-claim-ref              | integration-test | pending | Claim commit ref exists, GC-protected                  |
-| store-ownership-migration    | integration-test | pending | New claim → new ref path                               |
-| claim-transition-git         | integration-test | pending | Claim creates commit + 2 refs, chains if needed        |
-| publish-transition-git       | integration-test | pending | Publish creates atom commit + tag + src ref            |
-| ingest-transition            | integration-test | pending | Full ingest cycle preserves identity                   |
-| claim-replacement-storage    | integration-test | pending | New claim replaces ref, old commit stays               |
-| publish-update-transition    | integration-test | pending | New tag carries amendment payload; overwrite-class change without claim-owner signature rejected; append-class from any signer accepted; chains to old tag, ref updated |
-| fs-ingest-transition         | integration-test | pending | FS atoms ingested unsigned into store                  |
-| no-non-empty-claim           | unit-test        | pending | Validation rejects non-empty-tree claim                |
-| no-orphan-publish            | integration-test | pending | Publish without claim rejected                         |
-| no-backdated-src             | integration-test | pending | publish src before claim src rejected                  |
-| no-label-collision-registry  | integration-test | pending | Duplicate label rejected                               |
-| anchor-oldest-root           | retired          | n/a     | Retired with anchor-is-genesis (no anchor discovery)   |
-| no-missing-store-claim       | integration-test | pending | Missing claim for payload czd detected                 |
-| anchor-vector-authenticity   | integration-test | pending | Full vector: charter src → claim src → publish src     |
-| ingestion-portable           | integration-test | pending | git fetch transfers all objects correctly              |
-| update-chain-auditable       | integration-test | pending | Tag chain walkable, all CozMessages retrievable        |
-| store-accumulates            | integration-test | pending | Post-ingest resolve ⊇ source resolve                   |
-| dev-atom-resolution          | integration-test | pending | Local → dev/{anchor}/{label}/{ver}, remote → d/        |
-| peel-content-integrity       | integration-test | pending | Peeled sha == payload.dig; mismatch → reject           |
-| store-claim-cleanup          | integration-test | pending | Orphaned claim ref cleaned on version eviction         |
-| tag-chain-semantic-immutable | unit-test        | pending | Amendment payload has no identity-field slot; base tag is sole source |
-| odb-immutable                | agent-check      | pending | Protocol objects append-only; GC only if unreachable   |
-| refs-sole-mutable            | agent-check      | pending | No protocol state outside refs + objects               |
-| ancestry-hash-committed      | agent-check      | pending | Parent OIDs in hashed preimage; checks quantify over it |
-| ancestry-query-path          | integration-test | pending | replace/grafts ignored; shallow ancestry fails closed  |
-| czd-oid-disjoint             | agent-check      | pending | Czd/OID distinct types; ref segments rehydrate to sort |
-| oid-hash-inheritance         | agent-check      | pending | SHA-1 dig/src documented; dig closure is content_hash (atom-transactions.md), src closure irreducible |
-| src-hash-kind-disambiguated  | agent-check      | pending | src header length (40/64) is the sole algorithm indicator |
-| refs-atomic-multi            | integration-test | pending | Multi-ref transitions commit atomically per store      |
 
 ## Implications
 
