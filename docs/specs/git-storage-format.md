@@ -780,7 +780,7 @@ another store) into a store.
   atom-transactions.md `[ingest-preserves-identity]`.)
   `VERIFIED: unverified`
 
-**[claim-replacement-transition]**: An atom's active claim MAY be
+**[claim-replacement-storage]**: An atom's active claim MAY be
 replaced (e.g., after key compromise).
 
 - **PRE**: An active claim for this label MUST exist. The new claim
@@ -1076,7 +1076,7 @@ ingested atom. (Model §2.3, ⊇ condition.)
 | claim-transition-git         | integration-test | pending | Claim creates commit + 2 refs, chains if needed        |
 | publish-transition-git       | integration-test | pending | Publish creates atom commit + tag + src ref            |
 | ingest-transition            | integration-test | pending | Full ingest cycle preserves identity                   |
-| claim-replacement-transition | integration-test | pending | New claim replaces ref, old commit stays               |
+| claim-replacement-storage    | integration-test | pending | New claim replaces ref, old commit stays               |
 | publish-update-transition    | integration-test | pending | New tag carries amendment payload; overwrite-class change without claim-owner signature rejected; append-class from any signer accepted; chains to old tag, ref updated |
 | fs-ingest-transition         | integration-test | pending | FS atoms ingested unsigned into store                  |
 | no-non-empty-claim           | unit-test        | pending | Validation rejects non-empty-tree claim                |
@@ -1165,7 +1165,7 @@ ingested atom. (Model §2.3, ⊇ condition.)
 - **Claim metadata**: Clients SHOULD leverage
   `[claim-payload-extensible]` to provide programmatic claim chain
   transition metadata in replacement claims. When a new claim replaces
-  a previous one (via `[claim-replacement-transition]`), the new
+  a previous one (via `[claim-replacement-storage]`), the new
   claim's `meta` object communicates the intent to consumers who may
   hold the old claim from a stale mirror.
   Recommended fields for client implementors (all nested under `meta`):

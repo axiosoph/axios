@@ -334,7 +334,7 @@ stateDiagram-v2
   Claimed --> Superseded: meta.supersedes:"revoke"\n(new claim in chain carries revocation)
   note right of Claimed
     [single-active-claim-registry]: ≤1 active claim/AtomId;
-    [claim-replacement-transition]: chain to previous, old publishes stay valid.
+    [claim-replacement-storage]: chain to previous, old publishes stay valid.
     Revocation is verify-time: walk to the active claim at the chain tip.
   end note
 ```
@@ -403,7 +403,7 @@ specs** and are consolidated here:
 
 - Claims form an append-only **chain**: a replacement claim's commit is parented to
   the previous, and `refs/atom/claims/pub/{label}` advances to the tip
-  (`[single-active-claim-registry]`, `[claim-replacement-transition]`). Reclaiming
+  (`[single-active-claim-registry]`, `[claim-replacement-storage]`). Reclaiming
   with new keys is the normal key-rotation path; existing publishes remain valid
   under the claim they referenced.
 - **Revocation is carried in publish/claim tag metadata** —
@@ -573,7 +573,7 @@ Out of scope for the atom layer:
 | §4.2 Resolve/Acquire   | [atom-sourcing.md](../specs/atom-sourcing.md), [git-storage-format.md](../specs/git-storage-format.md)                                     |
 | §4.3 Ingest            | [atom-transactions.md](../specs/atom-transactions.md) `[ingest-preserves-identity]`                                                        |
 | §5.1 Publish Tag Chain | [git-storage-format.md](../specs/git-storage-format.md) `[tag-chain-immutable]`, `[tag-chain-semantic-immutable]`                          |
-| §5.2 Claim Chain       | [git-storage-format.md](../specs/git-storage-format.md) `[single-active-claim-registry]`, `[claim-replacement-transition]`                 |
+| §5.2 Claim Chain       | [git-storage-format.md](../specs/git-storage-format.md) `[single-active-claim-registry]`, `[claim-replacement-storage]`                    |
 | §6 plane semantics     | [atom-model.md](../models/atom-model.md) (composite duality §2, partition law §4, anchoring law §5, reproducibility contract §6)            |
 | §2.3 backend duties    | [atom-backend-contract.md](../specs/atom-backend-contract.md) (git instantiation: its Appendix A)                                          |
 | §6.1 Identity          | [atom-transactions.md](../specs/atom-transactions.md) `[identity-content-addressed]`, `[identity-stability]`                               |
