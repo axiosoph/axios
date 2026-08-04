@@ -105,6 +105,7 @@ interface BuildJob {
   getMissing @3 () -> (missingAtoms :List(AtomId));
 }
 
+# docket: eos-discovery-read-only :: cargo check --manifest-path eos/Cargo.toml -p eos-proto
 interface AtomDiscovery {
   resolve @0 (id :AtomId) -> (meta :AtomMeta);
   contains @1 (id :AtomId) -> (exists :Bool);

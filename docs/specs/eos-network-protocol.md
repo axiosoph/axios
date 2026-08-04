@@ -534,6 +534,11 @@ Cyphr cryptographic suite — implementations MUST NOT hardcode a specific curve
 or scheme.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[eos-trustless-substitution]**: When fetching a pre-built artifact from a
 remote substituter at a given store path, Eos MUST verify that the content
 digest of the fetched artifact matches the expected digest derivable from the
@@ -541,11 +546,21 @@ verified `Plan`. Eos MUST NOT import substituted artifacts that fail this
 content-address verification.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[eos-origin-attestation]**: A build artifact committed to a shared cache
 MUST be accompanied by an `OriginAttestation`: a signature from the worker
 node's `NodeIdentity` over the tuple `(PlanHash, OutputDigest)`. The
 attestation MUST include a timestamp for freshness verification.
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 **[eos-protocol-capability-matching]**: During the connection handshake, the
 client and daemon MUST exchange `HandshakeRequest`/`HandshakeResponse`
@@ -554,12 +569,23 @@ version (`apiVersion`). If no common backend exists, or if the API versions
 are incompatible, the connection MUST be terminated with a rejection reason.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[eos-signature-freshness]**: `NodeIdentity` payloads and
 `OriginAttestation` records MUST carry a timestamp and nonce. The receiving
 node MUST reject payloads whose timestamp deviates from the receiver's system
 clock by more than a configurable freshness window (default: 5 minutes).
 Nonces MUST NOT be reused within the freshness window to prevent replay.
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+depends: [eos-network-sovereign-auth, eos-origin-attestation]
+```
 
 **[eos-capability-lifecycle]**: A `BuildJob` capability returned by
 `submitBuild` MUST remain valid for the duration of the job. Dropping the
@@ -569,12 +595,23 @@ underlying build. Cancellation MUST only occur via an explicit `cancel()`
 invocation on the `BuildJob` capability.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[eos-progress-multiplexing]**: Multiple clients MUST be able to attach
 `ProgressStream` callbacks to the same `BuildJob` concurrently. Each
 attached callback MUST receive the same sequence of `BuildStatus` updates.
 When a client drops its `ProgressStream` capability, the daemon MUST clean up
 that callback's resources without disturbing other attached clients.
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+depends: [attach-progress]
+```
 
 **[eos-transport-agnosticism]**: The protocol layer MUST be decoupled from
 the transport layer. All protocol operations MUST function identically over
@@ -583,12 +620,23 @@ concerns (socket paths, TLS handshakes, Cyphr authentication) MUST be
 resolved before the Cap'n Proto `TwoPartyVatNetwork` is instantiated.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[eos-wot-substitution-threshold]**: When strict substitution policy is
 enabled, Eos MUST require that a substituted artifact carry attestations from
 at least _M_ of _N_ configured trusted builders (Web of Trust threshold)
 before accepting the artifact. The threshold values _M_ and _N_ are
 deployment-configurable.
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+depends: [eos-origin-attestation]
+```
 
 **[eos-discovery-read-only]**: The `AtomDiscovery` capability MUST NOT expose
 mutation operations. Discovery is strictly observation-only: `resolve`,
@@ -597,6 +645,11 @@ This is consistent with Eos consuming `AtomSource` (a read-only trait) per
 the formal model. Any future method added to `AtomDiscovery` MUST preserve
 this read-only invariant.
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: type
+```
 
 ---
 
@@ -614,6 +667,11 @@ connections.
   readiness.
   `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[client-connect]**: Establish an authenticated session between a client and
 the daemon.
 
@@ -625,6 +683,12 @@ the daemon.
   session. The client receives an `EosDaemon` bootstrap capability. If
   authentication fails, the connection is closed with a rejection reason.
   `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+depends: [eos-network-sovereign-auth, eos-protocol-capability-matching]
+```
 
 **[submit-build]**: Submit a build request and receive a job capability.
 
@@ -639,6 +703,11 @@ the daemon.
   capability is returned. The build proceeds asynchronously.
   `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[attach-progress]**: Attach a progress callback to a running build.
 
 - **PRE**: A client holds a `BuildJob` capability.
@@ -649,6 +718,11 @@ the daemon.
   invokes `callback.done()`.
   `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[detach-progress]**: Detach from progress streaming without cancelling the
 build.
 
@@ -658,6 +732,12 @@ build.
   removes that callback from the job's subscriber list and reclaims
   associated resources. The build continues unaffected.
   `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+depends: [attach-progress]
+```
 
 **[cancel-build]**: Cancel a running build.
 
@@ -670,6 +750,12 @@ build.
   `Cancelled` status.
   `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+depends: [submit-build]
+```
+
 **[request-substitute]**: Query remote caches for pre-built artifacts.
 
 - **PRE**: An Eos daemon has a plan in the `NeedsBuild` state and at least
@@ -681,6 +767,12 @@ build.
   content digest, and bypasses local build execution.
   `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+depends: [eos-trustless-substitution, eos-origin-attestation, eos-wot-substitution-threshold]
+```
+
 **[client-disconnect]**: Graceful or abrupt session termination.
 
 - **PRE**: A client has an active RPC session.
@@ -690,6 +782,12 @@ build.
   explicit `cancel()` terminates builds.
   `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+because: [eos-capability-lifecycle]
+```
+
 **[daemon-shutdown]**: Graceful daemon termination.
 
 - **PRE**: A shutdown signal is received (SIGTERM, explicit command).
@@ -697,6 +795,11 @@ build.
   builds to completion (or cancels them per policy), notifies connected
   clients, closes all transport endpoints, and removes the socket file (UDS).
   `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 ---
 
@@ -708,25 +811,54 @@ policy is enabled. Artifacts without attestations meeting the configured
 Web of Trust threshold MUST be rejected.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+depends: [eos-wot-substitution-threshold, eos-origin-attestation]
+```
+
 **[no-unencrypted-secrets]**: Worker nodes MUST NOT transmit private keys or
 plaintext credentials over the network during build execution or session
 establishment.
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 **[no-unauthorized-handshake]**: A connection MUST NOT be promoted to an
 authenticated RPC session if the `HandshakeRequest` signature does not
 validate against the declared `NodeIdentity` (sovereign principal).
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+depends: [eos-network-sovereign-auth]
+```
+
 **[no-cancel-on-drop]**: Dropping a `BuildJob` or `ProgressStream` capability
 MUST NOT implicitly cancel the associated build. Only an explicit `cancel()`
 invocation MAY terminate a build.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+because: [eos-capability-lifecycle]
+```
+
 **[no-unauthenticated-capability]**: The `EosDaemon` bootstrap capability
 MUST NOT be issued to a connection that has not completed the authenticated
 handshake. Unauthenticated transports MUST NOT expose any RPC surface.
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+depends: [client-connect]
+```
 
 ---
 
@@ -740,6 +872,12 @@ delay.
 - **Type**: Liveness
   `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+depends: [request-substitute]
+```
+
 **[reproducible-build-consensus]**: For high-security environments, Eos MAY
 schedule the same `Plan` on _N_ independent, distrusted worker nodes and
 verify that the resulting output digests are identical (majority consensus)
@@ -750,6 +888,11 @@ _M_-of-_N_ agreement threshold.
 - **Type**: Safety
   `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[capability-cleanup-on-disconnect]**: When a client disconnects (gracefully
 or abruptly), all server-side resources associated with that client's
 capabilities MUST be reclaimed within a bounded interval. No resource leak
@@ -757,6 +900,12 @@ MAY persist after the Cap'n Proto runtime processes the disconnection.
 
 - **Type**: Liveness
   `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+depends: [client-disconnect]
+```
 
 ---
 
