@@ -597,9 +597,12 @@ evaluator: none
 
 ## Proof Obligations
 
-Continuing the substrate-wide P-numbering (P1–P11 in the substrate
-models; P12–P14 in [atom-model.md §10](../models/atom-model.md);
-P15–P16 in [atom-backend-contract.md](atom-backend-contract.md)):
+Continuing the substrate-wide P-numbering (P1–P10 in the substrate
+models — P11 renumbered to P18, see
+[Execution Model v0.11](../models/execution-model.md), to resolve a
+collision with eos-scheduling.md's independent obligation numbering;
+P12–P14 in [atom-model.md §10](../models/atom-model.md); P15–P16 in
+[atom-backend-contract.md](atom-backend-contract.md)):
 
 - **P17 — acceptance coherence.** (a) Totality and determinism: the
   acceptance procedure is a total function of

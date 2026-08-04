@@ -87,6 +87,22 @@ as an abstract type and owns the dynamic primitive alone. P1 moves with
 the merge monoid; obligation numbering (P1–P11) is unique across the
 three models._
 
+_v0.11 (2026-08-04): the v0.10 uniqueness claim above was true only as
+stated and false as a reader applies it — it says nothing about
+[eos-scheduling.md](eos-scheduling.md), which carries its own,
+independently-numbered P1–P15 track of scheduler protocol properties
+that was never part of this chain. The two tracks collided at P11:
+this chain's P11 (the composition model's delta-monoid obligation,
+unproved) and eos-scheduling's P11 (Failure Isolation, discharged) name
+different obligations. The delta monoid is renumbered to **P18**
+([Composition Model §10](composition-model.md#10-proof-obligations));
+eos-scheduling's P11 is untouched. Scope, stated precisely: this
+chain's obligation numbers (P1–P10, P12–P18, continued in
+[atom-model.md](atom-model.md), [atom-backend-contract.md](../specs/atom-backend-contract.md),
+and [trust-model.md](../specs/trust-model.md)) are unique among
+themselves; they share no namespace with eos-scheduling.md's numbering,
+despite both using the letter `P` and overlapping digits._
+
 _Trigger: early substrate implementation work treated **build** as the
 primitive and bolted observation into its materialization layer (a FUSE
 read-set inside `BuildResult`). The substrate's founding analysis had

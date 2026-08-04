@@ -514,8 +514,11 @@ evaluator: none
 
 ## Proof Obligations
 
-Continuing the substrate-wide P-numbering (P1–P11 in the substrate
-models; P12–P14 in [atom-model](../models/atom-model.md) §10):
+Continuing the substrate-wide P-numbering (P1–P10 in the substrate
+models — P11 renumbered to P18, see
+[Execution Model v0.11](../models/execution-model.md), to resolve a
+collision with eos-scheduling.md's independent obligation numbering;
+P12–P14 in [atom-model](../models/atom-model.md) §10):
 
 - **P15 — ancestry soundness.** `[backend-ancestry-sound]` holds in
   the instantiation: the backend's revision identifiers commit to

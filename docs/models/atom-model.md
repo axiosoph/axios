@@ -520,8 +520,10 @@ performed by this document:
 
 ## 10. Proof obligations
 
-Continuing the substrate-wide P-numbering (P1–P11 are homed in the
-three substrate models):
+Continuing the substrate-wide P-numbering (P1–P10 are homed in the
+three substrate models; P11 was renumbered to P18 — see
+[Execution Model v0.11](execution-model.md) — to resolve a collision
+with eos-scheduling.md's independent obligation numbering):
 
 - **P12 — metadata-partition well-formedness.** Every field of the
   publish payload, the chain-variable set, and every fact kind on the

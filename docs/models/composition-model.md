@@ -626,7 +626,7 @@ thus form a **partial commutative idempotent monoid** — the merge
 monoid's shape (§3) recurring one level up: `⊕` for content, delta
 union for choices. Override application is order-independent by
 construction; the overlay-ordering folklore of function-based override
-systems is structurally unexpressible here. _Proof obligation P11
+systems is structurally unexpressible here. _Proof obligation P18
 (§10): the delta monoid laws and compilation soundness._
 
 **Property (generator normal form).** Environments are freely generated
@@ -745,12 +745,21 @@ choice policy)`, and its certificate is **recomputable**: any holder
   yields a valid certificate (§7). Testable against the composer
   implementation.
 
-- **P11** — **the delta monoid and its compiler**: choice-delta union
-  satisfies the partial-monoid laws with exact same-point conflict
-  detection (the §3 mirror at the choice level), and normal-form
-  compilation is sound: elaborating under `defaults ∪ Δ` yields the
-  same state as applying Δ's compiled edit set
+- **P18** _(renumbered from P11; the number is out of sequence with
+  P8/P9 above because the substrate-wide chain now runs P1–P10, P12–P17
+  before it — see [Execution Model](execution-model.md) v0.11 for the
+  scope note)_ — **the delta monoid and its compiler**: choice-delta
+  union satisfies the partial-monoid laws with exact same-point
+  conflict detection (the §3 mirror at the choice level), and
+  normal-form compilation is sound: elaborating under `defaults ∪ Δ`
+  yields the same state as applying Δ's compiled edit set
   `(remove, add, rebind, re-certify)` to the default elaboration (§7).
+  Was P11 until 2026-08-04: that number also names an unrelated,
+  independently-numbered obligation in
+  [eos-scheduling.md](eos-scheduling.md) (Failure Isolation,
+  discharged) — the two were never the same namespace, but the shared
+  digit let a reader who asked "is P11 discharged?" find the wrong
+  answer first. This obligation remains **unproved**.
 
 Seam obligations shared with the execution model, homed there: **P6**
 (promotion coherence — the arrow of §0's cycle), **P7** (`resolve`
