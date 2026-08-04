@@ -84,6 +84,7 @@ Serialization MUST be canonical (see [lock-canonical-form]).
 ```claim
 kind: constraint
 evaluator: none
+depends: [lock-set-snapshot, lock-canonical-form]
 ```
 
 **[lock-choice-policy]**: The choice function is fixed and canonical:
@@ -98,6 +99,7 @@ Model §6: the recorded choice).
 ```claim
 kind: constraint
 evaluator: none
+because: [docs/models/composition-model#6]
 ```
 
 **[lock-groundness]**: Every lock value MUST be ground: names bound to
@@ -144,6 +146,8 @@ dedicated entry type exists or is needed.
 ```claim
 kind: constraint
 evaluator: none
+depends: [docs/models/execution-model#2.4, lock-closure-completeness]
+because: [docs/models/execution-model#8]
 ```
 
 **[lock-in-snapshot-locality]**: The lock is carried inside the atom
@@ -161,6 +165,7 @@ semantically-inert lock edit exists to spuriously shift identity.
 ```claim
 kind: constraint
 evaluator: none
+because: [lock-no-plan-digest]
 ```
 
 ## Top level
@@ -216,6 +221,8 @@ regardless of what happens to the source repository underneath it.
 ```claim
 kind: constraint
 evaluator: none
+depends: [charter-anchor]
+because: [charter-ancestry]
 ```
 
 **[lock-set-charter-head]**: Each `[sets]` entry MUST record a
@@ -360,6 +367,7 @@ never package-lock state.
 ```claim
 kind: constraint
 evaluator: none
+because: [docs/models/composition-model#4]
 ```
 
 **[lock-dep-version]**: The `version` field MUST be the exact, non-empty
@@ -435,6 +443,7 @@ roots from the manifest.
 ```claim
 kind: constraint
 evaluator: none
+depends: [lock-closure-completeness]
 ```
 
 **[lock-dep-ordering]**: Dep entries MUST be serialized in bytewise
@@ -535,6 +544,7 @@ two independent promotions in either order MUST yield the same bytes
 ```claim
 kind: constraint
 evaluator: none
+because: [docs/models/execution-model#8]
 ```
 
 ## Deliberate absences
@@ -571,6 +581,7 @@ propagation is computed per [lock-action-totality], never stored.
 ```claim
 kind: constraint
 evaluator: test
+because: [lock-action-totality]
 ```
 
 **[lock-no-interfaces]**: Interface manifests MUST NOT appear in the
@@ -619,6 +630,7 @@ the v1-era `plan_digest` and the job-identity scheme built on it.)
 ```claim
 kind: constraint
 evaluator: test
+because: [docs/models/execution-model#2.4]
 ```
 
 ## Example
