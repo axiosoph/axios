@@ -593,11 +593,11 @@ capability reference (client disconnect or explicit release) MUST detach the
 client from progress streaming but MUST NOT cancel or terminate the
 underlying build. Cancellation MUST only occur via an explicit `cancel()`
 invocation on the `BuildJob` capability.
-`VERIFIED: unverified`
+`VERIFIED: review (BuildJobImpl carries no Drop impl; scheduler.cancel() is only reachable from the explicit cancel() RPC handler — eos/eos-daemon/src/server.rs, scheduler.rs)`
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: review
 ```
 
 **[eos-progress-multiplexing]**: Multiple clients MUST be able to attach
@@ -605,11 +605,11 @@ evaluator: none
 attached callback MUST receive the same sequence of `BuildStatus` updates.
 When a client drops its `ProgressStream` capability, the daemon MUST clean up
 that callback's resources without disturbing other attached clients.
-`VERIFIED: unverified`
+`VERIFIED: review (each attach_progress call spawns an independent broadcast subscriber and task; one client's send failure only breaks its own loop — eos/eos-daemon/src/server.rs:393-460)`
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: review
 depends: [attach-progress]
 ```
 
@@ -701,11 +701,11 @@ depends: [eos-network-sovereign-auth, eos-protocol-capability-matching]
   `JobId` already exists, the existing `BuildJob` capability is returned
   (deduplication). Otherwise, a new job is enqueued and a fresh `BuildJob`
   capability is returned. The build proceeds asynchronously.
-  `VERIFIED: unverified`
+  `VERIFIED: review (Scheduler::submit keys the jobs map by plan_digest and returns the existing JobState clone on a hit — eos/eos-daemon/src/scheduler.rs:106-133)`
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: review
 ```
 
 **[attach-progress]**: Attach a progress callback to a running build.
@@ -716,11 +716,11 @@ evaluator: none
   `BuildStatus` updates via `callback.update()`. The `-> stream` annotation
   provides built-in backpressure. When the build completes, the daemon
   invokes `callback.done()`.
-  `VERIFIED: unverified`
+  `VERIFIED: review (BuildJobImpl::attach_progress subscribes a broadcast receiver and pushes update()/done() on terminal status — eos/eos-daemon/src/server.rs:393-460)`
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: review
 ```
 
 **[detach-progress]**: Detach from progress streaming without cancelling the
@@ -731,11 +731,11 @@ build.
   Proto runtime notifies the daemon of the dropped reference. The daemon
   removes that callback from the job's subscriber list and reclaims
   associated resources. The build continues unaffected.
-  `VERIFIED: unverified`
+  `VERIFIED: review (the progress task loop breaks on callback.update()'s send failure without touching scheduler state; the build's own tokio::spawn task is independent — eos/eos-daemon/src/server.rs:406-457, scheduler.rs:145-277)`
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: review
 depends: [attach-progress]
 ```
 
@@ -748,11 +748,11 @@ depends: [attach-progress]
   `ProgressStream` callbacks. In-flight build work is terminated. The
   `BuildJob` capability remains valid but subsequent operations return the
   `Cancelled` status.
-  `VERIFIED: unverified`
+  `VERIFIED: review (Scheduler::cancel sets Cancelled, broadcasts it to every subscriber, and aborts the job task via AbortHandle; get_status still resolves after — eos/eos-daemon/src/scheduler.rs:305-334)`
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: review
 depends: [submit-build]
 ```
 
@@ -780,11 +780,11 @@ depends: [eos-trustless-substitution, eos-origin-attestation, eos-wot-substituti
   Cap'n Proto runtime cleans up associated server-side state (progress
   callbacks, pending responses). No running builds are cancelled — only
   explicit `cancel()` terminates builds.
-  `VERIFIED: unverified`
+  `VERIFIED: review (the Scheduler and its spawned job tasks are owned independently of any per-connection RpcSystem/capability object — eos/eos-daemon/src/main.rs:150-160, scheduler.rs:67-96; no code path cancels a job outside the explicit cancel() handler)`
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: review
 because: [eos-capability-lifecycle]
 ```
 
@@ -841,11 +841,11 @@ depends: [eos-network-sovereign-auth]
 **[no-cancel-on-drop]**: Dropping a `BuildJob` or `ProgressStream` capability
 MUST NOT implicitly cancel the associated build. Only an explicit `cancel()`
 invocation MAY terminate a build.
-`VERIFIED: unverified`
+`VERIFIED: review (neither BuildJobImpl nor the progress task implements Drop; Scheduler::cancel is invoked from exactly one call site, the cancel() RPC handler — eos/eos-daemon/src/server.rs:462-472)`
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: review
 because: [eos-capability-lifecycle]
 ```
 
@@ -899,11 +899,11 @@ capabilities MUST be reclaimed within a bounded interval. No resource leak
 MAY persist after the Cap'n Proto runtime processes the disconnection.
 
 - **Type**: Liveness
-  `VERIFIED: unverified`
+  `VERIFIED: review (per-connection RpcSystem is spawned per accepted socket and torn down with it — capnp_rpc's own transport-close handling reclaims the capability objects it owns; job/progress-task state lives outside the connection, per [client-disconnect] — eos/eos-daemon/src/main.rs:150-160)`
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: review
 depends: [client-disconnect]
 ```
 

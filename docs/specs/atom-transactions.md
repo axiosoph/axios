@@ -1471,11 +1471,11 @@ evaluator: type
 `AtomRegistry`, `AtomStore`) MUST NOT contain backend-specific types.
 Backend specifics MUST be expressed exclusively through associated
 types on the traits.
-`VERIFIED: unverified`
+`VERIFIED: review (AtomSource/AtomRegistry/AtomStore signatures use only AtomId, OwnerRef, Czd, RawVersion, &[u8], and associated types Self::Entry/Self::Error — atom/atom-core/src/lib.rs:523-697)`
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: review
 ```
 
 **[crypto-layer-separation]**: Within the atom crate hierarchy,
@@ -1506,13 +1506,13 @@ establishment. These concerns are deferred to the identity
 framework in use (e.g., Cyphr). The atom
 verification function MUST accept raw public key bytes as a
 parameter.
-`VERIFIED: unit-test (verify functions take pub_key: &[u8])`
+`VERIFIED: review (verify_claim/verify_publish/verify_claim_key_thumbprint/verify_publish_key_thumbprint all take pub_key: &[u8]; atom-id has no key-storage, discovery, or trust-establishment code — atom/atom-id/src/lib.rs:1008-1201)`
 
 ### Transitions
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: review
 ```
 
 **[charter-transition]**: An atom-set MAY be chartered by constructing
@@ -1731,11 +1731,11 @@ backend-agnostic. Backend-specific concerns are expressed through
 associated types on traits.
 
 - **Type**: Safety
-  `VERIFIED: unverified`
+  `VERIFIED: review (AtomId/ClaimPayload/PublishPayload/RawVersion carry only Anchor, Label, OwnerRef, Czd, Thumbprint, Vec<u8>, String, u64 fields — no backend-specific type (e.g. gix::ObjectId) appears; those live only in atom-git — atom/atom-id/src/lib.rs:217-782)`
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: review
 ```
 
 **[publish-payload-extensible]**: The publish `CozMessage` payload

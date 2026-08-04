@@ -291,21 +291,21 @@ depends: [recursive-transparent]
 **[zero-deps]**: Alurl MUST have zero non-std external dependencies.
 Alias detection and expansion is pure string processing. Unicode
 validation MAY use `unicode-ident` as the sole permitted dependency.
-`VERIFIED: pass — Cargo.toml: only unicode-ident`
+`VERIFIED: review — Cargo.toml: only unicode-ident`
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: review
 ```
 
 **[no-io]**: Alurl MUST NOT perform any I/O (filesystem, network,
 environment variables). All external state is provided through the
 `AliasMap` (populated by an `AliasSource` implementor).
-`VERIFIED: pass — code inspection: no std::fs, std::net`
+`VERIFIED: review — no std::fs/std::net/std::env in alurl/src (checked exhaustively)`
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: review
 ```
 
 ### Transitions
@@ -387,11 +387,11 @@ stored metadata. Aliases are a user convenience — all persistent
 references MUST use fully expanded URLs. (This constraint is
 enforced by consumers, but alurl's API design SHOULD make it natural
 by separating `AliasedUrl::Expanded.url` as the resolved artifact.)
-`VERIFIED: pass — code inspection: no Serialize derive`
+`VERIFIED: review — no Serialize/Deserialize derive on any alurl type (checked exhaustively)`
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: review
 ```
 
 ### Behavioral Properties
@@ -403,11 +403,11 @@ the resolver is hash-based). Recursive resolution MUST be O(d × n)
 where d is the chain depth, bounded by the alias configuration size.
 
 - **Type**: Performance
-  `VERIFIED: pass — code inspection: O(d×n), HashMap::get is O(1)`
+  `VERIFIED: review — parse::classify is a single linear scan (str::find, no backtracking); AliasMap uses HashMap::get; resolve_recursive's per-level cost is O(n) classify + O(d) cycle-check, dominated by n for realistic chain depths (alurl/src/lib.rs, parse.rs)`
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: review
 ```
 
 **[error-diagnostic]**: All error types MUST carry sufficient
