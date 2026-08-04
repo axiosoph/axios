@@ -101,6 +101,12 @@ patch, then pre-release identifiers. Build metadata is ignored for
 precedence.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: test
+because: [version-total-order]
+```
+
 The lock's top-level `version` field is specified by
 [lock-file-schema.md](lock-file-schema.md) `[lock-schema-version]`.
 Resolution does not constrain it further.
@@ -111,6 +117,12 @@ atom-sourcing.md `[lock-entry-sufficient]`. Each entry in the `[sets]`
 table MUST contain the set's `tag` (for human readability) and its
 `mirrors` (for fetch targets).
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+because: [lock-entry-sufficient]
+```
 
 **[lock-atom-entry-fields]**: Each locked atom dependency MUST contain:
 `set`, `label`, `version`, and `publish_czd` (publish transaction
@@ -125,12 +137,23 @@ of direct atom deps) and `direct` (provenance flag). The `set` field
 for mirror resolution.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+because: [lock-entry-sufficient]
+```
+
 **[lock-requires-graph]**: Each locked atom dependency SHOULD include
 a `requires` field listing the **`publish_czd`** values of its
 direct atom dependencies. This enables dependency graph reconstruction
 from the lock file without re-resolving and supports targeted updates
 when a transitive dependency changes.
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 **[lock-direct-flag]**: Each locked atom dependency SHOULD include a
 `direct` field indicating whether it is a direct dependency (from the
@@ -139,12 +162,22 @@ the field MAY be omitted for direct deps. Transitive deps MUST set
 `direct = false`.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[lock-compose-capture]**: The lock file MUST capture the resolved
 composer configuration. This includes the `publish_czd` and version
 of the composer atom (for `with` variant), or the evaluation
 mode (for `as` variants). The composer is resolved through the same
 pipeline as regular dependencies.
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 **[lock-plugin-entries]**: Lock entries produced by direct dependency
 plugins (per ion-manifest.md `[plugin-lock-contract]`) MUST be
@@ -153,12 +186,23 @@ by their type tag. This ensures a single lock file contains the
 complete dependency graph.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+because: [plugin-lock-contract]
+```
+
 ### Resolution Properties
 
 **[resolution-complete]**: If a valid assignment of versions to all
 declared dependencies exists, the resolver MUST find one. The resolver
 MUST NOT fail for solvable instances. (Completeness.)
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 **[resolution-deterministic]**: Given the same manifest and the same
 set of available atoms, the resolver MUST produce the same lock file.
@@ -169,6 +213,12 @@ normalized order; ordering nondeterminism is the primary determinism
 footgun and is forbidden (SAD §6.1, §6.7).
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+because: [docs/architecture/atom-sad#6.1, docs/architecture/atom-sad#6.7]
+```
+
 **[resolution-highest-match]**: When multiple versions of an atom
 satisfy a constraint, the resolver SHOULD prefer the highest
 compatible version. This is a SHOULD, not MUST — the resolver MAY
@@ -176,17 +226,32 @@ select a lower version if it is necessary to satisfy other constraints
 in the dependency graph.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[resolution-unsolvable-diagnostic]**: If no valid assignment exists,
 the resolver MUST report the conflict clearly. The error SHOULD
 identify the conflicting constraints and the atoms involved. A bare
 "resolution failed" message is insufficient.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[resolution-transitive]**: The resolver MUST resolve the transitive
 closure of atom dependencies. If atom A depends on atom B, and atom B
 depends on atom C, then C MUST appear in the lock file even though
 the root manifest does not mention it.
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 ### Transitions
 
@@ -203,6 +268,11 @@ MUST reconcile the lock with the current manifest.
   `VERIFIED: unverified`
   `RESIDUE: Phase 2 -- no reconciliation pipeline exists; ion-resolve/src/lib.rs's own docstring: "A full SAT-based resolver and lock file generator are planned but not yet implemented"`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[lock-freeze]**: After reconciliation, the lock file is frozen
 for the current operation. Subsequent reads within the same operation
 (e.g., publish, build) MUST use the reconciled lock, not re-resolve.
@@ -213,6 +283,12 @@ for the current operation. Subsequent reads within the same operation
   cycle.
   `VERIFIED: unverified`
   `RESIDUE: Phase 2 -- depends on the same unimplemented reconciliation pipeline as [reconcile]; no operation-scoped lock-freeze mechanism exists`
+
+```claim
+kind: constraint
+evaluator: none
+depends: [reconcile]
+```
 
 Lock write atomicity — including the crash-safety guarantee and the
 write-to-temporary-then-rename discipline — is specified by
@@ -228,10 +304,20 @@ the lock file is not written. A lock file with some deps resolved
 and others missing is invalid.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[no-stale-lock-entry]**: After reconciliation, the lock file MUST
 NOT contain entries for dependencies that are no longer declared in
 the manifest (directly or transitively). Stale entries MUST be purged.
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 > **Note (2026-07-05, P4 flag):** A literal reading purges
 > tool-recorded fetch entries (the substrate's record-mode fetch proxy
@@ -249,6 +335,11 @@ version that violates a declared constraint. If the manifest says
 lock is invalid.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 ### Behavioral Properties
 
 **[lock-reproducibility]**: Given the same lock file and the same
@@ -263,12 +354,23 @@ in the lock (atom-sad §6.5).
 - **Type**: Safety
   `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+because: [resolution-reproducible]
+```
+
 **[reconcile-idempotent]**: Reconciling an already-reconciled lock
 file against an unchanged manifest MUST produce no changes. The
 reconcile operation is idempotent.
 
 - **Type**: Safety
   `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 **[plugin-dep-sanitization]**: During reconciliation, plugin
 dependencies MUST be sanitized against the current manifest's
@@ -278,6 +380,11 @@ in the manifest MUST be purged from the lock.
 
 - **Type**: Safety
   `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 > **Note (2026-07-05, P4 flag):** Same tension as `[no-stale-lock-
 entry]` above: this would purge tool-recorded fetch entries the
@@ -294,6 +401,11 @@ is NOT REQUIRED — it depends on the specific atom storage backend.
 
 - **Type**: Liveness (convenience)
   `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 ## Lock File Schema (Informative)
 
