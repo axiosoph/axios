@@ -147,7 +147,6 @@ alias if and only if a `+` character (U+002B) appears at a valid host
 position (see `[host-position-only]`). If no `+` appears at a host
 position, the input MUST be passed through as `AliasedUrl::Raw` without
 modification.
-`VERIFIED: pass — sigil_present_bare, sigil_absent_raw_*`
 
 ```claim
 kind: constraint
@@ -170,7 +169,6 @@ credentials;
 start of the authority if no `@` is found.
 A `+` appearing at any other position (e.g., mid-path, as part of
 a username) MUST NOT be treated as an alias sigil.
-`VERIFIED: pass — plus_in_path_not_alias, plus_in_credentials_not_alias, multiple_at_signs_last_wins, scheme_with_plus_in_name`
 
 ```claim
 kind: constraint
@@ -182,7 +180,6 @@ the first `/`, `:`, or end of input) MUST be a valid UAX #31 Identifier
 (XID_Start followed by zero or more XID_Continue characters). An
 invalid alias name MUST produce an `InvalidAliasName` error, not a
 fallback to raw.
-`VERIFIED: pass — alias_name_digit_start_rejected, alias_name_empty_rejected, alias_name_unicode_accepted, alias_name_hyphen_rejected, alias_name_dot_rejected, alias_name_underscore_accepted`
 
 ```claim
 kind: constraint
@@ -196,7 +193,6 @@ the alias name determines the separator:
 Alurl MUST NOT interpret the suffix or the choice of separator.
 The separator is preserved in the output to maintain the input's
 transport semantics (e.g., `:` for SCP, `/` for URL-style).
-`VERIFIED: pass — separator_slash_url_style, separator_colon_scp_style, separator_none_bare_alias, colon_only_suffix_empty_rest`
 
 ```claim
 kind: constraint
@@ -209,7 +205,6 @@ value. The prefix (scheme, credentials), separator, and suffix are
 preserved exactly as provided. No scheme is injected. No normalization
 is performed. The output is:
 `prefix + resolved_alias + separator + suffix`
-`VERIFIED: pass — preserves_scheme_prefix, preserves_credentials_prefix, preserves_scheme_and_credentials, preserves_git_user_url_style`
 
 ```claim
 kind: constraint
@@ -220,7 +215,6 @@ depends: [host-position-only, separator-opaque-suffix]
 **[suffix-opaque]**: The suffix (everything after the separator)
 MUST be treated as an opaque string. Alurl MUST NOT validate,
 normalize, or interpret it. The suffix MAY be empty.
-`VERIFIED: pass — suffix_with_port_pattern, suffix_empty_trailing_slash`
 
 ```claim
 kind: constraint
@@ -231,7 +225,6 @@ depends: [separator-opaque-suffix]
 **[expansion-deterministic]**: Given the same input and the same
 `AliasMap`, `AliasMap::resolve()` MUST produce the same output.
 Alias resolution MUST be a pure function of its inputs.
-`VERIFIED: pass — deterministic_repeated_calls`
 
 ```claim
 kind: constraint
@@ -245,7 +238,6 @@ resolution MUST fail with `CycleDetected`. Because the alias
 configuration is finite and cycles are detected, non-cyclic chains
 are guaranteed to terminate. A depth limit MAY be implemented as
 defense-in-depth but is not required.
-`VERIFIED: pass — cycle_detected_two_aliases, self_referencing_alias_detected`
 
 ```claim
 kind: constraint
@@ -256,7 +248,6 @@ evaluator: test
 that contains a `+` at a valid host position, alurl MUST re-resolve
 it as a new alias. The caller MUST NOT need to loop — recursive
 resolution is alurl's responsibility, not the caller's.
-`VERIFIED: pass — recursive_alias_chain, three_level_recursive_chain`
 
 ```claim
 kind: constraint
@@ -267,7 +258,6 @@ depends: [resolution-terminates]
 **[raw-preserves-input]**: When the input does not contain a `+` at a
 valid host position, the returned `AliasedUrl::Raw` MUST contain the
 exact input string with no modifications.
-`VERIFIED: pass — raw_preserves_exact_input, empty_input_is_raw`
 
 ```claim
 kind: constraint
@@ -280,7 +270,6 @@ returned `AliasedUrl::Expanded` MUST include the **original** alias
 name (the first alias in the chain, before recursive resolution).
 This enables downstream consumers to provide diagnostic messages
 referencing what the user typed.
-`VERIFIED: pass — expanded_preserves_original_alias`
 
 ```claim
 kind: constraint
@@ -291,7 +280,6 @@ depends: [recursive-transparent]
 **[zero-deps]**: Alurl MUST have zero non-std external dependencies.
 Alias detection and expansion is pure string processing. Unicode
 validation MAY use `unicode-ident` as the sole permitted dependency.
-`VERIFIED: review — Cargo.toml: only unicode-ident`
 
 ```claim
 kind: constraint
@@ -301,7 +289,6 @@ evaluator: review
 **[no-io]**: Alurl MUST NOT perform any I/O (filesystem, network,
 environment variables). All external state is provided through the
 `AliasMap` (populated by an `AliasSource` implementor).
-`VERIFIED: review — no std::fs/std::net/std::env in alurl/src (checked exhaustively)`
 
 ```claim
 kind: constraint
@@ -317,7 +304,6 @@ the host position and determine whether an alias is present.
 - **POST**: Parse any prefix (scheme, credentials). Check if the
   character at the host position is `+`. If yes, extract the alias
   name and separator. If no, return `Raw(input)`.
-  `VERIFIED: pass — spec_examples_table, empty_input_is_raw, just_plus_alone_is_invalid`
 
 ```claim
 kind: constraint
@@ -335,7 +321,6 @@ depends: [sigil-required, host-position-only]
   suffix are preserved. If the result contains another `+` at a host
   position, recursive resolution is applied (subject to cycle guards).
   The final result is returned as `AliasedUrl::Expanded`.
-  `VERIFIED: pass — spec_examples_table`
 
 ```claim
 kind: constraint
@@ -350,7 +335,6 @@ position but the alias name is invalid or the resolver returns an
 error, alurl MUST NOT silently fall back to `Raw`. It MUST return an
 error. A `+` at a host position is an unambiguous declaration of alias
 intent — failure to resolve is an error, not a suggestion.
-`VERIFIED: pass — unknown_alias_errors, invalid_name_errors_not_raw, just_plus_alone_is_invalid`
 
 ```claim
 kind: constraint
@@ -361,7 +345,6 @@ depends: [host-position-only]
 **[no-partial-expansion]**: Alurl MUST NOT return an `AliasedUrl::Expanded`
 whose `url` field still contains an unresolved `+`-prefixed alias at a
 host position. Recursive resolution MUST complete fully or fail entirely.
-`VERIFIED: pass — no_partial_expansion`
 
 ```claim
 kind: constraint
@@ -373,7 +356,6 @@ because: [recursive-transparent]
 scheme component. If the input has no scheme, the output has no scheme.
 If the input has `ssh://`, the output has `ssh://`. Scheme inference is
 the consumer's responsibility.
-`VERIFIED: pass — bare_alias_no_scheme`
 
 ```claim
 kind: constraint
@@ -387,7 +369,6 @@ stored metadata. Aliases are a user convenience — all persistent
 references MUST use fully expanded URLs. (This constraint is
 enforced by consumers, but alurl's API design SHOULD make it natural
 by separating `AliasedUrl::Expanded.url` as the resolved artifact.)
-`VERIFIED: review — no Serialize/Deserialize derive on any alurl type (checked exhaustively)`
 
 ```claim
 kind: constraint
@@ -403,7 +384,6 @@ the resolver is hash-based). Recursive resolution MUST be O(d × n)
 where d is the chain depth, bounded by the alias configuration size.
 
 - **Type**: Performance
-  `VERIFIED: review — parse::classify is a single linear scan (str::find, no backtracking); AliasMap uses HashMap::get; resolve_recursive's per-level cost is O(n) classify + O(d) cycle-check, dominated by n for realistic chain depths (alurl/src/lib.rs, parse.rs)`
 
 ```claim
 kind: constraint
@@ -416,7 +396,6 @@ the full chain of alias names that formed the cycle.
 `AliasNotFound` MUST include the alias name that failed.
 
 - **Type**: Usability
-  `VERIFIED: pass — error_not_found_includes_name, error_cycle_includes_chain`
 
 ```claim
 kind: constraint
@@ -489,39 +468,6 @@ Step 1: input = "+gh:8080/owner/repo"
         → return Expanded { alias: "gh", url: "github.com:8080/owner/repo" }
         (downstream parser determines that :8080 is a port)
 ```
-
-## Verification
-
-**Verification methods:**
-
-- `rustc` — Rust type system; if code compiles, constraint holds
-- `cargo-dep` — Cargo.toml dependency audit; verified by `cargo check`
-- `unit-test` — deterministic test in isolation
-- `agent-check` — agent self-verification (weakest guarantee)
-
-| Constraint               | Method      | Result | Detail                                     | Phase |
-| :----------------------- | :---------- | :----- | :----------------------------------------- | :---- |
-| sigil-required           | unit-test   | pass   | `+` at host position → alias, else → raw   | 2     |
-| host-position-only       | unit-test   | pass   | `+` mid-path / in creds is NOT an alias    | 2     |
-| alias-name-validated     | unit-test   | pass   | UAX #31 validation, InvalidAliasName error | 2     |
-| separator-opaque-suffix  | unit-test   | pass   | `/` or `:` → separator, rest is opaque     | 2     |
-| structure-preserving     | unit-test   | pass   | prefix + resolved + sep + suffix           | 2     |
-| suffix-opaque            | unit-test   | pass   | Suffix passed through without modification | 2     |
-| expansion-deterministic  | unit-test   | pass   | Same input + AliasMap → same output        | 2     |
-| resolution-terminates    | unit-test   | pass   | Cycle detection terminates all chains      | 2     |
-| recursive-transparent    | unit-test   | pass   | Stacked aliases resolve fully              | 2     |
-| raw-preserves-input      | unit-test   | pass   | Raw output equals input exactly            | 2     |
-| expanded-preserves-alias | unit-test   | pass   | Original alias name preserved in Expanded  | 2     |
-| zero-deps                | cargo-dep   | pass   | Cargo.toml has only unicode-ident (if any) | 2     |
-| no-io                    | rustc       | pass   | No std::fs, std::net in source             | 2     |
-| no-silent-fallback       | unit-test   | pass   | Invalid alias → error, not Raw             | 2     |
-| no-partial-expansion     | unit-test   | pass   | No `+` at host position in Expanded.url    | 2     |
-| no-scheme-injection      | unit-test   | pass   | Bare alias output has no scheme            | 2     |
-| no-alias-in-metadata     | rustc       | pass   | AliasedUrl not Serialize                   | 2     |
-| resolution-complexity    | agent-check | pass   | O(d × n) bounded by config size            | 2     |
-| error-diagnostic         | unit-test   | pass   | Error types carry diagnostic info          | 2     |
-
-**Coverage:** 1 agent-check, 15 unit-test, 1 cargo-dep, 2 rustc = **19 total, 19 pass**.
 
 ## Implications
 
