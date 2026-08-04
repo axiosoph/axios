@@ -183,12 +183,15 @@ fact charter_properties {
 // [identity-content-addressed]: AtomId is the (anchor, label) PAIR, not a hash of it.
 // "content-addressed" means the anchor is a content digest and identity is permanent —
 // it does NOT mean the AtomId is a digest. This assertion checks pair-uniqueness.
+// docket: identity-content-addressed :: docs/specs/run_model_check.sh
 assert identity_content_addressed {
   all a1, a2: AtomId |
     (a1.anchor = a2.anchor and a1.label = a2.label) implies a1 = a2
 }
 
 // [ownership-independence]
+// docket: owner-abstract :: docs/specs/run_model_check.sh
+// docket: owner-compatibility :: docs/specs/run_model_check.sh
 assert ownership_independence {
   all a: AtomId, c1, c2: Claim |
     (c1.atomId = a and c2.atomId = a and c1.owner != c2.owner)
@@ -197,6 +200,7 @@ assert ownership_independence {
 }
 
 // [ingest-preserves-identity]
+// docket: ingest-preserves-identity :: docs/specs/run_model_check.sh
 assert ingest_preserves_identity {
   all s: AtomSource, st: AtomStore, a: AtomId |
     a in s.atoms implies (after_ingest[st, s] implies a in st.atoms)
@@ -223,6 +227,7 @@ assert verification_chain {
 // is NOT a restatement of either -- dropping injectivity yields two founders
 // sharing an anchor and refutes it. An owned, signed charter, never a free or
 // source-derived value.
+// docket: anchor-content-addressed :: docs/specs/run_model_check.sh
 assert anchor_content_addressed {
   all a: Anchor | one c: founders | c.czd = a
 }
@@ -230,6 +235,7 @@ assert anchor_content_addressed {
 // [claim-chains-charter]: every claim's anchor chains to EXACTLY ONE founding
 // charter -- an unforgeable, unambiguous link from claim authority back to the
 // set's founding charter (again existence + injectivity, not a fact restated).
+// docket: claim-chains-charter :: docs/specs/run_model_check.sh
 assert claim_chains_charter {
   all cl: Claim | one c: founders | c.czd = cl.claimAnchor
 }
@@ -237,6 +243,7 @@ assert claim_chains_charter {
 // [charter-fork-distinction]: distinct founding charters have distinct anchors
 // (czd is injective), so a cross-fork (anchor, label) collision is structurally
 // impossible -- a fork cannot forge the origin's anchor.
+// docket: charter-fork-distinction :: docs/specs/run_model_check.sh
 assert charter_fork_distinction {
   all disj c1, c2: founders | c1.chAnchor != c2.chAnchor
 }

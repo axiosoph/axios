@@ -116,12 +116,14 @@ Spec == Init /\ [][Next]_vars
 \* SAFETY PROPERTIES (INVARIANTS)
 
 \* [atomid-per-source-unique]
+\* docket: atomid-per-source-unique :: docs/specs/run_model_check.sh
 \* Within a single source, same label => same atomId (by construction)
 AtomIdPerSourceUnique ==
     \A c1, c2 \in claims :
         (c1.source = c2.source /\ c1.label = c2.label) => (c1.atomId = c2.atomId)
 
 \* [publish-claim-coherence]
+\* docket: publish-claim-coherence :: docs/specs/run_model_check.sh
 \* Every publish references a valid claim czd with matching atomId
 PublishClaimCoherence ==
     \A p \in publishes :
@@ -129,6 +131,7 @@ PublishClaimCoherence ==
             c.czd = p.claimCzd /\ c.atomId = p.atomId
 
 \* [no-unclaimed-publish]
+\* docket: no-unclaimed-publish :: docs/specs/run_model_check.sh
 \* No publish exists without a corresponding claim
 NoUnclaimedPublish ==
     \A p \in publishes :
@@ -136,12 +139,14 @@ NoUnclaimedPublish ==
             c.czd = p.claimCzd
 
 \* [no-duplicate-version]
+\* docket: no-duplicate-version :: docs/specs/run_model_check.sh
 \* Per (AtomId, claimCzd) pair, each version appears at most once
 NoDuplicateVersion ==
     \A p1, p2 \in publishes :
         (p1.atomId = p2.atomId /\ p1.claimCzd = p2.claimCzd /\ p1.version = p2.version) => (p1 = p2)
 
 \* [session-ordering]
+\* docket: session-ordering :: docs/specs/run_model_check.sh
 \* Claim precedes publish: data flow + temporal (model §3.1)
 SessionOrdering ==
     \A p \in publishes :
@@ -149,6 +154,7 @@ SessionOrdering ==
             c.czd = p.claimCzd /\ p.now > c.now
 
 \* [no-backdated-publish]
+\* docket: no-backdated-publish :: docs/specs/run_model_check.sh
 \* publish.now > claim.now for matching claim
 NoBackdatedPublish ==
     \A p \in publishes :
@@ -156,6 +162,7 @@ NoBackdatedPublish ==
             (c.czd = p.claimCzd) => (p.now > c.now)
 
 \* [identity-stability]
+\* docket: identity-stability :: docs/specs/run_model_check.sh
 \* Same anchor + same label => same atomId, regardless of source identity
 IdentityStability ==
     \A c1, c2 \in claims :
@@ -163,6 +170,7 @@ IdentityStability ==
             => (c1.atomId = c2.atomId)
 
 \* [publish-chains-claim]
+\* docket: publish-chains-claim :: docs/specs/run_model_check.sh
 \* publish.claimCzd matches a claim with the same atomId
 PublishChainsClaim ==
     \A p \in publishes :

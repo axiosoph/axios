@@ -105,11 +105,13 @@ pub const NAME_MAX: usize = 128;
 /// Transaction type for atom claims.
 ///
 /// Spec constraint: `[claim-typ]`.
+// docket: claim-typ :: cargo check --manifest-path atom/Cargo.toml -p atom-id
 pub const TYP_CLAIM: &str = "atom/claim";
 
 /// Transaction type for atom version publishes.
 ///
 /// Spec constraint: `[publish-typ]`.
+// docket: publish-typ :: cargo check --manifest-path atom/Cargo.toml -p atom-id
 pub const TYP_PUBLISH: &str = "atom/publish";
 
 /// Spec shorthand for [`Thumbprint`] (Coz key thumbprint).
@@ -402,6 +404,8 @@ where
 }
 
 #[cfg(test)]
+// docket: owner-authorization-delegated :: cargo test --manifest-path atom/Cargo.toml -p atom-id --lib -- owner_tests::single_key_authorizes_matching_thumbprint owner_tests::single_key_rejects_mismatched_thumbprint owner_tests::hierarchical_and_rooted_identity_never_authorize owner_tests::owner_set_authorizes_is_a_disjunction owner_tests::owner_set_authorizes_rejects_empty_set
+// docket: owner-kind-required :: cargo test --manifest-path atom/Cargo.toml -p atom-id --lib -- owner_tests::owner_kind_has_no_default_and_missing_kind_is_a_parse_error owner_tests::owner_kind_wire_names_match_spec owner_tests::owner_kind_rejects_unknown_variant owner_tests::hierarchical_and_rooted_identity_never_authorize
 mod owner_tests {
     use super::*;
 
@@ -507,6 +511,7 @@ mod owner_tests {
 /// `[owner-abstract]`, `[claim-replacement-authority]`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+// docket: symmetric-payloads :: cargo check --manifest-path atom/Cargo.toml -p atom-id
 pub struct ClaimPayload {
     /// The signing algorithm.
     #[cfg_attr(feature = "serde", serde(with = "serde_alg"))]
@@ -528,6 +533,7 @@ pub struct ClaimPayload {
     /// label.
     ///
     /// Spec constraints: `[owner-abstract]`, `[claim-owner-single]`.
+    // docket: claim-owner-single :: cargo check --manifest-path atom/Cargo.toml -p atom-id
     pub owner: OwnerRef,
     /// PURL type identifying the package ecosystem (e.g., "cargo").
     pub pkg: String,
@@ -651,6 +657,7 @@ pub enum Mode {
 /// `[publish-chains-claim]`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+// docket: uri-not-metadata :: cargo check --manifest-path atom/Cargo.toml -p atom-id
 pub struct PublishPayload {
     /// The signing algorithm.
     #[cfg_attr(feature = "serde", serde(with = "serde_alg"))]
@@ -771,6 +778,7 @@ impl PublishPayload {
 /// through a [`VersionScheme`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+// docket: rawversion-opaque :: cargo check --manifest-path atom/Cargo.toml -p atom-id
 pub struct RawVersion(String);
 
 impl RawVersion {

@@ -147,6 +147,7 @@ fn write_chain_append_tag_rejects_differing_dig() {
 /// c2 accept case: a mode-transition-only append (all immutable fields
 /// identical, only `mode` differs) must be accepted and produce a real
 /// tag object targeting the previous tag.
+// docket: publish-mode :: cargo test --manifest-path atom/Cargo.toml -p atom-git --test tag_chain -- write_chain_append_tag_accepts_mode_only_transition write_chain_append_tag_rejects_differing_dig
 #[test]
 fn write_chain_append_tag_accepts_mode_only_transition() {
     let (_dir, repo, genesis_oid) = setup_test_repo();

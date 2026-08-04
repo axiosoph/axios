@@ -981,6 +981,7 @@ mod charter_tests {
     }
 
     #[test]
+    // docket: charter-transition :: cargo test --manifest-path atom/Cargo.toml -p atom-git --lib -- registry::charter_tests::charter_founds_authorized_over_preexisting_claim registry::charter_tests::charter_founds_rejects_unauthorized_founder registry::charter_tests::charter_succeeds_accepts_authorized_later_now registry::charter_tests::charter_succeeds_rejects_non_increasing_now registry::charter_tests::charter_succeeds_rejects_unauthorized_signer registry::charter_tests::charter_succeeds_rejects_second_successor_to_same_prior
     fn charter_founds_authorized_over_preexisting_claim() {
         let (_dir, repo) = setup_test_repo();
         let incumbent = gen_keypair();
