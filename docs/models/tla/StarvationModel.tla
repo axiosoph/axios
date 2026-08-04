@@ -109,5 +109,6 @@ NoIdle ==
 \* under the unbounded high-priority stream H. The teeth of bounded-fair-dispatch.
 \* FAILS at Gamma = 0 (mutation): without the delay credit L is starved forever.
 StarvationFreedom == <> (epStatus["L"] \in {"dispatched", "complete"})
+\* docket: eos-scheduler-bounded-fair-dispatch :: docs/models/tla/run_model_check.sh
 
 =============================================================================
