@@ -450,7 +450,7 @@ operations are pure queries with no side effects on daemon state.
   build proceeds asynchronously.
   `VERIFIED: unverified`
 
-**[attach-progress]**: Ion attaches to a build's progress stream.
+**[ion-attach-progress]**: Ion attaches to a build's progress stream.
 
 - **PRE**: Ion holds a `BuildJob` capability.
 - **POST**: Ion invokes `BuildJob.attachProgress(callback)`, passing a
@@ -868,7 +868,7 @@ This returns the current `BuildStatus` as a snapshot value.
 | `capability-mismatch-handling` | Integration test       | UNVERIFIED | Submit unsupported type, verify rejection message                            |
 | `daemon-connect`               | Integration test       | UNVERIFIED | Verify handshake and bootstrap cap                                           |
 | `build-request`                | Integration test       | UNVERIFIED | Submit lock, receive `BuildJob`                                              |
-| `attach-progress`              | Integration test       | UNVERIFIED | Attach callback, verify status delivery                                      |
+| `ion-attach-progress`          | Integration test       | UNVERIFIED | Attach callback, verify status delivery                                      |
 | `fetch-verify-build`           | Integration test       | UNVERIFIED | End-to-end: fetch, verify, build                                             |
 | `compose-evaluation`           | Integration test       | UNVERIFIED | Full composer with args → successful eval                                    |
 | `concurrent-builds`            | Dedup test             | UNVERIFIED | Two clients, same lock, one execution                                        |
