@@ -371,6 +371,7 @@ Spec == Init /\ [][Next]_vars
 \* [charter-anchor] + [anchor-content-addressed] (dynamic facet) +
 \* [anchor-immutable] (charter facet): a founding charter's anchor is its own
 \* czd; a successor inherits its prior's anchor, never minting a fresh one.
+\* docket: charter-anchor :: docs/specs/run_model_check.sh
 AnchorIsFoundingCzd ==
     \A c \in charters :
         /\ (c.prior = NoPrior => c.anchor = c.czd)
@@ -392,6 +393,7 @@ OwnerSetNonEmpty ==
 \* charter at claim time). Replacement claims chain their authority to the
 \* replaced claim, not the charter, and are governed by ReplacementAuthority
 \* instead.
+\* docket: claim-charter-authorization :: docs/specs/run_model_check.sh
 ClaimAuthorized ==
     \A cl \in claims :
         cl.prior = NoClaimPrior =>
@@ -401,6 +403,7 @@ ClaimAuthorized ==
                 /\ AuthorizedBySet(cl.key, c.owner)
 
 \* [charter-ancestry]: a claim's src descends from its authorizing charter's src.
+\* docket: charter-ancestry :: docs/specs/run_model_check.sh
 ClaimAncestry ==
     \A cl \in claims :
         \E c \in charters :
@@ -408,6 +411,7 @@ ClaimAncestry ==
 
 \* [charter-succession]: a successor is signed by a key authorized by SOME
 \* member of the prior's owner set, and preserves the anchor.
+\* docket: charter-succession :: docs/specs/run_model_check.sh
 SuccessionAuthorized ==
     \A c \in charters :
         c.prior # NoPrior =>
@@ -425,6 +429,7 @@ SuccessionAuthorized ==
 \* embedded in c's own message. Pure removal (c.owner \subseteq p.owner) is
 \* explicitly exempt: no possession-proof is owed by, or from, a departing
 \* principal.
+\* docket: charter-succession-linear :: docs/specs/run_model_check.sh
 TransferDualSigned ==
     \A c \in charters :
         (\E p \in charters : p.czd = c.prior /\ ~(c.owner \subseteq p.owner))
@@ -452,6 +457,7 @@ ReplacementAuthority ==
 
 \* [anchor-immutable]: a claim's anchor equals its authorizing charter's anchor,
 \* so identity is fixed to the founding czd across claims and replacements.
+\* docket: anchor-immutable :: docs/specs/run_model_check.sh
 AnchorImmutable ==
     \A cl \in claims :
         \E c \in charters :
@@ -468,6 +474,7 @@ TypeOK ==
 
 \* [chain-monotonicity]: recordedHead never regresses -- each step keeps it,
 \* starts it from NoHead, or advances it to a descendant (old head an ancestor).
+\* docket: chain-monotonicity :: docs/specs/run_model_check.sh
 MonotonicHead ==
     [][ \/ recordedHead' = recordedHead
         \/ recordedHead = NoHead

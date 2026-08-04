@@ -9,6 +9,7 @@
 
 use crate::fixtures;
 
+// docket: charter-transition :: cargo test --manifest-path atom/Cargo.toml -p atom-id --test charter -- bootstrap_gate::bootstrap_seizure_requires_incumbent_authorization
 #[test]
 fn bootstrap_seizure_requires_incumbent_authorization() {
     // The fixture: an incumbent's pre-existing claim, and a founding

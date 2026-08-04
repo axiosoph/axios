@@ -261,6 +261,7 @@ mod tests {
 
     use super::*;
 
+    // docket: charter-transition :: cargo test --manifest-path atom/Cargo.toml -p atom-git --lib -- charter_store::tests::resolve_founding_charter_accepts_real_founding_charter charter_store::tests::charterstore_get_charter_accepts_through_trait_interface charter_store::tests::resolve_effective_charter_walks_multilink_chain_to_correct_tail
     #[test]
     fn charter_ref_name_is_hex_keyed() {
         let bytes = [0xde, 0xad, 0xbe, 0xef];
