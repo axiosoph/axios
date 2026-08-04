@@ -125,6 +125,11 @@ by the CAS at materialization time — a build process MUST NOT be able to
 write into any part of the mounted closure.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 ### Network Containment
 
 **[eos-build-sandbox-network-containment]**: Build execution MUST NOT have
@@ -147,6 +152,12 @@ set is itself the exception mechanism, keyed by content rather than by a
 derivation-level flag.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+because: [htc-fetch-set-lock-plugin]
+```
+
 ### Read-Set Capture
 
 **[eos-sandbox-read-set-capture]**: The castore FUSE daemon that
@@ -163,6 +174,12 @@ document requires the executor capture and populate that field; it does not
 redefine the `BuildRecord` schema itself.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+depends: [htc-declared-closure-enforced]
+```
+
 ### Build Sandbox Delegation
 
 **[eos-build-sandbox-delegation]**: Sandboxing is wholly the executor
@@ -174,6 +191,11 @@ platform-appropriate sandboxing (OCI runtime or Bubblewrap, reusing
 `snix-build`, htc-sad.md §2, §3.5). The daemon holds no opinion on how a
 given executor achieves isolation (eos-sad.md §6.2).
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 ### Host Isolation
 
@@ -188,6 +210,12 @@ view), not one inferred after the fact from the read-set log
 (§Read-Set Capture is the log; this invariant is the enforcement it
 verifies).
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+depends: [eos-sandbox-fhs-materialization, htc-declared-closure-enforced]
+```
 
 ### Materialization Tiers
 
@@ -208,6 +236,12 @@ sandboxing's scope — see htc-sad.md §5.2–§5.3 for their mechanics, not
 restated here.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+depends: [htc-materialization-tiers]
+```
+
 ---
 
 ## Forbidden States
@@ -218,6 +252,11 @@ the lock's recorded fetch set. Any other request MUST result in a refused
 connection, logged.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[no-read-outside-declared-closure]**: A build process MUST NOT be able to
 read any byte not present in its materialized atom closure or toolchain
 composition, plus whatever the fetch proxy separately permits (§Network
@@ -225,10 +264,21 @@ Containment). This is enforced by denying the read at the sandbox boundary,
 not by post-hoc audit of the read-set log.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+depends: [eos-build-sandbox-network-containment]
+```
+
 **[no-write-outside-build-scratch]**: A build process MUST NOT write to any
 path outside the scratch directory allocated for its build task. The
 mounted closure is read-only; there is no writable path inside it.
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 ---
 
