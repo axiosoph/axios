@@ -235,38 +235,99 @@ See the Cap'n Proto projection of this trait as the `AtomDiscovery` capability i
 **[eos-verification-obligation]**: Eos MUST fetch atom snapshots and verify their content digests before applying any operations. Eos MUST NOT execute plans using unverified atom sources.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[eos-verify-ownership]**: Eos MUST verify that the publish transaction is validly signed and authorized according to the claim chain before using the snapshot.
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 **[eos-verify-plugin-deps]**: Eos MUST fetch plugin dependencies and verify their hashes against the locked hashes using the specified algorithm (indicated by type tag).
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: review
+```
+
 **[eos-no-unverified-execution]**: Eos MUST NOT execute or reference any unverified snapshot or plugin dependency in a build sandbox.
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+because: [eos-verification-obligation, eos-verify-plugin-deps]
+```
 
 **[eos-sandbox-network-containment]**: Build execution MUST be executed in a restricted sandboxed environment. The sandbox MUST NOT have network access except through HTC's content-addressing record/replay proxy (htc-sad §4.2, ADR-0005 §7 `[htc-fetch-set-lock-plugin]`). Normative record/replay proxy semantics (record vs. replay mode, TLS CA injection, protocol-aware handlers) are specified in [eos-sandboxing.md](eos-sandboxing.md), not restated here. Platform-specific sandbox selection is wholly the executor implementation's concern (htc-sad §6.2, §6.4) — the FHS executor reuses `snix-build`'s OCI/bwrap sandbox.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[eos-sandbox-host-isolation]**: The sandbox MUST NOT have write access to any part of the host filesystem outside the designated temporary sandbox build directory.
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 **[eos-sandbox-reproducibility]**: The sandbox MUST NOT leak host environment variables, system times, CPU/hardware identifiers, or other sources of non-determinism into the build process. All inputs (environment variables, files, binaries) MUST be explicitly declared in the `BuildEngine::Plan`.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[eos-bisimulation-equivalence]**: Two Eos engine implementations MUST be behaviorally equivalent (bisimilar) under the same inputs: for any `AtomRef` and `ActionParams`, they MUST produce the same `BuildPlan` and equivalent outputs. This equivalence MUST hold across both local and daemon-served execution paths.
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 **[eos-immutable-store]**: Once a build output is registered in the `ArtifactStore` at a `StorePath`, it MUST be read-only and immutable. Eos MUST NOT permit modification, overwriting, or deletion of existing store paths during execution.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[eos-cache-determinism]**: If the output corresponding to a given `BuildEngine::Plan` already exists in the `ArtifactStore` (build cache) or can be substituted, Eos MUST skip the build execution (`apply`) and return the cached `StorePath`.
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: review
+```
 
 **[eos-transitive-closure]**: The store path of any build output MUST be transitively self-contained. All dependencies of a store path MUST exist within the `ArtifactStore` and be immutable.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[eos-atom-index-ingest]**: Atoms that have been successfully processed (fetched, verified, evaluated, or built) MUST be ingested into the `AtomIndex` via `ingest()`. The daemon MUST NOT silently discard atom metadata after processing. This invariant ensures that every eos instance progressively accumulates discoverable knowledge about the atoms it has encountered.
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: review
+```
 
 ---
 
@@ -278,11 +339,22 @@ See the Cap'n Proto projection of this trait as the `AtomDiscovery` capability i
 - **POST**: Returns `Cached` if the output tree is verified in HTC's shared CAS, or `NeedsBuild` if the action's `action_id` has no cached `BuildRecord`.
   `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: review
+```
+
 **[engine-apply]**: Execute a build plan to produce store outputs.
 
 - **PRE**: The `BuildPlan` is `NeedsBuild`. All transitive build inputs are present and verified in the store. The backend's sandbox is initialized.
 - **POST**: The builder executes inside the sandbox. Outputs are verified, registered as read-only, and committed to the `ArtifactStore` via the delegated store backend. Failed builds MUST abort and return an error without mutating existing store paths. The daemon transitions the corresponding `JobStatus` to `Completed` or `Failed` and pushes a `ProgressEvent` to all attached clients.
   `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+depends: [engine-plan]
+```
 
 ---
 
@@ -291,11 +363,26 @@ See the Cap'n Proto projection of this trait as the `AtomDiscovery` capability i
 **[no-undeclared-inputs]**: A build execution MUST NOT reference or import any host environment variables or filesystem paths not explicitly declared in the plan's environment or capability set.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[no-speculative-writes]**: Eos MUST NOT commit outputs to the store for builds that fail post-evaluation verification checks.
 `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+```
+
 **[no-dirty-store-paths]**: Eos MUST NOT register a store path in the `ArtifactStore` unless its contents have been verified to match the content digest of the built output.
 `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+```
 
 ---
 
@@ -306,10 +393,22 @@ See the Cap'n Proto projection of this trait as the `AtomDiscovery` capability i
 - **Type**: Safety
   `VERIFIED: unverified`
 
+```claim
+kind: constraint
+evaluator: none
+because: [engine-plan]
+```
+
 **[apply-cleanup-on-abort]**: If a build application fails or aborts, all temporary sandbox resources and partial outputs MUST be completely garbage collected and MUST NOT leak into the `ArtifactStore`.
 
 - **Type**: Safety
   `VERIFIED: unverified`
+
+```claim
+kind: constraint
+evaluator: none
+because: [engine-apply]
+```
 
 ---
 
