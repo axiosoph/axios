@@ -30,6 +30,7 @@ pub fn compare_versions(a_str: &str, b_str: &str) -> Result<std::cmp::Ordering, 
 mod tests {
     use super::*;
 
+    // docket: version-semantics-semver :: cargo test --manifest-path ion/Cargo.toml -p ion-resolve --lib -- tests::test_matches_constraint tests::test_compare_versions --exact
     #[test]
     fn test_matches_constraint() {
         assert!(matches_constraint("1.2.3", ">= 1.0.0").unwrap());
