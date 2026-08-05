@@ -85,8 +85,8 @@ evaluator: none
 
 The lock MUST be the output of deterministic
 resolution: the same manifest and the same discovery snapshot (as pinned
-by [lock-set-snapshot]) MUST re-derive a byte-identical lock.
-Serialization MUST be canonical (see [lock-canonical-form]).
+by [lock-set-snapshot](#lock-set-snapshot)) MUST re-derive a byte-identical lock.
+Serialization MUST be canonical (see [lock-canonical-form](#lock-canonical-form)).
 
 This depends on both the canonical encoder and resolution
 determinism, neither implemented: `LockFileV2::to_canonical` is an
@@ -162,7 +162,7 @@ MUST let a consumer identify and fetch each member's snapshot, from
 which that member's `action_id` is computed the same way — governed by
 *this* lock, the top-level one under computation, never by re-reading
 the member's own nested lock inside its fetched snapshot:
-[lock-closure-completeness] already guarantees this lock carries every
+[lock-closure-completeness](#lock-closure-completeness) already guarantees this lock carries every
 member's fully-resolved entry, so a member's own lock matters only when
 that atom is itself the top level. This discharges P7's totality gate
 (Execution Model §8): the toolchain pin is an ordinary dep entry; no
@@ -188,7 +188,7 @@ lock therefore legitimately changes that atom's _own_ action identity
 leakage: the identity of any _other_ action — a dependency's build,
 another atom's job — MUST NOT be derived from this atom's lock; each
 action's identity derives only from its own snapshot's slice (see
-[lock-no-plan-digest]). Canonical form exists partly for this reason:
+[lock-no-plan-digest](#lock-no-plan-digest)). Canonical form exists partly for this reason:
 with exactly one legal serialization and no comments, no
 semantically-inert lock edit exists to spuriously shift identity.
 
@@ -244,14 +244,14 @@ evaluator: none
 Each key under `[sets]` is a local set alias; its
 `anchor` field MUST be the algorithm-prefixed coz digest of the
 atom-set's founding charter transaction: `anchor = czd(charter₀)`
-(atom-transactions.md's `[charter-anchor]`). The anchor IS the set's
+(atom-transactions.md's [charter-anchor](atom-transactions.md#charter-anchor)). The anchor IS the set's
 identity, and this derivation is backend-agnostic: the value is a coz
 digest regardless of which VCS backend hosts the set's source. This
 supersedes the prior genesis-commit derivation. The founding commit is
 not lost — `charter.src` is the chartering-point revision, and because
 a revision hash commits to its entire ancestry, `charter.src`
 transitively pins the genesis commit (atom-transactions.md's
-`[charter-ancestry]`) without itself being the genesis commit or
+[charter-ancestry](atom-transactions.md#charter-ancestry)) without itself being the genesis commit or
 serving as the set's identity; that role now belongs one layer up, to
 `anchor`. A weak source-repository hash — SHA-1 is not
 collision-resistant (Storage Model §5) — therefore no longer bears on
@@ -535,7 +535,7 @@ evaluator: test
 
 Dep-entry liveness is reachability from the
 manifest's direct dependencies — the graph's roots, which live
-manifest-side per [lock-closure-completeness]. The lock alone is
+manifest-side per [lock-closure-completeness](#lock-closure-completeness). The lock alone is
 deliberately not a self-contained GC domain: sanitization MUST take its
 roots from the manifest.
 
@@ -718,7 +718,7 @@ The lock MUST NOT contain a toolchain
 section or toolchain entry type. Toolchain-role defaults are ordinary
 dependencies declared in the manifest and pinned as ordinary dep
 entries; the _effective_ toolchain after role-keyed override
-propagation is computed per [lock-action-totality], never stored.
+propagation is computed per [lock-action-totality](#lock-action-totality), never stored.
 
 ```claim
 kind: constraint
