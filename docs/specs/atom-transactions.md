@@ -34,7 +34,7 @@ an atom-set. All atoms within an atom-set share the same anchor. The anchor
 pins the atom-set to an owned, signed declaration over the source's history.
 
 **(Amended 2026-07-08 — the charter.)** The anchor is the coz digest of the
-set's **founding charter transaction**: `Anchor := czd(charter₀)`. This
+set's **founding charter transaction**: `Anchor := czd(charter)`. This
 replaces the earlier backend-specific derivation (git: genesis-commit hash),
 and makes anchor derivation **backend-agnostic**: the charter is a coz
 object regardless of backend; only the interpretation of its `src` field is
@@ -45,9 +45,14 @@ simply stops being the identity.
 An anchor MUST satisfy the following properties:
 
 1. **Immutable**: The anchor is fixed at chartering and persists for the
-   lifetime of the atom-set. Successor charters (key rotation, ownership
-   succession) chain to the founding charter and MUST NOT change the
-   anchor (`[charter-succession]`).
+   lifetime of the atom-set. The charter is written once and never
+   reissued — there is no successor charter
+   (`[atom-genesis-and-facts]`, ADR-0007 §3; `docs/glossary.md`
+   "Genesis record / genesis-once"). Key rotation and owner-set
+   membership change happen as a `fact` layered on the charter's own
+   scope, never as a new charter, and therefore cannot change the
+   anchor by construction rather than by a rule that must be
+   separately checked (`[charter-owner-fact]`).
 2. **Content-addressed and owned**: The anchor is a coz digest of a
    _signed_ payload — the trust chain roots at an owned object, not at
    unowned repository metadata.
@@ -65,11 +70,18 @@ An anchor MUST satisfy the following properties:
 
 **Note on git hash agility** (`[anchor-hash-agile]`): a SHA-256 re-hash of
 a SHA-1 repository rewrites history, so a prior charter's `src` does not
-exist in the re-hashed repository. Continuity across a re-hash is an
-explicit act: a successor charter in the new history, chaining to the
-founding charter (`[charter-succession]`). Absent succession, the
-re-hashed repository is a distinct atom-set — now by explicit rule rather
-than silent consequence.
+exist in the re-hashed repository. Genesis-once forecloses the answer
+this note previously gave (a successor charter chaining to the founding
+one): there is no successor charter, and the charter's `src` is a
+genesis-payload field, fixed forever, never a target of amendment or
+fact. The re-hashed repository therefore has no in-protocol path to the
+original anchor at all — establishing an atom-set over it requires a new
+charter, which is, by definition, a genuine fork
+(`[charter-fork-distinction]`). Continuity between the two anchors — "the
+re-hashed history is a continuation of the original project" — is not a
+protocol-level guarantee; it is, at most, an out-of-band trust decision a
+consumer makes on other evidence (e.g. an attestation `fact` on either
+anchor naming the other), never something this specification resolves.
 
 The anchor feeds into identity, but is never identity itself. For a
 **claimed** atom, identity is the claim record's own `czd` — the
@@ -133,16 +145,21 @@ A backend MUST:
 1. Store and retrieve claim `CozMessage`s by `AtomId`.
 2. Store and retrieve publish `CozMessage`s by `(AtomId, version)`.
 3. Resolve and verify the founding charter from the source, so the
-   consumer can check `anchor == czd(charter₀)` (`[anchor-resolvable]`;
+   consumer can check `anchor == czd(charter)` (`[anchor-resolvable]`;
    the anchor is never derived from backend state).
 4. Enforce version uniqueness per `(claim czd, version)` pair — `claim
    czd` alone already identifies the claimed atom
    (`[identity-content-addressed]`); pairing it with `AtomId` would be
    redundant, since a claim's own `czd` IS its `AtomId`.
-5. Support multiple claims for the same underlying `(anchor, label)`
-   slot by different owners — each carries its own distinct `AtomId`
-   (`[identity-stability]`); this is never "multiple claims sharing
-   one `AtomId`."
+5. Reject a second claim for an already-claimed `(anchor, label)` slot
+   as void, independent of who signs it — genesis-once
+   (`[atom-genesis-and-facts]`, `[publish-claim-coherence]`). _(Re-scoped
+   2026-08-05: this item previously required a backend to **support**
+   multiple claims for one `(anchor, label)` slot as distinct
+   identities — the retired `[claim-replacement-authority]` design's
+   governance-seizure path. There is exactly one claim per label, ever;
+   a label's current owner changes via `[claim-owner-fact]`, never via
+   a second claim record.)_
 
 A backend MUST NOT:
 
@@ -317,9 +334,20 @@ This principle means:
 1. An atom's authenticity is not determined by which store holds it,
    but by the cryptographic chain back to its source.
 2. A consumer can verify trust without trusting intermediate stores.
-3. Forked sources produce competing claims for the same underlying
-   `(anchor, label)` slot, each with its own distinct `AtomId` — the
-   consumer selects which source (and therefore which claim) to trust.
+3. _(Re-scoped 2026-08-05 — genesis-once: this item previously described
+   two claims contesting the SAME `(anchor, label)` slot as forks; that
+   was residue from the retired `[claim-replacement-authority]` design
+   — see `[publish-claim-coherence]`.)_ Forked sources each charter
+   independently (`[charter-fork-distinction]`), so a fork's claims
+   live under a *different* anchor by construction, never the same
+   `(anchor, label)` slot as the source it forked from — two forks MAY
+   publish under the identical human-facing label with no collision,
+   since label uniqueness is scoped to `(anchor, label)`, never global
+   (`docs/glossary.md` "Label"). Each fork's claims therefore carry
+   their own distinct `AtomId` trivially, as a consequence of the
+   distinct anchor, not because of any contest over one slot; the
+   consumer selects which source (and therefore which anchor) to
+   trust.
 4. Backend-internal machinery (ref parsing, caching strategies,
    remote protocols) is NOT protocol surface — it is private to the
    backend implementation.
@@ -338,7 +366,7 @@ TYPE  Label       = String  { UAX #31 validated }                 (atom-id)
 TYPE  RawVersion  = String  { opaque, unparsed }                  (atom-id)
 
 TYPE  Anchor      = Vec<u8>                                        (atom-id)
-  -- Opaque digest. Anchor := czd(charter₀), backend-agnostic.
+  -- Opaque digest. Anchor := czd(charter), backend-agnostic.
   -- See §Anchor for required properties.
 
 TYPE  AtomId      = Vec<u8>                                       (atom-id)
@@ -377,18 +405,21 @@ TYPE  CharterPayload = {
         owner:  Vec<OwnerRef>,  -- non-empty set: the principals
                             -- recognized under this anchor
                             -- ([charter-owner-set])
-        prior:  Czd?,      -- OPTIONAL: czd of the charter this one succeeds
         src:    Vec<u8>,   -- source revision demarking the chartering point
         tmb:    Tmb,       -- standard Coz: signing key thumbprint
         typ:    "atom/charter"
       }                                                           (atom-id)
   -- CozMessage MUST include `key` field (public key for TOFU).
-  -- The founding charter (no `prior`) DEFINES the set: Anchor :=
-  -- czd(charter₀). A successor charter (with `prior`) MUST be
-  -- authorized per [charter-succession]/[charter-succession-linear];
-  -- succession preserves the anchor. `src` demarks the chartering
-  -- point in history — everything before it is unowned by this set
-  -- unless claimed after it ("orphaned unless re-claimed").
+  -- The charter DEFINES the set: Anchor := czd(charter). Written once,
+  -- at chartering, never reissued — genesis-once
+  -- ([atom-genesis-and-facts], ADR-0007 §3). No `prior` field exists on
+  -- this payload: there is no successor charter to chain to. Owner-set
+  -- membership change and key rotation happen as a `fact` extending the
+  -- charter's own scope instead ([charter-owner-fact]) — the concrete
+  -- fact-record wire shape is not yet specified in this document (Open
+  -- Items). `src` demarks the chartering point in history — everything
+  -- before it is unowned by this set unless claimed after it
+  -- ("orphaned unless re-claimed").
 
 TYPE  ClaimPayload = {
         alg:    Alg,
@@ -399,19 +430,22 @@ TYPE  ClaimPayload = {
                             -- accountable for this label
                             -- ([claim-owner-single])
         pkg:    String,    -- PURL type (e.g., "cargo", "npm", "pypi")
-        prior:  Czd?,      -- OPTIONAL: czd of a replaced claim ([claim-replacement-authority])
-        governance: bool?, -- OPTIONAL: MUST be true on governance replacement; absent otherwise
         src:    Vec<u8>,   -- source revision hash at claim time (temporal floor)
         tmb:    Tmb,       -- standard Coz: signing key thumbprint
         typ:    "atom/claim"
       }                                                           (atom-id)
   -- CozMessage MUST include `key` field (public key for TOFU).
-  -- `prior` and `governance` are root-level PROTOCOL fields (declared
-  -- here precisely so the reserved-root-keys rule is satisfied).
   -- The `anchor` field IS the chain link to the charter: anchor ==
-  -- czd(charter₀). No separate charter field exists or is needed —
+  -- czd(charter). No separate charter field exists or is needed —
   -- exactly as publish chains to claim by `claim: Czd`, claim chains
   -- to charter by `anchor`.
+  -- Written once, at first claim for this label, never reissued —
+  -- genesis-once ([atom-genesis-and-facts], ADR-0007 §3). No `prior` or
+  -- `governance` field exists on this payload: there is no replacement
+  -- claim to chain to or mark. Label transfer and owner-identity change
+  -- happen as a `fact` extending the claim's own scope instead
+  -- ([claim-owner-fact]) — the concrete fact-record wire shape is not
+  -- yet specified in this document (Open Items).
   -- The `src` field cryptographically binds the claim to its temporal
   -- position in history via the signed payload.
   -- The `pkg` field identifies the ecosystem. Implementations SHOULD
@@ -486,9 +520,9 @@ evaluator: none
 #### [charter-anchor]
 
 The atom-set's anchor MUST equal the coz digest of
-the founding charter: `Anchor == czd(charter₀)`, where the founding
-charter is the unique charter in the succession chain carrying no
-`prior` field.
+the charter: `Anchor == czd(charter)`, where the charter is the
+anchor's one and only genesis record — written once, never reissued
+(`[atom-genesis-and-facts]`, ADR-0007 §3).
 
 ```claim
 kind: constraint
@@ -498,10 +532,13 @@ evaluator: model-check
 #### [claim-chains-charter]
 
 Every claim's `anchor` field MUST equal
-`czd(charter₀)` — the founding charter's czd, exactly. Succession
-governs _authorization_, never the anchor value (a successor's czd is
-not an anchor and MUST NOT appear as one). This is the claim-level
-analogue of
+`czd(charter)` — the charter's own czd, exactly, and nothing else:
+there is no successor charter whose czd could be mistaken for it
+(`[atom-genesis-and-facts]`, ADR-0007 §3). A `fact` extending the
+charter's owner set (`[charter-owner-fact]`) changes who is currently
+authorized to act under the anchor; it never produces a new charter
+record and therefore never produces a second value this field could
+legally hold. This is the claim-level analogue of
 `[publish-chains-claim]`: charter : claim :: claim : publish.
 
 ```claim
@@ -512,104 +549,143 @@ evaluator: model-check
 #### [claim-charter-authorization]
 
 _(amended 2026-07-14 — owner-set
-membership)_: A claim's signing key MUST be authorized by membership
-in the effective charter's `owner` set — some entry in the set
-authorizes the signer, under that entry's own `kind`
-(`[owner-authorization-delegated]`'s set composition rule). (The
-effective charter is the latest valid charter in the succession chain
-at claim time.) This replaces unscoped first-come label TOFU with
-set-governed claiming; open or delegated claiming is expressible
-through the owner abstraction's identity frameworks, not through
-protocol exceptions.
+membership; re-scoped 2026-08-05 — genesis-once)_: A claim's signing
+key MUST be authorized by membership in the charter's **current
+owner-fold** — some entry authorizes the signer, under that entry's
+own `kind` (`[owner-authorization-delegated]`'s set composition rule).
+The charter's current owner-fold is its genesis `owner` set as amended
+by every `[charter-owner-fact]` signed since (an add, a remove, never a
+new charter — there is exactly one charter, permanently); "the
+effective charter" from the pre-genesis-once wording named the wrong
+thing; it is the fold that evolves, never the charter record. This
+replaces unscoped first-come label TOFU with set-governed claiming;
+open or delegated claiming is expressible through the owner
+abstraction's identity frameworks, not through protocol exceptions.
 
 ```claim
 kind: constraint
 evaluator: model-check
 ```
 
-#### [claim-replacement-authority]
+#### [claim-replacement-authority] — RETIRED 2026-08-05
 
-_(amended 2026-07-14 — governance
-path reworded for owner-set membership)_: A claim MAY be replaced by
-a new claim carrying `prior: czd(replaced claim)`, under exactly two
-authorities, distinguishable by every consumer:
+**Retired, not amended.** This constraint specified a **replacement
+claim** — a second `ClaimPayload` carrying `prior: czd(replaced claim)`
+— as the mechanism for a label's owner to change. ADR-0007 §3 abolishes
+that shape everywhere: claim is one of the three genesis record kinds
+(charter, claim, publish) that are "each a permanent, single genesis
+record for their scope — never reissued, never superseded by a record
+of the same kind" (`[atom-genesis-and-facts]`). A `ClaimPayload` with a
+`prior` field pointing at an earlier claim is not an amended design —
+it is the shape this ADR names and forecloses. There is no replacement
+claim, marked or unmarked, owner-authorized or governance-authorized:
+`ClaimPayload` no longer carries `prior` or `governance` fields at all
+(Type Declarations, above).
 
-- **owner replacement** — signing key authorized by the replaced
-  claim's `owner` (key rotation, identity-framework upgrade), under
-  `[claim-owner-single]`'s single-value semantics: the ordinary path,
-  no special marking. Unaffected by the charter-owner-set
-  generalization — a claim's own `owner` stays single-valued.
-- **governance replacement** — signing key authorized by MEMBERSHIP
-  in the effective charter's `owner` set (`[owner-authorization-delegated]`'s
-  set composition rule) but NOT by the replaced claim's `owner`: the
-  replacement payload MUST carry `governance: true`. A governance
-  replacement is a first-class, visible seizure event; consumers' trust
-  policies MUST be able to distinguish it and MAY refuse, warn, or pin
-  the prior owner. The honest strength of this guarantee: seizure is
-  unmarked-and-invisible to no one — it is visible to every consumer
-  who observes the newer state, and rollback below any consumer's
-  recorded state is detectable (`[chain-monotonicity]`); a consumer who
-  has never seen the newer state makes a TOFU judgment, as at all first
-  contact. Absolute freshness without a transport of record is not
-  claimed — monotonic non-regression plus mandatory marking is.
+What this constraint protected — that a label's controlling identity
+can change, and that a change forced by the wider charter-owner-fold
+against the current holder's wishes is a first-class, marked, fork-
+detectable event, never a silent, unmarked seizure — is real and still
+required. `[claim-owner-fact]`, below, restates it as a `fact`
+extending the claim's own scope, per ADR-0007 §3's "Label transfer and
+governance amendments are `fact`s on the label's record-log entries,
+the same discipline as charter." That the two authorization tiers this
+constraint drew (ordinary owner-authorized change vs.
+charter-owner-fold-authorized seizure) survive unaffected is not a
+coincidence: ADR-0007 §3's own fold-based authorization rule for a
+label-scope fact — "authorized by the current fold of the label's own
+history, cross-checked that the signer is currently in the *claiming
+anchor's* owner-fold" — is this exact two-tier structure, independently
+arrived at from the genesis-once side.
+
+#### [claim-owner-fact]
+
+A label's currently-effective owner MAY change via a `fact` extending
+the claim's own scope — never a new claim record; the claim itself is
+permanent and genesis-once (`[atom-genesis-and-facts]`, `[identity-
+stability]`). Every publish continues to chain to the one, unchanging
+claim czd regardless of how many owner-facts have since landed
+(`[publish-chains-claim]`); an owner-fact changes who currently holds
+the label, never which record the label *is*. Authorized under exactly
+two tiers, distinguishable by every consumer — carried forward from
+`[claim-replacement-authority]`'s owner-replacement/governance-
+replacement split, now expressed as ADR-0007 §3's fold-based fact rule:
+
+- **owner fact** — signed by the label's own currently-effective owner
+  (`[claim-owner-single]`'s single-value semantics: key rotation,
+  identity-framework upgrade). The ordinary path, no special marking.
+  Unaffected by the charter-owner-set generalization — a claim's own
+  effective owner stays single-valued at every point in its history.
+- **governance fact** — signed by a member of the charter's *current
+  owner-fold* (`[owner-authorization-delegated]`'s set composition
+  rule) who is NOT the label's currently-effective owner: a first-class,
+  visible seizure event, distinguishably marked so a consumer's trust
+  policy MAY refuse, warn, or pin the prior owner. Seizure is
+  unmarked-and-invisible to no one — visible to every consumer who
+  observes the newer state, with rollback below any consumer's recorded
+  state detectable (`[chain-monotonicity]`); a consumer who has never
+  seen the newer state makes a TOFU judgment, as at all first contact.
+  Absolute freshness without a transport of record is not claimed —
+  monotonic non-regression plus mandatory marking is.
 
   **Widened by the owner-set generalization, mitigated the same way
-  charter succession is.** Under a single-valued charter owner, only
-  that one key could force a governance replacement. Under
-  `[charter-owner-set]`, ANY existing charter-set member can,
+  charter-owner-fact divergence is.** Under a single-valued charter
+  owner, only that one key could force a governance fact. Under
+  `[charter-owner-set]`, ANY current charter-fold member can,
   unilaterally — the same flat, undifferentiated authority
-  `[charter-succession-linear]` grants for charter succession now
+  `[charter-owner-fact-linear]` grants for a charter-owner fact now
   extends to seizing any claim under the anchor. This constraint
-  extends `[charter-succession-linear]`'s existing fail-closed
-  divergence rule one level down, mirroring it exactly: **a claim has
-  at most one valid governance replacement.** Nothing can prevent a
-  charter-set member from _signing_ two governance replacements naming
-  the same `prior` claim; the constraint therefore binds consumers —
-  observing two DIVERGENT governance-replacement claims (both carrying
-  `governance: true` and the same `prior`), signed by different
-  charter-set members, is a **claim-authority fork**, and a consumer
+  extends `[charter-owner-fact-linear]`'s fail-closed divergence rule
+  one level down, mirroring it exactly: **a claim has at most one
+  effective governance fact per divergence point.** Nothing can prevent
+  a charter-fold member from *signing* two divergent governance facts
+  against the same claim; the constraint therefore binds consumers —
+  observing two DIVERGENT governance facts, signed by different
+  charter-fold members, is a **claim-authority fork**, and a consumer
   MUST fail closed for any authority decision downstream of the
   divergence point — neither branch is effective — surfacing the
   divergence for an out-of-band trust decision, exactly as
-  `[charter-succession-linear]` requires for a set-authority fork. A
+  `[charter-owner-fact-linear]` requires for an owner-fold fork. A
   consumer's previously recorded chain head (`[chain-monotonicity]`)
   remains valid for decisions at or below that head. This rule is
-  scoped to governance replacements specifically — two divergent
-  OWNER replacements of the same claim are outside this constraint's
-  scope, unaffected by the owner-set widening this rule mitigates.
-  Exactly as for charter succession, safety here comes from
-  fork-detection, not from unilateral governance-replacement authority
-  being intrinsically safe; the same named future extension
-  (human-configurable per-charter governance policy,
-  `[charter-succession-linear]`) is where quorum-style protection
-  against unilateral claim seizure would eventually land — this rule
-  is not a complete answer to unilateral capture, only to divergent
-  seizure attempts going undetected.
+  scoped to governance facts specifically — two divergent OWNER facts
+  against the same claim are outside this constraint's scope,
+  unaffected by the owner-set widening this rule mitigates. Exactly as
+  for the charter, safety here comes from fork-detection, not from
+  unilateral governance-fact authority being intrinsically safe; the
+  same named future extension (human-configurable per-charter
+  governance policy, `[charter-owner-fact-linear]`) is where
+  quorum-style protection against unilateral claim seizure would
+  eventually land — this rule is not a complete answer to unilateral
+  capture, only to divergent seizure attempts going undetected.
 
-Publishes chained to a replaced claim remain verifiable history;
-new publishes MUST chain to the current claim.
+The concrete fact-record wire shape (chaining field, discriminator
+naming the fact as owner- vs. governance-authorized) is not yet
+specified in this document — Open Items; scoping it is a
+git-storage-format.md / atom-backend-contract.md concern, not settled
+by re-grading this constraint alone.
 
-The owner-replacement/governance-replacement split — including the
-`prior`-chained structure and the governance flag's correctness — is
-machine-verified by `docs/specs/tla/AtomCharter.tla`'s
-`ReplacementAuthority` invariant (subject to the AtomCharter.tla
-owner-set-rework staleness tracked separately, out of this
-constraint's scope). What that model does NOT check: (a) the
-claim-authority fail-closed rule above — new protocol text mirroring
-`[charter-succession-linear]`'s `ForkFailClosed` mechanism — has no
-claim-level divergence detection anywhere in `AtomCharter.tla` (its
-`Divergent`/`ForkFailClosed` machinery is charter-scoped only; nothing
-prevents two governance replacements from naming the same `prior` in
-the model, so a consumer's fail-closed obligation on divergent claim
-authority is unverified); (b) `ReplacementAuthority`'s anchor/label
-conjuncts hold at every state only because `ClaimReplace` hardcodes
-them — a regression guard, not a state-space proof that identity (the
-genesis claim's `czd`, `[identity-stability]`) persists through the
-chain. Identity persistence there is definitional (an append-only
-chain whose czds are never mutated or reissued), the same
-review-residue category as `[charter-typ]`, not something a model
-check could non-vacuously establish without a construction where
-anchor/label COULD drift.
+**Historical model coverage of the retired design (superseded, not
+evidence for this constraint).** `docs/specs/tla/AtomCharter.tla`'s
+`ReplacementAuthority` invariant machine-verifies the *replacement-claim*
+shape — the `prior`-chained structure and the governance flag's
+correctness — that this section retires; that coverage is real, for the
+design it checks, and even there it is weaker than it first reads:
+`ReplacementAuthority`'s anchor/label conjuncts hold at every state only
+because `ClaimReplace` hardcodes them into the replacement record — a
+regression guard on the construction, not a state-space proof that
+identity persists, since no reachable state could ever violate a
+hardcoded field. And the claim-authority fail-closed rule stated above
+was never covered at all: `AtomCharter.tla`'s `Divergent`/`ForkFailClosed`
+machinery is charter-scoped only, so nothing in the model prevented two
+governance replacements from naming the same `prior` — a gap in the
+retired design's own coverage, not merely staleness.
+
+**None of the above bears on `[claim-owner-fact]`, the fact-based
+restatement.** A green `ReplacementAuthority` result is evidence the
+superseded replacement-claim design was internally consistent (with the
+vacuity above noted), never evidence for this constraint. No model checks
+the fact-based claim-owner-change rule anywhere in this repository.
 
 ```claim
 kind: constraint
@@ -619,85 +695,115 @@ evaluator: none
 #### [charter-ancestry]
 
 A claim's `src` MUST be a descendant of (or equal
-to) the effective charter's `src`. Together with the existing
-claim→publish ancestry, the temporal floor becomes
+to) the charter's `src`. Together with the existing claim→publish
+ancestry, the temporal floor becomes
 `charter.src ⟶ claim.src ⟶ publish.src`, rooted at a signed object.
 History prior to `charter.src` is visible but unowned by the set —
 **orphaned unless re-claimed** after the chartering point. This is a
 consumer obligation, not narrative: a resolver encountering a claim
-whose `src` does not descend from the effective charter's `src` MUST
+whose `src` does not descend from the charter's `src` MUST
 treat it as unowned by this set — neither silently valid nor silently
 dropped, but surfaced as pre-charter state awaiting re-claim.
+(There is one charter per anchor, genesis-once —
+`[atom-genesis-and-facts]` — so "the charter's `src`" names a fixed
+value, never a value that shifts with succession.)
 
 ```claim
 kind: constraint
 evaluator: model-check
 ```
 
-#### [charter-succession]
+#### [charter-succession] and [charter-succession-linear] — RETIRED 2026-08-05
 
-_(amended 2026-07-14 — owner-set
-membership)_: A successor charter (carrying `prior`) MUST be signed
-by a key authorized under `[owner-authorization-delegated]`'s set
-composition rule by the charter named in `prior`'s `owner` set, and
-MUST NOT alter the anchor: the anchor remains `czd(charter₀)` for the
-lifetime of the set. Succession is how membership change and key
-rotation occur without identity change (preserving
-`[identity-stability]`). Orphaning is keyed to ANCHOR change and
-therefore occurs only on fork: succession preserves the anchor, so no
-claim or publish is orphaned by a membership change.
+**Both retired, not amended — together, since they specified one
+mechanism.** These constraints specified a **successor charter** — a
+second `CharterPayload` carrying `prior: czd(prior charter)` — as the
+mechanism for owner-set membership change and key rotation
+(`[charter-succession]`), plus the linearity/fork-detection rule
+governing it (`[charter-succession-linear]`). ADR-0007 §3 forecloses
+this shape by the same rule that retires `[claim-replacement-
+authority]`, above: the charter is one of the three genesis record
+kinds "never reissued, never superseded by a record of the same kind"
+(`[atom-genesis-and-facts]`) — the anchor's first and only charter,
+full stop, glossary-confirmed ("There is no charter succession and no
+claim replacement; the only way to a 'new charter' is a genuine
+fork"). `CharterPayload` no longer carries a `prior` field (Type
+Declarations, above).
+
+What this constraint protected — membership change and key rotation
+without identity change, and the "two independent layers" distinction
+(a principal rotating keys within its own identity framework needs no
+charter action; only the *set of principals* changing does) — is real
+and still required. `[charter-owner-fact]`, below, restates both as a
+`fact` extending the charter's own scope, per ADR-0007 §3's own
+statement of this exact rule: "Everything that used to require a new
+charter record — owner-set rotation, threshold changes, governance
+amendments — is now a `fact` on the anchor's own record-log entries."
+
+#### [charter-owner-fact]
+
+Owner-set membership change and key rotation happen as a `fact`
+extending the charter's own scope — never a new charter record; the
+charter itself is permanent and genesis-once (`[atom-genesis-and-
+facts]`). A charter-owner fact MUST be signed by a key authorized under
+`[owner-authorization-delegated]`'s set composition rule by the
+charter's *current* owner-fold (the genesis `owner` set as amended by
+every charter-owner fact signed since), and MUST NOT alter the anchor:
+the anchor remains `czd(charter)` for the lifetime of the set
+(preserving `[identity-stability]`). Orphaning is keyed to ANCHOR
+change and therefore occurs only on fork: a charter-owner fact
+preserves the anchor, so no claim or publish is orphaned by a
+membership change.
 
 **Two independent layers, not one** — the confirmed non-conflict
 (`[charter-owner-set]` does not disturb this): each `OwnerRef` entry
 represents one coherent principal; that principal growing or rotating
 keys WITHIN its own identity framework (a hierarchical master
 authorizing a new subkey, a rooted identity deriving a new key)
-requires no charter at all, because the entry's `value` — the
-principal's own digest — is unchanged (`[owner-authorization-delegated]`).
-A successor charter is needed only when the *set of principals
-itself* changes: a member added, removed, or replaced.
-Single-key-tier entries are the degenerate case — a `"single-key"`
-principal has no internal growth mechanism of its own, so it cannot
-add a key without a membership change (a new `OwnerRef` entry, or
-replacing its own).
+requires no charter-owner fact at all, because the entry's `value` —
+the principal's own digest — is unchanged
+(`[owner-authorization-delegated]`). A charter-owner fact is needed
+only when the *set of principals itself* changes: a member added,
+removed, or replaced. Single-key-tier entries are the degenerate case
+— a `"single-key"` principal has no internal growth mechanism of its
+own, so it cannot add a key without a membership change (a new
+`OwnerRef` entry, or replacing its own).
 
 ```claim
 kind: constraint
-evaluator: model-check
+evaluator: none
 ```
 
-#### [charter-succession-linear]
+#### [charter-owner-fact-linear]
 
-_(amended 2026-07-14 — owner-set
-add/remove semantics)_: A charter has at most one valid successor.
-Nothing can prevent a key from _signing_ two successors naming the
-same `prior`; the constraint therefore binds consumers: observing
-divergent successors is a **set-authority fork**, and a consumer MUST
-fail closed for any authority decision downstream of the divergence
-point — neither branch is effective — surfacing the divergence for an
+The charter's owner-fold has, at any point in its history, at most one
+valid current state. Nothing can prevent a current-fold member from
+_signing_ two divergent charter-owner facts against the same prior
+fold state; the constraint therefore binds consumers: observing
+divergent facts is a **set-authority fork**, and a consumer MUST fail
+closed for any authority decision downstream of the divergence point —
+neither branch is effective — surfacing the divergence for an
 out-of-band trust decision. A consumer's previously recorded chain
 head (`[chain-monotonicity]`) remains valid for decisions at or below
-that head. The effective charter is the head of the unique valid
-chain, ordered by **chain position** (`prior` links), never by `now`:
-the `now` field is untrusted for authority ordering (it feeds only
-the temporal-floor checks).
+that head. The current owner-fold is the fold reached by the unique
+valid sequence of charter-owner facts, ordered by **chain position**,
+never by `now`: the `now` field is untrusted for authority ordering
+(it feeds only the temporal-floor checks).
 
 **Adding a principal** to the owner set requires that principal's own
 possession-proof, mirroring the single-owner transfer mechanism
-exactly: the successor charter (naming the enlarged set) is signed by
-a key authorized under the prior charter's `owner` set
-(`[owner-authorization-delegated]`'s set composition rule), and a
-SECOND, independently-signed charter MUST follow it, chained via
-`prior` onto the successor's own `czd` and signed by the INCOMING
-principal's key (proof of possession) — the same succession-chain
-mechanism this constraint already uses for full transfer, applied one
-link further, for the same reason: a coz message carries exactly one
-signature (`czd` is the digest of a single `{cad, sig}` pair — Coz
-`README.md` "Canon"), so proof of possession cannot be a second
-signature embedded in the successor's own message; it is the next
-link in the chain. A unilateral addition naming an unwitting
-recipient — an enlarged set with no such chained possession-proof for
-the new entry — is invalid.
+exactly: the charter-owner fact naming the enlarged set is signed by a
+key authorized under the current owner-fold's set composition rule,
+and a SECOND, independently-signed fact MUST follow it, chained onto
+the first fact's own czd and signed by the INCOMING principal's key
+(proof of possession) — the same append-only chaining this constraint
+already uses for full transfer, applied one link further, for the same
+reason: a coz message carries exactly one signature (`czd` is the
+digest of a single `{cad, sig}` pair — Coz `README.md` "Canon"), so
+proof of possession cannot be a second signature embedded in the first
+fact's own message; it is the next link in the chain. A unilateral
+addition naming an unwitting recipient — an enlarged set with no such
+chained possession-proof for the new entry — is invalid.
 
 **Removing a principal** from the owner set requires only an existing
 REMAINING member's signature — no consent or proof from the removed
@@ -705,49 +811,64 @@ principal. Rationale: a compromised or malicious member MUST NOT be
 able to block its own removal by withholding cooperation.
 
 **This removal rule adds no NEW weakness, but the reason must be
-stated, not assumed.** Flat set authority already lets any single
-existing member sign an arbitrary successor — including one that
-removes every other member. The actual protection against a
-malicious or compromised member racing a legitimate removal is NOT
-the removal rule itself; it is this constraint's own fail-closed
-divergence rule, already stated above: two conflicting successors
-naming the same `prior` (a mutual-ejection race is one instance) fork
-set authority, and a consumer MUST fail closed for any decision
-downstream of that divergence. A reader MUST NOT conclude "no consent
-needed for removal" implies "removal is safe by construction" — safety
-here comes from fork-detection, not from the removal rule.
+stated, not assumed.** Flat fold authority already lets any single
+current member sign an arbitrary charter-owner fact — including one
+that removes every other member. The actual protection against a
+malicious or compromised member racing a legitimate removal is NOT the
+removal rule itself; it is this constraint's own fail-closed divergence
+rule, already stated above: two conflicting facts against the same
+prior fold state (a mutual-ejection race is one instance) fork set
+authority, and a consumer MUST fail closed for any decision downstream
+of that divergence. A reader MUST NOT conclude "no consent needed for
+removal" implies "removal is safe by construction" — safety here comes
+from fork-detection, not from the removal rule.
 
-A successor charter whose resulting owner set would be empty MUST be
+A charter-owner fact whose resulting owner set would be empty MUST be
 rejected (`[charter-owner-set-non-empty]`) — the empty-set rejection
-applies to a removal-driven successor exactly as it does to any other
-path that could reach an empty set.
+applies to a removal-driven fact exactly as it does to any other path
+that could reach an empty set.
 
 **Named future extension, explicitly out of MVP scope**:
 human-configurable per-charter governance policy — e.g., a project
-declaring "changes to this charter require 3-of-5 member signatures"
-rather than the flat "any existing member" default this constraint
-specifies. This is specifically where quorum-style protection against
-unilateral capture (a single compromised member signing an
-arbitrary, damaging successor) would eventually land. Naming the
-extension point here keeps the flat MVP default honest about what it
-does and does not protect against: it is not a complete answer to
-unilateral capture, only to a removed member blocking its own
-removal.
+declaring "changes to this charter's owner set require 3-of-5 member
+signatures" rather than the flat "any current member" default this
+constraint specifies (a distinct mechanism from ADR-0007 §3's own
+declared multi-signature threshold for *arbitrary* owner-authoritative
+facts, which this document does not yet incorporate — Open Items).
+This is specifically where quorum-style protection against unilateral
+capture (a single compromised member signing an arbitrary, damaging
+fact) would eventually land. Naming the extension point here keeps the
+flat MVP default honest about what it does and does not protect
+against: it is not a complete answer to unilateral capture, only to a
+removed member blocking its own removal.
+
+**Not machine-verified as stated.** `AtomCharter.tla`'s "succession"
+config checks this rule's *predecessor* — the successor-charter shape
+`[charter-succession-linear]` retired above — never a fact-based
+owner-fold history; per the same reasoning `[claim-owner-fact]` states,
+a green result there evidences the superseded design's internal
+consistency, not this restatement's correctness.
 
 ```claim
 kind: constraint
-evaluator: model-check
+evaluator: none
 ```
 
 #### [chain-monotonicity]
 
-Consumers MUST record the czd of the charter
-chain head (and SHOULD record the claim czds) under which they acted,
-and MUST refuse any served chain that regresses below a recorded head
-— a prefix of previously observed state is a detected rollback, not an
-alternative. First contact with a set is a TOFU decision, as all first
-contact is. Locks participate: a resolved lock pins the charter head
-its resolution consulted (a follow-up field in the lock schema).
+_(re-scoped 2026-08-05 — genesis-once: "chain head" now names a
+scope's fact history, never a succession chain)_: Consumers MUST record
+the czd of the head of the charter's own fact history (and SHOULD
+record the claim czds) under which they acted, and MUST refuse any
+served history that regresses below a recorded head — a prefix of
+previously observed state is a detected rollback, not an alternative.
+First contact with a set is a TOFU decision, as all first contact is.
+Locks participate: a resolved lock pins the charter-fact head its
+resolution consulted (a follow-up field in the lock schema). The
+charter record itself never needs a head distinct from its own czd —
+it is fixed forever — the head that can regress is the *fold* of
+whatever charter-owner facts (`[charter-owner-fact]`) or claim-owner
+facts (`[claim-owner-fact]`) have landed since genesis.
 
 ```claim
 kind: constraint
@@ -756,12 +877,18 @@ evaluator: model-check
 
 #### [charter-fork-distinction]
 
-A charter with no valid succession chain
-from another set's founding charter defines a **distinct atom-set**,
-regardless of shared source history. Forks are therefore explicit by
-construction: a fork cannot share the origin's anchor (it cannot forge
-succession), and cross-fork `(anchor, label)` collision is structurally
-impossible.
+_(simplified 2026-08-05 — genesis-once removes the succession-chain
+comparison this constraint used to require)_: Two charter records with
+different czds are, by construction, two distinct anchors
+(`Anchor := czd(charter)`), regardless of shared source history — this
+now follows directly from `[charter-anchor]` and ordinary digest
+collision-resistance, with no separate chain-validity check needed: a
+fork was never anything other than "a different signed charter," and
+genesis-once makes that the only way any two anchors can ever relate.
+Forks are therefore explicit by construction: a second charter cannot
+retroactively become "the same anchor" as an existing one — there is
+no succession mechanism through which it could — and cross-fork
+`(anchor, label)` collision is structurally impossible.
 
 ```claim
 kind: constraint
@@ -790,25 +917,38 @@ evaluator: model-check
 
 #### [identity-stability]
 
-Once claimed, an atom's identity (the
-claim record's `czd`) MUST NOT change as new versions are published
-against it — a publish's `claim` reference names one fixed czd for
-the atom's entire publish history. Identity MUST ALSO survive
-ownership transfers and key rotations: per the composite duality
-(atom-model.md §2), the atom's permanent identity is its **label-scope
-genesis claim's** `czd` — the first claim ever made for that
-`(anchor, label)` — which stays fixed even as claim replacement
-(`[claim-replacement-authority]`) produces new claim records, with new
-czds, for later owners or keys. A replacement claim's own `czd` is
-never itself the atom's identity; only the genesis claim's `czd` is.
-Before any claim exists, the unclaimed atom's `AtomId`
+_(simplified 2026-08-05 — genesis-once removes the replacement-claim
+case this constraint used to distinguish)_: Once claimed, an atom's
+identity (the claim record's `czd`) MUST NOT change as new versions are
+published against it — a publish's `claim` reference names one fixed
+czd for the atom's entire publish history. Identity MUST ALSO survive
+ownership transfers and key rotations: because claim is genesis-once
+(`[atom-genesis-and-facts]`), there is exactly one claim record per
+label, ever, so "the atom's permanent identity" and "the claim's own
+`czd`" are the same statement, not two that happen to coincide — the
+distinct **label-scope genesis claim** this constraint used to carve
+out from later replacement claims no longer needs carving out, because
+no replacement claim exists to confuse it with
+(`[claim-owner-fact]`'s owner- and governance-facts change who
+currently holds the label; they never mint a second claim record or a
+second `czd`). Before any claim exists, the unclaimed atom's `AtomId`
 (`[identity-content-addressed]`) is likewise fixed by `(anchor,
 label)`, neither of which changes pre-claim.
 (Model §1 olog: identity stability diagram.)
 
+**Re-graded 2026-08-05, not left at the stale grade.** The Pair-identity
+re-derivation note (Verification, below) already established that no
+currently-checked TLA+ invariant covers this claim — it was retired
+from both `.cfg` files' checked lists. This amendment does not restore
+coverage: `AtomTransactions.tla` has no model of genesis-once
+void-rejection (a second claim record for an already-claimed label
+being structurally invalid, `[publish-claim-coherence]`) any more than
+it modeled claim replacement — a different, still-open modeling gap,
+not a smaller version of the old one.
+
 ```claim
 kind: constraint
-evaluator: model-check
+evaluator: none
 ```
 
 #### [owner-abstract]
@@ -899,10 +1039,10 @@ under this anchor, not who owns one thing: team membership is
 naturally plural, and every listed principal has full, equal,
 undifferentiated authority — no per-entry roles or restricted
 identities exist (there is no concrete use case for a restricted
-identity distinct from "not on the team"). A charter (founding or
-successor) whose `owner` set is empty is a charter nobody could ever
-claim under; `[charter-owner-set-non-empty]` makes rejecting it
-explicit.
+identity distinct from "not on the team"). A charter whose `owner` set
+is empty — at genesis, or as reduced by a `[charter-owner-fact]` — is a
+charter nobody could ever claim under; `[charter-owner-set-non-empty]`
+makes rejecting it explicit.
 
 ```claim
 kind: constraint
@@ -911,13 +1051,13 @@ evaluator: test
 
 #### [charter-owner-set-non-empty]
 
-A charter transaction (founding or
-successor) whose `owner` set would contain zero entries MUST be
-rejected. This is a direct consequence of `[charter-owner-set]`'s
-non-empty requirement, restated as its own constraint because it is
-exactly the failure mode a removal-only transfer path
-(`[charter-succession-linear]`) could otherwise reach silently at
-implementation time.
+A charter transaction, or a
+`[charter-owner-fact]` amending its owner set, whose resulting `owner`
+set would contain zero entries MUST be rejected. This is a direct
+consequence of `[charter-owner-set]`'s non-empty requirement, restated
+as its own constraint because it is exactly the failure mode a
+removal-only owner-fact path (`[charter-owner-fact-linear]`) could
+otherwise reach silently at implementation time.
 
 ```claim
 kind: constraint
@@ -957,18 +1097,19 @@ evaluator: test
 
 #### [owner-compatibility]
 
-Upgrading from a simpler to a richer
-identity framework (e.g., raw key → GPG master → Cyphr PR)
-MUST NOT alter the atom's identity. A claim replacement
-(`[claim-replacement-transition]`) MAY update the `owner` to a new
-identity system: the replacement claim carries a fresh `czd` of its
-own, but the atom's permanent identity remains the label-scope genesis
-claim's `czd` (`[identity-stability]`) — owner upgrades change which
-claim is active, never which czd is identity.
+_(re-scoped 2026-08-05 — genesis-once)_: Upgrading from a simpler to a
+richer identity framework (e.g., raw key → GPG master → Cyphr PR) MUST
+NOT alter the atom's identity. An owner-identity-framework upgrade is
+an owner fact extending the claim's own scope (`[claim-owner-fact]`),
+never a new claim record: the claim's own `czd` never changes, so
+"which owner is active" and "which czd is identity" are not even
+separable questions to keep straight the way they were under claim
+replacement — there is only ever the one claim, the one `czd`
+(`[identity-stability]`).
 
 ```claim
 kind: constraint
-evaluator: model-check
+evaluator: none
 ```
 
 #### [symmetric-payloads]
@@ -1487,9 +1628,12 @@ evaluator: test
 
 #### [anchor-immutable]
 
-_(amended 2026-07-08)_: An anchor MUST NOT
-change over the lifetime of its atom-set: it is `czd(charter₀)`
-permanently; succession never alters it (`[charter-succession]`).
+_(amended 2026-07-08; re-scoped 2026-08-05 — genesis-once)_: An anchor
+MUST NOT change over the lifetime of its atom-set: it is `czd(charter)`
+permanently. There is no successor charter to alter it — owner-set
+membership change and key rotation are facts layered on the charter's
+scope, which never touch the charter record itself
+(`[charter-owner-fact]`).
 
 ```claim
 kind: constraint
@@ -1550,12 +1694,14 @@ evaluator: none
 Within a single source, a label MUST
 identify at most one atom — no two atoms in the same source MAY
 share the same label. This is a source-content constraint, not a
-claim-identity one: it holds regardless of how many claims are later
-made against that label (competing claims are a separate, legitimate
-fork condition, `[publish-claim-coherence]`). All atoms in a source
-share the same anchor, so label uniqueness within a source directly
-implies the pre-signature preimage `(anchor, label)` is unique per
-atom there too — the unclaimed `AtomId` this constraint is named for
+claim-identity one: it holds prior to and independent of claiming.
+_(Re-scoped 2026-08-05 — genesis-once removes the "competing claims"
+case this constraint used to defer to `[publish-claim-coherence]`:
+that constraint no longer describes a legitimate coexistence, only a
+void second-genesis attempt — see below.)_ All atoms in a source share
+the same anchor, so label uniqueness within a source directly implies
+the pre-signature preimage `(anchor, label)` is unique per atom there
+too — the unclaimed `AtomId` this constraint is named for
 (`[identity-content-addressed]`). This prevents ambiguous atom
 references within a source.
 
@@ -1566,17 +1712,28 @@ evaluator: model-check
 
 #### [publish-claim-coherence]
 
-A publish's `claim` field MUST reference
-the `czd` of a valid claim whose `(anchor, label)` matches the
-publish's `(anchor, label)`. Multiple claims for the same underlying
-`(anchor, label)` slot, by different owners, MAY coexist (e.g., forks
-sharing the same anchor) — each such claim carries its OWN identity
-(its own `czd`); they are competing identities contesting one
-human-facing name, never one shared `AtomId` (`[identity-stability]`).
-The publish→claim chain is the sole mechanism for binding a publish to
-a specific claim. Publishes from different claims MUST NOT
-cross-pollinate — a consumer selects which claim to trust based on
-the `owner`.
+_(re-scoped 2026-08-05 — genesis-once)_: A publish's `claim` field MUST
+reference the `czd` of the valid claim for the publish's `(anchor,
+label)` — there is at most one, ever: claim is genesis-once
+(`[atom-genesis-and-facts]`), so a given `(anchor, label)` has exactly
+one valid claim once claimed, none before. A second claim record
+naming an already-claimed `(anchor, label)` is **void**, independent of
+who signed it or under what authority, and MUST be rejected by every
+conforming verifier — the genesis-once verification rule ADR-0007 §10
+states generally, applied here: "the *canonical* genesis is the first
+such leaf encountered... any later leaf declaring the same genesis
+scope... is void." This retires the prior wording's "multiple claims
+... MAY coexist (e.g., forks sharing the same anchor)" — that
+described the claim-authority-fork residue `[claim-owner-fact]`'s
+governance-fact divergence rule now covers (two *facts* against the
+one claim disagreeing about who currently holds it), never two
+legitimate claim *records*; conflating the two was itself residue from
+the retired `[claim-replacement-authority]` design (`[charter-
+fork-distinction]` already establishes that a genuine fork carries a
+*different* anchor, so "forks sharing the same anchor" was never a
+coherent phrase to begin with). The publish→claim chain is the sole
+mechanism for binding a publish to a specific claim. A publish
+referencing a void second claim is itself invalid.
 
 ```claim
 kind: constraint
@@ -1673,21 +1830,18 @@ evaluator: review
 
 An atom-set MAY be chartered by constructing
 a `CharterPayload`, signing it, and producing a `CozMessage` that
-includes the public key.
+includes the public key. _(Simplified 2026-08-05 — genesis-once:
+there is no successor charter, so there is only one PRE case, not
+two.)_
 
-- **PRE** (founding): no `prior` field; `src` MUST be a revision that
-  exists in the source. The founding charter's czd becomes the
-  atom-set's anchor. **Bootstrap gate**: if the source already carries
-  claims predating any charter, the founding charter MUST be authorized
-  by the owner of the earliest such claim — chartering over a live,
-  claimed set is a migration act reserved to its incumbent, not a race
-  open to strangers. A virgin source is first-to-charter by design
-  (that is `[charter-fork-distinction]` working).
-- **PRE** (successor): `prior` MUST be the czd of a valid charter in
-  this set's succession chain; the signing key MUST be authorized by
-  membership in that charter's `owner` set
-  (`[owner-authorization-delegated]`'s set composition rule); `now`
-  MUST exceed the prior charter's `now`.
+- **PRE**: `src` MUST be a revision that exists in the source. The
+  charter's czd becomes the atom-set's anchor. **Bootstrap gate**: if
+  the source already carries claims predating any charter, the charter
+  MUST be authorized by the owner of the earliest such claim —
+  chartering over a live, claimed set is a migration act reserved to
+  its incumbent, not a race open to strangers. A virgin source is
+  first-to-charter by design (that is `[charter-fork-distinction]`
+  working).
 - **POST**: The charter message is stored in the source's atom refs,
   enumerable by consumers and retrievable by its czd.
 
@@ -1709,12 +1863,11 @@ An atom MAY be claimed by constructing a
 `ClaimPayload`, signing it with a Coz-compatible key, and producing
 a `CozMessage` that includes the public key.
 
-- **PRE**: `anchor` MUST equal the czd of the set's founding charter,
-  with a verifiable succession chain to the effective charter; the
-  signing key MUST be authorized by membership in the effective
-  charter's `owner` set (`[claim-charter-authorization]`); `src`
-  MUST descend from the effective charter's `src`
-  (`[charter-ancestry]`).
+- **PRE**: `anchor` MUST equal the czd of the set's one charter
+  (`[claim-chains-charter]`); the signing key MUST be authorized by
+  membership in the charter's current owner-fold
+  (`[claim-charter-authorization]`); `src` MUST descend from the
+  charter's `src` (`[charter-ancestry]`).
   `label` MUST pass UAX #31 validation. The signing key MUST be
   valid for the specified `alg`. The `CozMessage` MUST include a
   `key` field with the signing public key.
@@ -1732,44 +1885,10 @@ Verification is `verify_claim_roundtrip`: sign, then verify.
 
 A version MAY be published for a claimed
 atom by constructing a `PublishPayload`, signing it, and producing
-a `CozMessage`.
-
-```claim
-kind: constraint
-evaluator: test
-```
-
-Verification is `verify_publish_roundtrip`: sign, then verify.
-
-#### [claim-replacement-transition]
-
-A claim MAY be replaced per
-`[claim-replacement-authority]` — owner replacement unmarked,
-governance replacement marked `governance: true` — the replacement
-carrying `prior: czd(replaced claim)`. (This defines the transition
-previously referenced by `[owner-compatibility]` but never specified.)
-
-- **PRE**: authority per `[claim-replacement-authority]`; `now` MUST
-  exceed the replaced claim's `now`; `(anchor, label)` MUST be
-  unchanged — a replacement cannot silently retarget to a different
-  atom. This is a coherence check, distinct from `[identity-stability]`
-  itself: the atom's identity (the genesis claim's `czd`) is preserved
-  by the replacement referencing `prior: czd(replaced claim)` and
-  chaining back to that genesis, not by `(anchor, label)` staying
-  fixed. `docs/specs/tla/AtomCharter.tla`'s `ReplacementAuthority`
-  machine-checks this chaining and its authorization correctness, but
-  its anchor/label conjuncts hold only because `ClaimReplace` hardcodes
-  them — a regression guard, not a state-space proof that the genesis
-  czd persists (see `[identity-stability]`).
-- **POST**: the replacement is stored alongside the replaced claim;
-  both remain retrievable (history is never erased).
-
-`construction.rs::claim_replacement_transactions_verify` tests
-replacement shape (prior linkage, governance marking, distinct
-signing keys) and signature validity, but its own module docstring
-is explicit: "construction correctness only -- no ... authorization
-validation runs anywhere in this corpus." No storage backend exists
-either.
+a `CozMessage`. _(PRE/POST restored 2026-08-05: this transition's own
+clauses had drifted under the now-retired `[claim-replacement-
+transition]` section below it, with no heading of their own —
+corrected in place, not new content.)_
 
 - **PRE**: `claim` MUST be the `czd` of a valid, non-revoked claim
   for this `(anchor, label)`. `version` MUST be a non-empty string.
@@ -1782,8 +1901,28 @@ either.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 ```
+
+Verification is `verify_publish_roundtrip`: sign, then verify.
+
+#### [claim-replacement-transition] — RETIRED 2026-08-05
+
+**Retired, not amended.** This transition constructed a **replacement
+claim** — the shape `[claim-replacement-authority]` specified and
+ADR-0007 §3 forecloses (see that constraint's retirement note, above).
+There is no replacement claim to construct: `ClaimPayload` carries no
+`prior`/`governance` fields (Type Declarations). What this transition
+was for — changing who currently holds a label, with the owner-fact/
+governance-fact authorization split — is `[claim-owner-fact]`'s
+concern now; that constraint's own note already states the concrete
+fact-record construction (chaining field, discriminator) is not yet
+specified in this document (Open Items), so no replacement PRE/POST
+transition is authored here to take this one's place. Its own test
+coverage, `construction.rs::claim_replacement_transactions_verify`,
+exercised the retired replacement-claim shape specifically (`prior`
+linkage, `governance` marking) and verifies nothing about the fact-
+based restatement.
 
 #### [session-ordering]
 
@@ -1969,10 +2108,15 @@ therefore carry cryptographic assurance. Backends MUST preserve
 all payload fields, including unknown ones, when storing and
 retrieving claim transactions.
 
-Claim `meta` is particularly important for **claim chain
-transitions** — when a new claim replaces a previous one. The
-`meta` fields on the new claim communicate the intent and severity
-of the transition to consumers who may hold the old claim.
+_(Re-scoped 2026-08-05 — genesis-once: there is no new claim replacing
+a previous one; the paragraph below now describes a fact, not a claim.)_
+Claim `meta` remains available on the one, permanent claim payload for
+ecosystem extension; the transition-intent-and-severity communication
+this note originally described for a **replacement claim** belongs to
+the fact-record extending the claim's scope instead
+(`[claim-owner-fact]`) — that record's own `meta`-equivalent field, not
+this document's `ClaimPayload.meta`, once the fact-record wire shape is
+specified (Open Items).
 
 - **Type**: Safety
 
@@ -2121,27 +2265,28 @@ The following defines the normative verification steps for consumers.
 ### Local Verification (zero network)
 
 A consumer who has the atom snapshot, publish transaction, claim
-transaction, and charter chain MUST be able to perform all of the
-following locally:
+transaction, and the charter (with any owner-facts signed since
+genesis) MUST be able to perform all of the following locally:
 
 | Step | Check                            | Field(s)                                                             |
 | :--- | :------------------------------- | :------------------------------------------------------------------- |
 | 1    | Atom snapshot hash matches `dig` | `publish.dig`                                                        |
-| 2    | Charter signature(s) valid       | `charter.pay`, `charter.sig`, `charter.key` (each link in the chain) |
-| 3    | Charter chain valid              | each successor's `prior` + signer authorized by membership in prior `owner` set |
+| 2    | Charter signature valid          | `charter.pay`, `charter.sig`, `charter.key` (the one genesis record — genesis-once, `[atom-genesis-and-facts]`) |
+| 3    | Charter owner-fold valid         | step 2's signature, plus every `[charter-owner-fact]` signed since genesis, each fold-authorized at signing time — never a chain of successor charters |
 | 4    | Claim signature valid            | `claim.pay`, `claim.sig`, `claim.key`                                |
 | 5    | Publish signature valid          | `publish.pay`, `publish.sig`, key                                    |
 | 6    | Key thumbprints match            | `tmb(x.key) == x.pay.tmb` for charter/claim/BASE-publish             |
-| 7    | Claim chains to charter          | `claim.anchor == czd(charter₀)`                                      |
-| 8    | Publish chains to claim          | BASE-`publish.claim == czd(claim)` (current claim per replacement chain; `claim` is identity-class, present only on the base tag, `[amendment-field-classification]`) |
+| 7    | Claim chains to charter          | `claim.anchor == czd(charter)`                                      |
+| 8    | Publish chains to claim          | BASE-`publish.claim == czd(claim)` (the one, permanent claim — genesis-once, `[atom-genesis-and-facts]`; `claim` is identity-class, present only on the base tag, `[amendment-field-classification]`) |
 | 9    | Temporal ordering                | `charter.now < claim.now < BASE-publish.now` (an amendment tag's own `now` is overwrite-class and does not re-anchor this floor, `[no-backdated-publish]`) |
-| 10   | Claim signer authorized          | `claim.tmb` authorized by membership in effective charter `owner` set |
-| 11   | Publish signer authorized        | `publish.tmb` (already bound to the signing key by step 6) authorized by `claim.owner` (single-valued, per its `kind`) |
-| 12   | Replacement authority (if any)   | per `[claim-replacement-authority]`; `governance` flag surfaced      |
+| 10   | Claim signer authorized          | `claim.tmb` authorized by the charter's current owner-fold (step 3) |
+| 11   | Publish signer authorized        | `publish.tmb` (already bound to the signing key by step 6) authorized by `claim.owner` as amended by any `[claim-owner-fact]` since genesis (single-valued at every point, per its `kind`) |
+| 12   | Claim-owner fact fold (if any)   | per `[claim-owner-fact]`; owner-fact vs. governance-fact distinguished; a divergent governance fact fails this step closed |
 | 13   | Symmetric-payload consistency    | BASE-`publish.(anchor, label)` == `claim.(anchor, label)` (`[symmetric-payloads]`; `anchor`/`label` are identity-class, present only on the base tag, `[amendment-field-classification]`) |
 
-This pipeline verifies a single base transaction set (charter chain,
-one claim, one publish's base tag). Verifying a publish's full update
+This pipeline verifies a single base transaction set (the charter and
+its owner-fact history, one claim, one publish's base tag). Verifying
+a publish's full update
 chain — walking amendment tags and applying
 `[amendment-field-classification]`'s accumulation algorithm, and
 checking `[publish-update-transition]`'s per-class amendment
@@ -2164,6 +2309,23 @@ content or the complete source history:
 | 18   | Reconstruct atom snapshot → matches `dig`         | Local computation           |
 
 ## Verification
+
+> [!NOTE]
+> **Genesis-once retirement (2026-08-05) — read this before trusting any
+> `machine (TLC)`/`machine (Alloy)` pass below on a succession- or
+> replacement-shaped claim.** ADR-0007 §3 abolished the successor-charter
+> and replacement-claim record shapes; `[charter-succession]`,
+> `[charter-succession-linear]`, and `[claim-replacement-authority]`
+> are RETIRED (see their own entries under Invariants). `AtomCharter.tla`'s
+> "succession" config and `atom_structure.als`'s `charter_fork_distinction`-
+> family assertions, both cited below, verify that retired design — a
+> green result there is evidence the superseded model was internally
+> consistent, never evidence for `[charter-owner-fact]`,
+> `[charter-owner-fact-linear]`, or `[claim-owner-fact]`, the fact-based
+> constraints that replace them. Those three are graded `evaluator: none`
+> at their own claim blocks. The historical record below is otherwise
+> left intact — it accurately describes what was checked, for the design
+> that was checked, as of the dates given.
 
 > [!NOTE]
 > **Charter amendment verification (2026-07-08, discharged).** The charter
@@ -2274,22 +2436,32 @@ _The rows added or amended for the charter constraints are marked (amended)._
 > [!NOTE]
 > **Owner-set amendment (2026-07-14) outpaces `AtomCharter.tla`.** This
 > revision generalizes `CharterPayload.owner` from a single value to a
-> non-empty `Vec<OwnerRef>` (`[charter-owner-set]`) and reworks
-> `[charter-succession]`/`[charter-succession-linear]`'s authorization
-> semantics to set membership. `AtomCharter.tla` still encodes the
-> pre-amendment single-owner model (`CharterSucceed`'s rotation guard,
-> `CharterTransfer`'s transfer dichotomy assume exactly one owner per
-> charter) and has not been re-run against set-valued ownership. The
-> `machine (TLC)` **pass** recorded below for `[charter-anchor]`,
-> `[claim-charter-authorization]`, `[charter-ancestry]`,
-> `[charter-succession]`, `[charter-succession-linear]`,
-> `[chain-monotonicity]`, `[claim-replacement-authority]`, and
-> `[anchor-immutable]` therefore reflects the single-owner model, not
-> this amendment's set semantics. An `AtomCharter.tla` rework covering
-> add/remove-membership operations is registered follow-on work, not
-> yet landed; until it lands and re-discharges these eight rows, their
-> **pass** status is inherited from the prior model, not fresh
-> coverage of the set case.
+> non-empty `Vec<OwnerRef>` (`[charter-owner-set]`) and reworked the
+> succession-era authorization semantics to set membership.
+> `AtomCharter.tla` still encodes the pre-amendment single-owner model
+> (`CharterSucceed`'s rotation guard, `CharterTransfer`'s transfer
+> dichotomy assume exactly one owner per charter) and has not been
+> re-run against set-valued ownership. The `machine (TLC)` **pass**
+> recorded below for `[charter-anchor]`, `[claim-charter-authorization]`,
+> `[charter-ancestry]`, `[chain-monotonicity]`, and `[anchor-immutable]`
+> therefore reflects the single-owner model, not this amendment's set
+> semantics. An `AtomCharter.tla` rework covering add/remove-membership
+> operations is registered follow-on work, not yet landed; until it
+> lands and re-discharges these rows, their **pass** status is
+> inherited from the prior model, not fresh coverage of the set case.
+>
+> **Genesis-once retirement (2026-08-05) removes three rows from this
+> note's scope, not just staleness from it.** `[charter-succession]`,
+> `[charter-succession-linear]`, and `[claim-replacement-authority]`
+> are RETIRED (ADR-0007 §3 forecloses the successor-charter and
+> replacement-claim shapes both modeled); `AtomCharter.tla`'s
+> "succession" config and its checked invariants continue to describe
+> that retired design faithfully, but neither their historical
+> `machine (TLC)` **pass** nor this note's staleness caveat carries
+> forward to the fact-based replacements. `[charter-owner-fact]`,
+> `[charter-owner-fact-linear]`, and `[claim-owner-fact]` are graded
+> `evaluator: none` on their own claim blocks, above — ungraded, not
+> stale-graded, because nothing in this repository checks them yet.
 
 > [!NOTE]
 > **Pair-identity re-derivation (2026-08-05) leaves four claims without
@@ -2313,20 +2485,22 @@ _The rows added or amended for the charter constraints are marked (amended)._
 >   owner re-claiming a source+label at a later clock tick produces a
 >   second, distinct `czd`). The doctrinally-correct restatement —
 >   identity is stable across ownership transfer via the label-scope
->   GENESIS claim's `czd` — is not checked here: `AtomTransactions.tla`
->   has no claim-replacement chain at all (no `prior` field on its
->   `claims`). Both invariants were retired from the checked list in
->   both `.cfg` files rather than left green-by-construction; see
->   `AtomTransactions.tla` for the full reasoning.
+>   genesis claim's `czd` — cannot be checked because no TLA+ module
+>   models genesis-once void-rejection (a second claim record for an
+>   already-claimed label being structurally invalid,
+>   `[publish-claim-coherence]`) anywhere in this repo. Both invariants
+>   were retired from the checked list in both `.cfg` files rather
+>   than left green-by-construction; see `AtomTransactions.tla` for
+>   the full reasoning.
 > - `[owner-abstract]` and `[owner-compatibility]`
 >   (`atom_structure.als`): their backing assertion,
 >   `ownership_independence`, was a logical tautology independent of
 >   the identity question (`(x = a ∧ y = a) → x = y` holds for any
 >   relation) — it never tested anything. Its intended content
->   ("upgrading ownership doesn't alter identity") hits a related gap:
->   `atom_structure.als` has no `prior` field on `Claim` either, so
->   ownership succession isn't modeled there. The assertion was REMOVED
->   rather than repaired in place.
+>   ("upgrading ownership doesn't alter identity") hits the identical
+>   modeling gap as above: `atom_structure.als` has no owner-fact
+>   mechanism at all, so an owner-identity-framework upgrade isn't
+>   modeled. The assertion was REMOVED rather than repaired in place.
 > - `AtomCharter.tla` DOES model claim replacement (`ClaimReplace`,
 >   `prior` field, `ReplacementAuthority`) — the one formal model in
 >   this repo that does. But its `ReplacementAuthority` conjunct
@@ -2345,17 +2519,38 @@ _The rows added or amended for the charter constraints are marked (amended)._
 >   identical state counts before and after (4,115,091/2,090,615
 >   succession, 649,144/328,807 rotation, 0 errors both).
 >
-> The first four claims' `evaluator: model-check` grade is therefore
-> stale as of this re-derivation — this is a finding for the
-> architect to disposition (extend the models to cover claim
-> replacement non-vacuously, or re-grade the claims), not a change
-> made here. `[claim-replacement-authority]` and `[anchor-immutable]`
-> are a different case: their formulas were already correct and remain
-> `machine (TLC)`-verified without change — only the COMMENTS
-> explaining them asserted or implied the repudiated doctrine, now
-> fixed. The `[identity-content-addressed]`, `[identity-stability]`
-> prose above has been corrected regardless, since it asserted the
-> repudiated pair doctrine independent of this coverage question.
+> **Genesis-once retirement (2026-08-05) resolves the "cannot be
+> re-derived without new modeling scope" framing above for two of these
+> four, not by adding coverage but by removing the premise — and
+> supersedes a competing claim below, not just a phrasing choice.** The
+> original wording attributed the gap to "no TLA+ module models claim
+> replacement" — as if extending `AtomTransactions.tla` to cover
+> replacement would eventually close it. There is no replacement to
+> model (`[claim-replacement-authority]` retired, above); the honest
+> gap is the different one restated in the two bullets above. Per this
+> amendment's own instruction to grade what it touches rather than
+> defer, `[identity-stability]` and `[owner-compatibility]` are
+> re-graded `evaluator: none` at their own claim blocks, above — not
+> left at the stale `model-check` grade pending disposition.
+> `[atomid-per-source-unique]` and `[owner-abstract]` are untouched by
+> this amendment; their pair-identity-specific coverage gap remains the
+> architect's to disposition, unchanged by anything above.
+>
+> A separately-landed pass through this same note (concurrent with this
+> amendment, corrected `AtomCharter.tla`'s misleading comments — see the
+> bullet immediately above) concluded `[claim-replacement-authority]`
+> "was already correct and remain[s] `machine (TLC)`-verified without
+> change," needing only a comment fix. That conclusion is accurate about
+> the comments and the retired model, and irrelevant to this document as
+> of this amendment: `[claim-replacement-authority]` is retired, not
+> merely re-verified, and a correct account of what a stale model checks
+> is not evidence the constraint it checks survives (this amendment's
+> own governing instruction — a worker was reversed today for treating a
+> green model check as exactly that kind of evidence). Superseded here,
+> not silently dropped: the finding about `AtomCharter.tla`'s comments
+> stands as the accurate historical record it is; the inference that
+> `[claim-replacement-authority]` therefore remains a live claim does
+> not.
 
 ## Implications
 
@@ -2370,7 +2565,7 @@ This specification explicitly does NOT define:
 - **Network transport**: HTTP, SSH, native protocols — implementation details.
 - **Key/identity management**: deferred to Cyphr.
 - **Charter `src` interpretation**: the founding charter's derivation
-  (`Anchor := czd(charter₀)`) is now fixed and backend-agnostic; only
+  (`Anchor := czd(charter)`) is now fixed and backend-agnostic; only
   how a backend interprets the charter's `src` field remains
   backend-specific.
 - **Fact-append mechanics**: atom-model.md §4 states the governing
@@ -2383,3 +2578,18 @@ This specification explicitly does NOT define:
   `[fact-claim-owner-gated]` above — closing atom-sad.md §9 gap 5
   at the specification level. The Rust implementation of this
   mechanism is separate, not-yet-landed work.
+- **Charter-scope and claim-scope fact wire shape (2026-08-05, new
+  gap)**: `[charter-owner-fact]`, `[charter-owner-fact-linear]`, and
+  `[claim-owner-fact]` require owner-set membership change, key
+  rotation, and label-owner transfer to be expressed as a `fact`
+  extending the charter's or claim's own scope, per ADR-0007 §3 —
+  replacing the retired successor-charter and replacement-claim record
+  shapes. This document states the authorization rules those facts
+  MUST satisfy but does NOT define their concrete encoding (a chaining
+  field analogous to `pay.prior`, a discriminator distinguishing an
+  owner-fact from a governance-fact, storage/ref placement). That is
+  deliberately left to `git-storage-format.md` and
+  `atom-backend-contract.md` — both separately obligated by ADR-0007 to
+  amend for the same reason, and the natural home for a wire-format
+  decision that must cohere with those documents' own backend
+  representation, not be pre-empted here in isolation.
