@@ -189,8 +189,9 @@ evaluator: none
 Version constraints in
 `[deps.from.<set>]` MUST use semantic versioning range syntax as
 defined by the `semver` crate (compatible with the node-semver range
-grammar). Ion's `[version-total-order]` implementation (per
-atom-sourcing.md) is semver. Examples: `"^1.0.0"`, `">=2.0,<3.0"`,
+grammar). Ion's
+[version-total-order](atom-sourcing.md#version-total-order)
+implementation is semver. Examples: `"^1.0.0"`, `">=2.0,<3.0"`,
 `"=1.2.3"`, `"*"`.
 
 ```claim
@@ -214,9 +215,10 @@ evaluator: test
 
 Within a single atom-set, the pair
 (label, version) MUST uniquely identify an atom snapshot. This is a
-consequence of atom-transactions.md atom identity, restated here for
-manifest clarity: publishing a new snapshot under an existing
-(label, version) pair is forbidden.
+consequence of
+[atom-version-identity](atom-sourcing.md#atom-version-identity),
+restated here for manifest clarity: publishing a new snapshot under an
+existing (label, version) pair is forbidden.
 
 ```claim
 kind: constraint
@@ -241,7 +243,8 @@ evaluator: none
 
 #### [plugin-lock-contract]
 
-A direct dependency plugin MUST produce
+Every plugin occupying a
+[plugin-extension-point](#plugin-extension-point) MUST produce
 lock entries containing at minimum:
 
 | Field  | Type   | Purpose                                |
@@ -262,7 +265,8 @@ depends: [plugin-extension-point]
 
 #### [plugin-lock-type-tag]
 
-Each lock entry produced by a plugin MUST
+Each lock entry produced by a
+[plugin-extension-point](#plugin-extension-point) plugin MUST
 carry a type tag that identifies both the plugin and the specific
 fetch strategy (e.g., `"nix"`, `"nix+git"`, `"nix+tar"`,
 `"nix+build"`). This tag enables eos to select the correct fetch and
@@ -276,11 +280,12 @@ depends: [plugin-extension-point]
 
 #### [plugin-owner-tracking]
 
-When a plugin dependency originates from
-a transitive atom dependency (not the root manifest), the lock entry
-SHOULD include an `owner` field containing the owning atom's
-`publish_czd` (a Czd). This enables dependency
-graph reconstruction and targeted re-resolution when the owning atom
+When a
+[plugin-extension-point](#plugin-extension-point) dependency
+originates from a transitive atom dependency (not the root manifest),
+the lock entry SHOULD include an `owner` field containing the owning
+atom's `publish_czd` (a Czd). This enables dependency graph
+reconstruction and targeted re-resolution when the owning atom
 updates.
 
 ```claim
@@ -291,8 +296,9 @@ depends: [plugin-extension-point]
 
 #### [plugin-resolution-locality]
 
-Plugin resolution MUST execute
-within ion (or the plugin itself). Eos MUST NOT be required to
+Resolution for a
+[plugin-extension-point](#plugin-extension-point) dependency MUST
+execute within ion (or the plugin itself). Eos MUST NOT be required to
 understand the plugin's resolution logic. Eos consumes only the lock
 output: type tag, name, URL, and hash.
 
@@ -321,8 +327,10 @@ any resolution or publish operation.
 
 - **PRE**: An `atom.toml` file exists at the atom root.
 - **POST**: A validated `Manifest` value exists. All invariants
-  (`[manifest-required-sections]`, `[set-declaration-completeness]`,
-  `[composer-set-reference]`, `[deny-unknown-fields]`) hold. Invalid
+  ([manifest-required-sections](#manifest-required-sections),
+  [set-declaration-completeness](#set-declaration-completeness),
+  [composer-set-reference](#composer-set-reference),
+  [deny-unknown-fields](#deny-unknown-fields)) hold. Invalid
   manifests MUST be rejected with a diagnostic error.
 
 ```claim
@@ -341,7 +349,8 @@ MUST update the manifest and trigger re-resolution.
 - **POST**: The `[deps.from.<set>]` section contains the new
   dependency. If the set was not previously declared, it is added to
   `[package.sets]`. The lock file is updated via the resolution
-  pipeline. The manifest is re-validated after modification.
+  pipeline. The manifest is re-validated after modification, subject
+  to the same [manifest-parse](#manifest-parse) it runs at load time.
 
 No CLI `add` command or re-resolution pipeline exists; ion-manifest
 only parses and validates a manifest already on disk.
@@ -362,7 +371,8 @@ validate the mirror's anchor against the set's established anchor.
 - **POST**: The mirror is appended to the set's mirror list. The
   mirror singleton is promoted to a mirror array if needed. The
   anchor of the new mirror has been verified consistent with existing
-  mirrors per atom-sourcing.md `[set-anchor-bijection]`.
+  mirrors per atom-sourcing.md
+  [set-anchor-bijection](atom-sourcing.md#set-anchor-bijection).
 
 No mirror-add or anchor-bijection-validation logic exists anywhere in
 the codebase.
@@ -399,7 +409,7 @@ evaluator: none
 
 A `[deps.from.<set>]` section MUST
 NOT reference a set not declared in `[package.sets]`. Corollary of
-`[set-declaration-completeness]`.
+[set-declaration-completeness](#set-declaration-completeness).
 
 ```claim
 kind: constraint
@@ -453,8 +463,9 @@ evaluator: none
 
 Plugins MUST NOT modify ion core manifest
 sections (`[package]`, `[compose]`, `[deps.from]`). A plugin's scope
-is strictly limited to its own namespace under `[deps.direct.<tag>]`
-and its corresponding lock entries.
+at its [plugin-extension-point](#plugin-extension-point) is strictly
+limited to its own namespace under `[deps.direct.<tag>]` and its
+corresponding lock entries.
 
 - **Type**: Safety
 
