@@ -71,11 +71,20 @@ founding charter (`[charter-succession]`). Absent succession, the
 re-hashed repository is a distinct atom-set — now by explicit rule rather
 than silent consequence.
 
-The anchor feeds into identity: `AtomId = (anchor, label)`. Because
-the anchor is immutable and the label is fixed per atom, the AtomId is
-permanent. The `AtomId` is the abstract pair — no identity-layer digest
-is derived from it. Algorithm agility for content addressing lives only
-in the Coz `czd`.
+The anchor feeds into identity, but is never identity itself. For a
+**claimed** atom, identity is the claim record's own `czd` — the
+signed transaction's content-addressed digest (glossary, "Atom
+identity"). For an **unclaimed development atom**, identity degrades
+to `AtomId`, a deterministic digest of the pre-signature preimage
+`(anchor, label)` — the only mechanism anywhere in this protocol
+where anchor and label combine as a unit, and only at this one
+pre-claim level. Neither case makes `AtomId` or `czd` the fused pair
+`(anchor, label)` itself: naming the pair as identity, or as a lookup
+key, is glossary-repudiated (2026-07-18) — each component has real,
+separate significance, and there is no "hashed atom id." Algorithm
+agility for content addressing lives only in the Coz `czd`; the
+pre-claim `AtomId` digest is computed the same way but over an
+unsigned preimage (`[identity-content-addressed]`).
 
 ## Implementor Abstraction
 
@@ -126,8 +135,14 @@ A backend MUST:
 3. Resolve and verify the founding charter from the source, so the
    consumer can check `anchor == czd(charter₀)` (`[anchor-resolvable]`;
    the anchor is never derived from backend state).
-4. Enforce version uniqueness per `(AtomId, claim czd)` pair.
-5. Support multiple claims for the same `AtomId` by different owners.
+4. Enforce version uniqueness per `(claim czd, version)` pair — `claim
+   czd` alone already identifies the claimed atom
+   (`[identity-content-addressed]`); pairing it with `AtomId` would be
+   redundant, since a claim's own `czd` IS its `AtomId`.
+5. Support multiple claims for the same underlying `(anchor, label)`
+   slot by different owners — each carries its own distinct `AtomId`
+   (`[identity-stability]`); this is never "multiple claims sharing
+   one `AtomId`."
 
 A backend MUST NOT:
 
@@ -302,7 +317,8 @@ This principle means:
 1. An atom's authenticity is not determined by which store holds it,
    but by the cryptographic chain back to its source.
 2. A consumer can verify trust without trusting intermediate stores.
-3. Forked sources produce competing claims for the same AtomId — the
+3. Forked sources produce competing claims for the same underlying
+   `(anchor, label)` slot, each with its own distinct `AtomId` — the
    consumer selects which source (and therefore which claim) to trust.
 4. Backend-internal machinery (ref parsing, caching strategies,
    remote protocols) is NOT protocol surface — it is private to the
@@ -325,11 +341,22 @@ TYPE  Anchor      = Vec<u8>                                        (atom-id)
   -- Opaque digest. Anchor := czd(charter₀), backend-agnostic.
   -- See §Anchor for required properties.
 
-TYPE  AtomId      = { anchor: Anchor, label: Label }              (atom-id)
-  -- Protocol-level identity. Determined solely by the source's
-  -- anchor and the atom's label. Algorithm-free, permanent.
-  -- Two atoms with the same (anchor, label) ARE the same atom.
-  -- NOT a hash — this is the abstract identity pair.
+TYPE  AtomId      = Vec<u8>                                       (atom-id)
+  -- Opaque content-addressed digest — the generic identity/lookup-key
+  -- type used across `resolve`/`discover`/`contains` and everywhere
+  -- else an atom is referenced. What occupies it changes at the
+  -- claim boundary, by design (glossary, "Atom identity"): for an
+  -- UNCLAIMED development atom, `AtomId` is a deterministic digest of
+  -- the pre-signature preimage `(anchor, label)` — the only mechanism
+  -- anywhere in this protocol where anchor and label combine as a
+  -- unit, and only at this one pre-claim level; for a CLAIMED atom,
+  -- `AtomId` IS the claim record's own `czd`, byte-identical, not a
+  -- re-derivation or a wrapping of it. Either way `AtomId` is a
+  -- digest, never the fused pair `(anchor, label)` itself and never a
+  -- lookup key built from it — both framings are glossary-repudiated
+  -- (2026-07-18). Two unclaimed atoms with the same `(anchor, label)`
+  -- share the same pre-claim `AtomId` — content-addressing over the
+  -- preimage, not identity residing in the preimage.
 
 TYPE  OwnerKind   = "single-key" | "hierarchical" | "rooted-identity"
                                                                    (atom-id)
@@ -729,11 +756,18 @@ evaluator: model-check
 
 #### [identity-content-addressed]
 
-An atom's identity (`AtomId`) MUST be
-determined solely by the pair `(anchor, label)`. The `AtomId` MUST NOT
-depend on any key, signature, signed message, or hash algorithm. Identity
-is permanent and content-addressed. The `AtomId` is the abstract pair —
-not a hash of it; there is no identity-layer digest type.
+An **unclaimed** atom's identity
+(`AtomId`) MUST be a deterministic digest of the pair `(anchor,
+label)` — content-addressed, collision-free (same inputs always
+produce the same digest, distinct inputs always produce distinct
+digests), and independent of any key, signature, or signed message.
+The pair is the digest's INPUT, never the digest itself: it MUST NOT
+be observable in, or reconstructible from, an `AtomId` value, and MUST
+NOT be used as a lookup key in its own right (glossary-repudiated,
+2026-07-18, both framings). Once the atom is **claimed**, this
+pre-signature digest is superseded — the atom's permanent identity
+becomes the claim record's own `czd` instead (`[identity-stability]`),
+never a hash or wrapping of the pair.
 
 ```claim
 kind: constraint
@@ -742,9 +776,20 @@ evaluator: model-check
 
 #### [identity-stability]
 
-An atom's `AtomId` MUST NOT change across
-versions, ownership transfers, or key rotations. The `AtomId` is
-determined by `anchor` and `label`, neither of which changes.
+Once claimed, an atom's identity (the
+claim record's `czd`) MUST NOT change as new versions are published
+against it — a publish's `claim` reference names one fixed czd for
+the atom's entire publish history. Identity MUST ALSO survive
+ownership transfers and key rotations: per the composite duality
+(atom-model.md §2), the atom's permanent identity is its **label-scope
+genesis claim's** `czd` — the first claim ever made for that
+`(anchor, label)` — which stays fixed even as claim replacement
+(`[claim-replacement-authority]`) produces new claim records, with new
+czds, for later owners or keys. A replacement claim's own `czd` is
+never itself the atom's identity; only the genesis claim's `czd` is.
+Before any claim exists, the unclaimed atom's `AtomId`
+(`[identity-content-addressed]`) is likewise fixed by `(anchor,
+label)`, neither of which changes pre-claim.
 (Model §1 olog: identity stability diagram.)
 
 ```claim
@@ -900,11 +945,12 @@ evaluator: test
 
 Upgrading from a simpler to a richer
 identity framework (e.g., raw key → GPG master → Cyphr PR)
-MUST NOT alter the `AtomId`. The `AtomId` is derived from
-`(anchor, label)`, which is independent of the owner. A claim
-replacement (`[claim-replacement-transition]`) MAY update the
-`owner` to a new identity system without changing the atom's
-identity.
+MUST NOT alter the atom's identity. A claim replacement
+(`[claim-replacement-transition]`) MAY update the `owner` to a new
+identity system: the replacement claim carries a fresh `czd` of its
+own, but the atom's permanent identity remains the label-scope genesis
+claim's `czd` (`[identity-stability]`) — owner upgrades change which
+claim is active, never which czd is identity.
 
 ```claim
 kind: constraint
@@ -916,9 +962,14 @@ evaluator: model-check
 `ClaimPayload` and a publish's **base
 payload** (`[amendment-field-classification]` class 1 — the first tag
 in an update chain, the one targeting the atom commit) MUST carry raw
-`anchor` and `label` fields. A consumer MUST be able to reconstruct
-the `AtomId` from either payload independently by extracting
-`(anchor, label)`.
+`anchor` and `label` fields. A consumer holding either payload MUST be
+able to verify its `(anchor, label)` fields independently — without
+needing the other payload present — and cross-check them for
+consistency once both are available (verification step 13). This is
+a coherence check between two payloads, never an identity
+reconstruction: the payload's identity is its own `czd`
+(`[identity-content-addressed]`, `[identity-stability]`), not a value
+computed by extracting and re-hashing `(anchor, label)`.
 
 This constraint does NOT extend to a non-base **amendment payload**
 (`[publish-update-transition]`, git-storage-format.md): an amendment
@@ -929,11 +980,12 @@ payload structurally lacks every identity-class field — `anchor` and
 identity field stays absent, would be an ad hoc asymmetry the field
 classification does not otherwise support; an amendment payload was
 never symmetric with `ClaimPayload` under the duplicate-then-compare
-model this constraint originally described. `AtomId` reconstruction
+model this constraint originally described. Verifying `anchor`/`label`
 from an amendment payload in isolation is NOT possible by design — a
 consumer MUST walk the chain to the base tag
-(`[tag-chain-semantic-immutable]`) to recover it, the same obligation
-the resolver already has for every other identity-class field.
+(`[tag-chain-semantic-immutable]`) to recover them, the same
+obligation the resolver already has for every other identity-class
+field.
 
 `ClaimPayload`/base-`PublishPayload` carrying `anchor`+`label` is
 rustc-verified today; the amendment-payload exclusion is new protocol
@@ -1481,11 +1533,17 @@ evaluator: none
 
 #### [atomid-per-source-unique]
 
-Within a single source, an `AtomId`
-MUST be unique — no two atoms in the same source MAY share the same
-label. All atoms in a source share the same anchor, so label uniqueness
-within a source directly implies `(anchor, label)` pair uniqueness.
-This prevents ambiguous references within a source.
+Within a single source, a label MUST
+identify at most one atom — no two atoms in the same source MAY
+share the same label. This is a source-content constraint, not a
+claim-identity one: it holds regardless of how many claims are later
+made against that label (competing claims are a separate, legitimate
+fork condition, `[publish-claim-coherence]`). All atoms in a source
+share the same anchor, so label uniqueness within a source directly
+implies the pre-signature preimage `(anchor, label)` is unique per
+atom there too — the unclaimed `AtomId` this constraint is named for
+(`[identity-content-addressed]`). This prevents ambiguous atom
+references within a source.
 
 ```claim
 kind: constraint
@@ -1496,8 +1554,11 @@ evaluator: model-check
 
 A publish's `claim` field MUST reference
 the `czd` of a valid claim whose `(anchor, label)` matches the
-publish's `(anchor, label)`. Multiple claims for the same `AtomId` by
-different owners MAY coexist (e.g., forks sharing the same anchor).
+publish's `(anchor, label)`. Multiple claims for the same underlying
+`(anchor, label)` slot, by different owners, MAY coexist (e.g., forks
+sharing the same anchor) — each such claim carries its OWN identity
+(its own `czd`); they are competing identities contesting one
+human-facing name, never one shared `AtomId` (`[identity-stability]`).
 The publish→claim chain is the sole mechanism for binding a publish to
 a specific claim. Publishes from different claims MUST NOT
 cross-pollinate — a consumer selects which claim to trust based on
@@ -1676,7 +1737,13 @@ previously referenced by `[owner-compatibility]` but never specified.)
 
 - **PRE**: authority per `[claim-replacement-authority]`; `now` MUST
   exceed the replaced claim's `now`; `(anchor, label)` MUST be
-  unchanged (replacement never alters identity).
+  unchanged — a replacement cannot silently retarget to a different
+  atom. This is a coherence check, distinct from `[identity-stability]`
+  itself: the atom's identity (the genesis claim's `czd`) is preserved
+  by the replacement referencing `prior: czd(replaced claim)` and
+  chaining back to that genesis, not by `(anchor, label)` staying
+  fixed — this repo's formal models do not yet verify that chaining
+  (no claim-replacement model exists; see `[identity-stability]`).
 - **POST**: the replacement is stored alongside the replaced claim;
   both remain retrievable (history is never erased).
 
@@ -1914,8 +1981,9 @@ for filesystem directories (paths without git history). Such a source:
   signed transactions)
 - MUST be ingestible into an `AtomStore` for consumption
 - MUST use a well-known constant sentinel value as its anchor, so
-  that the `AtomId` (the pair `(anchor, label)`) is reconstructible
-  for all atoms. The sentinel anchor distinguishes filesystem-sourced
+  that the `AtomId` (a deterministic digest of the pair `(anchor,
+  label)`, `[identity-content-addressed]`) is derivable for all atoms.
+  The sentinel anchor distinguishes filesystem-sourced
   atoms from git-sourced atoms and prevents them from being confused
   with published atoms. **Note**: the exact byte encoding of the
   `FsSource` sentinel anchor is a protocol-level constant that MUST
@@ -2053,7 +2121,7 @@ following locally:
 | 10   | Claim signer authorized          | `claim.tmb` authorized by membership in effective charter `owner` set |
 | 11   | Publish signer authorized        | `publish.tmb` (already bound to the signing key by step 6) authorized by `claim.owner` (single-valued, per its `kind`) |
 | 12   | Replacement authority (if any)   | per `[claim-replacement-authority]`; `governance` flag surfaced      |
-| 13   | AtomId matches payload fields    | extract BASE-`(anchor, label)` from payload, compare to expected `AtomId` (`anchor`/`label` are identity-class, present only on the base tag, `[amendment-field-classification]`) |
+| 13   | Symmetric-payload consistency    | BASE-`publish.(anchor, label)` == `claim.(anchor, label)` (`[symmetric-payloads]`; `anchor`/`label` are identity-class, present only on the base tag, `[amendment-field-classification]`) |
 
 This pipeline verifies a single base transaction set (charter chain,
 one claim, one publish's base tag). Verifying a publish's full update
@@ -2094,7 +2162,18 @@ content or the complete source history:
 `docs/specs/run_model_check.sh`).
 
 - `docs/specs/tla/AtomTransactions.tla` — claim/publish subchain, two
-  configs (fork: 31,593 states; distinct-anchor: 27,817). Unchanged.
+  configs, both re-derived 2026-08-05 over the corrected identity (a
+  claim's own `czd`, not the `(anchor, label)` pair): fork and
+  distinct-anchor configs each now generate 24,041 states (12,521
+  distinct), 0 errors. `AtomIdPerSourceUnique` and `IdentityStability`
+  were RETIRED from both configs' checked invariants — see the note
+  below; this repo's formal models do not model claim replacement, so
+  neither invariant is re-expressible without either new modeling
+  scope or genuine violation (forks legitimately differ in identity
+  now). `PublishClaimCoherence`, `NoUnclaimedPublish`, and
+  `PublishChainsClaim` are now textually identical formulas under the
+  corrected identity — a pre-existing three-way naming redundancy the
+  fix surfaces rather than introduces.
 - `docs/specs/tla/AtomCharter.tla` — charter/authorization/anchor layer,
   two configs (succession: 1,409,951 states, depth 6; rotation: 480,096
   states). All 9 safety invariants plus the `MonotonicHead` and
@@ -2104,10 +2183,16 @@ content or the complete source history:
 
 **Alloy model**: `docs/specs/alloy/atom_structure.als` verified by Alloy
 Analyzer 5.1.0 (pinned nixpkgs) at scope 4, headless via `SimpleCLI`
-(SAT4J). All 8 structural assertions pass (UNSAT) — the 5 original plus
-`anchor_content_addressed`, `claim_chains_charter`, `charter_fork_distinction`.
-Both `fork_scenario` and the charter-rooted `charter_rooted_fork` are
-satisfiable (SAT), confirming the charter facts are consistent.
+(SAT4J). All 7 remaining structural assertions pass (UNSAT), re-derived
+2026-08-05 over the corrected identity — `identity_content_addressed`
+(re-scoped to the unclaimed-atom preimage digest), `ingest_preserves_identity`,
+`anchor_set_coherence`, `verification_chain` (re-derived from
+`[symmetric-payloads]` directly, no longer via a removed `atomId` field on
+`Publish`), `anchor_content_addressed`, `claim_chains_charter`,
+`charter_fork_distinction`. Both `fork_scenario` and the charter-rooted
+`charter_rooted_fork` are satisfiable (SAT), confirming the charter facts
+are consistent. `ownership_independence` was REMOVED, not re-derived — see
+the note below.
 
 **Verification methods:**
 
@@ -2176,10 +2261,48 @@ _The rows added or amended for the charter constraints are marked (amended)._
 > add/remove-membership operations is registered follow-on work, not
 > yet landed; until it lands and re-discharges these eight rows, their
 > **pass** status is inherited from the prior model, not fresh
-> coverage of the set case. `atom_structure.als`'s structural
-> assertions (`ownership_independence` and others) are unaffected —
-> that model carries no `owner` field at all, so `[owner-abstract]`'s
-> `machine (Alloy)` status stands unchanged.
+> coverage of the set case.
+
+> [!NOTE]
+> **Pair-identity re-derivation (2026-08-05) leaves four claims without
+> machine coverage.** Correcting identity from the `(anchor, label)`
+> pair to the claim's own `czd` (glossary-repudiated 2026-07-18)
+> surfaced that four `machine (TLC)`/`machine (Alloy)` claims were
+> never really state-space-verified in the first place, and cannot be
+> re-derived without new modeling scope:
+>
+> - `[atomid-per-source-unique]` and `[identity-stability]`
+>   (`AtomTransactions.tla`): under the old pair identity these held
+>   VACUOUSLY — `AtomId` was a pure function of the very fields being
+>   compared, so TLC needed no reachable-state exploration to "prove"
+>   them. Substituting the corrected identity makes the literal
+>   invariant FALSE (TLC finds a 2-state counterexample: the same
+>   owner re-claiming a source+label at a later clock tick produces a
+>   second, distinct `czd`), and the doctrinally-correct restatement —
+>   identity is stable across ownership transfer via the label-scope
+>   GENESIS claim's `czd` — cannot be checked because no TLA+ module
+>   models claim replacement anywhere in this repo (the same gap
+>   `[claim-replacement-authority]` already names). Both invariants
+>   were retired from the checked list in both `.cfg` files rather
+>   than left green-by-construction; see `AtomTransactions.tla` for
+>   the full reasoning.
+> - `[owner-abstract]` and `[owner-compatibility]`
+>   (`atom_structure.als`): their backing assertion,
+>   `ownership_independence`, was a logical tautology independent of
+>   the identity question (`(x = a ∧ y = a) → x = y` holds for any
+>   relation) — it never tested anything. Its intended content
+>   ("upgrading ownership doesn't alter identity") hits the identical
+>   claim-replacement gap as above: `atom_structure.als` has no
+>   `prior` field on `Claim`, so ownership succession isn't modeled.
+>   The assertion was REMOVED rather than repaired in place.
+>
+> These four claims' `evaluator: model-check` grade is therefore
+> stale as of this re-derivation — this is a finding for the
+> architect to disposition (extend the models to cover claim
+> replacement, or re-grade the claims), not a change made here. The
+> `[identity-content-addressed]`, `[identity-stability]` prose above
+> has been corrected regardless, since it asserted the repudiated
+> pair doctrine independent of this coverage question.
 
 ## Implications
 

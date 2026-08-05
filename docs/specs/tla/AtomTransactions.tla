@@ -22,12 +22,12 @@ vars == <<claims, publishes, clock>>
 -----------------------------------------------------------------------------
 \* DEFINITIONS
 
-\* [identity-content-addressed]: AtomId is a deterministic function of (anchor, label)
-AtomId(anchor, label) == <<anchor, label>>
-
-\* czd is a deterministic tuple of the claim payload (models cryptographic effect)
-\* Different owner/key/timestamp => different czd (models signature uniqueness)
-Czd(atomId, owner, key, now) == <<atomId, owner, key, now>>
+\* [identity-content-addressed]: a claim's identity IS its czd -- the digest of
+\* its full signed payload (anchor, label, and every other claim-payload field;
+\* owner/key/now stand in for the rest here). (anchor, label) are two INPUTS to
+\* that digest, never the identity value itself -- there is no separate AtomId
+\* type distinct from Czd.
+Czd(anchor, label, owner, key, now) == <<anchor, label, owner, key, now>>
 
 -----------------------------------------------------------------------------
 \* INITIALIZATION
@@ -46,10 +46,9 @@ Init ==
 Claim(source, label, owner, key) ==
     LET
         anchor == SourceAnchor[source]
-        atomId == AtomId(anchor, label)
-        czd == Czd(atomId, owner, key, clock)
+        czd == Czd(anchor, label, owner, key, clock)
         newClaim == [
-            atomId |-> atomId,
+            anchor |-> anchor,
             source |-> source,
             label  |-> label,
             owner  |-> owner,
@@ -66,23 +65,22 @@ Claim(source, label, owner, key) ==
         /\ clock' = clock + 1
 
 \* Publish: publish a version against an existing claim.
-\* [session-ordering]: requires an existing claim with matching atomId.
+\* [session-ordering]: requires an existing claim, chained by czd alone --
+\* the publish->claim czd reference IS the identity binding
+\* ([identity-content-addressed]; the publish carries no separate atomId).
 \* [no-backdated-publish]: publish.now > claim.now.
-\* [no-duplicate-version]: unique (atomId, claimCzd, version).
-Publish(atomId, version, claimCzd, dig, src) ==
+\* [no-duplicate-version]: unique (claimCzd, version).
+Publish(version, claimCzd, dig, src) ==
     /\ clock < MAX_CLOCK
     \* Data flow & temporal ordering constraints
     /\ \E c \in claims :
         /\ c.czd = claimCzd
-        /\ c.atomId = atomId
         /\ clock > c.now
     \* [no-duplicate-version]
     /\ ~\E p \in publishes :
-        /\ p.atomId = atomId
         /\ p.claimCzd = claimCzd
         /\ p.version = version
     /\ publishes' = publishes \cup {[
-           atomId   |-> atomId,
            version  |-> version,
            claimCzd |-> claimCzd,
            dig      |-> dig,
@@ -100,14 +98,15 @@ Terminating ==
 -----------------------------------------------------------------------------
 \* STATE TRANSITIONS
 
-\* The Next relation deliberately passes all combinations of c1.atomId
-\* and c2.czd to exhaustively test cross-pollination — the Publish
-\* action's internal guard rejects invalid combinations.
+\* The Next relation deliberately passes every claim's czd to Publish,
+\* not only the czd of the claim that produced it, to exhaustively test
+\* cross-pollination — the Publish action's internal guard rejects any
+\* claimCzd that does not resolve to an existing claim.
 Next ==
     \/ \E source \in SOURCES, label \in LABELS, owner \in OWNERS, key \in KEYS :
            Claim(source, label, owner, key)
-    \/ \E c1 \in claims, c2 \in claims, version \in VERSIONS, dig \in DIGESTS, src \in SRCS :
-           Publish(c1.atomId, version, c2.czd, dig, src)
+    \/ \E c \in claims, version \in VERSIONS, dig \in DIGESTS, src \in SRCS :
+           Publish(version, c.czd, dig, src)
     \/ Terminating
 
 Spec == Init /\ [][Next]_vars
@@ -115,20 +114,35 @@ Spec == Init /\ [][Next]_vars
 -----------------------------------------------------------------------------
 \* SAFETY PROPERTIES (INVARIANTS)
 
-\* [atomid-per-source-unique]
-\* @docket: atomid-per-source-unique :: docs/specs/run_model_check.sh
-\* Within a single source, same label => same atomId (by construction)
-AtomIdPerSourceUnique ==
-    \A c1, c2 \in claims :
-        (c1.source = c2.source /\ c1.label = c2.label) => (c1.atomId = c2.atomId)
+\* [atomid-per-source-unique] -- RETIRED from the checked INVARIANTS list
+\* (both .cfg files), 2026-08-05. Under the old (anchor, label)-pair
+\* identity, this held vacuously: AtomId was a pure function of the two
+\* fields being compared, so no reachable-state exploration was needed --
+\* it proved nothing about actual claim traffic. Substituting the correct
+\* identity (a claim's own czd, which also depends on owner/key/now) makes
+\* the literal substitution FALSE: this model's Claim action has no guard
+\* against two independent claims for the same (source, label) -- e.g. the
+\* same owner re-claiming at a later clock tick produces a second, distinct
+\* czd. TLC confirms this in 2 states (see report). The underlying
+\* protocol constraint this invariant names is source-content-structural
+\* (a source cannot hold two atoms under one label) -- this model has no
+\* "atom content" entity at all, only claims/publishes, so it never tested
+\* that property either. Verifying it for real requires either a
+\* single-active-claim-per-(source,label) guard on Claim, or an atom-slot
+\* entity distinct from claims -- both are new modeling scope, not a
+\* substitution, and are left to the architect's decision (see report).
+\* AtomIdPerSourceUnique ==
+\*     \A c1, c2 \in claims :
+\*         (c1.source = c2.source /\ c1.label = c2.label) => (c1.czd = c2.czd)
 
 \* [publish-claim-coherence]
 \* @docket: publish-claim-coherence :: docs/specs/run_model_check.sh
-\* Every publish references a valid claim czd with matching atomId
+\* Every publish references a valid claim czd -- the czd reference IS the
+\* binding (there is no separate atomId to match alongside it).
 PublishClaimCoherence ==
     \A p \in publishes :
         \E c \in claims :
-            c.czd = p.claimCzd /\ c.atomId = p.atomId
+            c.czd = p.claimCzd
 
 \* [no-unclaimed-publish]
 \* @docket: no-unclaimed-publish :: docs/specs/run_model_check.sh
@@ -140,10 +154,10 @@ NoUnclaimedPublish ==
 
 \* [no-duplicate-version]
 \* @docket: no-duplicate-version :: docs/specs/run_model_check.sh
-\* Per (AtomId, claimCzd) pair, each version appears at most once
+\* Per claimCzd, each version appears at most once
 NoDuplicateVersion ==
     \A p1, p2 \in publishes :
-        (p1.atomId = p2.atomId /\ p1.claimCzd = p2.claimCzd /\ p1.version = p2.version) => (p1 = p2)
+        (p1.claimCzd = p2.claimCzd /\ p1.version = p2.version) => (p1 = p2)
 
 \* [session-ordering]
 \* @docket: session-ordering :: docs/specs/run_model_check.sh
@@ -161,21 +175,39 @@ NoBackdatedPublish ==
         \A c \in claims :
             (c.czd = p.claimCzd) => (p.now > c.now)
 
-\* [identity-stability]
-\* @docket: identity-stability :: docs/specs/run_model_check.sh
-\* Same anchor + same label => same atomId, regardless of source identity
-IdentityStability ==
-    \A c1, c2 \in claims :
-        (SourceAnchor[c1.source] = SourceAnchor[c2.source] /\ c1.label = c2.label)
-            => (c1.atomId = c2.atomId)
+\* [identity-stability] -- RETIRED from the checked INVARIANTS list (both
+\* .cfg files), 2026-08-05, same reasoning as AtomIdPerSourceUnique above:
+\* vacuous under the pair doctrine (same anchor+label trivially gave the
+\* same pure-function AtomId), and its literal substitution is FALSE under
+\* the corrected doctrine -- two independent claims sharing an anchor and
+\* label (this model's fork scenario, MC_ForkAnchor) legitimately have
+\* DIFFERENT identities (different czds) now, which is the doctrinally
+\* correct outcome: forks are competing claims, not one shared identity.
+\* The claim this invariant names -- "[identity-stability]" -- covers TWO
+\* separable properties: identity stability ACROSS VERSIONS (a claim's own
+\* czd never changes as publishes accrue against it -- already proven,
+\* vacuously-but-truly, by PublishClaimCoherence/NoUnclaimedPublish/
+\* PublishChainsClaim in this section, since a claim record is immutable
+\* once created) and identity stability ACROSS OWNERSHIP TRANSFERS / KEY
+\* ROTATIONS (per atom-model.md: the label-scope GENESIS claim's czd stays
+\* stable through claim replacement). This model has no claim-replacement
+\* chain (no `prior` field on claims, unlike AtomCharter.tla's charter
+\* succession) -- the ownership/key-rotation half is genuinely unmodeled,
+\* not merely mis-stated. Verifying it requires modeling claim replacement
+\* and a genesis-claim derivation analogous to [charter-anchor]'s
+\* czd(charter_0) -- new modeling scope, left to the architect (see report).
+\* IdentityStability ==
+\*     \A c1, c2 \in claims :
+\*         (SourceAnchor[c1.source] = SourceAnchor[c2.source] /\ c1.label = c2.label)
+\*             => (c1.czd = c2.czd)
 
 \* [publish-chains-claim]
 \* @docket: publish-chains-claim :: docs/specs/run_model_check.sh
-\* publish.claimCzd matches a claim with the same atomId
+\* publish.claimCzd matches an existing claim's czd
 PublishChainsClaim ==
     \A p \in publishes :
         \E c \in claims :
-            c.czd = p.claimCzd /\ c.atomId = p.atomId
+            c.czd = p.claimCzd
 
 -----------------------------------------------------------------------------
 \* MODEL-CHECKING HELPERS
