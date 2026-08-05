@@ -895,6 +895,26 @@ kind: constraint
 evaluator: model-check
 ```
 
+**Alloy assertion consolidated, not dropped (2026-08-05).**
+`atom_structure.als` carried a dedicated `charter_fork_distinction`
+assertion for this constraint until the succession-abolition pass on that
+file (same date). With the founding/successor anchor-derivation split
+retired, `Anchor` is the charter's own `czd` directly, so "distinct
+charters have distinct anchors" restated in the file's terms is `all disj
+c1, c2: Charter | c1.czd != c2.czd` — the model's `charter_properties`
+injectivity fact verbatim, not an independent claim to check. This is
+exactly the "no separate chain-validity check needed" already stated
+above, now true of the model as well as the prose. The dedicated
+assertion was retired, marked in place with the reasoning above, not
+silently deleted; the property remains machine-verified, folded into
+`anchor_content_addressed`'s uniqueness conjunct ("every anchor resolves
+to **at most one** charter" is this constraint read from the other
+direction) — the same assertion-consolidation pattern `[charter-anchor]`
+already uses (no dedicated `charter_anchor` assertion exists either; it
+is covered the same way). `evaluator: model-check` is left as-is: the
+property is verified by `docs/specs/run_model_check.sh`, just via
+`anchor_content_addressed` rather than its own assertion.
+
 #### [identity-content-addressed]
 
 An **unclaimed** atom's identity
@@ -2317,15 +2337,19 @@ content or the complete source history:
 > and replacement-claim record shapes; `[charter-succession]`,
 > `[charter-succession-linear]`, and `[claim-replacement-authority]`
 > are RETIRED (see their own entries under Invariants). `AtomCharter.tla`'s
-> "succession" config and `atom_structure.als`'s `charter_fork_distinction`-
-> family assertions, both cited below, verify that retired design — a
+> "succession" config, cited below, verifies that retired design — a
 > green result there is evidence the superseded model was internally
 > consistent, never evidence for `[charter-owner-fact]`,
 > `[charter-owner-fact-linear]`, or `[claim-owner-fact]`, the fact-based
 > constraints that replace them. Those three are graded `evaluator: none`
-> at their own claim blocks. The historical record below is otherwise
-> left intact — it accurately describes what was checked, for the design
-> that was checked, as of the dates given.
+> at their own claim blocks. `atom_structure.als`'s own Charter succession
+> chain (`prior`, the founding/successor anchor-derivation split, its
+> `charter_fork_distinction` assertion) was abolished the same day, not
+> merely flagged: the file's Charter modeling is now genesis-once and
+> current, no longer part of what this caveat warns about — see the Alloy
+> model paragraph below for its post-abolition state. The historical
+> record below is otherwise left intact — it accurately describes what
+> was checked, for the design that was checked, as of the dates given.
 
 > [!NOTE]
 > **Charter amendment verification (2026-07-08, discharged).** The charter
@@ -2373,16 +2397,37 @@ content or the complete source history:
 
 **Alloy model**: `docs/specs/alloy/atom_structure.als` verified by Alloy
 Analyzer 5.1.0 (pinned nixpkgs) at scope 4, headless via `SimpleCLI`
-(SAT4J). All 7 remaining structural assertions pass (UNSAT), re-derived
-2026-08-05 over the corrected identity — `identity_content_addressed`
+(SAT4J). All 6 remaining structural assertions pass (UNSAT): five
+re-derived 2026-08-05 over the corrected identity — `identity_content_addressed`
 (re-scoped to the unclaimed-atom preimage digest), `ingest_preserves_identity`,
 `anchor_set_coherence`, `verification_chain` (re-derived from
 `[symmetric-payloads]` directly, no longer via a removed `atomId` field on
-`Publish`), `anchor_content_addressed`, `claim_chains_charter`,
-`charter_fork_distinction`. Both `fork_scenario` and the charter-rooted
-`charter_rooted_fork` are satisfiable (SAT), confirming the charter facts
-are consistent. `ownership_independence` was REMOVED, not re-derived — see
-the note below.
+`Publish`), `anchor_content_addressed` — plus `claim_chains_charter`. Both
+`fork_scenario` and the charter-rooted `charter_rooted_fork` are
+satisfiable (SAT), confirming the charter facts are consistent.
+`ownership_independence` was REMOVED, not re-derived — see the note below.
+
+**Charter succession abolished, same day (2026-08-05).** The file's
+`Charter { prior: lone Charter }` succession chain, its recursive
+founding/successor anchor-derivation fact, the `founders` function, and
+the `charter_fork_distinction` assertion were retired, not repaired —
+ADR-0007 §3 forecloses the successor-charter shape they modeled (the same
+abolition `[charter-succession]`/`[charter-succession-linear]` record
+above). `Charter` is now `{ czd: one Czd }` alone: genesis-once,
+`Anchor := czd(charter)` directly, no successor field to carry.
+`charter_fork_distinction` was retired as a dedicated assertion not
+because it modeled a stale design, but because it became a direct
+syntactic restatement of `charter_properties`'s czd-injectivity fact once
+the founding/successor split it depended on was gone (full argument at
+`[charter-fork-distinction]`'s own claim block, above) — its content
+remains machine-verified inside `anchor_content_addressed`'s uniqueness
+conjunct. `anchor_content_addressed` and `claim_chains_charter` both
+dropped their `founders`-quantified form for a direct `Charter`
+quantification with no change in meaning: genesis-once removes the
+founding/non-founding distinction those functions existed to draw. This
+file's Charter modeling is current, not superseded — unlike
+`AtomCharter.tla`'s "succession" config below, it no longer checks an
+abolished design.
 
 **Verification methods:**
 
