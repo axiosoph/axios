@@ -70,6 +70,13 @@ the trichotomy, both on purpose:
   writes. It is defined once, in §6, and both sibling models state their
   obligations against that definition.
 
+#### [comp-evaluator-exclusion-law]
+
+```claim
+kind: invariant
+evaluator: none
+```
+
 ## 1. The language-free purity thesis
 
 Nix's purity is folklorically attributed to its purely functional
@@ -161,6 +168,13 @@ are properties of the arrow's formation, not of the endpoints.
 faithfulness: P5, P7. If any of these weakens, this corollary names
 exactly what breaks with it.
 
+#### [comp-endpoint-completeness]
+
+```claim
+kind: invariant
+evaluator: none
+```
+
 ## 2. The composition domain
 
 All values are content-addressed; identity is digest (storage model A2).
@@ -186,6 +200,13 @@ adds one value of its own:
   technologies could return different `readdir` orders for one view, and
   a build sensitive to enumeration order would break action-stratum
   bisimulation (execution model §6.1).
+
+#### [comp-enumeration-order]
+
+```claim
+kind: invariant
+evaluator: none
+```
 
 ## 3. Composition merge is a partial commutative monoid
 
@@ -220,6 +241,13 @@ denotation domains (equivalently: mandate a prefix-free normal form and
 check keys there). _Proof obligation P1 (cheap, Alloy-able): the concrete
 merge implementation satisfies the laws AND detects exactly the
 denotational conflicts — the graft case is in P1's scope explicitly._
+
+#### [comp-merge-monoid-p1]
+
+```claim
+kind: invariant
+evaluator: none
+```
 
 ## 4. Interfaces: the typing of compositions
 
@@ -372,6 +400,13 @@ is an Export-tier mapping that gives layering _meaning_ — the layer
 boundary is a certified linking boundary, not an accident of Dockerfile
 ordering.
 
+#### [comp-containment-law]
+
+```claim
+kind: invariant
+evaluator: none
+```
+
 ## 5. The two strata of intent
 
 Atoms are the unit of publishable, versioned, signed intent. The question
@@ -461,6 +496,13 @@ recomputable by anyone holding both. Publication gating (execution model
 §3.2) is the degenerate case; staged rollouts and policy-gated
 environments are the general one.
 
+#### [comp-strata-steps-pure]
+
+```claim
+kind: invariant
+evaluator: none
+```
+
 ## 6. The fact-set: the substrate's only state
 
 Everything in the substrate is an immutable value except one thing: what
@@ -504,6 +546,13 @@ only state is an append-only, commutative, signer-attributed set is what
 makes the whole design tractable under decentralization: replicas
 converge by union, and nothing anyone writes can invalidate what another
 party already consumed (they pinned their snapshot).
+
+#### [comp-factset-laws]
+
+```claim
+kind: invariant
+evaluator: none
+```
 
 ### The cloud: a snapshot name for the fact-set
 
@@ -639,6 +688,13 @@ delta before it is ever applied. The package is the primitive of the
 generator/environment relation; environments are states; generators are
 transitions compiled to the operator algebra.
 
+#### [comp-override-algebra]
+
+```claim
+kind: invariant
+evaluator: none
+```
+
 ## 8. Materialization, installation, and transactional update
 
 The runtime has a second operation beside `execute` — the interpreter of
@@ -764,3 +820,10 @@ choice policy)`, and its certificate is **recomputable**: any holder
 Seam obligations shared with the execution model, homed there: **P6**
 (promotion coherence — the arrow of §0's cycle), **P7** (`resolve`
 determinism and totality — the arrow from intent into requests).
+
+#### [comp-proof-obligations-scope]
+
+```claim
+kind: invariant
+evaluator: none
+```
