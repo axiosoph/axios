@@ -232,28 +232,36 @@ See the Cap'n Proto projection of this trait as the `AtomDiscovery` capability i
 
 ### Invariants
 
-**[eos-verification-obligation]**: Eos MUST fetch atom snapshots and verify their content digests before applying any operations. Eos MUST NOT execute plans using unverified atom sources.
+#### [eos-verification-obligation]
+
+Eos MUST fetch atom snapshots and verify their content digests before applying any operations. Eos MUST NOT execute plans using unverified atom sources.
 
 ```claim
 kind: constraint
 evaluator: none
 ```
 
-**[eos-verify-ownership]**: Eos MUST verify that the publish transaction is validly signed and authorized according to the claim chain before using the snapshot.
+#### [eos-verify-ownership]
+
+Eos MUST verify that the publish transaction is validly signed and authorized according to the claim chain before using the snapshot.
 
 ```claim
 kind: constraint
 evaluator: none
 ```
 
-**[eos-verify-plugin-deps]**: Eos MUST fetch plugin dependencies and verify their hashes against the locked hashes using the specified algorithm (indicated by type tag).
+#### [eos-verify-plugin-deps]
+
+Eos MUST fetch plugin dependencies and verify their hashes against the locked hashes using the specified algorithm (indicated by type tag).
 
 ```claim
 kind: constraint
 evaluator: review
 ```
 
-**[eos-no-unverified-execution]**: Eos MUST NOT execute or reference any unverified snapshot or plugin dependency in a build sandbox.
+#### [eos-no-unverified-execution]
+
+Eos MUST NOT execute or reference any unverified snapshot or plugin dependency in a build sandbox.
 
 ```claim
 kind: constraint
@@ -261,21 +269,27 @@ evaluator: none
 because: [eos-verification-obligation, eos-verify-plugin-deps]
 ```
 
-**[eos-sandbox-network-containment]**: Build execution MUST be executed in a restricted sandboxed environment. The sandbox MUST NOT have network access except through HTC's content-addressing record/replay proxy (htc-sad §4.2, ADR-0005 §7 `[htc-fetch-set-lock-plugin]`). Normative record/replay proxy semantics (record vs. replay mode, TLS CA injection, protocol-aware handlers) are specified in [eos-sandboxing.md](eos-sandboxing.md), not restated here. Platform-specific sandbox selection is wholly the executor implementation's concern (htc-sad §6.2, §6.4) — the FHS executor reuses `snix-build`'s OCI/bwrap sandbox.
+#### [eos-sandbox-network-containment]
+
+Build execution MUST be executed in a restricted sandboxed environment. The sandbox MUST NOT have network access except through HTC's content-addressing record/replay proxy (htc-sad §4.2, ADR-0005 §7 `[htc-fetch-set-lock-plugin]`). Normative record/replay proxy semantics (record vs. replay mode, TLS CA injection, protocol-aware handlers) are specified in [eos-sandboxing.md](eos-sandboxing.md), not restated here. Platform-specific sandbox selection is wholly the executor implementation's concern (htc-sad §6.2, §6.4) — the FHS executor reuses `snix-build`'s OCI/bwrap sandbox.
 
 ```claim
 kind: constraint
 evaluator: none
 ```
 
-**[eos-sandbox-host-isolation]**: The sandbox MUST NOT have write access to any part of the host filesystem outside the designated temporary sandbox build directory.
+#### [eos-sandbox-host-isolation]
+
+The sandbox MUST NOT have write access to any part of the host filesystem outside the designated temporary sandbox build directory.
 
 ```claim
 kind: constraint
 evaluator: none
 ```
 
-**[eos-sandbox-reproducibility]**: The sandbox MUST NOT leak host environment variables, system times, CPU/hardware identifiers, or other sources of non-determinism into the build process. All inputs (environment variables, files, binaries) MUST be explicitly declared in the `BuildEngine::Plan`.
+#### [eos-sandbox-reproducibility]
+
+The sandbox MUST NOT leak host environment variables, system times, CPU/hardware identifiers, or other sources of non-determinism into the build process. All inputs (environment variables, files, binaries) MUST be explicitly declared in the `BuildEngine::Plan`.
 
 ```claim
 kind: constraint
@@ -285,7 +299,9 @@ evaluator: none
 Verification will double-build and compare output hashes for
 equivalence.
 
-**[eos-bisimulation-equivalence]**: Two Eos engine implementations MUST be behaviorally equivalent (bisimilar) under the same inputs: for any `AtomRef` and `ActionParams`, they MUST produce the same `BuildPlan` and equivalent outputs. This equivalence MUST hold across both local and daemon-served execution paths.
+#### [eos-bisimulation-equivalence]
+
+Two Eos engine implementations MUST be behaviorally equivalent (bisimilar) under the same inputs: for any `AtomRef` and `ActionParams`, they MUST produce the same `BuildPlan` and equivalent outputs. This equivalence MUST hold across both local and daemon-served execution paths.
 
 ```claim
 kind: constraint
@@ -295,14 +311,18 @@ evaluator: none
 Verification will run parity checks between a mock and a concrete
 backend.
 
-**[eos-immutable-store]**: Once a build output is registered in the `ArtifactStore` at a `StorePath`, it MUST be read-only and immutable. Eos MUST NOT permit modification, overwriting, or deletion of existing store paths during execution.
+#### [eos-immutable-store]
+
+Once a build output is registered in the `ArtifactStore` at a `StorePath`, it MUST be read-only and immutable. Eos MUST NOT permit modification, overwriting, or deletion of existing store paths during execution.
 
 ```claim
 kind: constraint
 evaluator: none
 ```
 
-**[eos-cache-determinism]**: If the output corresponding to a given `BuildEngine::Plan` already exists in the `ArtifactStore` (build cache) or can be substituted, Eos MUST skip the build execution (`apply`) and return the cached `StorePath`.
+#### [eos-cache-determinism]
+
+If the output corresponding to a given `BuildEngine::Plan` already exists in the `ArtifactStore` (build cache) or can be substituted, Eos MUST skip the build execution (`apply`) and return the cached `StorePath`.
 
 ```claim
 kind: constraint
@@ -311,7 +331,9 @@ evaluator: review
 
 Verification will run property-based tests against the build cache.
 
-**[eos-transitive-closure]**: The store path of any build output MUST be transitively self-contained. All dependencies of a store path MUST exist within the `ArtifactStore` and be immutable.
+#### [eos-transitive-closure]
+
+The store path of any build output MUST be transitively self-contained. All dependencies of a store path MUST exist within the `ArtifactStore` and be immutable.
 
 ```claim
 kind: constraint
@@ -321,7 +343,9 @@ evaluator: none
 Verification will trace store-scanner references to validate the
 closure.
 
-**[eos-atom-index-ingest]**: Atoms that have been successfully processed (fetched, verified, evaluated, or built) MUST be ingested into the `AtomIndex` via `ingest()`. The daemon MUST NOT silently discard atom metadata after processing. This invariant ensures that every eos instance progressively accumulates discoverable knowledge about the atoms it has encountered.
+#### [eos-atom-index-ingest]
+
+Atoms that have been successfully processed (fetched, verified, evaluated, or built) MUST be ingested into the `AtomIndex` via `ingest()`. The daemon MUST NOT silently discard atom metadata after processing. This invariant ensures that every eos instance progressively accumulates discoverable knowledge about the atoms it has encountered.
 
 ```claim
 kind: constraint
@@ -332,7 +356,9 @@ evaluator: review
 
 ### Transitions
 
-**[engine-plan]**: Determine an atom action's build status.
+#### [engine-plan]
+
+Determine an atom action's build status.
 
 - **PRE**: The `AtomRef` is resolved and its verified content snapshot is present. `ActionParams` and the toolchain composition are known. The scheduler holds a connection to registered executor workers.
 - **POST**: Returns `Cached` if the output tree is verified in HTC's shared CAS, or `NeedsBuild` if the action's `action_id` has no cached `BuildRecord`.
@@ -345,7 +371,9 @@ evaluator: review
 Verification will run unit tests over plan transitions via the
 daemon protocol.
 
-**[engine-apply]**: Execute a build plan to produce store outputs.
+#### [engine-apply]
+
+Execute a build plan to produce store outputs.
 
 - **PRE**: The `BuildPlan` is `NeedsBuild`. All transitive build inputs are present and verified in the store. The backend's sandbox is initialized.
 - **POST**: The builder executes inside the sandbox. Outputs are verified, registered as read-only, and committed to the `ArtifactStore` via the delegated store backend. Failed builds MUST abort and return an error without mutating existing store paths. The daemon transitions the corresponding `JobStatus` to `Completed` or `Failed` and pushes a `ProgressEvent` to all attached clients.
@@ -363,7 +391,9 @@ the backend.
 
 ### Forbidden States
 
-**[no-undeclared-inputs]**: A build execution MUST NOT reference or import any host environment variables or filesystem paths not explicitly declared in the plan's environment or capability set.
+#### [no-undeclared-inputs]
+
+A build execution MUST NOT reference or import any host environment variables or filesystem paths not explicitly declared in the plan's environment or capability set.
 
 ```claim
 kind: constraint
@@ -372,14 +402,18 @@ evaluator: none
 
 Verification will audit environment-variable whitelist enforcement.
 
-**[no-speculative-writes]**: Eos MUST NOT commit outputs to the store for builds that fail post-evaluation verification checks.
+#### [no-speculative-writes]
+
+Eos MUST NOT commit outputs to the store for builds that fail post-evaluation verification checks.
 
 ```claim
 kind: constraint
 evaluator: none
 ```
 
-**[no-dirty-store-paths]**: Eos MUST NOT register a store path in the `ArtifactStore` unless its contents have been verified to match the content digest of the built output.
+#### [no-dirty-store-paths]
+
+Eos MUST NOT register a store path in the `ArtifactStore` unless its contents have been verified to match the content digest of the built output.
 
 ```claim
 kind: constraint
@@ -390,7 +424,9 @@ evaluator: none
 
 ### Behavioral Properties
 
-**[action-cache-idempotency]**: Multiple concurrent action-cache lookups for the same `action_id` (htc-sad §6.5) MUST yield bisimilar `BuildEngine::Plan` results.
+#### [action-cache-idempotency]
+
+Multiple concurrent action-cache lookups for the same `action_id` (htc-sad §6.5) MUST yield bisimilar `BuildEngine::Plan` results.
 
 - **Type**: Safety
 
@@ -400,7 +436,9 @@ evaluator: none
 because: [engine-plan]
 ```
 
-**[apply-cleanup-on-abort]**: If a build application fails or aborts, all temporary sandbox resources and partial outputs MUST be completely garbage collected and MUST NOT leak into the `ArtifactStore`.
+#### [apply-cleanup-on-abort]
+
+If a build application fails or aborts, all temporary sandbox resources and partial outputs MUST be completely garbage collected and MUST NOT leak into the `ArtifactStore`.
 
 - **Type**: Safety
 

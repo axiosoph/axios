@@ -127,7 +127,9 @@ TYPE  Manifest = {
 
 ### Invariants
 
-**[manifest-required-sections]**: A valid `atom.toml` MUST contain
+#### [manifest-required-sections]
+
+A valid `atom.toml` MUST contain
 both a `[package]` section and a `[compose]` section. The `[deps]`
 section is OPTIONAL and defaults to empty (no dependencies).
 
@@ -136,7 +138,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[package-identity-required]**: The `[package]` section MUST contain
+#### [package-identity-required]
+
+The `[package]` section MUST contain
 a `label` field (a valid `Label`) and a `version` field (a valid
 semantic version as defined by the [Semantic Versioning 2.0.0
 specification](https://semver.org)). The `description` field is
@@ -147,7 +151,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[set-declaration-completeness]**: Every set name referenced in
+#### [set-declaration-completeness]
+
+Every set name referenced in
 `[deps.from.<set>]` MUST have a corresponding entry in
 `[package.sets]`. A manifest that references an undeclared set MUST
 be rejected during validation.
@@ -157,7 +163,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[set-mirror-minimum]**: Each set declared in `[package.sets]` MUST
+#### [set-mirror-minimum]
+
+Each set declared in `[package.sets]` MUST
 contain at least one mirror (either a URL or the local sentinel `::`).
 
 ```claim
@@ -165,7 +173,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[composer-set-reference]**: If the composer uses the `with` variant,
+#### [composer-set-reference]
+
+If the composer uses the `with` variant,
 the `from` field MUST reference a set declared in `[package.sets]`.
 The referenced atom MUST be resolvable from that set.
 
@@ -174,7 +184,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[version-constraint-syntax]**: Version constraints in
+#### [version-constraint-syntax]
+
+Version constraints in
 `[deps.from.<set>]` MUST use semantic versioning range syntax as
 defined by the `semver` crate (compatible with the node-semver range
 grammar). Ion's `[version-total-order]` implementation (per
@@ -187,7 +199,9 @@ evaluator: none
 depends: [version-total-order]
 ```
 
-**[deny-unknown-fields]**: A valid manifest MUST reject any fields not
+#### [deny-unknown-fields]
+
+A valid manifest MUST reject any fields not
 defined by the manifest schema or by registered plugins. This prevents
 silent misconfiguration from typos or deprecated fields.
 
@@ -196,7 +210,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[label-version-uniqueness]**: Within a single atom-set, the pair
+#### [label-version-uniqueness]
+
+Within a single atom-set, the pair
 (label, version) MUST uniquely identify an atom snapshot. This is a
 consequence of atom-transactions.md atom identity, restated here for
 manifest clarity: publishing a new snapshot under an existing
@@ -210,7 +226,9 @@ depends: [atom-version-identity]
 
 ### Direct Dependency Plugin Extension
 
-**[plugin-extension-point]**: Ion MUST support an extension mechanism
+#### [plugin-extension-point]
+
+Ion MUST support an extension mechanism
 for non-atom dependencies. Each plugin is identified by a tag (e.g.,
 `nix`) and occupies its own namespace under `[deps.direct.<plugin>]`.
 The schema within each plugin namespace is defined by the plugin, not
@@ -221,7 +239,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[plugin-lock-contract]**: A direct dependency plugin MUST produce
+#### [plugin-lock-contract]
+
+A direct dependency plugin MUST produce
 lock entries containing at minimum:
 
 | Field  | Type   | Purpose                                |
@@ -240,7 +260,9 @@ evaluator: none
 depends: [plugin-extension-point]
 ```
 
-**[plugin-lock-type-tag]**: Each lock entry produced by a plugin MUST
+#### [plugin-lock-type-tag]
+
+Each lock entry produced by a plugin MUST
 carry a type tag that identifies both the plugin and the specific
 fetch strategy (e.g., `"nix"`, `"nix+git"`, `"nix+tar"`,
 `"nix+build"`). This tag enables eos to select the correct fetch and
@@ -252,7 +274,9 @@ evaluator: none
 depends: [plugin-extension-point]
 ```
 
-**[plugin-owner-tracking]**: When a plugin dependency originates from
+#### [plugin-owner-tracking]
+
+When a plugin dependency originates from
 a transitive atom dependency (not the root manifest), the lock entry
 SHOULD include an `owner` field containing the owning atom's
 `publish_czd` (a Czd). This enables dependency
@@ -265,7 +289,9 @@ evaluator: none
 depends: [plugin-extension-point]
 ```
 
-**[plugin-resolution-locality]**: Plugin resolution MUST execute
+#### [plugin-resolution-locality]
+
+Plugin resolution MUST execute
 within ion (or the plugin itself). Eos MUST NOT be required to
 understand the plugin's resolution logic. Eos consumes only the lock
 output: type tag, name, URL, and hash.
@@ -288,7 +314,9 @@ depends: [plugin-extension-point]
 
 ### Transitions
 
-**[manifest-parse]**: Ion MUST parse and validate `atom.toml` before
+#### [manifest-parse]
+
+Ion MUST parse and validate `atom.toml` before
 any resolution or publish operation.
 
 - **PRE**: An `atom.toml` file exists at the atom root.
@@ -303,7 +331,9 @@ evaluator: test
 depends: [manifest-required-sections, set-declaration-completeness, composer-set-reference, deny-unknown-fields]
 ```
 
-**[manifest-add-dep]**: Adding a dependency via CLI (e.g., `eka add`)
+#### [manifest-add-dep]
+
+Adding a dependency via CLI (e.g., `eka add`)
 MUST update the manifest and trigger re-resolution.
 
 - **PRE**: A valid manifest exists. The user specifies a URI (label,
@@ -322,7 +352,9 @@ evaluator: none
 depends: [manifest-parse]
 ```
 
-**[manifest-add-mirror]**: Adding a mirror to an existing set MUST
+#### [manifest-add-mirror]
+
+Adding a mirror to an existing set MUST
 validate the mirror's anchor against the set's established anchor.
 
 - **PRE**: The set exists in `[package.sets]`. The new mirror is a
@@ -343,7 +375,9 @@ depends: [set-anchor-bijection]
 
 ### Forbidden States
 
-**[no-orphaned-set]**: A set declared in `[package.sets]` that is
+#### [no-orphaned-set]
+
+A set declared in `[package.sets]` that is
 referenced by NEITHER `[deps.from]` NOR `[compose.with]` is NOT an
 error — sets MAY be declared for future use or for mirror management.
 This is explicitly NOT forbidden.
@@ -361,7 +395,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[no-undeclared-set-reference]**: A `[deps.from.<set>]` section MUST
+#### [no-undeclared-set-reference]
+
+A `[deps.from.<set>]` section MUST
 NOT reference a set not declared in `[package.sets]`. Corollary of
 `[set-declaration-completeness]`.
 
@@ -371,7 +407,9 @@ evaluator: test
 depends: [set-declaration-completeness]
 ```
 
-**[no-self-dependency]**: An atom MUST NOT declare a dependency on
+#### [no-self-dependency]
+
+An atom MUST NOT declare a dependency on
 itself (same label from the local set). Implementations MUST detect
 and reject self-referential dependencies.
 
@@ -382,7 +420,9 @@ evaluator: none
 
 ### Behavioral Properties
 
-**[manifest-roundtrip]**: Parsing a valid manifest to the `Manifest`
+#### [manifest-roundtrip]
+
+Parsing a valid manifest to the `Manifest`
 type and serializing it back to TOML MUST produce a semantically
 equivalent document. Field ordering and formatting MAY differ (per
 `toml_edit` formatting rules), but the deserialized result MUST be
@@ -395,7 +435,9 @@ kind: constraint
 evaluator: property-test
 ```
 
-**[manifest-validation-total]**: Manifest validation MUST catch all
+#### [manifest-validation-total]
+
+Manifest validation MUST catch all
 constraint violations in a single pass and report all errors, not
 just the first one. This enables users to fix multiple issues without
 repeated parse-fix-parse cycles.
@@ -407,7 +449,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[plugin-isolation]**: Plugins MUST NOT modify ion core manifest
+#### [plugin-isolation]
+
+Plugins MUST NOT modify ion core manifest
 sections (`[package]`, `[compose]`, `[deps.from]`). A plugin's scope
 is strictly limited to its own namespace under `[deps.direct.<tag>]`
 and its corresponding lock entries.

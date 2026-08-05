@@ -525,7 +525,9 @@ struct BatchPresenceResult {
 
 ### Invariants
 
-**[eos-network-sovereign-auth]**: All daemon connections and inter-node wire
+#### [eos-network-sovereign-auth]
+
+All daemon connections and inter-node wire
 sessions MUST authenticate using sovereign identities at Layer 1 (Cyphr
 sovereign principals). Authentication proceeds via signed challenge-response
 over `NodeIdentity` payloads. Eos MUST NOT accept connections authenticated
@@ -541,7 +543,9 @@ evaluator: none
 Verification will exercise challenge-response authentication against
 Cyphr Principal Roots.
 
-**[eos-trustless-substitution]**: When fetching a pre-built artifact from a
+#### [eos-trustless-substitution]
+
+When fetching a pre-built artifact from a
 remote substituter at a given store path, Eos MUST verify that the content
 digest of the fetched artifact matches the expected digest derivable from the
 verified `Plan`. Eos MUST NOT import substituted artifacts that fail this
@@ -555,7 +559,9 @@ evaluator: none
 Verification will inject a corrupted artifact into the cache and
 confirm it is rejected.
 
-**[eos-origin-attestation]**: A build artifact committed to a shared cache
+#### [eos-origin-attestation]
+
+A build artifact committed to a shared cache
 MUST be accompanied by an `OriginAttestation`: a signature from the worker
 node's `NodeIdentity` over the tuple `(PlanHash, OutputDigest)`. The
 attestation MUST include a timestamp for freshness verification.
@@ -568,7 +574,9 @@ evaluator: none
 Verification will check `OriginAttestation` signature validation
 directly.
 
-**[eos-protocol-capability-matching]**: During the connection handshake, the
+#### [eos-protocol-capability-matching]
+
+During the connection handshake, the
 client and daemon MUST exchange `HandshakeRequest`/`HandshakeResponse`
 payloads declaring supported backends (`supportedBackends`) and protocol
 version (`apiVersion`). If no common backend exists, or if the API versions
@@ -582,7 +590,9 @@ evaluator: none
 Verification will exercise the handshake and confirm a capability
 mismatch causes rejection.
 
-**[eos-signature-freshness]**: `NodeIdentity` payloads and
+#### [eos-signature-freshness]
+
+`NodeIdentity` payloads and
 `OriginAttestation` records MUST carry a timestamp and nonce. The receiving
 node MUST reject payloads whose timestamp deviates from the receiver's system
 clock by more than a configurable freshness window (default: 5 minutes).
@@ -597,7 +607,9 @@ depends: [eos-network-sovereign-auth, eos-origin-attestation]
 Verification will replay an expired `NodeIdentity` payload and
 confirm rejection.
 
-**[eos-capability-lifecycle]**: A `BuildJob` capability returned by
+#### [eos-capability-lifecycle]
+
+A `BuildJob` capability returned by
 `submitBuild` MUST remain valid for the duration of the job. Dropping the
 capability reference (client disconnect or explicit release) MUST detach the
 client from progress streaming but MUST NOT cancel or terminate the
@@ -612,7 +624,9 @@ evaluator: review
 Verification will drop a `BuildJob` capability and confirm the build
 continues.
 
-**[eos-progress-multiplexing]**: Multiple clients MUST be able to attach
+#### [eos-progress-multiplexing]
+
+Multiple clients MUST be able to attach
 `ProgressStream` callbacks to the same `BuildJob` concurrently. Each
 attached callback MUST receive the same sequence of `BuildStatus` updates.
 When a client drops its `ProgressStream` capability, the daemon MUST clean up
@@ -627,7 +641,9 @@ depends: [attach-progress]
 Verification will attach two clients to the same job and confirm
 both receive events.
 
-**[eos-transport-agnosticism]**: The protocol layer MUST be decoupled from
+#### [eos-transport-agnosticism]
+
+The protocol layer MUST be decoupled from
 the transport layer. All protocol operations MUST function identically over
 any transport satisfying `AsyncRead + AsyncWrite`. Transport-specific
 concerns (socket paths, TLS handshakes, Cyphr authentication) MUST be
@@ -641,7 +657,9 @@ evaluator: none
 Verification will run the identical test suite over both UDS and TCP
 transports.
 
-**[eos-wot-substitution-threshold]**: When strict substitution policy is
+#### [eos-wot-substitution-threshold]
+
+When strict substitution policy is
 enabled, Eos MUST require that a substituted artifact carry attestations from
 at least _M_ of _N_ configured trusted builders (Web of Trust threshold)
 before accepting the artifact. The threshold values _M_ and _N_ are
@@ -656,7 +674,9 @@ depends: [eos-origin-attestation]
 Verification will configure an M-of-N threshold, inject insufficient
 attestations, and confirm rejection.
 
-**[eos-discovery-read-only]**: The `AtomDiscovery` capability MUST NOT expose
+#### [eos-discovery-read-only]
+
+The `AtomDiscovery` capability MUST NOT expose
 mutation operations. Discovery is strictly observation-only: `resolve`,
 `contains`, and `search` are pure reads with no side effects on daemon state.
 This is consistent with Eos consuming `AtomSource` (a read-only trait) per
@@ -675,7 +695,9 @@ operations.
 
 ### Transitions
 
-**[daemon-startup]**: Initialize the Eos daemon and begin accepting
+#### [daemon-startup]
+
+Initialize the Eos daemon and begin accepting
 connections.
 
 - **PRE**: A valid configuration exists specifying the transport endpoint
@@ -693,7 +715,9 @@ evaluator: none
 
 Verification will confirm socket creation and readiness signaling.
 
-**[client-connect]**: Establish an authenticated session between a client and
+#### [client-connect]
+
+Establish an authenticated session between a client and
 the daemon.
 
 - **PRE**: The daemon is in the listening state. A client opens a transport
@@ -713,7 +737,9 @@ depends: [eos-network-sovereign-auth, eos-protocol-capability-matching]
 Verification will exercise both successful and rejected handshake
 transitions.
 
-**[submit-build]**: Submit a build request and receive a job capability.
+#### [submit-build]
+
+Submit a build request and receive a job capability.
 
 - **PRE**: An authenticated client holds an `EosDaemon` capability.
 - **POST**: The client invokes `submitBuild(request: BuildRequest)`. The
@@ -732,7 +758,9 @@ evaluator: review
 
 Verification will submit identical plans and confirm deduplication.
 
-**[attach-progress]**: Attach a progress callback to a running build.
+#### [attach-progress]
+
+Attach a progress callback to a running build.
 
 - **PRE**: A client holds a `BuildJob` capability.
 - **POST**: The client invokes `attachProgress(callback)`, passing a
@@ -749,7 +777,9 @@ evaluator: review
 Verification will attach a callback and confirm `BuildStatus`
 delivery.
 
-**[detach-progress]**: Detach from progress streaming without cancelling the
+#### [detach-progress]
+
+Detach from progress streaming without cancelling the
 build.
 
 - **PRE**: A client has an attached `ProgressStream` callback.
@@ -767,7 +797,9 @@ depends: [attach-progress]
 Verification will drop a `ProgressStream` and confirm cleanup
 without interrupting the build.
 
-**[cancel-build]**: Cancel a running build.
+#### [cancel-build]
+
+Cancel a running build.
 
 - **PRE**: A client holds a `BuildJob` capability for a job in `Queued` or
   `Building` state.
@@ -786,7 +818,9 @@ depends: [submit-build]
 Verification will cancel via the capability and confirm the job
 transitions to `Cancelled`.
 
-**[request-substitute]**: Query remote caches for pre-built artifacts.
+#### [request-substitute]
+
+Query remote caches for pre-built artifacts.
 
 - **PRE**: An Eos daemon has a plan in the `NeedsBuild` state and at least
   one configured remote substituter.
@@ -805,7 +839,9 @@ depends: [eos-trustless-substitution, eos-origin-attestation, eos-wot-substituti
 Verification will mock a substituter and confirm attestation and
 digest checks.
 
-**[client-disconnect]**: Graceful or abrupt session termination.
+#### [client-disconnect]
+
+Graceful or abrupt session termination.
 
 - **PRE**: A client has an active RPC session.
 - **POST**: All capability references held by the client are dropped. The
@@ -821,7 +857,9 @@ because: [eos-capability-lifecycle]
 
 Verification will disconnect abruptly and confirm resource cleanup.
 
-**[daemon-shutdown]**: Graceful daemon termination.
+#### [daemon-shutdown]
+
+Graceful daemon termination.
 
 - **PRE**: A shutdown signal is received (SIGTERM, explicit command).
 - **POST**: The daemon stops accepting new connections, drains in-flight
@@ -840,7 +878,9 @@ removal.
 
 ### Forbidden States
 
-**[no-unattested-substitution]**: Eos MUST NOT accept artifacts from
+#### [no-unattested-substitution]
+
+Eos MUST NOT accept artifacts from
 substituters that lack valid `OriginAttestation`s when strict substitution
 policy is enabled. Artifacts without attestations meeting the configured
 Web of Trust threshold MUST be rejected.
@@ -853,7 +893,9 @@ depends: [eos-wot-substitution-threshold, eos-origin-attestation]
 
 Verification will confirm rejection when attestations are missing.
 
-**[no-unencrypted-secrets]**: Worker nodes MUST NOT transmit private keys or
+#### [no-unencrypted-secrets]
+
+Worker nodes MUST NOT transmit private keys or
 plaintext credentials over the network during build execution or session
 establishment.
 
@@ -865,7 +907,9 @@ evaluator: none
 Verification will run static analysis for credential exposure in
 wire payloads.
 
-**[no-unauthorized-handshake]**: A connection MUST NOT be promoted to an
+#### [no-unauthorized-handshake]
+
+A connection MUST NOT be promoted to an
 authenticated RPC session if the `HandshakeRequest` signature does not
 validate against the declared `NodeIdentity` (sovereign principal).
 
@@ -878,7 +922,9 @@ depends: [eos-network-sovereign-auth]
 Verification will present an invalid signature and confirm
 connection rejection.
 
-**[no-cancel-on-drop]**: Dropping a `BuildJob` or `ProgressStream` capability
+#### [no-cancel-on-drop]
+
+Dropping a `BuildJob` or `ProgressStream` capability
 MUST NOT implicitly cancel the associated build. Only an explicit `cancel()`
 invocation MAY terminate a build.
 
@@ -891,7 +937,9 @@ because: [eos-capability-lifecycle]
 Verification will drop all client capabilities and confirm the build
 completes.
 
-**[no-unauthenticated-capability]**: The `EosDaemon` bootstrap capability
+#### [no-unauthenticated-capability]
+
+The `EosDaemon` bootstrap capability
 MUST NOT be issued to a connection that has not completed the authenticated
 handshake. Unauthenticated transports MUST NOT expose any RPC surface.
 
@@ -908,7 +956,9 @@ rejected.
 
 ### Behavioral Properties
 
-**[eventual-cache-consistency]**: If a build artifact is successfully pushed
+#### [eventual-cache-consistency]
+
+If a build artifact is successfully pushed
 to a remote binary cache, subsequent `SubstitutionQuery` requests for that
 artifact's plan hash MUST return the artifact within a bounded propagation
 delay.
@@ -924,7 +974,9 @@ depends: [request-substitute]
 Verification will push to the cache and confirm the artifact
 returns within the bounded propagation delay.
 
-**[reproducible-build-consensus]**: For high-security environments, Eos MAY
+#### [reproducible-build-consensus]
+
+For high-security environments, Eos MAY
 schedule the same `Plan` on _N_ independent, distrusted worker nodes and
 verify that the resulting output digests are identical (majority consensus)
 before committing the output. This follows the Trustix model: builders
@@ -941,7 +993,9 @@ evaluator: none
 Verification will dual-build with injected non-determinism and
 confirm detection.
 
-**[capability-cleanup-on-disconnect]**: When a client disconnects (gracefully
+#### [capability-cleanup-on-disconnect]
+
+When a client disconnects (gracefully
 or abruptly), all server-side resources associated with that client's
 capabilities MUST be reclaimed within a bounded interval. No resource leak
 MAY persist after the Cap'n Proto runtime processes the disconnection.

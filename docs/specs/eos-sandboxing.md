@@ -114,7 +114,9 @@ Pipeline) — not reproduced here.
 
 ### FHS-View Materialization
 
-**[eos-sandbox-fhs-materialization]**: The primary executor MUST mount the
+#### [eos-sandbox-fhs-materialization]
+
+The primary executor MUST mount the
 _composed_ atom closure and toolchain composition as a single FHS-view
 rootfs (htc-sad.md §2, §4.1) — a merged tree at conventional FHS paths, not
 a set of per-input directories addressed by an `inputs_dir` parameter (the
@@ -134,7 +136,9 @@ mounted read-only for a build.
 
 ### Network Containment
 
-**[eos-build-sandbox-network-containment]**: Build execution MUST NOT have
+#### [eos-build-sandbox-network-containment]
+
+Build execution MUST NOT have
 access to the external network, unless the sandbox routes that access
 exclusively through HTC's content-addressing record/replay fetch proxy
 (`[htc-fetch-set-lock-plugin]`, ADR-0005 §7; htc-sad.md §4.2). The proxy has
@@ -164,7 +168,9 @@ check record/replay mode behavior.
 
 ### Read-Set Capture
 
-**[eos-sandbox-read-set-capture]**: The castore FUSE daemon that
+#### [eos-sandbox-read-set-capture]
+
+The castore FUSE daemon that
 materializes the FHS view (§Sandbox Execution Model) MUST log `(path,
 digest)` for every read of the composed closure during a build or
 check-phase run — this daemon is the _only_ source of those bytes, making it
@@ -188,7 +194,9 @@ the digest lands in `BuildRecord`.
 
 ### Build Sandbox Delegation
 
-**[eos-build-sandbox-delegation]**: Sandboxing is wholly the executor
+#### [eos-build-sandbox-delegation]
+
+Sandboxing is wholly the executor
 implementation's responsibility, never the Eos daemon's or its scheduler's.
 The Eos scheduler dispatches build actions to executor workers via Cap'n
 Proto; the worker's executor-trait implementation (the primary FHS
@@ -207,7 +215,9 @@ sandboxing of their own -- all isolation is executor-side.
 
 ### Host Isolation
 
-**[eos-build-sandbox-host-isolation]**: Build execution MUST NOT write
+#### [eos-build-sandbox-host-isolation]
+
+Build execution MUST NOT write
 outside the temporary directory allocated for the build task. Inputs MUST
 be mounted read-only (§FHS-View Materialization). This invariant is
 strengthened by its declared-closure form: the build's _observed_ read set
@@ -229,7 +239,9 @@ outside the declared closure, and confirm both are denied.
 
 ### Materialization Tiers
 
-**[eos-sandbox-materialization-tiers]**: The composed view a build sandbox
+#### [eos-sandbox-materialization-tiers]
+
+The composed view a build sandbox
 mounts is one instance of three materialization tiers over the same
 composition object (`[htc-materialization-tiers]`, ADR-0005 §11; htc-sad.md
 §5):
@@ -258,7 +270,9 @@ Observe tier exclusively, with no Fast/Export mount at build time.
 
 ## Forbidden States
 
-**[no-fetch-outside-recorded-set]**: In replay mode, a build process's
+#### [no-fetch-outside-recorded-set]
+
+In replay mode, a build process's
 network request MUST NOT be served unless it exactly matches an entry in
 the lock's recorded fetch set. Any other request MUST result in a refused
 connection, logged.
@@ -271,7 +285,9 @@ evaluator: none
 Verification will issue unrecorded requests in replay mode and
 confirm refusal plus a log entry.
 
-**[no-read-outside-declared-closure]**: A build process MUST NOT be able to
+#### [no-read-outside-declared-closure]
+
+A build process MUST NOT be able to
 read any byte not present in its materialized atom closure or toolchain
 composition, plus whatever the fetch proxy separately permits (§Network
 Containment). This is enforced by denying the read at the sandbox boundary,
@@ -286,7 +302,9 @@ depends: [eos-build-sandbox-network-containment]
 Verification will attempt reads of undeclared paths and confirm
 denial at the mount boundary.
 
-**[no-write-outside-build-scratch]**: A build process MUST NOT write to any
+#### [no-write-outside-build-scratch]
+
+A build process MUST NOT write to any
 path outside the scratch directory allocated for its build task. The
 mounted closure is read-only; there is no writable path inside it.
 

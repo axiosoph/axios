@@ -205,7 +205,9 @@ EMPTY_TREE     = 4b825dc...             -- well-known empty tree ObjectId
 
 ### Invariants
 
-**[anchor-is-genesis]** _(retired 2026-07-08 — superseded by the charter
+#### [anchor-is-genesis]
+
+_(retired 2026-07-08 — superseded by the charter
 amendment)_: The former rule (anchor = raw bytes of the repository's
 genesis commit ObjectId, discovered by walking the claim's lineage to
 its oldest parentless root) is retired. The anchor is backend-agnostic:
@@ -220,7 +222,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[anchor-hash-agile]**: The anchor is a coz digest (`czd(charter₀)`),
+#### [anchor-hash-agile]
+
+The anchor is a coz digest (`czd(charter₀)`),
 not a git ObjectId, so the anchor does not inherit the repository's
 object hash algorithm at all. Git hash agility (SHA-1 → SHA-256) is
 handled by the charter, not by the backend: a re-hash rewrites history,
@@ -236,7 +240,9 @@ evaluator: none
 depends: [charter-succession]
 ```
 
-**[snapshot-deterministic]**: An atom commit MUST be deterministic given
+#### [snapshot-deterministic]
+
+An atom commit MUST be deterministic given
 the same inputs. Given the same content tree AND the same source revision
 (`src`), any party MUST produce an identical commit object (and therefore
 identical ObjectId). This is achieved by fixing: (1) author and committer
@@ -250,7 +256,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[snapshot-parentless]**: An atom commit MUST have zero parents. Atoms
+#### [snapshot-parentless]
+
+An atom commit MUST have zero parents. Atoms
 are detached subtrees — they carry no history. Provenance is recorded
 in the `src` extra header and the publish payload, not in git's parent
 chain. (Satisfies atom-transactions.md `[atom-detached]`.)
@@ -261,7 +269,9 @@ evaluator: none
 because: [atom-detached]
 ```
 
-**[snapshot-src-header]**: An atom commit MUST contain exactly one extra
+#### [snapshot-src-header]
+
+An atom commit MUST contain exactly one extra
 header: `src`, whose value is the hex-encoded ObjectId of the source
 revision commit from which the atom's content was extracted, in the
 length-disambiguated encoding `[src-hash-kind-disambiguated]` defines.
@@ -282,7 +292,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[temporal-vector]**: The atom protocol's git backend enforces a
+#### [temporal-vector]
+
+The atom protocol's git backend enforces a
 three-point temporal ordering — the **authenticity vector**
 (atom-transactions.md `[charter-ancestry]`):
 
@@ -315,7 +327,9 @@ evaluator: test
 depends: [charter-ancestry, backend-ancestry-sound, backend-ancestry-queryable, ancestry-hash-committed]
 ```
 
-**[charter-commit-format]**: A charter transaction MUST be stored as a
+#### [charter-commit-format]
+
+A charter transaction MUST be stored as a
 **charter commit**: a commit whose `tree` is the well-known empty tree
 (`EMPTY_TREE`), whose author and committer are `ATOM_AUTHOR` at
 `ATOM_TIMESTAMP`, and whose commit `message` is the charter `CozMessage`
@@ -344,7 +358,9 @@ evaluator: test
 depends: [charter-ref-by-czd, charter-succession-via-prior]
 ```
 
-**[charter-message-is-coz]**: The commit message of a charter commit
+#### [charter-message-is-coz]
+
+The commit message of a charter commit
 MUST be a valid, complete `CozMessage` JSON object whose payload has
 `typ: "atom/charter"`. The message MUST be parseable as JSON and MUST
 pass Coz verification. No additional text, headers, or formatting
@@ -357,7 +373,9 @@ evaluator: test
 because: [claim-message-is-coz]
 ```
 
-**[charter-succession-via-prior]**: A succession chain MUST be walked by
+#### [charter-succession-via-prior]
+
+A succession chain MUST be walked by
 following the **signed** `prior` czd of each `CharterPayload` — each
 `prior` resolved to its charter commit through
 `refs/atom/charter/d/{prior_czd}` — never by a git parent link and never
@@ -380,7 +398,9 @@ evaluator: test
 because: [charter-succession, charter-succession-linear, charter-ancestry]
 ```
 
-**[charter-src-reachable]**: A resolver MUST be able to obtain the
+#### [charter-src-reachable]
+
+A resolver MUST be able to obtain the
 effective charter's `src` for the `[temporal-vector]` ancestry check by
 resolving the effective charter commit (`[charter-succession-via-prior]`)
 and reading the `src` field of its signed `CharterPayload` — one object
@@ -397,7 +417,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[dev-atom-unchartered-local]**: A development atom built from a git
+#### [dev-atom-unchartered-local]
+
+A development atom built from a git
 source that carries **no charter yet** MUST be treated as **local class**
 (atom-model.md §5): it acquires no set anchor, because the anchor is
 `czd(charter₀)` and no founding charter exists to supply one. For the
@@ -417,7 +439,9 @@ evaluator: none
 depends: [fs-source-contract]
 ```
 
-**[claim-detached]**: A claim commit MUST have the well-known empty
+#### [claim-detached]
+
+A claim commit MUST have the well-known empty
 tree as its `tree` and no extra headers. The **first** claim for an
 atom MUST be parentless. **Subsequent** claims (e.g., key rotation)
 MUST have the previous claim commit as their parent, forming a chain.
@@ -432,7 +456,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[claim-message-is-coz]**: The commit message of a claim commit MUST
+#### [claim-message-is-coz]
+
+The commit message of a claim commit MUST
 be a valid, complete `CozMessage` JSON object whose payload has
 `typ: "atom/claim"`. The message MUST be parseable as JSON and MUST
 pass Coz verification. No additional text, headers, or formatting
@@ -443,7 +469,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[publish-tag-targets-correct]**: An initial publish tag MUST target
+#### [publish-tag-targets-correct]
+
+An initial publish tag MUST target
 an atom commit (a deterministic, parentless commit with a `src` extra
 header). An update publish tag MUST target the previous publish tag for
 the same `(label, version)`. A publish tag MUST NOT target a regular
@@ -454,7 +482,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[publish-tag-claim-binding]**: A publish tag's CozMessage payload
+#### [publish-tag-claim-binding]
+
+A publish tag's CozMessage payload
 MUST contain a `claim` field whose value is the czd of the authorizing
 claim. The claim commit is looked up via `refs/atom/claims/d/{czd}`
 (or `refs/atom/claims/pub/{label}` in the originating registry). No
@@ -465,7 +495,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[publish-tag-message-is-coz]**: The message body of a publish tag
+#### [publish-tag-message-is-coz]
+
+The message body of a publish tag
 MUST be a valid, complete `CozMessage` JSON object whose payload has
 `typ: "atom/publish"`. The message MUST be parseable as JSON and MUST
 pass Coz verification. No additional text or formatting SHOULD be
@@ -476,7 +508,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[tag-chain-immutable]**: Publish tag updates MUST be implemented by
+#### [tag-chain-immutable]
+
+Publish tag updates MUST be implemented by
 creating a new tag object that targets the _previous_ tag object (not
 the atom commit directly). Git's tag-peeling mechanism resolves the
 chain to the underlying atom commit. The ref is updated to point to
@@ -493,7 +527,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[coz-bit-perfect]**: All `CozMessage` JSON stored in git objects
+#### [coz-bit-perfect]
+
+All `CozMessage` JSON stored in git objects
 (commit messages, tag messages) MUST be preserved bit-for-bit. The
 backend MUST NOT reformat, re-serialize, or alter the JSON in any
 way. (Satisfies atom-transactions.md `[backend-bit-perfect]`;
@@ -508,7 +544,9 @@ because: [backend-bit-perfect, backend-carriage-bit-perfect]
 Verification will store a `CozMessage`, retrieve it, and byte-compare
 against the original.
 
-**[odb-immutable]**: The backend MUST treat the object database as
+#### [odb-immutable]
+
+The backend MUST treat the object database as
 append-only for protocol objects (charter/claim/atom commits, publish
 tags): a protocol object, once written, MUST NOT be mutated in place,
 and MUST NOT be deleted while protocol-reachable (the protective and
@@ -524,7 +562,9 @@ evaluator: none
 because: [backend-store-immutable]
 ```
 
-**[refs-sole-mutable]**: Refs are the backend's ONLY mutable protocol
+#### [refs-sole-mutable]
+
+Refs are the backend's ONLY mutable protocol
 state. Objects are immutable (`[odb-immutable]`) and ancestry is
 derived from hash-committed object content
 (`[ancestry-hash-committed]`), so every protocol state transition is
@@ -543,7 +583,9 @@ depends: [odb-immutable, ancestry-hash-committed]
 because: [backend-refs-sole-mutability]
 ```
 
-**[ancestry-hash-committed]**: A git ObjectId commits to its entire
+#### [ancestry-hash-committed]
+
+A git ObjectId commits to its entire
 ancestry: a commit's parent OIDs are part of the hashed commit
 preimage, so asserting false ancestry for an existing OID requires a
 hash collision. Every ancestry-dependent check in this spec
@@ -559,7 +601,9 @@ evaluator: test
 because: [backend-ancestry-sound]
 ```
 
-**[ancestry-query-path]**: Protocol ancestry queries MUST resolve
+#### [ancestry-query-path]
+
+Protocol ancestry queries MUST resolve
 parents from hash-committed object content with object replacement
 disabled (`--no-replace-objects` semantics): `refs/replace/*` and
 grafts MUST NOT influence `[temporal-vector]`, `[no-backdated-src]`,
@@ -578,7 +622,9 @@ evaluator: none
 depends: [ancestry-hash-committed]
 ```
 
-**[czd-oid-disjoint]**: The seam law's git instance
+#### [czd-oid-disjoint]
+
+The seam law's git instance
 (atom-backend-contract.md `[backend-seam-typed]`): `Czd` values and
 git `ObjectId`s are disjoint types. The only OID-typed protocol
 identities are the payload fields `dig` and `src` and the atom
@@ -599,7 +645,9 @@ evaluator: test
 depends: [backend-seam-typed]
 ```
 
-**[oid-hash-inheritance]**: `dig` and `src` inherit the repository's
+#### [oid-hash-inheritance]
+
+`dig` and `src` inherit the repository's
 object hash algorithm; under git's SHA-1 default they are NOT
 collision-resistant, unlike every czd-sorted identity
 (`[anchor-hash-agile]`). This inheritance MUST be documented wherever
@@ -624,7 +672,9 @@ depends: [anchor-hash-agile, content-hash-is-tree-digest]
 because: [backend-hash-strength]
 ```
 
-**[src-hash-kind-disambiguated]**: The atom commit's `src` extra
+#### [src-hash-kind-disambiguated]
+
+The atom commit's `src` extra
 header (`[snapshot-src-header]`) is a hex-encoded git `ObjectId` whose
 byte length MUST be read as the sole, authoritative indicator of which
 hash algorithm produced it: 40 hex characters denotes SHA-1, 64
@@ -661,7 +711,9 @@ evaluator: none
 depends: [czd-oid-disjoint]
 ```
 
-**[single-active-claim-registry]**: In a registry (source repository),
+#### [single-active-claim-registry]
+
+In a registry (source repository),
 at most one active claim MUST exist per `AtomId`. If a claim is
 replaced (e.g., key compromise), the new claim commit's parent MUST
 be the previous claim commit, forming a chain. The ref
@@ -673,7 +725,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[store-claim-disambiguation]**: In a store, multiple publishes for the
+#### [store-claim-disambiguation]
+
+In a store, multiple publishes for the
 same `AtomId` MAY coexist (from different sources/forks). The store's
 ref layout MUST disambiguate them by `blake3(publish_czd)`. Distinct
 publishes produce distinct publish czds and therefore distinct flat ref
@@ -701,7 +755,9 @@ reachable by walking the chain — no separate `claims/d/` refs are
 needed in the registry. `refs/atom/src/` protects source revision
 commits from GC if the originating branch is deleted.
 
-**[registry-ref-label-unique]**: Within a single registry, the `{label}`
+##### [registry-ref-label-unique]
+
+Within a single registry, the `{label}`
 segment MUST be unique. No two atoms in the same registry MAY share a
 label. (Satisfies atom-transactions.md `[atomid-per-source-unique]`.)
 
@@ -711,7 +767,9 @@ evaluator: none
 because: [atomid-per-source-unique]
 ```
 
-**[registry-ref-claim]**: The ref `refs/atom/claims/pub/{label}` MUST
+##### [registry-ref-claim]
+
+The ref `refs/atom/claims/pub/{label}` MUST
 point to the currently active claim commit for that atom. When a claim
 is replaced, this ref MUST be updated to point to the new claim commit.
 The old claim commit remains in the repository's history. Claim refs
@@ -723,7 +781,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[registry-ref-version]**: The ref `refs/atom/pub/{label}/{version}`
+##### [registry-ref-version]
+
+The ref `refs/atom/pub/{label}/{version}`
 MUST point to an annotated tag object (the publish tag tip), which
 either directly targets the deterministic atom commit (initial publish)
 or targets a previous tag in the update chain (updates). The
@@ -756,7 +816,9 @@ The `d/` sub-prefix under `claims/` denotes digest-addressed claims
 `refs/atom/claims/` namespace while preventing collision with
 registry label-addressed claims.
 
-**[store-ref-by-publish-czd]**: Store version refs MUST be keyed by
+##### [store-ref-by-publish-czd]
+
+Store version refs MUST be keyed by
 `blake3(publish_czd)`, where `publish_czd` is the `czd` of the
 **specific publish tag `CozMessage` the ref addresses** — the base tag
 or any amendment tag in the same update chain
@@ -779,7 +841,9 @@ evaluator: test
 depends: [publish-update-transition, store-ownership-migration]
 ```
 
-**[store-claim-ref]**: Each ingested claim MUST have a corresponding
+##### [store-claim-ref]
+
+Each ingested claim MUST have a corresponding
 ref at `refs/atom/claims/d/{claim_czd}` pointing to the claim commit.
 The full claim chain (including historical claims) SHOULD be fetched
 from the source — since all claims have empty trees, the chain is
@@ -796,7 +860,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[store-ownership-migration]**: If the ownership of an atom changes
+##### [store-ownership-migration]
+
+If the ownership of an atom changes
 (new claim), new versions published under the new claim produce new
 publish czds and therefore new flat ref keys
 (`refs/atom/d/{blake3(new_publish_czd)}`). Versions published under
@@ -808,7 +874,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[store-claim-cleanup]**: When a store ref
+##### [store-claim-cleanup]
+
+When a store ref
 `refs/atom/d/{blake3(publish_czd)}` is deleted (e.g., cache eviction),
 the backend SHOULD check whether any remaining store refs reference the
 same claim czd (by inspecting the publish tag payloads reachable from
@@ -837,7 +905,9 @@ via git parents (`[charter-succession-via-prior]`). Charter commits carry
 the empty tree, so the whole succession chain is lightweight to enumerate
 and fetch (commit objects only), exactly as claim chains are.
 
-**[charter-ref-by-czd]**: Each charter commit MUST be referenced by
+##### [charter-ref-by-czd]
+
+Each charter commit MUST be referenced by
 `refs/atom/charter/d/{charter_czd}`, a czd-hex ref family (conforming to
 the typed ref-path discipline of `[czd-oid-disjoint]`) that both protects
 the charter commit from garbage collection and addresses it by czd for
@@ -856,7 +926,9 @@ depends: [czd-oid-disjoint, anchor-resolvable, charter-transition]
 
 ### Transitions
 
-**[charter-transition-git]**: An atom-set MAY be chartered on the git
+#### [charter-transition-git]
+
+An atom-set MAY be chartered on the git
 backend by creating a parentless charter commit.
 
 - **PRE**: The repository MUST have at least one commit, and the
@@ -885,7 +957,9 @@ evaluator: test
 depends: [charter-succession, charter-message-is-coz, charter-transition, charter-commit-format, charter-ref-by-czd, refs-atomic-multi]
 ```
 
-**[claim-transition-git]**: An atom MAY be claimed by creating a
+#### [claim-transition-git]
+
+An atom MAY be claimed by creating a
 detached claim commit.
 
 - **PRE**: The repository MUST have at least one commit. The atom-set's
@@ -910,7 +984,9 @@ evaluator: test
 depends: [claim-chains-charter]
 ```
 
-**[publish-transition-git]**: A version MAY be published for a
+#### [publish-transition-git]
+
+A version MAY be published for a
 claimed atom by creating an atom commit and annotating it with a
 publish tag.
 
@@ -941,7 +1017,9 @@ depends: [temporal-vector, snapshot-deterministic]
 because: [backend-refs-linearizable]
 ```
 
-**[ingest-transition]**: Atoms MAY be ingested from a registry (or
+#### [ingest-transition]
+
+Atoms MAY be ingested from a registry (or
 another store) into a store.
 
 - **PRE**: The source has discoverable atoms (resolvable refs). The
@@ -966,7 +1044,9 @@ depends: [verification-local]
 because: [ingest-preserves-identity]
 ```
 
-**[claim-replacement-storage]**: An atom's active claim MAY be
+#### [claim-replacement-storage]
+
+An atom's active claim MAY be
 replaced (e.g., after key compromise).
 
 - **PRE**: An active claim for this label MUST exist. The new claim
@@ -985,7 +1065,9 @@ evaluator: test
 depends: [temporal-vector]
 ```
 
-**[publish-update-transition]**: A publish tag MAY be updated (e.g.,
+#### [publish-update-transition]
+
+A publish tag MAY be updated (e.g.,
 after key revocation or resigning, to carry a reproducibility-mode
 transition — promotion or demotion per atom-model.md §6 — or to append
 overwrite- or append-class fields per atom-transactions.md
@@ -1058,7 +1140,9 @@ evaluator: none
 depends: [sig-over-pay, claim-owner-single, owner-authorization-delegated, publish-transition, fact-kind-table, trust-role-authorization, fact-claim-owner-gated, trust-signer-relative, tag-chain-immutable]
 ```
 
-**[tag-chain-semantic-immutable]**: The identity-class fields of a
+#### [tag-chain-semantic-immutable]
+
+The identity-class fields of a
 publish payload — `label`, `version`, `dig`, `src`, `path`,
 `content_hash`, `anchor`, and `claim` (atom-transactions.md
 `[amendment-field-classification]`) — MUST be set only by the base
@@ -1090,7 +1174,9 @@ evaluator: test
 depends: [amendment-field-classification, publish-update-transition, publish-typ, publish-mode, fact-kind-table]
 ```
 
-**[refs-atomic-multi]**: Multi-ref protocol transitions (claim +
+#### [refs-atomic-multi]
+
+Multi-ref protocol transitions (claim +
 protective ref; publish tag + version ref + protective ref; multi-atom
 ingestion) MUST be committed atomically within the store — all named
 refs move together or none do — so no consumer can observe a torn
@@ -1107,7 +1193,9 @@ evaluator: test
 because: [backend-refs-atomic-multi]
 ```
 
-**[fs-ingest-transition]**: Atoms from a filesystem `AtomSource` MAY
+#### [fs-ingest-transition]
+
+Atoms from a filesystem `AtomSource` MAY
 be ingested into a git `AtomStore` without claims or publishes.
 
 - **PRE**: The filesystem source satisfies the `AtomSource` contract
@@ -1134,7 +1222,9 @@ evaluator: test
 depends: [fs-source-contract, dev-atom-unchartered-local]
 ```
 
-**[dev-atom-resolution]**: Tooling consuming atoms from a store
+#### [dev-atom-resolution]
+
+Tooling consuming atoms from a store
 resolves through two namespaces in order of precedence:
 
 1. `refs/atom/dev/{anchor}/{label}/` — local development atoms (unsigned,
@@ -1160,7 +1250,9 @@ depends: [ingest-transition]
 
 ### Forbidden States
 
-**[no-non-empty-claim]**: A claim commit MUST have the well-known
+#### [no-non-empty-claim]
+
+A claim commit MUST have the well-known
 empty tree as its `tree`. If a claim commit has a non-empty tree,
 the backend MUST reject it as malformed. A claim's parent (if present)
 MUST be another claim commit (also with empty tree).
@@ -1170,7 +1262,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[no-orphan-publish]**: A publish tag MUST NOT exist in a registry
+#### [no-orphan-publish]
+
+A publish tag MUST NOT exist in a registry
 without a corresponding claim commit reachable via
 `refs/atom/claims/pub/{label}` or `refs/atom/claims/d/{claim_czd}`.
 (Satisfies atom-transactions.md `[no-unclaimed-publish]`.)
@@ -1181,7 +1275,9 @@ evaluator: none
 because: [no-unclaimed-publish]
 ```
 
-**[no-backdated-src]**: A publish MUST NOT reference a source revision
+#### [no-backdated-src]
+
+A publish MUST NOT reference a source revision
 (`src`) that precedes the claim's `src` in the repository's history.
 The publish's `src` MUST be at or after the claim's `src`. This is the
 enforcement mechanism for `[temporal-vector]`.
@@ -1192,7 +1288,9 @@ evaluator: test
 because: [temporal-vector]
 ```
 
-**[no-label-collision-registry]**: Two atoms in the same registry
+#### [no-label-collision-registry]
+
+Two atoms in the same registry
 MUST NOT share a label. This is enforced by the ref layout — two
 claim refs for the same label would conflict.
 
@@ -1201,7 +1299,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[anchor-oldest-root]** _(retired 2026-07-08 — superseded by the
+#### [anchor-oldest-root]
+
+_(retired 2026-07-08 — superseded by the
 charter amendment)_: The oldest-parentless-commit selection rule
 existed only to make genesis-based anchor discovery deterministic.
 With `Anchor := czd(charter₀)` there is no anchor discovery to
@@ -1213,7 +1313,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[no-missing-store-claim]**: In a store, if a publish tag's payload
+#### [no-missing-store-claim]
+
+In a store, if a publish tag's payload
 references a claim czd, the corresponding claim commit MUST exist in
 the store's object database and MUST be reachable via
 `refs/atom/claims/d/{claim_czd}`. A missing claim MUST be treated as
@@ -1226,7 +1328,9 @@ evaluator: none
 
 ### Behavioral Properties
 
-**[anchor-vector-authenticity]**: Given a publish tag in a registry,
+#### [anchor-vector-authenticity]
+
+Given a publish tag in a registry,
 the atom MUST be verifiable as authentic by checking the vector:
 (1) the claim's `anchor` field equals `czd(charter₀)` of the effective,
 verified charter (atom-transactions.md `[charter-anchor]`,
@@ -1245,7 +1349,9 @@ evaluator: test
 depends: [charter-anchor, claim-charter-authorization, charter-ancestry]
 ```
 
-**[ingestion-portable]**: Atom commits, publish tag objects (and their
+#### [ingestion-portable]
+
+Atom commits, publish tag objects (and their
 chains), and claim commits MUST be transferable between git
 repositories via standard git pack negotiation (`git fetch`). No
 custom transport extensions are REQUIRED. Claim commits SHOULD be
@@ -1259,7 +1365,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[update-chain-auditable]**: The tag chain structure (new → old → ...
+#### [update-chain-auditable]
+
+The tag chain structure (new → old → ...
 → atom commit) MUST be traversable. A consumer MUST be able to
 reconstruct the full update history by walking the tag chain from the
 ref tip. Each tag object in the chain carries its own `CozMessage`,
@@ -1272,7 +1380,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[peel-content-integrity]**: When acquiring an atom via
+#### [peel-content-integrity]
+
+When acquiring an atom via
 `refs/atom/d/{blake3(publish_czd)}`, a consumer MUST walk the publish
 tag chain from the tip (following tag-to-tag pointers until reaching
 an atom commit), then verify that the **peeled content-addressed sha
@@ -1292,7 +1402,9 @@ evaluator: none
 because: [docs/architecture/atom-sad#8]
 ```
 
-**[store-accumulates]**: After ingestion, a store's `resolve` MUST
+#### [store-accumulates]
+
+After ingestion, a store's `resolve` MUST
 return at least what the source's `resolve` returns for every
 ingested atom. (Model §2.3, ⊇ condition.)
 

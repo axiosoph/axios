@@ -182,7 +182,9 @@ A non-normative TOML rendering appears in Appendix A.
 
 ### Invariants
 
-**[trust-anchor-set-format]**: A conforming implementation MUST
+#### [trust-anchor-set-format]
+
+A conforming implementation MUST
 represent the consumer's trust configuration as an `AcceptancePolicy`
 per the type declarations above: a `TrustAnchorSet` holding at most
 one entry per `SignerRef`, an ordered rule list, and explicit
@@ -201,7 +203,9 @@ evaluator: none
 because: [docs/models/execution-model#3.4, docs/models/atom-model#4]
 ```
 
-**[trust-anchor-sort]**: A trust anchor's `tmb(_)` reference is
+#### [trust-anchor-sort]
+
+A trust anchor's `tmb(_)` reference is
 `Tmb`-sorted. `Tmb`, `Anchor`, `Czd`, and `OID` are pairwise disjoint
 sorts: a trust anchor is never the atom-set anchor
 (`czd(charter₀)`), never a protocol content-address, and never a
@@ -223,7 +227,9 @@ A machine check for this sort-disjointness is a candidate future row
 in the seam Alloy model, owed by atom-backend-contract.md's own
 Verification section.
 
-**[trust-anchored-input]**: Only protocol-anchored signed objects
+#### [trust-anchored-input]
+
+Only protocol-anchored signed objects
 enter acceptance evaluation: the record MUST verify under the
 protocol's verification pipeline
 ([atom-transactions.md](atom-transactions.md) §Verification Pipeline)
@@ -241,7 +247,9 @@ evaluator: none
 depends: [docs/models/atom-model#5]
 ```
 
-**[trust-signer-relative]**: Verdicts are per-consumer. An
+#### [trust-signer-relative]
+
+Verdicts are per-consumer. An
 implementation MUST compute verdicts against the local
 `AcceptancePolicy` and MUST NOT treat another party's verdict as its
 own input: an imported verdict is at most evidence. (Inherited frame:
@@ -257,7 +265,9 @@ because: [docs/models/execution-model#3.4]
 Verification will audit the API surface and confirm no verdict-import
 path exists.
 
-**[trust-role-authorization]**: An anchored signer's records count
+#### [trust-role-authorization]
+
+An anchored signer's records count
 only within its roles: a `builder`-role entry authorizes derived
 facts, an `assertor`-role entry authorizes asserted facts (species
 per [atom-model.md §4](../models/atom-model.md)), and an entry with
@@ -281,7 +291,9 @@ depends: [docs/models/atom-model#5]
 because: [docs/architecture/htc-sad#6.10]
 ```
 
-**[trust-owner-selector]** _(disambiguated 2026-07-14 — charter vs.
+#### [trust-owner-selector]
+
+_(disambiguated 2026-07-14 — charter vs.
 claim ownership no longer share one shape)_: The `owner` signer
 reference matches a record's signer iff that key equals (or is
 authorized under) the atom's EFFECTIVE CLAIM's `owner` —
@@ -322,7 +334,9 @@ because: [charter-owner-set, claim-charter-authorization]
 Verification needs charter/claim succession fixtures to exercise
 ownership judged at differing chain positions.
 
-**[trust-threshold-rule]**: Acceptance of a derived execution record
+#### [trust-threshold-rule]
+
+Acceptance of a derived execution record
 as `fact` for cache service is quorum-gated. For a candidate record
 `r` at action identity `a`, signed by anchored signer `s` (entry
 quorum `q_s`, matched rule minimum `k_r`, both defaulting per the
@@ -350,7 +364,9 @@ evaluator: none
 depends: [docs/models/atom-model#6, docs/models/execution-model#3.1]
 ```
 
-**[trust-threshold-independence]**: Signer distinctness is the
+#### [trust-threshold-independence]
+
+Signer distinctness is the
 enforced independence floor: two records signed by the same `Tmb`
 MUST count as one toward any quorum, and one record MUST NOT be
 counted twice. Distinct thumbprints are machine-checkable; genuinely
@@ -364,7 +380,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[trust-rule-determinism]**: Rule resolution MUST be deterministic:
+#### [trust-rule-determinism]
+
+Rule resolution MUST be deterministic:
 the applicable rule for an atom is the FIRST rule in document order
 whose `scope` matches (an `atom(_)` scope matches that composite; a
 `set(_)` scope matches every atom anchored to that set; `role(_)`
@@ -381,7 +399,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[trust-mode-rule]**: A rule carrying `require_mode: "reproducible"`
+#### [trust-mode-rule]
+
+A rule carrying `require_mode: "reproducible"`
 MUST cause verdict `refused` for any derived execution record of an
 in-scope atom whose effective declared mode is not `reproducible`
 (mode per [atom-transactions.md](atom-transactions.md)
@@ -399,7 +419,9 @@ evaluator: none
 depends: [publish-mode, docs/models/atom-model#6]
 ```
 
-**[trust-contested-refusal]**: The contested-action hook. A
+#### [trust-contested-refusal]
+
+The contested-action hook. A
 **standing divergence finding** exists at action identity `a`, for
 this consumer, iff the in-scope atom's effective declared mode is
 `reproducible` AND there exist two records at `a` from distinct
@@ -434,7 +456,9 @@ evaluator: none
 depends: [docs/models/atom-model#6]
 ```
 
-**[trust-finding-derivable]**: Standing divergence findings MUST be
+#### [trust-finding-derivable]
+
+Standing divergence findings MUST be
 derivable from chain state plus the local policy alone: a consumer
 holding the atom's publish chain and metadata (enumerable per
 [atom-backend-contract.md](atom-backend-contract.md)
@@ -452,7 +476,9 @@ evaluator: none
 depends: [backend-enumeration, backend-chain-append]
 ```
 
-**[trust-policy-pure]**: Verdict computation MUST be a pure function
+#### [trust-policy-pure]
+
+Verdict computation MUST be a pure function
 of `(record, fact snapshot, policy)`: the same record evaluated
 against the same chain snapshot under the same policy yields the same
 verdict, on every conforming implementation. This is what lets the
@@ -521,7 +547,9 @@ because: [docs/adr/0007-atom-version-integrity-system#16]
 
 ### The acceptance procedure
 
-**[trust-acceptance-procedure]**: A conforming implementation MUST
+#### [trust-acceptance-procedure]
+
+A conforming implementation MUST
 evaluate every signed record it would consume as a fact — at cache
 service, at substitution, at resolution over asserted facts — by the
 following ordered procedure, and MUST NOT consume a record as a fact
@@ -588,7 +616,9 @@ of Appendix B.
 
 ### Behavioral Properties
 
-**[trust-verdict-total]**: For every anchored fact-class signed
+#### [trust-verdict-total]
+
+For every anchored fact-class signed
 object and every well-formed `AcceptancePolicy`, the acceptance
 procedure MUST terminate with exactly one verdict. No record is ever
 part-fact; no policy state makes the procedure abstain.
@@ -604,7 +634,9 @@ depends: [trust-acceptance-procedure]
 Verification will fuzz records against policies and confirm exactly
 one verdict is always produced.
 
-**[trust-no-silent-serve]**: A record MUST NOT be served as a cache
+#### [trust-no-silent-serve]
+
+A record MUST NOT be served as a cache
 hit or substitution unless the procedure returned `fact` for it under
 the serving consumer's policy at a snapshot at or after the record's
 append. Serving evidence is a conformance violation, whatever the

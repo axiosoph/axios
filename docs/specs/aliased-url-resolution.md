@@ -142,7 +142,9 @@ raw-input      = <any input not matching aliased-input>
 
 ### Invariants
 
-**[sigil-required]**: An input string MUST be treated as containing an
+#### [sigil-required]
+
+An input string MUST be treated as containing an
 alias if and only if a `+` character (U+002B) appears at a valid host
 position (see `[host-position-only]`). If no `+` appears at a host
 position, the input MUST be passed through as `AliasedUrl::Raw` without
@@ -154,7 +156,9 @@ evaluator: test
 depends: [host-position-only]
 ```
 
-**[host-position-only]**: The `+` sigil is valid ONLY at a host
+#### [host-position-only]
+
+The `+` sigil is valid ONLY at a host
 position within the input. To locate the host position, the parser
 MUST:
 (1) check for a scheme (`://`) and skip past it if present;
@@ -175,7 +179,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[alias-name-validated]**: The alias name (characters after `+` until
+#### [alias-name-validated]
+
+The alias name (characters after `+` until
 the first `/`, `:`, or end of input) MUST be a valid UAX #31 Identifier
 (XID_Start followed by zero or more XID_Continue characters). An
 invalid alias name MUST produce an `InvalidAliasName` error, not a
@@ -186,7 +192,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[separator-opaque-suffix]**: The character immediately following
+#### [separator-opaque-suffix]
+
+The character immediately following
 the alias name determines the separator:
 (a) `/` or `:` → separator; everything after is the opaque suffix;
 (b) end of input → bare alias, no separator, no suffix.
@@ -199,7 +207,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[structure-preserving]**: Alias expansion MUST preserve the input's
+#### [structure-preserving]
+
+Alias expansion MUST preserve the input's
 structure. Alurl substitutes ONLY the alias name with the resolved
 value. The prefix (scheme, credentials), separator, and suffix are
 preserved exactly as provided. No scheme is injected. No normalization
@@ -212,7 +222,9 @@ evaluator: test
 depends: [host-position-only, separator-opaque-suffix]
 ```
 
-**[suffix-opaque]**: The suffix (everything after the separator)
+#### [suffix-opaque]
+
+The suffix (everything after the separator)
 MUST be treated as an opaque string. Alurl MUST NOT validate,
 normalize, or interpret it. The suffix MAY be empty.
 
@@ -222,7 +234,9 @@ evaluator: test
 depends: [separator-opaque-suffix]
 ```
 
-**[expansion-deterministic]**: Given the same input and the same
+#### [expansion-deterministic]
+
+Given the same input and the same
 `AliasMap`, `AliasMap::resolve()` MUST produce the same output.
 Alias resolution MUST be a pure function of its inputs.
 
@@ -231,7 +245,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[resolution-terminates]**: Recursive alias resolution MUST
+#### [resolution-terminates]
+
+Recursive alias resolution MUST
 terminate. Alurl MUST enforce termination through cycle detection:
 if the same alias name is encountered twice in a resolution chain,
 resolution MUST fail with `CycleDetected`. Because the alias
@@ -244,7 +260,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[recursive-transparent]**: If alias expansion produces a result
+#### [recursive-transparent]
+
+If alias expansion produces a result
 that contains a `+` at a valid host position, alurl MUST re-resolve
 it as a new alias. The caller MUST NOT need to loop — recursive
 resolution is alurl's responsibility, not the caller's.
@@ -255,7 +273,9 @@ evaluator: test
 depends: [resolution-terminates]
 ```
 
-**[raw-preserves-input]**: When the input does not contain a `+` at a
+#### [raw-preserves-input]
+
+When the input does not contain a `+` at a
 valid host position, the returned `AliasedUrl::Raw` MUST contain the
 exact input string with no modifications.
 
@@ -265,7 +285,9 @@ evaluator: test
 depends: [sigil-required]
 ```
 
-**[expanded-preserves-alias]**: When the input is an alias, the
+#### [expanded-preserves-alias]
+
+When the input is an alias, the
 returned `AliasedUrl::Expanded` MUST include the **original** alias
 name (the first alias in the chain, before recursive resolution).
 This enables downstream consumers to provide diagnostic messages
@@ -277,7 +299,9 @@ evaluator: test
 depends: [recursive-transparent]
 ```
 
-**[zero-deps]**: Alurl MUST have zero non-std external dependencies.
+#### [zero-deps]
+
+Alurl MUST have zero non-std external dependencies.
 Alias detection and expansion is pure string processing. Unicode
 validation MAY use `unicode-ident` as the sole permitted dependency.
 
@@ -286,7 +310,9 @@ kind: constraint
 evaluator: review
 ```
 
-**[no-io]**: Alurl MUST NOT perform any I/O (filesystem, network,
+#### [no-io]
+
+Alurl MUST NOT perform any I/O (filesystem, network,
 environment variables). All external state is provided through the
 `AliasMap` (populated by an `AliasSource` implementor).
 
@@ -297,7 +323,9 @@ evaluator: review
 
 ### Transitions
 
-**[classify-transition]**: Given an input string, alurl MUST locate
+#### [classify-transition]
+
+Given an input string, alurl MUST locate
 the host position and determine whether an alias is present.
 
 - **PRE**: Input MUST be a non-empty string.
@@ -311,7 +339,9 @@ evaluator: test
 depends: [sigil-required, host-position-only]
 ```
 
-**[resolve-transition]**: Given an alias input and an `AliasMap`,
+#### [resolve-transition]
+
+Given an alias input and an `AliasMap`,
 `AliasMap::resolve()` MUST expand the alias and reconstruct the output.
 
 - **PRE**: The input MUST contain a valid alias at a host position.
@@ -330,7 +360,9 @@ depends: [structure-preserving, recursive-transparent]
 
 ### Forbidden States
 
-**[no-silent-fallback]**: If an input contains `+` at a valid host
+#### [no-silent-fallback]
+
+If an input contains `+` at a valid host
 position but the alias name is invalid or the resolver returns an
 error, alurl MUST NOT silently fall back to `Raw`. It MUST return an
 error. A `+` at a host position is an unambiguous declaration of alias
@@ -342,7 +374,9 @@ evaluator: test
 depends: [host-position-only]
 ```
 
-**[no-partial-expansion]**: Alurl MUST NOT return an `AliasedUrl::Expanded`
+#### [no-partial-expansion]
+
+Alurl MUST NOT return an `AliasedUrl::Expanded`
 whose `url` field still contains an unresolved `+`-prefixed alias at a
 host position. Recursive resolution MUST complete fully or fail entirely.
 
@@ -352,7 +386,9 @@ evaluator: test
 because: [recursive-transparent]
 ```
 
-**[no-scheme-injection]**: Alurl MUST NOT add, remove, or modify the
+#### [no-scheme-injection]
+
+Alurl MUST NOT add, remove, or modify the
 scheme component. If the input has no scheme, the output has no scheme.
 If the input has `ssh://`, the output has `ssh://`. Scheme inference is
 the consumer's responsibility.
@@ -363,7 +399,9 @@ evaluator: test
 because: [structure-preserving]
 ```
 
-**[no-alias-in-metadata]**: Alurl types (aliases, alias names)
+#### [no-alias-in-metadata]
+
+Alurl types (aliases, alias names)
 MUST NOT appear in persisted protocol state, signed payloads, or
 stored metadata. Aliases are a user convenience — all persistent
 references MUST use fully expanded URLs. (This constraint is
@@ -377,7 +415,9 @@ evaluator: review
 
 ### Behavioral Properties
 
-**[resolution-complexity]**: Single-level alias resolution MUST be
+#### [resolution-complexity]
+
+Single-level alias resolution MUST be
 O(n) for prefix parsing (where n is input length, dominated by
 scanning for `://` and `@`) and O(1) for resolver lookup (assuming
 the resolver is hash-based). Recursive resolution MUST be O(d × n)
@@ -390,7 +430,9 @@ kind: constraint
 evaluator: review
 ```
 
-**[error-diagnostic]**: All error types MUST carry sufficient
+#### [error-diagnostic]
+
+All error types MUST carry sufficient
 information for diagnostic messages. `CycleDetected` MUST include
 the full chain of alias names that formed the cycle.
 `AliasNotFound` MUST include the alias name that failed.

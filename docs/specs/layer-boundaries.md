@@ -115,7 +115,9 @@ Examples:
 
 ### §2.1 — Downward-Only Rule
 
-**[boundary-downward-only]**: Dependencies between workspaces MUST
+#### [boundary-downward-only]
+
+Dependencies between workspaces MUST
 flow strictly downward through the layer stack. A crate at layer
 Lₙ MUST NOT depend (directly or transitively) on any crate at
 layer Lₘ where m > n.
@@ -136,7 +138,9 @@ FORBIDDEN:     eos → ion-manifest  (L3 → L4)
 
 ### §2.2 — Contract-Only Across Boundaries
 
-**[boundary-contract-only]**: Cross-workspace dependencies MUST
+#### [boundary-contract-only]
+
+Cross-workspace dependencies MUST
 target contract crates, not implementation crates. A crate in
 workspace W₁ MUST NOT depend on an implementation crate in
 workspace W₂.
@@ -157,7 +161,9 @@ FORBIDDEN:     ion-eos → eos            (implementation)
 
 ### §2.3 — Implementation Isolation
 
-**[boundary-impl-isolation]**: Implementation crates MUST NOT be
+#### [boundary-impl-isolation]
+
+Implementation crates MUST NOT be
 depended upon by any crate outside their own workspace.
 
 ```claim
@@ -174,7 +180,9 @@ all other layers.
 
 ### §2.4 — Intra-Workspace Freedom
 
-**[boundary-intra-workspace]**: Within a single workspace,
+#### [boundary-intra-workspace]
+
+Within a single workspace,
 dependency direction is unconstrained. Implementation crates
 MAY depend on their workspace's contract crates and on each
 other as needed.
@@ -196,7 +204,9 @@ Permitted:     eos → eos-core           (impl → contract, same workspace)
 
 ### §3.1 — Interface Types in Contract Crates
 
-**[boundary-contract-types]**: Types that appear in the signature
+#### [boundary-contract-types]
+
+Types that appear in the signature
 of any cross-layer trait method, or that are exchanged as the
 serialized interface artifact between two layers, MUST reside in
 a contract crate of the _consuming_ layer.
@@ -232,7 +242,9 @@ following the lock file's reclassification to L4 (§4.2).
 
 ### §3.2 — Dependency Budget for Contract Crates
 
-**[boundary-contract-dep-budget]**: Contract crates at L1 MUST
+#### [boundary-contract-dep-budget]
+
+Contract crates at L1 MUST
 have ≤ 5 non-`std` dependencies. Contract crates at L3 and L4
 SHOULD have ≤ 10 non-`std` dependencies. Implementation crates
 have no dependency budget.
@@ -249,7 +261,9 @@ The L1 budget of 5 is inherited from ADR-0001.
 
 ### §3.3 — No Backend Leakage
 
-**[boundary-no-backend-leakage]**: Contract crate types MUST NOT
+#### [boundary-no-backend-leakage]
+
+Contract crate types MUST NOT
 expose backend-specific types in their public API. Snix types,
 gix types, nix-compat types, and other backend-specific types
 MUST NOT appear in the public signatures of `eos-core`, `atom-core`,
@@ -279,7 +293,9 @@ unowned — they require an explicit ownership decision (which SHOULD
 be recorded as an amendment to this spec) before implementation
 proceeds.
 
-**[boundary-L1-concerns]**: L1 (atom) owns:
+#### [boundary-L1-concerns]
+
+L1 (atom) owns:
 
 - Identity primitives: `AtomId` (`(anchor, label)` pair), `Label`, `Tag`, `Identifier`, `Anchor`
 - URI parsing: `RawAtomUri`, `AtomUri`, alias resolution
@@ -304,7 +320,9 @@ L1 MUST NOT own: manifest _formats_ (that's L4), build recipes
 (that's L2/L3), dependency resolution (that's L4), or lock files
 (that's L4).
 
-**[boundary-L2-concerns]**: L2 (HTC — Hermetic Transactional
+#### [boundary-L2-concerns]
+
+L2 (HTC — Hermetic Transactional
 Composition) owns:
 
 - **The build function and sandboxed execution**: `build(atom
@@ -347,7 +365,9 @@ _declaration_, or the manifest (that's L4), or scheduling policy,
 worker placement, or the atom-DAG (that's L3 — L2 is what L3's
 executor trait dispatches _to_, not the scheduler itself).
 
-**[boundary-L3-concerns]**: L3 (eos) owns:
+#### [boundary-L3-concerns]
+
+L3 (eos) owns:
 
 - Build engine trait: `BuildEngine`, `BuildPlan`
 - Build dispatch: plan/apply lifecycle (dispatched through L2's
@@ -378,7 +398,9 @@ or **frontend-specific serialization formats** including the lock
 file (that's L4). Eos reads atom content through the `AtomSource`
 trait (L1) and MUST NOT implement its own atom fetching logic.
 
-**[boundary-L4-concerns]**: L4 (ion) owns:
+#### [boundary-L4-concerns]
+
+L4 (ion) owns:
 
 - Manifest format: `ion.toml` / `atom.toml` parsing and validation
 - Dependency resolution: SAT solver, constraint matching, version
@@ -404,7 +426,9 @@ L4 MUST NOT own: identity primitives (that's L1), build engine
 internals (that's L3), fetch-set _execution_ (that's L2), or
 storage backends (that's L1/L2).
 
-**[boundary-L5-concerns]**: L5 (plugins) extends L4 with
+#### [boundary-L5-concerns]
+
+L5 (plugins) extends L4 with
 ecosystem-specific dependency handling. Plugins MAY produce
 lock file entries that conform to the lock file schema
 (`[lock-type-extension-mechanism]`), but MUST NOT bypass ion's
@@ -414,7 +438,9 @@ matures.
 
 ### §4.2 — Lock File Ownership
 
-**[boundary-lock-ownership]**: The lock file format (`atom.lock`)
+#### [boundary-lock-ownership]
+
+The lock file format (`atom.lock`)
 is owned by L4 (ion). The lock file is ion's serialization of
 resolved dependencies — it is a frontend-specific artifact, not
 an inter-layer contract type.
@@ -474,7 +500,9 @@ and `serde` + `toml` (for parsing). It does NOT depend on
 
 ### §4.3 — Bridge Crate Constraints
 
-**[boundary-bridge-crate]**: Bridge crates connect two adjacent
+#### [boundary-bridge-crate]
+
+Bridge crates connect two adjacent
 layers. They MUST:
 
 1. Depend only on contract crates from the layer below (not
@@ -503,7 +531,9 @@ After lock file migration, `ion-eos` additionally depends on
 
 ### §4.4 — Store Separation
 
-**[boundary-store-separation]**: The atom store (L1) and the
+#### [boundary-store-separation]
+
+The atom store (L1) and the
 artifact store (L3) are architecturally distinct and MUST NOT
 be conflated.
 
@@ -548,7 +578,9 @@ because: [boundary-contract-only]
 
 ### §5.1 — Mechanical Verification
 
-**[boundary-ci-enforcement]**: The layer boundary constraints in
+#### [boundary-ci-enforcement]
+
+The layer boundary constraints in
 §2 SHOULD be enforced by automated CI checks. A conformance
 script MUST parse the `Cargo.toml` files of all workspace crates,
 construct the dependency graph, and verify:
@@ -571,7 +603,9 @@ depends: [boundary-downward-only, boundary-contract-only, boundary-contract-dep-
 
 ### §5.2 — Crate Classification
 
-**[boundary-crate-metadata]**: Each crate's `Cargo.toml` SHOULD
+#### [boundary-crate-metadata]
+
+Each crate's `Cargo.toml` SHOULD
 carry a `[package.metadata.axios]` table declaring its
 classification:
 
@@ -595,7 +629,9 @@ evaluator: none
 
 ### §5.3 — Violation Budgeting
 
-**[boundary-violation-budget]**: Known violations MAY be
+#### [boundary-violation-budget]
+
+Known violations MAY be
 documented in a `boundary-exceptions.toml` file at the repo root.
 Each exception MUST carry:
 
