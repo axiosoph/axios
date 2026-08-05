@@ -20,11 +20,17 @@ sig Source {
   anchor: one Anchor
 }
 
--- AtomId: Deterministic pair of (Anchor, Label)
-sig AtomId {
-  anchor: one Anchor,
-  label: one Label
-}
+-- AtomId: an opaque digest -- the pre-signature preimage identity of an
+-- UNCLAIMED atom (glossary, "Atom identity (and the unclaimed development
+-- atom)"; the degenerate case, glossary-repudiated 2026-07-18 as anything
+-- more). It carries no `anchor`/`label` fields: a digest has no legible
+-- internal structure to recover, unlike the fused pair the old doctrine
+-- asserted. Its determinism (same (anchor, label) -> same digest,
+-- collision-free) is stated over Atom in `atomid_content_addressed` below,
+-- since Atom -- not AtomId -- is what carries the two preimage inputs.
+-- A CLAIMED atom's identity is its claim's own `czd` field directly (see
+-- Claim below) -- there is no separate AtomId on Claim or Publish.
+sig AtomId {}
 
 -- AtomSet: Collection of atoms sharing a common anchor
 sig AtomSet {
@@ -37,18 +43,25 @@ sig Manifest {
   version: one Version
 }
 
--- Atom: Fundamental unit of publishing (detached subtree)
+-- Atom: Fundamental unit of publishing (detached subtree) -- the CONTENT
+-- object, independent of claim status. Its atomId is the pre-claim
+-- preimage digest: the degenerate identity of an unclaimed development
+-- atom, never the atom's permanent identity once claimed.
 sig Atom {
   source: one Source,
   atomSet: one AtomSet,
   manifest: one Manifest,
-  atomId: one AtomId,
-  label: one Label
+  label: one Label,
+  atomId: one AtomId
 }
 
--- Claim: Establishes ownership over an AtomId
+-- Claim: Establishes ownership over a label. A claim's identity is its OWN
+-- czd -- not the atomId of the content it claims (glossary-repudiated,
+-- 2026-07-18: "the fused pair has no role outside the pre-signature
+-- preimage of an unclaimed development atom"). claimAnchor/claimLabel are
+-- the symmetric-payload raw fields ([symmetric-payloads]) -- a consumer
+-- coherence check against the source, never an identity reconstruction.
 sig Claim {
-  atomId: one AtomId,
   owner: one Owner,
   source: one Source,
   czd: one Czd,
@@ -56,13 +69,20 @@ sig Claim {
   claimLabel: one Label     -- symmetric payloads
 }
 
--- Publish: Extends the identity with an immutable version snapshot
+-- Publish: Extends the identity with an immutable version snapshot. A
+-- publish's identity is `claimCzd` -- the czd of the claim that authorizes
+-- it. No separate atomId field: the publish->claim czd reference IS the
+-- binding ([publish-claim-coherence], [publish-chains-claim]).
+-- pubAnchor/pubLabel are the base payload's own symmetric-payload raw
+-- fields ([symmetric-payloads]) -- independently verifiable against the
+-- claim's, not derived from any atomId.
 sig Publish {
-  atomId: one AtomId,
   version: one Version,
   claimCzd: one Czd,
   dig: one Dig,
-  src: one Src
+  src: one Src,
+  pubAnchor: one Anchor,  -- symmetric payloads
+  pubLabel: one Label      -- symmetric payloads
 }
 
 -- Charter: roots the trust chain (2026-07-08 amendment). A FOUNDING charter
@@ -74,7 +94,9 @@ sig Charter {
   chAnchor: one Anchor     -- the set anchor: czd of the chain's founding charter
 }
 
--- AtomSource: Read-only trait interface (coalgebra observer)
+-- AtomSource: Read-only trait interface (coalgebra observer). `atoms` is
+-- content-addressed by the pre-claim AtomId digest -- storage/ingestion
+-- operate on atom CONTENT, independent of claim/ownership status.
 sig AtomSource {
   atoms: set AtomId
 }
@@ -88,9 +110,12 @@ sig AtomStore extends AtomSource {
 // 2. FUNCTIONS & PREDICATES
 // ============================================================================
 
--- Local content-addressed derivation simulator
+-- Local content-addressed derivation simulator: the digest an unclaimed
+-- atom at (anchor, label) is identified by. Returns the atomId of any Atom
+-- with a matching source-anchor and label; `atomid_content_addressed`
+-- below guarantees this set has at most one distinct member.
 fun computeId[a: Anchor, l: Label]: set AtomId {
-  { id: AtomId | id.anchor = a and id.label = l }
+  { atm: Atom | atm.source.anchor = a and atm.label = l }.atomId
 }
 
 -- Ingest condition definition
@@ -101,13 +126,17 @@ pred after_ingest[st: AtomStore, s: AtomSource] {
 -- The founding charters: those with no predecessor in their succession chain.
 fun founders: set Charter { { c: Charter | no c.prior } }
 
--- Fork Scenario: Multiple sources share the same anchor,
--- different owners claim the same AtomId.
+-- Fork Scenario: Multiple sources share the same anchor, different owners
+-- independently claim the SAME underlying atom slot (same claimAnchor,
+-- claimLabel). Under the corrected doctrine the resulting claims have
+-- DIFFERENT identities (different czds, since owner is a czd input) --
+-- that is the doctrinally correct reading of a fork: competing claims,
+-- never one shared identity ([identity-content-addressed]).
 pred fork_scenario {
   some disj s1, s2: Source, disj c1, c2: Claim |
     s1.anchor = s2.anchor and
     c1.source = s1 and c2.source = s2 and
-    c1.atomId = c2.atomId and
+    c1.claimAnchor = c2.claimAnchor and c1.claimLabel = c2.claimLabel and
     c1.owner != c2.owner
 }
 
@@ -115,26 +144,33 @@ pred fork_scenario {
 // 3. FACTS (Structural Invariants & Constraints)
 // ============================================================================
 
-fact identity_bijection {
-  -- Identity Computation (olog §1): `computed_from: AtomId → (Anchor × Label)` is a bijection.
-  -- Two atoms with the same anchor and label MUST have the same AtomId.
-  all a1, a2: AtomId | (a1.anchor = a2.anchor and a1.label = a2.label) implies a1 = a2
+fact atomid_content_addressed {
+  -- [identity-content-addressed], pre-claim (unclaimed-atom) regime: the
+  -- digest is a deterministic, collision-free function of (anchor, label).
+  -- Stated directly over Atom (which carries both preimage inputs) since
+  -- AtomId itself carries no anchor/label fields to compare -- a digest,
+  -- not the pair.
+  all a1, a2: Atom |
+    (a1.source.anchor = a2.source.anchor and a1.label = a2.label) iff a1.atomId = a2.atomId
 }
 
 fact claim_properties {
-  -- Czd is a strictly unique digest for each claim
+  -- Czd is a strictly unique digest for each claim -- a claim's identity.
   all c1, c2: Claim | c1.czd = c2.czd implies c1 = c2
-  -- Symmetric payloads: Claim carries raw anchor/label matching its atomId
-  all c: Claim | c.claimAnchor = c.atomId.anchor and c.claimLabel = c.atomId.label
   -- The claim's anchor must match the source's derivation
   all c: Claim | c.source.anchor = c.claimAnchor
 }
 
 fact publish_properties {
-  -- Verification Chain Completeness ([publish-chains-claim] & [publish-claim-coherence])
-  -- The atomId in the publish MUST strictly match the atomId of the referenced claim.
+  -- Verification Chain Completeness ([publish-chains-claim] &
+  -- [publish-claim-coherence]): a publish's identity is entirely carried
+  -- by its claimCzd reference -- no separate atomId to also match.
+  all p: Publish | some c: Claim | c.czd = p.claimCzd
+  -- [symmetric-payloads]: the publish base payload's own raw anchor/label
+  -- MUST agree with its authorizing claim's -- independently verifiable
+  -- consistency, never an atomId reconstruction (there is no atomId here).
   all p: Publish | some c: Claim |
-    c.czd = p.claimCzd and p.atomId = c.atomId
+    c.czd = p.claimCzd and p.pubAnchor = c.claimAnchor and p.pubLabel = c.claimLabel
 }
 
 fact store_topology {
@@ -150,8 +186,6 @@ fact anchor_properties {
   all a: Atom | a.atomSet.setAnchor = a.source.anchor
   -- AtomSets are uniquely identified purely by their anchor.
   all as1, as2: AtomSet | as1.setAnchor = as2.setAnchor implies as1 = as2
-  -- Identity derivation: AtomId traces to source's anchor and atom's label.
-  all a: Atom | a.atomId.anchor = a.source.anchor and a.atomId.label = a.label
 }
 
 fact manifest_properties {
@@ -180,23 +214,15 @@ fact charter_properties {
 // 4. ASSERTIONS & VERIFICATIONS
 // ============================================================================
 
-// [identity-content-addressed]: AtomId is the (anchor, label) PAIR, not a hash of it.
-// "content-addressed" means the anchor is a content digest and identity is permanent —
-// it does NOT mean the AtomId is a digest. This assertion checks pair-uniqueness.
+// [identity-content-addressed]: an unclaimed atom's AtomId is a deterministic
+// digest of the (anchor, label) preimage, not the pair itself. "Content-
+// addressed" means the digest is collision-free and depends on nothing but
+// its declared inputs -- it does NOT mean the pair is observable in the
+// AtomId value. This assertion checks the digest's determinism/injectivity.
 // @docket: identity-content-addressed :: docs/specs/run_model_check.sh
 assert identity_content_addressed {
-  all a1, a2: AtomId |
-    (a1.anchor = a2.anchor and a1.label = a2.label) implies a1 = a2
-}
-
-// [ownership-independence]
-// @docket: owner-abstract :: docs/specs/run_model_check.sh
-// @docket: owner-compatibility :: docs/specs/run_model_check.sh
-assert ownership_independence {
-  all a: AtomId, c1, c2: Claim |
-    (c1.atomId = a and c2.atomId = a and c1.owner != c2.owner)
-    implies c1.atomId = c2.atomId
-  -- ownership changes don't alter identity
+  all a1, a2: Atom |
+    (a1.source.anchor = a2.source.anchor and a1.label = a2.label) implies a1.atomId = a2.atomId
 }
 
 // [ingest-preserves-identity]
@@ -213,12 +239,15 @@ assert anchor_set_coherence {
     implies a1.atomSet = a2.atomSet
 }
 
-// [verification-chain]
+// [symmetric-payloads] / [publish-chains-claim]: every publish resolves to
+// exactly the claim its claimCzd names, and the two payloads' raw
+// anchor/label fields agree.
+// @docket: publish-chains-claim :: docs/specs/run_model_check.sh
 assert verification_chain {
   all p: Publish |
     some c: Claim |
       c.czd = p.claimCzd and
-      computeId[c.claimAnchor, c.claimLabel] = p.atomId
+      p.pubAnchor = c.claimAnchor and p.pubLabel = c.claimLabel
 }
 
 // [anchor-content-addressed]: every anchor resolves to EXACTLY ONE founding
@@ -253,7 +282,6 @@ assert charter_fork_distinction {
 // ============================================================================
 
 check identity_content_addressed for 4
-check ownership_independence for 4
 check ingest_preserves_identity for 4
 check anchor_set_coherence for 4
 check verification_chain for 4
