@@ -105,6 +105,13 @@ verifier is ultimately asking, and why it cannot ask it directly.
 > predicate, and instead assembles the located, attributable evidence of
 > §5 into the bucket a member can mechanically earn.
 
+#### [surety-genuineness-underdetermined]
+
+```claim
+kind: invariant
+evaluator: none
+```
+
 > **Definition (classification).** `classify : Artifact → Bucket` is a
 > **total** function assigning every closure member exactly one
 > bucket:
@@ -218,6 +225,13 @@ The second conjunct is the fail-closed law: negation of the positive
 conditions _forces_ a residue bucket. $\mathrm{Exhaustive}$ is the safety
 invariant the machine-checked model asserts for every atom in scope
 (§10); a counterexample would be a member escaping all four buckets.
+
+#### [surety-classify-law]
+
+```claim
+kind: invariant
+evaluator: model-check
+```
 
 ## 3. The trust surface and the assumption basis
 
@@ -362,6 +376,13 @@ no enumerated class registry. Evaluator: gates (a)/(b) are decidable
 by construction (P1, §9.2); the fail-closure routing is part of the
 machine-checked classification (§10).
 
+#### [surety-gate-fail-closed]
+
+```claim
+kind: invariant
+evaluator: model-check
+```
+
 ### 5.2 Why a vouch is required at all
 
 The source-class declaration in the landed corpus is
@@ -435,6 +456,13 @@ trust the verdict rests on is enumerated, signed, and attributable —
 moved from an invisible self-declaration to a named signature — never
 erased from the books. A voucher who vouches a laundering tree has
 signed a permanent, czd-addressed record of that judgment.
+
+#### [surety-establishment-vouch-required]
+
+```claim
+kind: invariant
+evaluator: proof
+```
 
 ## 6. The reproducibility mode is empirically grounded
 
@@ -513,6 +541,13 @@ policy; the difference here is that the policy surface is explicit and
 minimal, and the entire remainder is machine-derived with the residue
 ($T(a)$) and basis ($B(a)$) enumerated.
 
+#### [surety-verdict-relativity]
+
+```claim
+kind: invariant
+evaluator: model-check
+```
+
 ## 8. The forced generator and degeneracy
 
 ### 8.1 The objects
@@ -576,6 +611,13 @@ the undecidable question somewhere, and an obfuscated factoring only
 hardens it — so no theorem below depends on which factoring is chosen,
 and no claim below is about the historical origin of any factoring.
 
+#### [surety-generator-forced]
+
+```claim
+kind: invariant
+evaluator: proof
+```
+
 ### 8.2 Why degeneracy is a valid undecidability target
 
 Rice's theorem requires a **semantic** property: a property of the
@@ -594,6 +636,13 @@ ranges over "sourcehood of a tree"; the undecidable question is asked
 of the forced generator, the one object it is well-posed for.
 Evaluator: proof (Rice's theorem, by citation; the exclusion is a
 well-definedness argument).
+
+#### [surety-degeneracy-undecidability-target]
+
+```claim
+kind: invariant
+evaluator: proof
+```
 
 ### 8.3 The witness (non-vacuity)
 
@@ -635,6 +684,13 @@ the undecidable residue is pinned to a named, permanent, czd-addressed
 signature in $B(a)$. The undecidability does not move; the
 accountability for accepting it does. Both outcomes are exercised in
 the machine-checked model (§10).
+
+#### [surety-forced-generator-witness]
+
+```claim
+kind: invariant
+evaluator: none
+```
 
 ## 9. The ceiling theorems
 
@@ -717,6 +773,13 @@ is the actual ground for "no certificate at any size retires the
 question": the construction's move to a permanent signed vouch (Theorem
 3) is not a stopgap for a merely-hard check but the only route left once
 $\Sigma_1$-certifiability itself is foreclosed.
+
+#### [surety-theorem1-generator-impossibility]
+
+```claim
+kind: invariant
+evaluator: proof
+```
 
 ### 9.2 Theorem 2 — maximal sound decidable rejection (conditional)
 
@@ -853,6 +916,13 @@ definition adopted in §2 — genuineness as membership in the declared,
 class-$c$ provenance, never a function of bytes — forced rather than
 merely preferred.
 
+#### [surety-theorem2-maximal-sound-rejection]
+
+```claim
+kind: invariant
+evaluator: proof
+```
+
 ### 9.3 Theorem 3 — forced attributability (two registers)
 
 > **Theorem 3a (completeness of the accounting — formal, finite,
@@ -872,6 +942,13 @@ by construction, so the model itself cannot refute it; the refutation
 surface is an _implementation_ of the closure walk whose computed
 $B(a)$ omits a signature the classification counted. Any conforming
 implementation must expose $B(a)$ so that check is possible.
+
+#### [surety-theorem3a-forced-attributability]
+
+```claim
+kind: invariant
+evaluator: proof
+```
 
 > **Theorem 3b (attributability forcing — economic argument, not a
 > theorem).** Any laundering (§8.1 sense) that survives the hard gates
@@ -1002,6 +1079,13 @@ only through its structural consequence (a witness-shaped atom is
 decided purely by vouch admission); its degeneracy is never computed —
 the model does not decide the undecidable.
 
+#### [surety-alloy-safety-result]
+
+```claim
+kind: invariant
+evaluator: model-check
+```
+
 ## 11. The Lean mechanization
 
 A second, independent evaluator over the same classification law:
@@ -1095,6 +1179,13 @@ clause, and the theorem needs no premise about degeneracy — not
 because one was assumed away, but because none is in scope for a
 generator-free, `Bool`-valued function to depend on.
 
+#### [surety-classification-vouch-decided]
+
+```claim
+kind: invariant
+evaluator: proof
+```
+
 ### 11.2 Proven here vs. cited: Theorem 1 is not mechanized
 
 Theorem 1 (§9.1 — Rice's theorem applied to the index set of
@@ -1128,6 +1219,13 @@ to state at all, because an `.atom`'s inputs are strictly-smaller
 subterms of itself — a circular-justification instance has no
 term-level witness, unsatisfiable at every scope by the type itself,
 not merely absent within Alloy's bound.
+
+#### [surety-lean-proof-footprint]
+
+```claim
+kind: invariant
+evaluator: proof
+```
 
 ### 11.3 The assumption base
 
