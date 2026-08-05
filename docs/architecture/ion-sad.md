@@ -9,9 +9,10 @@
 
   Maintained as Architecture-as-Code. Diagrams are Mermaid.js, inline.
 
-  Consumes the atom (L1) identity contract — see atom-sad.md. Key inputs: AtomId =
-  abstract (anchor,label) pair; the 2-value atom lock contribution {version,
-  publish_czd}; the self-describing atom git object.
+  Consumes the atom (L1) identity contract — see atom-sad.md. Key inputs:
+  identity is the claim record's czd, not the (anchor,label) pair (atom-sad
+  §6.1); the lock's AtomId = (set, label) dep key; the 2-value atom lock
+  contribution {version, publish_czd}; the self-describing atom git object.
 -->
 
 # Ion Software Architecture Document (SAD)

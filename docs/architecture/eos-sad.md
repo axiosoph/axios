@@ -641,10 +641,9 @@ the durable source of truth (§9.5).
 
 All data in the system is content-addressed:
 
-- **Atoms**: identified by the abstract pair `(anchor, label)` — **not** a
-  digest of it (atom-sad §6.1, `[identity-content-addressed]`). The atom's
-  signed publish (`publish_czd`) is the content identity the lock carries
-  (atom-sad §6.5) and eos consumes.
+- **Atoms**: identity is the claim record's czd, not the `(anchor, label)`
+  pair (atom-sad §6.1). The atom's signed publish (`publish_czd`) is the
+  content identity the lock carries (atom-sad §6.5) and eos consumes.
 - **Actions**: identified by `action_id` (`Digest` trait, currently Blake3
   over the H formula in §6.5) — the one drv/plan-hash-shaped identity in
   the system.
@@ -671,7 +670,7 @@ The cryptographic chain:
 
 ```text
 Atom identity   → publish_czd    → action_id            → Output Tree + BuildRecord
-(anchor, label)   (signed content) H(atom_czd_closure,     (htc-sad §2.3, §2.4)
+claim_czd         (signed content) H(atom_czd_closure,     (htc-sad §2.3, §2.4)
                                     toolchain_composition,
                                     action_params)
 ```
@@ -1072,7 +1071,7 @@ composition, action params) → output tree` — sandboxing, FHS-view
 | Term          | Definition                                                                                                                                                          |
 | :------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Anchor**    | Cryptographic commitment establishing atom-set identity                                                                                                             |
-| **Atom-id**   | The abstract pair `(anchor, label)` — identity is the pair itself, not a digest of it (atom-sad §6.1, `[identity-content-addressed]`)                               |
+| **Atom-id**   | Identity is the claim record's czd, not the `(anchor, label)` pair — the pair is the pre-signature preimage of an unclaimed development atom (atom-sad §6.1)        |
 | **Atom-set**  | Collection of atoms sharing a common anchor                                                                                                                         |
 | **Label**     | Human-readable name for an atom within an atom-set                                                                                                                  |
 | **Digest**    | Abstract content-addressed hash (algorithm not hardcoded)                                                                                                           |
