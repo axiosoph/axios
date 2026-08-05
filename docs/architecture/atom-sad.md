@@ -122,7 +122,7 @@ graph TB
 
 | Boundary      | Inside Atom                                                                             | Outside Atom                                                                    |
 | :------------ | :-------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------ |
-| **Identity**  | The claim record's czd (§6.1); `AtomId = (anchor, label)` is its pre-signature preimage, anchor = `czd(charter₀)`, the founding charter's coz digest | Key material, signature primitives (Coz/Cyphr)                                  |
+| **Identity**  | The claim record's czd (§6.1); `AtomId = (anchor, label)` is its pre-signature preimage; the anchor is named and verified by `czd(charter₀)`, the founding charter's coz digest | Key material, signature primitives (Coz/Cyphr)                                  |
 | **Ownership** | claim/publish protocol; claim/publish chains; the owner→identity binding                | Owner identity _systems_ (Coz `tmb`, Cyphr `PR`) — `Owner` is opaque            |
 | **Storage**   | git-object encoding; registry + store ref layout; ingest                                | Build execution, artifact store (L3)                                            |
 | **Discovery** | object-free ref advertisement; set→mirrors indirection                                  | Version _semantics_ (`VersionScheme` is a trait; its per-ecosystem dialects are internal plugins above L1, §1.1) |
@@ -196,7 +196,7 @@ resolution cache: an atom fetched once is content-addressed for reuse.
 
 `atom-git` implements `AtomContent`/`AtomStore` over a git repository: it reads atom
 commits, walks publish tag chains and claim chains, and verifies the anchor against
-the set's founding charter (`Anchor := czd(charter₀)`). The git object DB is the
+the set's founding charter by recomputing its czd (`czd(charter₀)`). The git object DB is the
 substrate; the registry/store refs are views over it. The obligations this
 backend discharges — and the ones still open against it — are enumerated
 in the [Atom Backend Contract](../specs/atom-backend-contract.md)'s
@@ -260,8 +260,9 @@ The URI is a locator, not the identity (`[uri-not-metadata]`).
 ### 3.4 atom-git — Git Bridge
 
 Implements `AtomContent`/`AtomStore` over git objects per `git-storage-format.md`:
-charter-based anchor verification (`Anchor := czd(charter₀)`), atom-commit
-snapshots, publish tag chains, claim chains, and the registry/store ref layouts.
+charter-based anchor verification (recomputing the anchor's czd against
+`czd(charter₀)`), atom-commit snapshots, publish tag chains, claim chains,
+and the registry/store ref layouts.
 
 ## 4. Core Lifecycles
 
@@ -389,10 +390,11 @@ rather than repeated here.
 
 ### 6.2 The Anchor
 
-**(Amended 2026-07-08 — the charter.)** The anchor is the coz digest of the
-atom-set's founding charter transaction: `Anchor := czd(charter₀)`
-(atom-transactions.md `[charter-anchor]`) — backend-agnostic, since a charter
-is a coz object regardless of backend. This replaces the earlier
+**(Amended 2026-07-08 — the charter.)** The anchor is the linkage the
+atom-set's founding charter transaction effects — a role, not a value; its
+czd (`czd(charter₀)`, atom-transactions.md `[charter-anchor]`) is the
+reference and verification handle every consumer uses — backend-agnostic,
+since a charter is a coz object regardless of backend. This replaces the earlier
 genesis-commit derivation; the genesis commit is not lost — the charter's
 `src` transitively pins it (a revision hash commits to its entire ancestry) —
 but it no longer _is_ the anchor. The anchor is: **immutable**
@@ -572,7 +574,7 @@ Out of scope for the atom layer:
 | :------------- | :------------------------------------------------------------------------------- |
 | Composite      | The genus an atom reifies as intent: a package, environment, or system with its determined closure (atom-model §2) |
 | Mode           | The publish-carried reproducibility declaration, `reproducible` \| `witnessed` (atom-model §6)                     |
-| Anchor         | `czd(charter₀)` — the founding charter's coz digest; immutable atom-set identity |
+| Anchor         | The founding charter's linking role (not a digest); named and verified by `czd(charter₀)`, the founding charter's coz digest; immutable atom-set identity |
 | AtomId         | The abstract pair `(anchor, label)` — the pre-signature preimage of an unclaimed development atom, not the atom's identity (§6.1); the lock's current map key (§6.5) |
 | Atom-set       | Atoms sharing a common anchor                                                    |
 | Label          | Human-readable atom name (UAX #31)                                               |
@@ -630,6 +632,26 @@ the git backend's storage encoding and ref layout for charter transactions is no
 yet specified (`git-storage-format.md` Open Questions #6) — tracked as
 atom-milestone design work, not silent drift. (The L4 consequences — the ion lock
 cross-references and the eos handoff — are tracked by `ion-sad.md`.)
+
+A further drift, opened by the 2026-07-21 glossary refinement
+(`docs/glossary.md`, "Deprecated and repudiated formulations"): the
+2026-07-08 amendment's own equation, `Anchor := czd(charter₀)` stated as a
+*definition*, is itself now repudiated — the anchor is the charter's
+linking role, not a digest; its czd is the reference and verification
+handle, never the anchor itself. This SAD's §6.2, Appendix A, and the
+§1.3/§2.3/§3.4 mentions have been realigned to the corrected framing. The
+registered constraints built on the equation have not: `atom-transactions.md`'s
+`[charter-anchor]` and `[claim-chains-charter]`; `git-storage-format.md`'s
+`[anchor-is-genesis]`, `[anchor-hash-agile]`, `[charter-commit-format]`,
+`[dev-atom-unchartered-local]`, `[fs-ingest-transition]`,
+`[anchor-oldest-root]`, and `[anchor-vector-authenticity]`;
+`trust-model.md`'s `[trust-anchor-sort]`; and `lock-file-schema.md`'s
+`[lock-set-anchor]` — together with the mechanized encodings in
+`alloy/atom_structure.als` (`sig Anchor in Czd {}`) and
+`tla/AtomCharter.tla`'s Anchor-semantics comment — still assert the
+equation. Each is a registered docket claim or the formal evaluator of
+one, so redesigning the `Anchor` type is separate follow-on work, tracked
+here as owed, not silent, drift.
 
 A further drift, opened by the 2026-07-18 identity correction (§6.1): the
 `[identity-content-addressed]` and `[identity-stability]` invariants

@@ -87,8 +87,9 @@ fn parse_and_verify_charter_commit(
 
 /// Resolve the founding charter of the atom-set anchored at `anchor`.
 ///
-/// Since `anchor == czd(charter₀)` by definition (`[charter-anchor]`),
-/// this is a direct keyed lookup at `refs/atom/charter/d/{anchor-hex}`.
+/// Since the anchor is named and verified by `czd(charter₀)`
+/// (`[charter-anchor]`), this is a direct keyed lookup at
+/// `refs/atom/charter/d/{anchor-hex}`.
 /// Returns `Ok(None)` — not an error — when: the ref doesn't exist, the
 /// stored payload's recomputed czd does not bind to `anchor` (the
 /// czd-binding hole, adversarially rejected), or the payload carries a

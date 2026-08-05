@@ -35,7 +35,8 @@ pub struct LockFileV2 {
 /// has no v2 successor — see the schema's `[sets.core]` example).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SetEntry {
-    /// `czd(charter₀)` — the founding-charter digest (`sha256`); immutable for
+    /// The anchor's reference and verification handle: the founding
+    /// charter's own digest, `czd(charter₀)` (`sha256`); immutable for
     /// the set's lifetime (`[lock-set-anchor]`).
     pub anchor: AtomDigest,
     /// Digest of the *effective* (possibly succeeded) charter (`sha256`); equals
