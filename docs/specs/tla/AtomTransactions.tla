@@ -190,12 +190,17 @@ NoBackdatedPublish ==
 \* PublishChainsClaim in this section, since a claim record is immutable
 \* once created) and identity stability ACROSS OWNERSHIP TRANSFERS / KEY
 \* ROTATIONS (per atom-model.md: the label-scope GENESIS claim's czd stays
-\* stable through claim replacement). This model has no claim-replacement
-\* chain (no `prior` field on claims, unlike AtomCharter.tla's charter
-\* succession) -- the ownership/key-rotation half is genuinely unmodeled,
-\* not merely mis-stated. Verifying it requires modeling claim replacement
-\* and a genesis-claim derivation analogous to [charter-anchor]'s
-\* czd(charter_0) -- new modeling scope, left to the architect (see report).
+\* stable through claim replacement). THIS model's claims have no `prior`
+\* field at all -- no claim-replacement chain here, unlike AtomCharter.tla,
+\* whose OWN (separate) `claims` variable DOES carry `prior` and models
+\* replacement via ClaimReplace/ReplacementAuthority. Even there, though,
+\* genesis-czd persistence is not machine-checked non-vacuously: its
+\* anchor/label conjuncts hold only because ClaimReplace hardcodes them
+\* (see AtomCharter.tla's ReplacementAuthority comment). So the
+\* ownership/key-rotation half of [identity-stability] is unmodeled here
+\* and, where a replacement chain does exist, still only definitionally
+\* (not state-space) established -- new modeling scope either way, left
+\* to the architect (see report).
 \* IdentityStability ==
 \*     \A c1, c2 \in claims :
 \*         (SourceAnchor[c1.source] = SourceAnchor[c2.source] /\ c1.label = c2.label)

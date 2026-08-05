@@ -665,13 +665,27 @@ specified in this document — Open Items; scoping it is a
 git-storage-format.md / atom-backend-contract.md concern, not settled
 by re-grading this constraint alone.
 
-**Not machine-verified.** The owner-replacement/governance-replacement
-split's TLC coverage (referenced by the retired constraint above) checks
-`AtomCharter.tla`'s *replacement-claim* modeling — the shape ADR-0007
-abolishes — never this fact-based restatement; a green result there is
-evidence the superseded design was internally consistent, not evidence
-for this constraint. No model checks the fact-based claim-owner-change
-rule anywhere in this repository.
+**Historical model coverage of the retired design (superseded, not
+evidence for this constraint).** `docs/specs/tla/AtomCharter.tla`'s
+`ReplacementAuthority` invariant machine-verifies the *replacement-claim*
+shape — the `prior`-chained structure and the governance flag's
+correctness — that this section retires; that coverage is real, for the
+design it checks, and even there it is weaker than it first reads:
+`ReplacementAuthority`'s anchor/label conjuncts hold at every state only
+because `ClaimReplace` hardcodes them into the replacement record — a
+regression guard on the construction, not a state-space proof that
+identity persists, since no reachable state could ever violate a
+hardcoded field. And the claim-authority fail-closed rule stated above
+was never covered at all: `AtomCharter.tla`'s `Divergent`/`ForkFailClosed`
+machinery is charter-scoped only, so nothing in the model prevented two
+governance replacements from naming the same `prior` — a gap in the
+retired design's own coverage, not merely staleness.
+
+**None of the above bears on `[claim-owner-fact]`, the fact-based
+restatement.** A green `ReplacementAuthority` result is evidence the
+superseded replacement-claim design was internally consistent (with the
+vacuity above noted), never evidence for this constraint. No model checks
+the fact-based claim-owner-change rule anywhere in this repository.
 
 ```claim
 kind: constraint
@@ -2340,11 +2354,22 @@ content or the complete source history:
   corrected identity — a pre-existing three-way naming redundancy the
   fix surfaces rather than introduces.
 - `docs/specs/tla/AtomCharter.tla` — charter/authorization/anchor layer,
-  two configs (succession: 1,409,951 states, depth 6; rotation: 480,096
-  states). All 9 safety invariants plus the `MonotonicHead` and
-  `ForkFailClosed` temporal properties pass, 0 errors. Non-vacuity is
-  established by 5 reachability witnesses and an 8-mutant guard battery
-  (each disabled guard yields the expected counterexample).
+  two configs, re-verified 2026-08-05 (identity-doctrine comment fixes
+  only, no formula changes — see below): succession now measures
+  4,115,091 states generated / 2,090,615 distinct, depth 6; rotation
+  649,144 / 328,807, depth 5 — both re-measured identically before and
+  after the comment fixes, confirming no behavior change. These figures
+  differ from the previously-recorded 1,409,951/480,096; not
+  investigated further here (out of this fix's scope), flagged rather
+  than silently overwritten. All 10 safety invariants plus the
+  `MonotonicHead` and `ForkFailClosed` temporal properties pass, 0
+  errors. Non-vacuity is established by 5 reachability witnesses and an
+  8-mutant guard battery (each disabled guard yields the expected
+  counterexample). Three identity-doctrine comments were corrected
+  (`ClaimReplace`, `ReplacementAuthority`, `[anchor-immutable]`) — see
+  the note below; no invariant's formula changed, since the underlying
+  facts they check (anchor/label consistency, authorization
+  correctness) were already true, only mislabeled as "identity."
 
 **Alloy model**: `docs/specs/alloy/atom_structure.als` verified by Alloy
 Analyzer 5.1.0 (pinned nixpkgs) at scope 4, headless via `SimpleCLI`
@@ -2440,11 +2465,16 @@ _The rows added or amended for the charter constraints are marked (amended)._
 
 > [!NOTE]
 > **Pair-identity re-derivation (2026-08-05) leaves four claims without
-> machine coverage.** Correcting identity from the `(anchor, label)`
-> pair to the claim's own `czd` (glossary-repudiated 2026-07-18)
-> surfaced that four `machine (TLC)`/`machine (Alloy)` claims were
-> never really state-space-verified in the first place, and cannot be
-> re-derived without new modeling scope:
+> machine coverage, plus a fifth found by a property-phrasing sweep.**
+> Correcting identity from the `(anchor, label)` pair to the claim's own
+> `czd` (glossary-repudiated 2026-07-18) surfaced that four
+> `machine (TLC)`/`machine (Alloy)` claims were never really
+> state-space-verified in the first place, and cannot be re-derived
+> without new modeling scope. A follow-up sweep for the same doctrine
+> phrased WITHOUT naming the pair — properties merely asserting
+> "identity is stable" / "never altered" — additionally found
+> `AtomCharter.tla` defective in three comments, though not vacuous in
+> the same way:
 >
 > - `[atomid-per-source-unique]` and `[identity-stability]`
 >   (`AtomTransactions.tla`): under the old pair identity these held
@@ -2453,7 +2483,7 @@ _The rows added or amended for the charter constraints are marked (amended)._
 >   them. Substituting the corrected identity makes the literal
 >   invariant FALSE (TLC finds a 2-state counterexample: the same
 >   owner re-claiming a source+label at a later clock tick produces a
->   second, distinct `czd`), and the doctrinally-correct restatement —
+>   second, distinct `czd`). The doctrinally-correct restatement —
 >   identity is stable across ownership transfer via the label-scope
 >   genesis claim's `czd` — cannot be checked because no TLA+ module
 >   models genesis-once void-rejection (a second claim record for an
@@ -2471,10 +2501,28 @@ _The rows added or amended for the charter constraints are marked (amended)._
 >   modeling gap as above: `atom_structure.als` has no owner-fact
 >   mechanism at all, so an owner-identity-framework upgrade isn't
 >   modeled. The assertion was REMOVED rather than repaired in place.
+> - `AtomCharter.tla` DOES model claim replacement (`ClaimReplace`,
+>   `prior` field, `ReplacementAuthority`) — the one formal model in
+>   this repo that does. But its `ReplacementAuthority` conjunct
+>   `cl.anchor = old.anchor` (a comment there read "identity never
+>   altered") holds at every state only because `ClaimReplace` hardcodes
+>   anchor/label to be copied unchanged — a regression guard, not a
+>   state-space proof. Genesis-czd persistence there is definitional
+>   (an append-only chain whose czds are never mutated or reissued), the
+>   same `review-residue` category as `[charter-typ]`, not something a
+>   model check could non-vacuously establish without a construction
+>   where anchor/label COULD drift. Three misleading comments were
+>   corrected (`ClaimReplace`, `ReplacementAuthority`,
+>   `[anchor-immutable]` — the last conflated ANCHOR/atom-set stability
+>   with individual ATOM identity, a related but separate claim); no
+>   invariant formula changed, and both configs re-verified with
+>   identical state counts before and after (4,115,091/2,090,615
+>   succession, 649,144/328,807 rotation, 0 errors both).
 >
 > **Genesis-once retirement (2026-08-05) resolves the "cannot be
 > re-derived without new modeling scope" framing above for two of these
-> four, not by adding coverage but by removing the premise.** The
+> four, not by adding coverage but by removing the premise — and
+> supersedes a competing claim below, not just a phrasing choice.** The
 > original wording attributed the gap to "no TLA+ module models claim
 > replacement" — as if extending `AtomTransactions.tla` to cover
 > replacement would eventually close it. There is no replacement to
@@ -2487,6 +2535,22 @@ _The rows added or amended for the charter constraints are marked (amended)._
 > `[atomid-per-source-unique]` and `[owner-abstract]` are untouched by
 > this amendment; their pair-identity-specific coverage gap remains the
 > architect's to disposition, unchanged by anything above.
+>
+> A separately-landed pass through this same note (concurrent with this
+> amendment, corrected `AtomCharter.tla`'s misleading comments — see the
+> bullet immediately above) concluded `[claim-replacement-authority]`
+> "was already correct and remain[s] `machine (TLC)`-verified without
+> change," needing only a comment fix. That conclusion is accurate about
+> the comments and the retired model, and irrelevant to this document as
+> of this amendment: `[claim-replacement-authority]` is retired, not
+> merely re-verified, and a correct account of what a stale model checks
+> is not evidence the constraint it checks survives (this amendment's
+> own governing instruction — a worker was reversed today for treating a
+> green model check as exactly that kind of evidence). Superseded here,
+> not silently dropped: the finding about `AtomCharter.tla`'s comments
+> stands as the accurate historical record it is; the inference that
+> `[claim-replacement-authority]` therefore remains a live claim does
+> not.
 
 ## Implications
 
