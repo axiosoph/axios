@@ -29,9 +29,9 @@
 //!
 //! ## Anchor
 //!
-//! An [`Anchor`] is an opaque byte vector establishing atom-set identity.
-//! Its derivation is fixed by charter: `Anchor == czd(charter₀)`, the coz
-//! digest of the atom-set's founding charter (spec `[charter-anchor]`).
+//! An [`Anchor`] establishes atom-set identity as the founding charter's
+//! linking role, not a digest. It is named and verified by that
+//! charter's own coz digest, `czd(charter₀)` (spec `[charter-anchor]`).
 //!
 //! [Coz]: https://github.com/Cyphrme/Coz
 
@@ -122,13 +122,14 @@ pub type Tmb = Thumbprint;
 // Anchor
 // ============================================================================
 
-/// An opaque anchor establishing atom-set identity.
+/// The anchor establishing atom-set identity: a linking role, not a
+/// digest.
 ///
 /// The anchor pins an atom-set to an immutable reference point in the
-/// source's history. Its derivation is fixed by charter: `Anchor ==
-/// czd(charter₀)`, the coz digest of the atom-set's founding charter
-/// (spec `[charter-anchor]`) — backend-agnostic, since the charter is a
-/// coz object regardless of backend.
+/// source's history — the founding charter. It is named and verified by
+/// that charter's own coz digest, `czd(charter₀)` (spec
+/// `[charter-anchor]`) — backend-agnostic, since the charter is a coz
+/// object regardless of backend.
 ///
 /// Displayed and serialized as a base64url-unpadded string.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
