@@ -205,7 +205,7 @@ manifest declarations.
 - **POST**: A validated set of `MirrorSet` values exists. Each set has
   a name, one or more mirror URLs, and a discovered anchor. All mirrors
   in a set have been queried (or a subset, per the resolver's fetch
-  strategy). `[set-anchor-bijection]` holds across all sets.
+  strategy). [set-anchor-bijection](#set-anchor-bijection) holds across all sets.
 
 `AtomSource`, `AtomStore`, and `AtomRegistry` are defined and
 implemented (`atom/atom-core/src/lib.rs`; atom-git's
@@ -227,10 +227,10 @@ the resolver MUST validate mirror consistency.
 - **PRE**: At least one mirror in the set has been queried. The set's
   anchor has been discovered from at least one mirror.
 - **POST**: All queried mirrors in the set share the same anchor
-  (`[set-anchor-bijection]`). All atoms advertised by multiple mirrors
-  have consistent digests (`[atom-version-identity]`). Atoms from all
+  ([set-anchor-bijection](#set-anchor-bijection)). All atoms advertised by multiple mirrors
+  have consistent digests ([atom-version-identity](#atom-version-identity)). Atoms from all
   queried mirrors are aggregated into a single availability set
-  (`[mirror-staleness-tolerance]`).
+  ([mirror-staleness-tolerance](#mirror-staleness-tolerance)).
 
 As with `[source-discovery]`, the source traits exist and are
 implemented, but no mirror-validation/aggregation pipeline exists.
@@ -250,7 +250,7 @@ the resolution in a lock entry.
   atom's `publish_czd` is known (located in the publish tag chain). At
   least one source set (anchor) is known.
 - **POST**: A `LockEntry` exists with `set`, `label`, `version`, and
-  `publish_czd` populated per `[lock-entry-sufficient]`. The `dig` is
+  `publish_czd` populated per [lock-entry-sufficient](#lock-entry-sufficient). The `dig` is
   NOT stored in the lock; it is verified on acquisition by peeling the
   publish tag chain (`payload.dig` MUST equal the peeled atom commit
   sha). The lock entry is sufficient to reproduce the fetch and verify
@@ -272,8 +272,10 @@ depends: [lock-entry-sufficient]
 #### [no-cross-set-anchor]
 
 An anchor MUST NOT appear in more than one
-named set within a single resolution context. If detected, the resolver
-MUST reject the entire resolution — not just the conflicting set.
+named set within a single resolution context — the forbidden-state
+mirror of [set-anchor-bijection](#set-anchor-bijection)'s per-set requirement. If detected,
+the resolver MUST reject the entire resolution — not just the
+conflicting set.
 
 ```claim
 kind: constraint
@@ -284,7 +286,8 @@ depends: [set-anchor-bijection]
 #### [no-conflicting-digest]
 
 Two mirrors in the same set MUST NOT
-advertise the same atom at the same version with different digests. If
+advertise the same atom at the same version with different digests —
+the violation [atom-version-identity](#atom-version-identity) forbids. If
 detected, the resolver MUST reject the atom and SHOULD identify the
 conflicting mirrors.
 
@@ -321,7 +324,7 @@ evaluator: none
 Adding a mirror to a set MUST NOT reduce
 the set of available atoms. A resolver that aggregates from N mirrors
 MUST make available at least the union of atoms from all N mirrors.
-This is a consequence of `[mirror-staleness-tolerance]`.
+This is a consequence of [mirror-staleness-tolerance](#mirror-staleness-tolerance).
 
 - **Type**: Safety
 
@@ -335,7 +338,8 @@ depends: [mirror-staleness-tolerance]
 
 Given the same lock file, a resolver
 MUST reproduce the same fetch targets. Lock entries contain sufficient
-information (`set`, `label`, `version`, `publish_czd`, sources) to
+information (`set`, `label`, `version`, `publish_czd`, sources) per
+[lock-entry-sufficient](#lock-entry-sufficient) to
 deterministically identify the exact atom version without re-resolving.
 
 - **Type**: Safety
@@ -368,7 +372,7 @@ the same atom at the same version with identical `dig` but different
 (from the publish payload) and check whether the claims are in the
 same claim chain (one is an ancestor of the other). If they are, the
 resolver SHOULD prefer the newest claim and SHOULD surface the claim's
-`meta` fields (see atom-transactions.md `[claim-payload-extensible]`)
+`meta` fields (see [claim-payload-extensible](atom-transactions.md#claim-payload-extensible))
 to inform the user — particularly `meta.supersedes` and
 `meta.announcement`. If the claims are NOT in the same chain (genuinely
 distinct ownership), the resolver MUST treat this as a conflict and
