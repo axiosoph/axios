@@ -5,8 +5,10 @@ module atom_structure
 // ============================================================================
 
 // [anchor-content-addressed] (amended 2026-07-08): an anchor IS a coz digest --
-// specifically czd(charter_0) -- so at the type level an Anchor is a Czd. The
-// charter facts below pin it to a founding charter's czd.
+// specifically czd(charter) -- so at the type level an Anchor is a Czd. The
+// charter facts below pin it to the charter's own czd directly: genesis-once
+// (ADR-0007 SS3, 2026-08-05) means there is exactly one charter per anchor,
+// ever, so "the charter" needs no founding/successor qualifier anymore.
 sig Anchor in Czd {}
 sig Label {}
 sig Version {}
@@ -85,13 +87,19 @@ sig Publish {
   pubLabel: one Label      -- symmetric payloads
 }
 
--- Charter: roots the trust chain (2026-07-08 amendment). A FOUNDING charter
--- carries no `prior`; its czd is the atom-set anchor. Succession preserves the
--- anchor for the life of the set.
+-- Charter: roots the trust chain (2026-07-08 amendment; genesis-once
+-- 2026-08-05, ADR-0007 SS3). One record per anchor, permanent, never
+-- reissued -- one of the three genesis-once record kinds
+-- ([atom-genesis-and-facts]). Its own `czd` IS the atom-set anchor
+-- directly ([charter-anchor]: `Anchor := czd(charter)`); charter_properties
+-- below makes Anchor exactly the set of Charter czds, so there is no
+-- separate anchor-derivation field to carry and no successor to chain to.
+-- Owner-set membership change and key rotation happen as a `fact`
+-- extending the charter's own scope instead ([charter-owner-fact]) --
+-- not modeled here (this file has no owner-fact mechanism at all; see
+-- atom-transactions.md's Verification section).
 sig Charter {
-  prior:    lone Charter,  -- succession link (none => founding charter)
-  czd:      one Czd,       -- content-addressed digest of the signed charter
-  chAnchor: one Anchor     -- the set anchor: czd of the chain's founding charter
+  czd: one Czd  -- content-addressed digest of the signed charter payload
 }
 
 -- AtomSource: Read-only trait interface (coalgebra observer). `atoms` is
@@ -122,9 +130,6 @@ fun computeId[a: Anchor, l: Label]: set AtomId {
 pred after_ingest[st: AtomStore, s: AtomSource] {
   s in st.ingested
 }
-
--- The founding charters: those with no predecessor in their succession chain.
-fun founders: set Charter { { c: Charter | no c.prior } }
 
 -- Fork Scenario: Multiple sources share the same anchor, different owners
 -- independently claim the SAME underlying atom slot (same claimAnchor,
@@ -195,19 +200,21 @@ fact manifest_properties {
 }
 
 fact charter_properties {
-  -- Content-addressed digest: czd is injective over the signed charter.
+  -- Content-addressed digest: czd is injective over the signed charter --
+  -- one of the three genesis-once record kinds ([atom-genesis-and-facts],
+  -- ADR-0007 SS3): permanent, never reissued. Combined with the
+  -- anchor-derivation fact below this gives exactly one Charter per Anchor
+  -- -- see anchor_content_addressed, which checks that combination.
   all disj c1, c2: Charter | c1.czd != c2.czd
-  -- Succession is a finite chain rooted at a founding charter (acyclic).
-  all c: Charter | c not in c.^prior
-  -- [charter-anchor] / [anchor-content-addressed]: a founding charter's anchor
-  -- is its OWN czd; a successor inherits its prior's anchor, never minting one.
-  all c: Charter | no c.prior implies c.chAnchor = c.czd
-  all c: Charter | some c.prior implies c.chAnchor = c.prior.chAnchor
-  -- Every anchor in use is realized by a founding charter's czd -- content-
-  -- addressed over an owned, signed payload, never source metadata.
-  all a: Anchor | some c: founders | c.czd = a
-  -- [claim-chains-charter]: a claim's anchor is exactly czd(charter_0).
-  all cl: Claim | some c: founders | c.czd = cl.claimAnchor
+  -- [charter-anchor]: every anchor traces to some charter's own czd --
+  -- existence only; uniqueness comes from the injectivity fact above, not
+  -- from this fact repeating it. Genesis-once removes the founding/
+  -- successor split this used to need: there is no successor charter for
+  -- a chain to distinguish "founding" from.
+  all a: Anchor | some c: Charter | c.czd = a
+  -- [claim-chains-charter]: a claim's anchor traces to some charter's czd
+  -- -- exactly one, again by the injectivity fact above.
+  all cl: Claim | some c: Charter | c.czd = cl.claimAnchor
 }
 
 // ============================================================================
@@ -250,32 +257,52 @@ assert verification_chain {
       p.pubAnchor = c.claimAnchor and p.pubLabel = c.claimLabel
 }
 
-// [anchor-content-addressed]: every anchor resolves to EXACTLY ONE founding
-// charter -- content addressing is unambiguous. This is a joint consequence of
-// the anchor-derivation fact (existence) and czd injectivity (uniqueness); it
-// is NOT a restatement of either -- dropping injectivity yields two founders
+// [anchor-content-addressed]: every anchor resolves to EXACTLY ONE charter --
+// content addressing is unambiguous. This is a joint consequence of the
+// anchor-derivation fact (existence) and czd injectivity (uniqueness); it is
+// NOT a restatement of either -- dropping injectivity yields two charters
 // sharing an anchor and refutes it. An owned, signed charter, never a free or
-// source-derived value.
+// source-derived value. Genesis-once removes the founding-charter qualifier:
+// every charter fills the role "founding" used to single out.
 // @docket: anchor-content-addressed :: docs/specs/run_model_check.sh
 assert anchor_content_addressed {
-  all a: Anchor | one c: founders | c.czd = a
+  all a: Anchor | one c: Charter | c.czd = a
 }
 
-// [claim-chains-charter]: every claim's anchor chains to EXACTLY ONE founding
-// charter -- an unforgeable, unambiguous link from claim authority back to the
-// set's founding charter (again existence + injectivity, not a fact restated).
+// [claim-chains-charter]: every claim's anchor chains to EXACTLY ONE charter
+// -- an unforgeable, unambiguous link from claim authority back to the set's
+// one and only charter (again existence + injectivity, not a fact restated).
 // @docket: claim-chains-charter :: docs/specs/run_model_check.sh
 assert claim_chains_charter {
-  all cl: Claim | one c: founders | c.czd = cl.claimAnchor
+  all cl: Claim | one c: Charter | c.czd = cl.claimAnchor
 }
 
-// [charter-fork-distinction]: distinct founding charters have distinct anchors
-// (czd is injective), so a cross-fork (anchor, label) collision is structurally
-// impossible -- a fork cannot forge the origin's anchor.
-// @docket: charter-fork-distinction :: docs/specs/run_model_check.sh
-assert charter_fork_distinction {
-  all disj c1, c2: founders | c1.chAnchor != c2.chAnchor
-}
+// [charter-fork-distinction] -- dedicated assertion RETIRED 2026-08-05, not
+// its content. Originally: "distinct FOUNDING charters have distinct
+// anchors" -- a real, non-trivial consequence of czd injectivity plus the
+// recursive founding/successor anchor-derivation split retired above
+// (ADR-0007 SS3, genesis-once). With that split gone, Anchor IS czd(charter)
+// directly (charter_properties, [charter-anchor]) -- there is no separate
+// chAnchor field left to derive. Restated in those terms the assertion
+// becomes "distinct charters have distinct czds", which is
+// charter_properties' own injectivity conjunct with the variables renamed:
+// a direct syntactic restatement of an existing fact, not a claim this
+// checker explores any new structure to confirm -- checking it would be
+// checking a fact against itself, the same defect class as
+// `ownership_independence`'s retired tautology (Verification, above), just
+// arrived at by construction here rather than by pure logic.
+// atom-transactions.md's own [charter-fork-distinction] text already
+// anticipates this: "this now follows directly from [charter-anchor] and
+// ordinary digest collision-resistance, with no separate chain-validity
+// check needed."
+//
+// The content survives, machine-checked, as a genuine joint consequence
+// inside anchor_content_addressed above: "every anchor resolves to AT MOST
+// ONE charter" is the same fact read from the other direction. Re-graded to
+// `evaluator: none` at [charter-fork-distinction]'s own claim block in
+// atom-transactions.md -- nothing in this file checks it as its own claim
+// any longer; its content is covered by anchor_content_addressed's
+// machine-check, not by a dedicated assertion.
 
 // ============================================================================
 // 5. RUN / CHECK BLOCKS
@@ -287,15 +314,16 @@ check anchor_set_coherence for 4
 check verification_chain for 4
 check anchor_content_addressed for 4
 check claim_chains_charter for 4
-check charter_fork_distinction for 4
+-- charter_fork_distinction: retired, not checked here -- see the retirement
+-- comment in the ASSERTIONS section above (after claim_chains_charter).
 
 run fork_scenario for 4
 
 // Charter-rooted fork (the amended fork, re-modeled against charter): two
-// claims by DIFFERENT owners chaining to the SAME founding charter -- the
-// legitimate shared-anchor fork within one set. Must be satisfiable (SAT).
+// claims by DIFFERENT owners chaining to the SAME charter -- the legitimate
+// shared-anchor fork within one set. Must be satisfiable (SAT).
 pred charter_rooted_fork {
-  some c: founders | some disj cl1, cl2: Claim |
+  some c: Charter | some disj cl1, cl2: Claim |
     cl1.claimAnchor = c.czd and cl2.claimAnchor = c.czd and
     cl1.owner != cl2.owner
 }
