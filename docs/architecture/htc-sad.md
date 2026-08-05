@@ -59,7 +59,9 @@ the scheduler itself); key management and signing primitives (Cyphr/Coz,
 below L1). HTC defines the build/composition contract those layers consume
 and is consumed by; it never resolves atoms or schedules itself.
 
-**[htc-declared-closure-enforced]**: the build sandbox is deny-by-default
+#### [htc-declared-closure-enforced]
+
+the build sandbox is deny-by-default
 — the only bytes a build process can read are those materialized from the
 declared atom closure and toolchain composition, plus whatever the fetch
 proxy explicitly permits through its own separate channel (§4.2). The
