@@ -219,7 +219,7 @@ parsing occurs in the daemon.
 
 #### [eos-scheduler-dag-intake]
 
-The scheduler MUST receive the atom DAG at build submission as a structured `eos-core` type handed off from Ion (the Eos Handoff, ion-sad §6.6) — nodes are atoms identified by `publish_czd`, edges are the dependency relationships already resolved into the lock. Dependency resolution, lock parsing, and DAG construction MUST occur entirely upstream of the submission boundary, never inside the daemon. This is the concrete, submission-time form `[eos-scheduler-state-isolation]` takes for atom-DAG intake specifically.
+The scheduler MUST receive the atom DAG at build submission as a structured `eos-core` type handed off from Ion (the Eos Handoff, ion-sad §6.6) — nodes are atoms identified by `publish_czd`, edges are the dependency relationships already resolved into the lock. Dependency resolution, lock parsing, and DAG construction MUST occur entirely upstream of the submission boundary, never inside the daemon. This is the concrete, submission-time form [eos-scheduler-state-isolation](#eos-scheduler-state-isolation) takes for atom-DAG intake specifically.
 
 ```claim
 kind: constraint
@@ -244,7 +244,7 @@ to `QUEUED`.
 
 #### [eos-scheduler-heartbeat-liveness]
 
-Every registered worker MUST send periodic heartbeat signals to the scheduler. If a worker's `last_heartbeat` exceeds the configured `heartbeat_deadline`, the scheduler MUST mark that worker as `healthy = false`, MUST NOT assign new jobs to it, and MUST revoke leases on all jobs currently assigned to that worker (triggering `[eos-scheduler-lease-expiry]` for each). When a previously unhealthy worker resumes heartbeats, the scheduler MAY restore it to `healthy = true` after a configurable stabilization interval.
+Every registered worker MUST send periodic heartbeat signals to the scheduler. If a worker's `last_heartbeat` exceeds the configured `heartbeat_deadline`, the scheduler MUST mark that worker as `healthy = false`, MUST NOT assign new jobs to it, and MUST revoke leases on all jobs currently assigned to that worker (triggering [eos-scheduler-lease-expiry](#eos-scheduler-lease-expiry) for each). When a previously unhealthy worker resumes heartbeats, the scheduler MAY restore it to `healthy = true` after a configurable stabilization interval.
 
 ```claim
 kind: constraint
@@ -257,7 +257,7 @@ health demotion and lease revocation.
 
 #### [eos-scheduler-frozen-stability]
 
-(P8): Once an EP transitions to `DISPATCHED` status, its coverage scope (`EpRecord.scope`) and worker assignment MUST NOT change. Re-coarsening MUST operate only on the MUTABLE partition (EPs in `PENDING` or `READY` status and unassigned plan nodes). An EP that has been dispatched MUST NOT be reassigned to a different worker by any mechanism other than the transient-failure path (`[fail-job]` with `failure_kind = transient`), which reverts the EP to `READY` for re-dispatch rather than transferring a running EP.
+(P8): Once an EP transitions to `DISPATCHED` status, its coverage scope (`EpRecord.scope`) and worker assignment MUST NOT change. Re-coarsening MUST operate only on the MUTABLE partition (EPs in `PENDING` or `READY` status and unassigned plan nodes). An EP that has been dispatched MUST NOT be reassigned to a different worker by any mechanism other than the transient-failure path ([fail-job](#fail-job) with `failure_kind = transient`), which reverts the EP to `READY` for re-dispatch rather than transferring a running EP.
 
 ```claim
 kind: constraint
@@ -291,7 +291,7 @@ evaluator: model-check
 
 #### [eos-scheduler-cache-filter-seam]
 
-The scheduler MUST query artifact existence ONLY through the `eos-core` `ArtifactStore` abstraction or the Cap'n Proto `SubstitutionService.query` surface (see [eos-network-protocol.md](eos-network-protocol.md):282-300). The scheduler MUST NOT import snix types, hold gRPC client code, or call `PathInfoService` directly. The `SubstitutionService` shim (deployable inside a worker or standalone) absorbs per-digest fan-out to the underlying store internally, presenting the scheduler with a single logical existence query per batch. This preserves `[eos-scheduler-state-isolation]` even when artifact existence checks are required.
+The scheduler MUST query artifact existence ONLY through the `eos-core` `ArtifactStore` abstraction or the Cap'n Proto `SubstitutionService.query` surface (see [eos-network-protocol.md](eos-network-protocol.md):282-300). The scheduler MUST NOT import snix types, hold gRPC client code, or call `PathInfoService` directly. The `SubstitutionService` shim (deployable inside a worker or standalone) absorbs per-digest fan-out to the underlying store internally, presenting the scheduler with a single logical existence query per batch. This preserves [eos-scheduler-state-isolation](#eos-scheduler-state-isolation) even when artifact existence checks are required.
 
 ```claim
 kind: constraint
@@ -310,7 +310,7 @@ in the scheduler crate.
 
 Add a new build task to the queue.
 
-- **PRE**: A client submits a build request containing a `BuildEngine::Plan` — carrying the atom DAG handed off at submission (`[eos-scheduler-dag-intake]`). The request arrives via `EosDaemon.submitBuild()` over the Cap'n Proto RPC surface (see [eos-network-protocol.md](eos-network-protocol.md) §submit-build).
+- **PRE**: A client submits a build request containing a `BuildEngine::Plan` — carrying the atom DAG handed off at submission ([eos-scheduler-dag-intake](#eos-scheduler-dag-intake)). The request arrives via `EosDaemon.submitBuild()` over the Cap'n Proto RPC surface (see [eos-network-protocol.md](eos-network-protocol.md) §submit-build).
 - **POST**: If a job with `JobId == plan_digest(plan)` already exists, the client is added to `subscribers`. Otherwise, a new `Job` is created with state `QUEUED`, its `id` is set to `plan_digest(plan)`, and it is added to the scheduler's queue.
 
 ```claim
@@ -325,8 +325,8 @@ Verification will audit submit transitions directly.
 
 Dispatch a ready EP to an available worker.
 
-- **PRE**: A ready EP exists in the scheduling table with `EpStatus = READY`, a healthy worker is available under capacity limits (see `[eos-scheduler-concurrency-limits]`), and all EP-level dependencies are in `COMPLETE` status (ordering soundness, P1). The bounded dispatch window `[eos-scheduler-bounded-window]` permits the dispatch to proceed now.
-- **POST**: The scheduler selects the worker minimizing `EFT(ep, w) + OCT(ep, w)` per `[eos-scheduler-placement]`. The job state transitions to `RUNNING`, `assigned_worker` is set to the selected worker's ID, a `Lease` is created with `granted_at = now` and `expires_at = now + lease_duration`, and the EP transitions to `DISPATCHED` with its worker assignment frozen per `[eos-scheduler-frozen-stability]`.
+- **PRE**: A ready EP exists in the scheduling table with `EpStatus = READY`, a healthy worker is available under capacity limits (see [eos-scheduler-concurrency-limits](#eos-scheduler-concurrency-limits)), and all EP-level dependencies are in `COMPLETE` status (ordering soundness, P1). The bounded dispatch window [eos-scheduler-bounded-window](#eos-scheduler-bounded-window) permits the dispatch to proceed now.
+- **POST**: The scheduler selects the worker minimizing `EFT(ep, w) + OCT(ep, w)` per [eos-scheduler-placement](#eos-scheduler-placement). The job state transitions to `RUNNING`, `assigned_worker` is set to the selected worker's ID, a `Lease` is created with `granted_at = now` and `expires_at = now + lease_duration`, and the EP transitions to `DISPATCHED` with its worker assignment frozen per [eos-scheduler-frozen-stability](#eos-scheduler-frozen-stability).
 
 ```claim
 kind: constraint
@@ -367,7 +367,7 @@ Handle task failures.
 
 - **PRE**: A job is in the `RUNNING` state and execution has failed or aborted.
 - **POST** (deterministic failure — build error, reproducible failure): The job state transitions to `FAILED`, the EP transitions to `FAILED`, the lease is released, subscribers are notified of the error, failure cascades to downstream dependent EPs (P11), and the job is removed from the active queue.
-- **POST** (transient failure — infrastructure failure, worker crash, network partition): The EP is reverted to `READY` for re-dispatch to a healthy worker (P10). The lease is revoked. PEFT re-planning runs. The scheduler selects a new worker per `[eos-scheduler-placement]`. Work-stealing of a running EP is FORBIDDEN — this re-dispatch path exists only when the executing worker becomes unavailable, never as a load-balancing mechanism.
+- **POST** (transient failure — infrastructure failure, worker crash, network partition): The EP is reverted to `READY` for re-dispatch to a healthy worker (P10). The lease is revoked. PEFT re-planning runs. The scheduler selects a new worker per [eos-scheduler-placement](#eos-scheduler-placement). Work-stealing of a running EP is FORBIDDEN — this re-dispatch path exists only when the executing worker becomes unavailable, never as a load-balancing mechanism.
 
 ```claim
 kind: constraint
@@ -381,7 +381,7 @@ depends: [eos-scheduler-placement]
 
 #### [no-dangling-jobs]
 
-A job MUST NOT remain in the `RUNNING` state if its `assigned_worker` is disconnected, offline, or unhealthy. The scheduler MUST re-queue or fail the job within a bounded timeout, enforced by lease expiry (`[eos-scheduler-lease-expiry]`) and heartbeat monitoring (`[eos-scheduler-heartbeat-liveness]`).
+A job MUST NOT remain in the `RUNNING` state if its `assigned_worker` is disconnected, offline, or unhealthy. The scheduler MUST re-queue or fail the job within a bounded timeout, enforced by lease expiry ([eos-scheduler-lease-expiry](#eos-scheduler-lease-expiry)) and heartbeat monitoring ([eos-scheduler-heartbeat-liveness](#eos-scheduler-heartbeat-liveness)).
 
 ```claim
 kind: constraint
@@ -405,7 +405,7 @@ Verification will audit multi-worker execution logs.
 
 #### [no-dispatched-ep-reassignment]
 
-A `DISPATCHED` EP's coverage scope and worker assignment MUST NOT be modified by any event other than the transient-failure path (`[fail-job]` → revert to `READY`). Re-coarsening, new request arrivals, and cache-skip events MUST NOT touch the FROZEN partition of the scheduling table (EPs in `DISPATCHED`, `COMPLETE`, or `FAILED` status). This is the operational expression of `[eos-scheduler-frozen-stability]` (P8).
+A `DISPATCHED` EP's coverage scope and worker assignment MUST NOT be modified by any event other than the transient-failure path ([fail-job](#fail-job) → revert to `READY`). Re-coarsening, new request arrivals, and cache-skip events MUST NOT touch the FROZEN partition of the scheduling table (EPs in `DISPATCHED`, `COMPLETE`, or `FAILED` status). This is the operational expression of [eos-scheduler-frozen-stability](#eos-scheduler-frozen-stability) (P8).
 
 ```claim
 kind: constraint
@@ -454,7 +454,7 @@ evaluator: model-check
 
 #### [bounded-window-dispatch]
 
-(P9′): A ready EP with a feasible worker MUST be dispatched, reach `COMPLETE`, or reach `FAILED` within Δ ticks of entering the `READY` state. When prediction confidence is low, Δ = 0 and dispatch is immediate. The bounded window is stated operationally in `[eos-scheduler-bounded-window]`.
+(P9′): A ready EP with a feasible worker MUST be dispatched, reach `COMPLETE`, or reach `FAILED` within Δ ticks of entering the `READY` state. When prediction confidence is low, Δ = 0 and dispatch is immediate. The bounded window is stated operationally in [eos-scheduler-bounded-window](#eos-scheduler-bounded-window).
 
 - **Type**: Liveness
 

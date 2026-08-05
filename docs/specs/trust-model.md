@@ -212,8 +212,8 @@ sorts: a trust anchor is never the atom-set anchor
 backend object id. Any comparison, assignment, or fabrication across
 these sorts is ill-typed and MUST be rejected at the type level where
 the implementation language permits. (This extends
-[atom-backend-contract.md](atom-backend-contract.md)
-`[backend-seam-typed]`'s discipline to the trust surface; the shared
+atom-backend-contract.md's
+[backend-seam-typed](atom-backend-contract.md#backend-seam-typed) discipline to the trust surface; the shared
 word "anchor" is an unfortunate collision this constraint exists to
 defuse.)
 
@@ -298,13 +298,13 @@ claim ownership no longer share one shape)_: The `owner` signer
 reference matches a record's signer iff that key equals (or is
 authorized under) the atom's EFFECTIVE CLAIM's `owner` —
 `ClaimPayload.owner`, a single `OwnerRef`
-([atom-transactions.md](atom-transactions.md) `[claim-owner-single]`)
+([claim-owner-single](atom-transactions.md#claim-owner-single))
 — at the record's chain position, under
-`[owner-authorization-delegated]`'s per-value semantics. This is
+[owner-authorization-delegated](atom-transactions.md#owner-authorization-delegated)'s per-value semantics. This is
 deliberately the CLAIM layer, never the charter layer: charter
 ownership is now a non-empty SET of principals
-(`[charter-owner-set]`, atom-transactions.md) governing who MAY hold
-a claim under this anchor (`[claim-charter-authorization]`) — a
+([charter-owner-set](atom-transactions.md#charter-owner-set)) governing who MAY hold
+a claim under this anchor ([claim-charter-authorization](atom-transactions.md#claim-charter-authorization)) — a
 decision already made and recorded at claim-authorization time, not
 a pool of keys this selector re-checks per record. "Effective charter
 ownership" and "claim ownership" are therefore two distinct concepts
@@ -404,8 +404,8 @@ evaluator: none
 A rule carrying `require_mode: "reproducible"`
 MUST cause verdict `refused` for any derived execution record of an
 in-scope atom whose effective declared mode is not `reproducible`
-(mode per [atom-transactions.md](atom-transactions.md)
-`[publish-mode]`; declaration semantics per
+(mode per
+[publish-mode](atom-transactions.md#publish-mode); declaration semantics per
 [atom-model.md §6](../models/atom-model.md)). The gate reads the
 SIGNED DECLARATION, never witness statistics — a policy composed on
 declarations has an accountable party behind every tier
@@ -461,9 +461,8 @@ depends: [docs/models/atom-model#6]
 Standing divergence findings MUST be
 derivable from chain state plus the local policy alone: a consumer
 holding the atom's publish chain and metadata (enumerable per
-[atom-backend-contract.md](atom-backend-contract.md)
-`[backend-enumeration]`, carried append-only per
-`[backend-chain-append]`) and its own `AcceptancePolicy` can compute
+[backend-enumeration](atom-backend-contract.md#backend-enumeration), carried append-only per
+[backend-chain-append](atom-backend-contract.md#backend-chain-append)) and its own `AcceptancePolicy` can compute
 every finding this spec defines with no out-of-band data. Both exit
 events are observable the same way: a mode amendment is a signed
 chain append; an anchor revision is a local policy edit. An
@@ -556,10 +555,10 @@ following ordered procedure, and MUST NOT consume a record as a fact
 through any other path:
 
 1. **Anchoring.** Verify the record per
-   `[trust-anchored-input]`. Unanchored ⇒ no verdict; stop.
+   [trust-anchored-input](#trust-anchored-input). Unanchored ⇒ no verdict; stop.
 2. **Signer.** Resolve the record's signing `tmb` against
    `policy.anchors` (including `owner` expansion per
-   `[trust-owner-selector]`; on a double match, the explicit
+   [trust-owner-selector](#trust-owner-selector); on a double match, the explicit
    `tmb(_)` entry governs, per that constraint). No matching
    entry ⇒ `evidence`. **The signing `tmb` used for this resolution
    MUST be `tmb(verifying_key)` — the thumbprint of the key that
@@ -588,14 +587,14 @@ through any other path:
    requirement for its own (structurally separate) protocol-level
    check.
 3. **Role.** Check the entry's roles against the record's fact class
-   per `[trust-role-authorization]`. Not covered ⇒ `evidence`.
+   per [trust-role-authorization](#trust-role-authorization). Not covered ⇒ `evidence`.
 4. **Rule.** Resolve the applicable rule per
-   `[trust-rule-determinism]`.
-5. **Mode.** Apply `[trust-mode-rule]`. Gate fails ⇒ `refused`.
-6. **Contested.** Apply `[trust-contested-refusal]`. Standing finding
+   [trust-rule-determinism](#trust-rule-determinism).
+5. **Mode.** Apply [trust-mode-rule](#trust-mode-rule). Gate fails ⇒ `refused`.
+6. **Contested.** Apply [trust-contested-refusal](#trust-contested-refusal). Standing finding
    with `refuse` ⇒ `refused`.
 7. **Quorum.** For derived execution records, apply
-   `[trust-threshold-rule]`. Threshold unmet ⇒ `evidence` (the record
+   [trust-threshold-rule](#trust-threshold-rule). Threshold unmet ⇒ `evidence` (the record
    stands, more corroboration may yet arrive); met ⇒ `fact`.
    For asserted facts, the verdict is `fact` at this step.
 
@@ -619,8 +618,8 @@ of Appendix B.
 #### [trust-verdict-total]
 
 For every anchored fact-class signed
-object and every well-formed `AcceptancePolicy`, the acceptance
-procedure MUST terminate with exactly one verdict. No record is ever
+object and every well-formed `AcceptancePolicy`, the
+[trust-acceptance-procedure](#trust-acceptance-procedure) MUST terminate with exactly one verdict. No record is ever
 part-fact; no policy state makes the procedure abstain.
 
 - **Type**: Safety
@@ -637,7 +636,7 @@ one verdict is always produced.
 #### [trust-no-silent-serve]
 
 A record MUST NOT be served as a cache
-hit or substitution unless the procedure returned `fact` for it under
+hit or substitution unless the [trust-acceptance-procedure](#trust-acceptance-procedure) returned `fact` for it under
 the serving consumer's policy at a snapshot at or after the record's
 append. Serving evidence is a conformance violation, whatever the
 record's cryptographic validity.

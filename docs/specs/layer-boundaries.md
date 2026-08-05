@@ -172,7 +172,8 @@ evaluator: none
 because: [boundary-contract-only]
 ```
 
-This is the crate-level corollary of `[boundary-contract-only]`
+This is the crate-level corollary of
+[boundary-contract-only](#boundary-contract-only)
 but also covers intra-workspace-but-cross-boundary scenarios.
 `atom-git` MUST NOT be depended upon by `eos-core` or `eos-snix`.
 Implementation details of one layer's backend are invisible to
@@ -562,7 +563,7 @@ time — eos trusts atoms resolved from its `AtomSource`.
 queries through the `eos-core` `ArtifactStore` abstraction or the
 Cap'n Proto `BuildJob` substitution surface — never through direct
 snix gRPC calls in scheduler code. This preserves
-`[boundary-contract-only]` at the scheduler boundary and is the
+[boundary-contract-only](#boundary-contract-only) at the scheduler boundary and is the
 required interface pattern for cache-skip scans (see
 [`eos-scheduler.md`](eos-scheduler.md)).
 
@@ -586,11 +587,11 @@ script MUST parse the `Cargo.toml` files of all workspace crates,
 construct the dependency graph, and verify:
 
 1. No upward cross-workspace dependency
-   (`[boundary-downward-only]`)
+   ([boundary-downward-only](#boundary-downward-only))
 2. No cross-workspace dependency on an implementation crate
-   (`[boundary-contract-only]`)
+   ([boundary-contract-only](#boundary-contract-only))
 3. Contract crate dependency budgets
-   (`[boundary-contract-dep-budget]`)
+   ([boundary-contract-dep-budget](#boundary-contract-dep-budget))
 
 The script SHOULD be implemented as a `cargo xtask` command or
 a standalone Rust/shell script in `tools/`.

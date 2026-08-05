@@ -146,7 +146,7 @@ raw-input      = <any input not matching aliased-input>
 
 An input string MUST be treated as containing an
 alias if and only if a `+` character (U+002B) appears at a valid host
-position (see `[host-position-only]`). If no `+` appears at a host
+position (see [host-position-only](#host-position-only)). If no `+` appears at a host
 position, the input MUST be passed through as `AliasedUrl::Raw` without
 modification.
 
@@ -211,7 +211,10 @@ evaluator: test
 
 Alias expansion MUST preserve the input's
 structure. Alurl substitutes ONLY the alias name with the resolved
-value. The prefix (scheme, credentials), separator, and suffix are
+value, found at the [host-position-only](#host-position-only) the
+prior claim locates. The prefix (scheme, credentials), separator, and
+suffix — the same separator and suffix
+[separator-opaque-suffix](#separator-opaque-suffix) defines — are
 preserved exactly as provided. No scheme is injected. No normalization
 is performed. The output is:
 `prefix + resolved_alias + separator + suffix`
@@ -224,9 +227,10 @@ depends: [host-position-only, separator-opaque-suffix]
 
 #### [suffix-opaque]
 
-The suffix (everything after the separator)
-MUST be treated as an opaque string. Alurl MUST NOT validate,
-normalize, or interpret it. The suffix MAY be empty.
+The suffix — the same suffix
+[separator-opaque-suffix](#separator-opaque-suffix) carves out after
+the separator — MUST be treated as an opaque string. Alurl MUST NOT
+validate, normalize, or interpret it. The suffix MAY be empty.
 
 ```claim
 kind: constraint
@@ -265,7 +269,9 @@ evaluator: test
 If alias expansion produces a result
 that contains a `+` at a valid host position, alurl MUST re-resolve
 it as a new alias. The caller MUST NOT need to loop — recursive
-resolution is alurl's responsibility, not the caller's.
+resolution is alurl's responsibility, not the caller's, and it is
+this repeated re-resolution that
+[resolution-terminates](#resolution-terminates) bounds.
 
 ```claim
 kind: constraint
@@ -275,8 +281,9 @@ depends: [resolution-terminates]
 
 #### [raw-preserves-input]
 
-When the input does not contain a `+` at a
-valid host position, the returned `AliasedUrl::Raw` MUST contain the
+When the input does not
+contain a `+` at a valid host position — [sigil-required](#sigil-required)'s
+negative case — the returned `AliasedUrl::Raw` MUST contain the
 exact input string with no modifications.
 
 ```claim
@@ -289,7 +296,8 @@ depends: [sigil-required]
 
 When the input is an alias, the
 returned `AliasedUrl::Expanded` MUST include the **original** alias
-name (the first alias in the chain, before recursive resolution).
+name (the first alias in the chain, before the
+[recursive-transparent](#recursive-transparent) re-resolution runs).
 This enables downstream consumers to provide diagnostic messages
 referencing what the user typed.
 
@@ -326,7 +334,8 @@ evaluator: review
 #### [classify-transition]
 
 Given an input string, alurl MUST locate
-the host position and determine whether an alias is present.
+the [host-position-only](#host-position-only) and determine whether an
+alias is present, per [sigil-required](#sigil-required).
 
 - **PRE**: Input MUST be a non-empty string.
 - **POST**: Parse any prefix (scheme, credentials). Check if the
@@ -348,9 +357,12 @@ Given an alias input and an `AliasMap`,
   The alias name MUST be a valid Identifier.
 - **POST**: The alias name is looked up in the map. The resolved
   value replaces the alias name in the output. Prefix, separator, and
-  suffix are preserved. If the result contains another `+` at a host
-  position, recursive resolution is applied (subject to cycle guards).
-  The final result is returned as `AliasedUrl::Expanded`.
+  suffix are preserved, per
+  [structure-preserving](#structure-preserving). If the result
+  contains another `+` at a host position,
+  [recursive-transparent](#recursive-transparent) resolution is
+  applied (subject to cycle guards). The final result is returned as
+  `AliasedUrl::Expanded`.
 
 ```claim
 kind: constraint
@@ -362,11 +374,12 @@ depends: [structure-preserving, recursive-transparent]
 
 #### [no-silent-fallback]
 
-If an input contains `+` at a valid host
-position but the alias name is invalid or the resolver returns an
-error, alurl MUST NOT silently fall back to `Raw`. It MUST return an
-error. A `+` at a host position is an unambiguous declaration of alias
-intent — failure to resolve is an error, not a suggestion.
+If an input contains `+` at a valid
+[host-position-only](#host-position-only) but the alias name is
+invalid or the resolver returns an error, alurl MUST NOT silently fall
+back to `Raw`. It MUST return an error. A `+` at a host position is an
+unambiguous declaration of alias intent — failure to resolve is an
+error, not a suggestion.
 
 ```claim
 kind: constraint
@@ -378,7 +391,8 @@ depends: [host-position-only]
 
 Alurl MUST NOT return an `AliasedUrl::Expanded`
 whose `url` field still contains an unresolved `+`-prefixed alias at a
-host position. Recursive resolution MUST complete fully or fail entirely.
+host position. The [recursive-transparent](#recursive-transparent)
+resolution MUST complete fully or fail entirely.
 
 ```claim
 kind: constraint
@@ -389,9 +403,11 @@ because: [recursive-transparent]
 #### [no-scheme-injection]
 
 Alurl MUST NOT add, remove, or modify the
-scheme component. If the input has no scheme, the output has no scheme.
-If the input has `ssh://`, the output has `ssh://`. Scheme inference is
-the consumer's responsibility.
+scheme component — the prefix
+[structure-preserving](#structure-preserving) already requires be
+carried through unchanged. If the input has no scheme, the output has
+no scheme. If the input has `ssh://`, the output has `ssh://`. Scheme
+inference is the consumer's responsibility.
 
 ```claim
 kind: constraint

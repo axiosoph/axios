@@ -261,7 +261,9 @@ evaluator: review
 
 #### [eos-no-unverified-execution]
 
-Eos MUST NOT execute or reference any unverified snapshot or plugin dependency in a build sandbox.
+Eos MUST NOT execute or reference any unverified snapshot or plugin dependency in a build sandbox: this closes the verification
+[eos-verification-obligation](#eos-verification-obligation) imposes on the snapshot and the hash check
+[eos-verify-plugin-deps](#eos-verify-plugin-deps) imposes on every plugin dependency.
 
 ```claim
 kind: constraint
@@ -375,7 +377,7 @@ daemon protocol.
 
 Execute a build plan to produce store outputs.
 
-- **PRE**: The `BuildPlan` is `NeedsBuild`. All transitive build inputs are present and verified in the store. The backend's sandbox is initialized.
+- **PRE**: The `BuildPlan` is `NeedsBuild`, as [engine-plan](#engine-plan) determined it. All transitive build inputs are present and verified in the store. The backend's sandbox is initialized.
 - **POST**: The builder executes inside the sandbox. Outputs are verified, registered as read-only, and committed to the `ArtifactStore` via the delegated store backend. Failed builds MUST abort and return an error without mutating existing store paths. The daemon transitions the corresponding `JobStatus` to `Completed` or `Failed` and pushes a `ProgressEvent` to all attached clients.
 
 ```claim
@@ -426,7 +428,7 @@ evaluator: none
 
 #### [action-cache-idempotency]
 
-Multiple concurrent action-cache lookups for the same `action_id` (htc-sad §6.5) MUST yield bisimilar `BuildEngine::Plan` results.
+Multiple concurrent action-cache lookups for the same `action_id` (htc-sad §6.5) MUST yield bisimilar results from [engine-plan](#engine-plan).
 
 - **Type**: Safety
 
@@ -438,7 +440,7 @@ because: [engine-plan]
 
 #### [apply-cleanup-on-abort]
 
-If a build application fails or aborts, all temporary sandbox resources and partial outputs MUST be completely garbage collected and MUST NOT leak into the `ArtifactStore`.
+If an [engine-apply](#engine-apply) fails or aborts, all temporary sandbox resources and partial outputs MUST be completely garbage collected and MUST NOT leak into the `ArtifactStore`.
 
 - **Type**: Safety
 

@@ -308,14 +308,14 @@ Mirrors and replicas are
 eventually-consistent reads of the authoritative store, and their
 lawful behavior is discharged at the protocol layer, cited here rather
 than re-invented: convergence is by monotone append propagation (the
-chains only grow, `[backend-chain-append]`); staleness is legitimate
-and non-erroneous (`[mirror-staleness-tolerance]`,
+chains only grow, [backend-chain-append](#backend-chain-append)); staleness is legitimate
+and non-erroneous ([mirror-staleness-tolerance](atom-sourcing.md#mirror-staleness-tolerance),
 [atom-sourcing](atom-sourcing.md)); regression below a consumer's
-recorded head is a detected rollback (`[chain-monotonicity]`,
+recorded head is a detected rollback ([chain-monotonicity](atom-transactions.md#chain-monotonicity),
 [atom-transactions](atom-transactions.md)); and cross-mirror
 divergence in content is tamper evidence, not a race
-(`[atom-version-identity]`, `[no-conflicting-digest]`,
-`[czd-divergence-handling]` — [atom-sourcing](atom-sourcing.md)).
+([atom-version-identity](atom-sourcing.md#atom-version-identity), [no-conflicting-digest](atom-sourcing.md#no-conflicting-digest),
+[czd-divergence-handling](atom-sourcing.md#czd-divergence-handling) — [atom-sourcing](atom-sourcing.md)).
 
 ```claim
 kind: constraint
@@ -360,7 +360,8 @@ evaluator: none
 
 Protocol digests are phantom-typed by what they address and are
 disjoint from backend object ids, rejected at the type level — the
-constraint form of `Czd ∩ OID = ∅` above.
+constraint form of the `Czd ∩ OID = ∅` law
+[backend-seam-typed](#backend-seam-typed) states above.
 
 ```claim
 kind: constraint
@@ -385,7 +386,7 @@ normalization of `CozMessage` content, ever — verification is
 re-hashing, so a single altered byte severs the trust chain. This
 generalizes [git-storage-format](git-storage-format.md)
 `[coz-bit-perfect]` and satisfies
-[atom-transactions](atom-transactions.md) `[backend-bit-perfect]` at
+[backend-bit-perfect](atom-transactions.md#backend-bit-perfect) at
 the contract level: it binds every backend, not the git encoding.
 
 ```claim
@@ -419,7 +420,7 @@ because: [docs/models/atom-model#6]
 
 Given a source, a zero-trust consumer MUST
 be able to enumerate: candidate charters
-([atom-transactions](atom-transactions.md) `[anchor-resolvable]`),
+([anchor-resolvable](atom-transactions.md#anchor-resolvable)),
 the labels claimed there, the versions published per label, and each
 chain's current tip — without downloading content and without trusting
 the publisher (enumeration yields candidates; verification is local).
@@ -436,9 +437,9 @@ depends: [anchor-resolvable]
 #### [backend-refs-sole-mutability]
 
 Refs MUST be the backend's ONLY
-mutable state: `Store` is immutable (`[backend-store-immutable]`),
+mutable state: `Store` is immutable ([backend-store-immutable](#backend-store-immutable)),
 `⊑` is derived from hash-committed structure
-(`[backend-ancestry-sound]`), and every protocol-visible state change
+([backend-ancestry-sound](#backend-ancestry-sound)), and every protocol-visible state change
 is a ref movement. This is what transfers the storage model's §4
 reasoning to the intent store — liveness is reachability from refs,
 rollback is retaining an old ref target, GC is dropping the
@@ -453,7 +454,8 @@ depends: [backend-store-immutable, backend-ancestry-sound]
 
 #### [backend-liveness-protection]
 
-State reachable from protocol refs
+Because refs are the backend's only mutable state
+([backend-refs-sole-mutability](#backend-refs-sole-mutability)), state reachable from those refs
 MUST be protected from the backend's garbage collection: an object the
 protocol can still name (a locked `publish_czd`'s chain, a claim
 referenced by surviving publishes, a `src` revision underpinning
@@ -478,14 +480,14 @@ signature in the chain. A conforming backend MUST document its object
 hash and its collision-resistance status.
 
 The closure mechanism is protocol-level, not backend-level:
-`content_hash` ([atom-transactions](atom-transactions.md)
-`[content-hash-is-tree-digest]`, `[content-hash-algorithm]`) is a
+`content_hash` ([content-hash-is-tree-digest](atom-transactions.md#content-hash-is-tree-digest),
+[content-hash-algorithm](atom-transactions.md#content-hash-algorithm)) is a
 publisher-signed BLAKE3 digest carried as ordinary `PublishPayload`
 data. It requires no backend-specific support — a conforming backend
 merely stores and returns the field bit-perfectly like any other
-signed payload content (`[backend-carriage-bit-perfect]`); no backend
+signed payload content ([backend-carriage-bit-perfect](#backend-carriage-bit-perfect)); no backend
 computes, verifies, or otherwise special-cases it. Its obligation
-level is the three-tier split in `[content-hash-obligation]`
+level is the three-tier split in [content-hash-obligation](atom-transactions.md#content-hash-obligation)
 (schema-optional, MUST-verify-when-present,
 SHOULD-include-when-the-backend's-own-hash-is-weak) — this contract
 does not restate that split, only points to it as the discharge of
@@ -495,14 +497,14 @@ This mechanism does NOT extend to `src`: `src`'s ancestry and temporal
 verification is a property of the backend's own commit-parent graph
 structure, not of any single value, and is irreducible without
 migrating the backend's own history to a stronger hash
-(`[content-hash-obligation]`'s "Known limit" documents this in full).
+([content-hash-obligation](atom-transactions.md#content-hash-obligation)'s "Known limit" documents this in full).
 A conforming backend with a weak object hash therefore remains
 forgeable on `src`-anchored ancestry claims regardless of
 `content_hash`'s presence; this is a stated, permanent limit of this
 mechanism, not an oversight.
 
 The anchor and all czd-sorted identities are unaffected by
-construction (`[anchor-hash-agile]`).
+construction ([anchor-hash-agile](git-storage-format.md#anchor-hash-agile)).
 
 ```claim
 kind: constraint

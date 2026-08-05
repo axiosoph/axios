@@ -97,7 +97,7 @@ TYPE  Lockfile = {
 Ion MUST use [Semantic Versioning
 2.0.0](https://semver.org) for atom version ordering and constraint
 matching. This is ion's implementation of atom-sourcing.md's
-`[version-total-order]`. The version comparison semantics are those
+[version-total-order](atom-sourcing.md#version-total-order). The version comparison semantics are those
 of the `semver` crate: precedence is determined by major, minor,
 patch, then pre-release identifiers. Build metadata is ignored for
 precedence.
@@ -116,7 +116,7 @@ Resolution does not constrain it further.
 
 The lock file MUST capture the mapping from
 anchors to mirror sets. This is the set-level information required by
-atom-sourcing.md `[lock-entry-sufficient]`. Each entry in the `[sets]`
+atom-sourcing.md [lock-entry-sufficient](atom-sourcing.md#lock-entry-sufficient). Each entry in the `[sets]`
 table MUST contain the set's `tag` (for human readability) and its
 `mirrors` (for fetch targets).
 
@@ -134,7 +134,7 @@ digest). The `publish_czd` is the digest of the publish `CozMessage` —
 from it, the claim czd, anchor, label, version, and provenance (src,
 path) are all derivable; `dig` lives in the signed payload and is
 verified by peel, not lock-stored (atom-sad §6.5). These are the
-REQUIRED fields from atom-sourcing.md's `[lock-entry-sufficient]`. Ion
+REQUIRED fields from atom-sourcing.md's [lock-entry-sufficient](atom-sourcing.md#lock-entry-sufficient). Ion
 extends these with `requires` (dep graph edges, as `publish_czd` values
 of direct atom deps) and `direct` (provenance flag). The `set` field
 (type: Anchor digest) is the lookup key into the lock's `[sets]` table
@@ -188,7 +188,7 @@ evaluator: none
 #### [lock-plugin-entries]
 
 Lock entries produced by direct dependency
-plugins (per ion-manifest.md `[plugin-lock-contract]`) MUST be
+plugins (per ion-manifest.md [plugin-lock-contract](ion-manifest.md#plugin-lock-contract)) MUST be
 stored in the same `[[deps]]` array as atom entries, distinguished
 by their type tag. This ensures a single lock file contains the
 complete dependency graph.
@@ -301,7 +301,7 @@ for the current operation. Subsequent reads within the same operation
   cycle.
 
 This depends on the same unimplemented reconciliation pipeline as
-`[reconcile]`; no operation-scoped lock-freeze mechanism exists.
+[reconcile](#reconcile); no operation-scoped lock-freeze mechanism exists.
 
 ```claim
 kind: constraint
@@ -369,7 +369,7 @@ evaluator: none
 Given the same lock file and the same
 mirror state, fetching all dependencies MUST produce the same set of
 artifacts. This is a consequence of atom-sourcing.md's
-`[resolution-reproducible]`, restated in ion's context. Content
+[resolution-reproducible](atom-sourcing.md#resolution-reproducible), restated in ion's context. Content
 binding flows through `publish_czd`: each locked entry's `publish_czd`
 pins the publish `CozMessage`; on fetch, the peeled content sha MUST
 equal `payload.dig`, which is verified by peel — `dig` is NOT stored
