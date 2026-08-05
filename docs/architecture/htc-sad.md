@@ -11,9 +11,10 @@
   Maintained as Architecture-as-Code. Diagrams are Mermaid.js, inline.
 
   Settled design inputs: ADR-0005 (layer designation L2/"HTC", the GPL-seam
-  wire-first posture, no-Nix-in-MVP); the atom keystone (AtomId = abstract
-  (anchor,label) pair; 2-value name-anchored lock; blake3(publish_czd)-keyed
-  store) which this layer's composition object generalizes one layer up.
+  wire-first posture, no-Nix-in-MVP); the atom keystone (identity is the
+  claim record's czd, not the (anchor,label) pair — atom-sad §6.1; 2-value
+  name-anchored lock; blake3(publish_czd)-keyed store) which this layer's
+  composition object generalizes one layer up.
 -->
 
 # HTC (Hermetic Transactional Composition) Software Architecture Document (SAD)
@@ -118,7 +119,7 @@ graph TB
 
 | Boundary      | Inside HTC                                                                           | Outside HTC                                                                                                                          |
 | :------------ | :----------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------- |
-| **Identity**  | Action identity (`action_id`, §6.5); composition/manifest/build-record digests       | Atom identity, the `(anchor, label)` pair (L1)                                                                                       |
+| **Identity**  | Action identity (`action_id`, §6.5); composition/manifest/build-record digests       | Atom identity, the claim record's czd (L1, atom-sad §6.1)                                                                            |
 | **Execution** | `build`, sandboxing, FHS-view materialization, upstream's own process                | Scheduling policy, worker placement, DAG traversal (L3, eos)                                                                         |
 | **Analysis**  | Interface manifest derivation (provides/requires), observation records, satisfaction | Manifest/lock authorship, resolution (L4, ion)                                                                                       |
 | **Fetch**     | The record/replay proxy's _execution_ of a fetch entry                               | Fetch entry _declaration_ — a `[[deps]]` entry with `type = "fetch"`, dispatched via ion's `[lock-dep-type-dispatch]`, is L4's (ion) |
