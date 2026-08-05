@@ -20,7 +20,7 @@ fn aliases(pairs: &[(&str, &str)]) -> AliasMap {
 // ============================================================================
 // [sigil-required]: + at host position → alias, else → raw
 // ============================================================================
-// docket: sigil-required :: cargo test --manifest-path alurl/Cargo.toml --lib -- sigil_present_bare sigil_absent_raw_url sigil_absent_raw_path sigil_absent_raw_scp
+// @docket: sigil-required :: cargo test --manifest-path alurl/Cargo.toml --lib -- sigil_present_bare sigil_absent_raw_url sigil_absent_raw_path sigil_absent_raw_scp
 
 #[test]
 fn sigil_present_bare() {
@@ -53,7 +53,7 @@ fn sigil_absent_raw_scp() {
 // ============================================================================
 // [host-position-only]: + mid-path / in creds is NOT an alias
 // ============================================================================
-// docket: host-position-only :: cargo test --manifest-path alurl/Cargo.toml --lib -- plus_in_path_not_alias plus_in_credentials_not_alias multiple_at_signs_last_wins scheme_with_plus_in_name
+// @docket: host-position-only :: cargo test --manifest-path alurl/Cargo.toml --lib -- plus_in_path_not_alias plus_in_credentials_not_alias multiple_at_signs_last_wins scheme_with_plus_in_name
 
 #[test]
 fn plus_in_path_not_alias() {
@@ -78,7 +78,7 @@ fn plus_in_credentials_not_alias() {
 // ============================================================================
 // [alias-name-validated]: UAX #31 validation, InvalidAliasName error
 // ============================================================================
-// docket: alias-name-validated :: cargo test --manifest-path alurl/Cargo.toml --lib -- alias_name_digit_start_rejected alias_name_empty_rejected alias_name_unicode_accepted alias_name_hyphen_rejected alias_name_dot_rejected alias_name_underscore_accepted
+// @docket: alias-name-validated :: cargo test --manifest-path alurl/Cargo.toml --lib -- alias_name_digit_start_rejected alias_name_empty_rejected alias_name_unicode_accepted alias_name_hyphen_rejected alias_name_dot_rejected alias_name_underscore_accepted
 
 #[test]
 fn alias_name_digit_start_rejected() {
@@ -104,7 +104,7 @@ fn alias_name_unicode_accepted() {
 // ============================================================================
 // [separator-opaque-suffix]: / or : → separator, rest is opaque
 // ============================================================================
-// docket: separator-opaque-suffix :: cargo test --manifest-path alurl/Cargo.toml --lib -- separator_slash_url_style separator_colon_scp_style separator_none_bare_alias colon_only_suffix_empty_rest
+// @docket: separator-opaque-suffix :: cargo test --manifest-path alurl/Cargo.toml --lib -- separator_slash_url_style separator_colon_scp_style separator_none_bare_alias colon_only_suffix_empty_rest
 
 #[test]
 fn separator_slash_url_style() {
@@ -130,7 +130,7 @@ fn separator_none_bare_alias() {
 // ============================================================================
 // [structure-preserving]: prefix + resolved + sep + suffix
 // ============================================================================
-// docket: structure-preserving :: cargo test --manifest-path alurl/Cargo.toml --lib -- preserves_scheme_prefix preserves_credentials_prefix preserves_scheme_and_credentials preserves_git_user_url_style
+// @docket: structure-preserving :: cargo test --manifest-path alurl/Cargo.toml --lib -- preserves_scheme_prefix preserves_credentials_prefix preserves_scheme_and_credentials preserves_git_user_url_style
 
 #[test]
 fn preserves_scheme_prefix() {
@@ -163,7 +163,7 @@ fn preserves_git_user_url_style() {
 // ============================================================================
 // [suffix-opaque]: suffix passed through without modification
 // ============================================================================
-// docket: suffix-opaque :: cargo test --manifest-path alurl/Cargo.toml --lib -- suffix_with_port_pattern suffix_empty_trailing_slash
+// @docket: suffix-opaque :: cargo test --manifest-path alurl/Cargo.toml --lib -- suffix_with_port_pattern suffix_empty_trailing_slash
 
 #[test]
 fn suffix_with_port_pattern() {
@@ -182,7 +182,7 @@ fn suffix_empty_trailing_slash() {
 // ============================================================================
 // [expansion-deterministic]: same input + AliasMap → same output
 // ============================================================================
-// docket: expansion-deterministic :: cargo test --manifest-path alurl/Cargo.toml --lib -- deterministic_repeated_calls
+// @docket: expansion-deterministic :: cargo test --manifest-path alurl/Cargo.toml --lib -- deterministic_repeated_calls
 
 #[test]
 fn deterministic_repeated_calls() {
@@ -195,7 +195,7 @@ fn deterministic_repeated_calls() {
 // ============================================================================
 // [resolution-terminates]: cycle detection terminates all chains
 // ============================================================================
-// docket: resolution-terminates :: cargo test --manifest-path alurl/Cargo.toml --lib -- cycle_detected_two_aliases self_referencing_alias_detected
+// @docket: resolution-terminates :: cargo test --manifest-path alurl/Cargo.toml --lib -- cycle_detected_two_aliases self_referencing_alias_detected
 
 #[test]
 fn cycle_detected_two_aliases() {
@@ -213,7 +213,7 @@ fn cycle_detected_two_aliases() {
 // ============================================================================
 // [recursive-transparent]: stacked aliases resolve fully
 // ============================================================================
-// docket: recursive-transparent :: cargo test --manifest-path alurl/Cargo.toml --lib -- recursive_alias_chain three_level_recursive_chain
+// @docket: recursive-transparent :: cargo test --manifest-path alurl/Cargo.toml --lib -- recursive_alias_chain three_level_recursive_chain
 
 #[test]
 fn recursive_alias_chain() {
@@ -231,7 +231,7 @@ fn recursive_alias_chain() {
 // ============================================================================
 // [raw-preserves-input]: raw output equals input exactly
 // ============================================================================
-// docket: raw-preserves-input :: cargo test --manifest-path alurl/Cargo.toml --lib -- raw_preserves_exact_input empty_input_is_raw
+// @docket: raw-preserves-input :: cargo test --manifest-path alurl/Cargo.toml --lib -- raw_preserves_exact_input empty_input_is_raw
 
 #[test]
 fn raw_preserves_exact_input() {
@@ -244,7 +244,7 @@ fn raw_preserves_exact_input() {
 // ============================================================================
 // [expanded-preserves-alias]: original alias name preserved
 // ============================================================================
-// docket: expanded-preserves-alias :: cargo test --manifest-path alurl/Cargo.toml --lib -- expanded_preserves_original_alias
+// @docket: expanded-preserves-alias :: cargo test --manifest-path alurl/Cargo.toml --lib -- expanded_preserves_original_alias
 
 #[test]
 fn expanded_preserves_original_alias() {
@@ -259,7 +259,7 @@ fn expanded_preserves_original_alias() {
 // ============================================================================
 // [no-silent-fallback]: invalid alias → error, not Raw
 // ============================================================================
-// docket: no-silent-fallback :: cargo test --manifest-path alurl/Cargo.toml --lib -- unknown_alias_errors invalid_name_errors_not_raw just_plus_alone_is_invalid
+// @docket: no-silent-fallback :: cargo test --manifest-path alurl/Cargo.toml --lib -- unknown_alias_errors invalid_name_errors_not_raw just_plus_alone_is_invalid
 
 #[test]
 fn unknown_alias_errors() {
@@ -278,7 +278,7 @@ fn invalid_name_errors_not_raw() {
 // ============================================================================
 // [no-partial-expansion]: no + at host position in Expanded.url
 // ============================================================================
-// docket: no-partial-expansion :: cargo test --manifest-path alurl/Cargo.toml --lib -- no_partial_expansion
+// @docket: no-partial-expansion :: cargo test --manifest-path alurl/Cargo.toml --lib -- no_partial_expansion
 
 #[test]
 fn no_partial_expansion() {
@@ -290,7 +290,7 @@ fn no_partial_expansion() {
 // ============================================================================
 // [no-scheme-injection]: bare alias output has no scheme
 // ============================================================================
-// docket: no-scheme-injection :: cargo test --manifest-path alurl/Cargo.toml --lib -- bare_alias_no_scheme
+// @docket: no-scheme-injection :: cargo test --manifest-path alurl/Cargo.toml --lib -- bare_alias_no_scheme
 
 #[test]
 fn bare_alias_no_scheme() {
@@ -302,7 +302,7 @@ fn bare_alias_no_scheme() {
 // ============================================================================
 // [error-diagnostic]: error types carry diagnostic info
 // ============================================================================
-// docket: error-diagnostic :: cargo test --manifest-path alurl/Cargo.toml --lib -- error_not_found_includes_name error_cycle_includes_chain
+// @docket: error-diagnostic :: cargo test --manifest-path alurl/Cargo.toml --lib -- error_not_found_includes_name error_cycle_includes_chain
 
 #[test]
 fn error_not_found_includes_name() {
@@ -329,8 +329,8 @@ fn error_cycle_includes_chain() {
 // ============================================================================
 // Spec resolution examples table (integration)
 // ============================================================================
-// docket: classify-transition :: cargo test --manifest-path alurl/Cargo.toml --lib -- spec_examples_table empty_input_is_raw just_plus_alone_is_invalid
-// docket: resolve-transition :: cargo test --manifest-path alurl/Cargo.toml --lib -- spec_examples_table
+// @docket: classify-transition :: cargo test --manifest-path alurl/Cargo.toml --lib -- spec_examples_table empty_input_is_raw just_plus_alone_is_invalid
+// @docket: resolve-transition :: cargo test --manifest-path alurl/Cargo.toml --lib -- spec_examples_table
 
 #[test]
 fn spec_examples_table() {

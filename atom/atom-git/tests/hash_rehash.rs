@@ -244,7 +244,7 @@ fn publish_then_resign_with_content_hash(
 /// A resolved publish carrying a `content_hash` that matches the
 /// recomputed digest of its resolved content is accepted — ingestion
 /// succeeds and the version becomes resolvable from the store.
-// docket: content-hash-obligation :: cargo test --manifest-path atom/Cargo.toml -p atom-git --test hash_rehash -- ingest_accepts_matching_content_hash ingest_rejects_mismatched_content_hash ingest_unaffected_when_content_hash_absent
+// @docket: content-hash-obligation :: cargo test --manifest-path atom/Cargo.toml -p atom-git --test hash_rehash -- ingest_accepts_matching_content_hash ingest_rejects_mismatched_content_hash ingest_unaffected_when_content_hash_absent
 #[tokio::test]
 async fn ingest_accepts_matching_content_hash() {
     let entries = fixture_content_entries(b"fn main() {}");

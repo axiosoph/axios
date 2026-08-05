@@ -9,7 +9,7 @@ default = ["serde"]
 serde   = ["dep:serde", "dep:serde_json"]
 
 [dependencies]
-# docket: crypto-via-coz :: cargo check --manifest-path atom/Cargo.toml -p atom-id
+# @docket: crypto-via-coz :: cargo check --manifest-path atom/Cargo.toml -p atom-id
 coz-rs = { version = "0.4" }
 hex    = "0.4"
 

@@ -307,7 +307,7 @@ fn test_claim_and_key_rotation() {
     assert_ne!(next_claim_czd.as_bytes(), next_claim_oid.as_bytes());
 }
 
-// docket: src-is-source-revision :: cargo test --manifest-path atom/Cargo.toml -p atom-git --test integration -- test_publish_and_tag_chain
+// @docket: src-is-source-revision :: cargo test --manifest-path atom/Cargo.toml -p atom-git --test integration -- test_publish_and_tag_chain
 #[test]
 fn test_publish_and_tag_chain() {
     let (_dir, repo, genesis_oid) = setup_test_repo();

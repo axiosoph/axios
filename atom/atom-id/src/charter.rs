@@ -85,8 +85,8 @@ impl CharterPayload {
     /// only at deserialization (see `CharterPayload`'s
     /// `deserialize_with`), so a charter nobody could ever claim under can
     /// never be built through this crate's own API either.
-    // docket: charter-owner-set :: cargo test --manifest-path atom/Cargo.toml -p atom-id --lib -- charter::tests::charter_payload_rejects_empty_owner_set charter::tests::charter_payload_owner_deserialize_rejects_empty_set
-    // docket: charter-owner-set-non-empty :: cargo test --manifest-path atom/Cargo.toml -p atom-id --lib -- charter::tests::charter_payload_rejects_empty_owner_set charter::tests::charter_payload_owner_deserialize_rejects_empty_set
+    // @docket: charter-owner-set :: cargo test --manifest-path atom/Cargo.toml -p atom-id --lib -- charter::tests::charter_payload_rejects_empty_owner_set charter::tests::charter_payload_owner_deserialize_rejects_empty_set
+    // @docket: charter-owner-set-non-empty :: cargo test --manifest-path atom/Cargo.toml -p atom-id --lib -- charter::tests::charter_payload_rejects_empty_owner_set charter::tests::charter_payload_owner_deserialize_rejects_empty_set
     pub fn new(
         alg: Alg,
         now: u64,

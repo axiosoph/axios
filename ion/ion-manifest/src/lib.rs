@@ -84,7 +84,7 @@ impl IonManifest {
     /// # Errors
     ///
     /// Returns an error if the manifest violates required sections or set constraints.
-    // docket: manifest-parse :: cargo test --manifest-path ion/Cargo.toml -p ion-manifest --lib -- tests::test_valid_manifest_parsing tests::test_manifest_missing_required_sections tests::test_manifest_deny_unknown_fields tests::test_set_declaration_completeness proptests::ion_manifest_invalid_rejected
+    // @docket: manifest-parse :: cargo test --manifest-path ion/Cargo.toml -p ion-manifest --lib -- tests::test_valid_manifest_parsing tests::test_manifest_missing_required_sections tests::test_manifest_deny_unknown_fields tests::test_set_declaration_completeness proptests::ion_manifest_invalid_rejected
     pub fn parse(content: &str) -> Result<Self, String> {
         let manifest: Self =
             toml::from_str(content).map_err(|e| format!("Failed to parse manifest: {}", e))?;
@@ -138,7 +138,7 @@ mod tests {
         assert_eq!(manifest.compose.entry.as_deref(), Some("default.nix"));
     }
 
-    // docket: manifest-required-sections :: cargo test --manifest-path ion/Cargo.toml -p ion-manifest --lib -- tests::test_manifest_missing_required_sections proptests::ion_manifest_invalid_rejected
+    // @docket: manifest-required-sections :: cargo test --manifest-path ion/Cargo.toml -p ion-manifest --lib -- tests::test_manifest_missing_required_sections proptests::ion_manifest_invalid_rejected
     #[test]
     fn test_manifest_missing_required_sections() {
         let content = r#"
@@ -150,7 +150,7 @@ mod tests {
         assert!(IonManifest::parse(content).is_err());
     }
 
-    // docket: deny-unknown-fields :: cargo test --manifest-path ion/Cargo.toml -p ion-manifest --lib -- tests::test_manifest_deny_unknown_fields proptests::ion_manifest_invalid_rejected
+    // @docket: deny-unknown-fields :: cargo test --manifest-path ion/Cargo.toml -p ion-manifest --lib -- tests::test_manifest_deny_unknown_fields proptests::ion_manifest_invalid_rejected
     #[test]
     fn test_manifest_deny_unknown_fields() {
         let content = r#"
@@ -164,8 +164,8 @@ mod tests {
         assert!(IonManifest::parse(content).is_err());
     }
 
-    // docket: set-declaration-completeness :: cargo test --manifest-path ion/Cargo.toml -p ion-manifest --lib -- tests::test_set_declaration_completeness proptests::ion_manifest_invalid_rejected
-    // docket: no-undeclared-set-reference :: cargo test --manifest-path ion/Cargo.toml -p ion-manifest --lib -- tests::test_set_declaration_completeness proptests::ion_manifest_invalid_rejected
+    // @docket: set-declaration-completeness :: cargo test --manifest-path ion/Cargo.toml -p ion-manifest --lib -- tests::test_set_declaration_completeness proptests::ion_manifest_invalid_rejected
+    // @docket: no-undeclared-set-reference :: cargo test --manifest-path ion/Cargo.toml -p ion-manifest --lib -- tests::test_set_declaration_completeness proptests::ion_manifest_invalid_rejected
     #[test]
     fn test_set_declaration_completeness() {
         let content = r#"
@@ -181,7 +181,7 @@ mod tests {
         assert!(IonManifest::parse(content).is_err());
     }
 
-    // docket: set-mirror-minimum :: cargo test --manifest-path ion/Cargo.toml -p ion-manifest --lib -- tests::test_set_mirror_minimum proptests::ion_manifest_invalid_rejected
+    // @docket: set-mirror-minimum :: cargo test --manifest-path ion/Cargo.toml -p ion-manifest --lib -- tests::test_set_mirror_minimum proptests::ion_manifest_invalid_rejected
     #[test]
     fn test_set_mirror_minimum() {
         let content = r#"
@@ -319,7 +319,7 @@ mod proptests {
         })
     }
 
-    // docket: manifest-roundtrip :: cargo test --manifest-path ion/Cargo.toml -p ion-manifest --lib proptests::ion_manifest_parse_roundtrip -- --exact
+    // @docket: manifest-roundtrip :: cargo test --manifest-path ion/Cargo.toml -p ion-manifest --lib proptests::ion_manifest_parse_roundtrip -- --exact
     #[test]
     fn ion_manifest_parse_roundtrip() {
         bolero::check!().with_type::<Vec<u8>>().for_each(|data| {

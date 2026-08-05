@@ -217,8 +217,8 @@ mod hash {
     }
 
     #[cfg(test)]
-    // docket: content-hash-is-tree-digest :: cargo test --manifest-path atom/Cargo.toml -p atom-core --lib -- hash::tests::single_regular_file_at_root hash::tests::single_symlink_at_root hash::tests::empty_root_hashes_to_blake3_of_empty_string
-    // docket: content-hash-algorithm :: cargo test --manifest-path atom/Cargo.toml -p atom-core --lib -- hash::tests::git_tie_break_orders_foo_txt_before_foo_directory hash::tests::nested_directories_recurse_bottom_up hash::tests::two_independent_constructions_of_same_content_are_byte_identical hash::tests::nul_in_filename_is_rejected hash::tests::executable_bit_changes_digest_and_uses_100755 hash::tests::renaming_a_file_changes_the_digest
+    // @docket: content-hash-is-tree-digest :: cargo test --manifest-path atom/Cargo.toml -p atom-core --lib -- hash::tests::single_regular_file_at_root hash::tests::single_symlink_at_root hash::tests::empty_root_hashes_to_blake3_of_empty_string
+    // @docket: content-hash-algorithm :: cargo test --manifest-path atom/Cargo.toml -p atom-core --lib -- hash::tests::git_tie_break_orders_foo_txt_before_foo_directory hash::tests::nested_directories_recurse_bottom_up hash::tests::two_independent_constructions_of_same_content_are_byte_identical hash::tests::nul_in_filename_is_rejected hash::tests::executable_bit_changes_digest_and_uses_100755 hash::tests::renaming_a_file_changes_the_digest
     mod tests {
         use super::*;
 
@@ -517,7 +517,7 @@ pub trait AtomVersion {
 ///
 /// Observations are wrapped in `Result` to distinguish "not found"
 /// (`Ok(None)`) from backend failure (`Err`).
-// docket: trait-async-io :: cargo check --manifest-path atom/Cargo.toml -p atom-core
+// @docket: trait-async-io :: cargo check --manifest-path atom/Cargo.toml -p atom-core
 // resolve/discover below (and AtomStore::ingest/contains) are
 // Future-returning; AtomRegistry::claim/publish/charter stay sync fn.
 pub trait AtomSource: Send + Sync + 'static {
