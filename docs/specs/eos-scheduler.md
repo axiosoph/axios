@@ -150,7 +150,9 @@ Workers register dynamically via Cap'n Proto handshake. The scheduler does NOT m
 
 ### Invariants
 
-**[eos-scheduler-lazy-fetching]**: A worker node MUST NOT fetch the source snapshot for an atom or any transitive inputs until an EP requiring them is dispatched to that worker.
+#### [eos-scheduler-lazy-fetching]
+
+A worker node MUST NOT fetch the source snapshot for an atom or any transitive inputs until an EP requiring them is dispatched to that worker.
 
 ```claim
 kind: constraint
@@ -159,7 +161,9 @@ evaluator: none
 
 Verification will inspect worker network logs during a build.
 
-**[eos-scheduler-deduplication]**: For any unique `JobId`, there MUST exist at most one active (QUEUED or RUNNING) `Job` in the scheduler state. If a client submits a build request for a `BuildEngine::Plan` that is already in progress, the scheduler MUST append the client's ID to the job's `subscribers` set rather than executing a duplicate build.
+#### [eos-scheduler-deduplication]
+
+For any unique `JobId`, there MUST exist at most one active (QUEUED or RUNNING) `Job` in the scheduler state. If a client submits a build request for a `BuildEngine::Plan` that is already in progress, the scheduler MUST append the client's ID to the job's `subscribers` set rather than executing a duplicate build.
 
 ```claim
 kind: constraint
@@ -168,7 +172,9 @@ evaluator: none
 
 Verification will test concurrent submissions of the same build.
 
-**[eos-scheduler-placement]**: The scheduler MUST assign each ready EP to the worker minimizing predicted locality-adjusted completion time. The placement contract is: for each feasible worker `w` and ready EP `ep`, the scheduler selects the worker minimizing `EFT(ep, w) + OCT(ep, w)`, where `EFT` is the estimated finish time and `OCT` is the per-worker Optimistic Cost Table value from `EpRecord.oct`. Local Rendezvous Hash (LRH) affinity and multi-resource fit enter placement exclusively through the per-worker predicted duration `d(ep, w)` — they are not independent scoring terms and do not bypass the EFT+OCT objective. For the duration model (Option C) and PEFT worker-selection algorithm, see [docs/adr/0004-learning-augmented-scheduling.md](../adr/0004-learning-augmented-scheduling.md) §2b and §3. This invariant supersedes the prior standard HRW invariant, which did not account for downstream DAG cost (OCT) or predicted duration.
+#### [eos-scheduler-placement]
+
+The scheduler MUST assign each ready EP to the worker minimizing predicted locality-adjusted completion time. The placement contract is: for each feasible worker `w` and ready EP `ep`, the scheduler selects the worker minimizing `EFT(ep, w) + OCT(ep, w)`, where `EFT` is the estimated finish time and `OCT` is the per-worker Optimistic Cost Table value from `EpRecord.oct`. Local Rendezvous Hash (LRH) affinity and multi-resource fit enter placement exclusively through the per-worker predicted duration `d(ep, w)` — they are not independent scoring terms and do not bypass the EFT+OCT objective. For the duration model (Option C) and PEFT worker-selection algorithm, see [docs/adr/0004-learning-augmented-scheduling.md](../adr/0004-learning-augmented-scheduling.md) §2b and §3. This invariant supersedes the prior standard HRW invariant, which did not account for downstream DAG cost (OCT) or predicted duration.
 
 ```claim
 kind: constraint
@@ -178,7 +184,9 @@ evaluator: test
 Verification will audit EFT+OCT minimization and LRH cache hit rates
 across mock schedules.
 
-**[eos-scheduler-profile-store]**: The scheduler MUST maintain a persistent profile store of historical build observations keyed by `AtomId` (the atom's `(set, label)` pair, not a hash of it). The persistent store is the authoritative source of truth; the in-memory hot cache holds profiles for atoms in the current active G∪ and is written through to the persistent store on every EP completion. When no historical observation exists for an atom, the scheduler MUST fall back to developer-provided scheduling metadata (`atom_metadata`), then to system defaults. See [docs/adr/0004-learning-augmented-scheduling.md](../adr/0004-learning-augmented-scheduling.md) §1 for the full prediction resolution order.
+#### [eos-scheduler-profile-store]
+
+The scheduler MUST maintain a persistent profile store of historical build observations keyed by `AtomId` (the atom's `(set, label)` pair, not a hash of it). The persistent store is the authoritative source of truth; the in-memory hot cache holds profiles for atoms in the current active G∪ and is written through to the persistent store on every EP completion. When no historical observation exists for an atom, the scheduler MUST fall back to developer-provided scheduling metadata (`atom_metadata`), then to system defaults. See [docs/adr/0004-learning-augmented-scheduling.md](../adr/0004-learning-augmented-scheduling.md) §1 for the full prediction resolution order.
 
 ```claim
 kind: constraint
@@ -188,14 +196,18 @@ evaluator: none
 Verification will confirm profile write-through, hot-cache eviction,
 and the fallback resolution order.
 
-**[eos-scheduler-concurrency-limits]**: The number of concurrently RUNNING jobs assigned to any worker node MUST NOT exceed that worker's declared capacity. The dispatch guard is: `current_load(w) + predicted_load(ep) ≤ capacity(w)`.
+#### [eos-scheduler-concurrency-limits]
+
+The number of concurrently RUNNING jobs assigned to any worker node MUST NOT exceed that worker's declared capacity. The dispatch guard is: `current_load(w) + predicted_load(ep) ≤ capacity(w)`.
 
 ```claim
 kind: constraint
 evaluator: model-check
 ```
 
-**[eos-scheduler-state-isolation]**: The scheduler's internal scheduling queue and state transitions MUST NOT depend on the internal evaluation states of L4 (Ion). The scheduler is a pure consumer of L3-native plan digests and DAG structures; lock file parsing MUST NOT occur in the daemon.
+#### [eos-scheduler-state-isolation]
+
+The scheduler's internal scheduling queue and state transitions MUST NOT depend on the internal evaluation states of L4 (Ion). The scheduler is a pure consumer of L3-native plan digests and DAG structures; lock file parsing MUST NOT occur in the daemon.
 
 ```claim
 kind: constraint
@@ -205,7 +217,9 @@ evaluator: none
 Verification will check module boundaries and confirm no lock
 parsing occurs in the daemon.
 
-**[eos-scheduler-dag-intake]**: The scheduler MUST receive the atom DAG at build submission as a structured `eos-core` type handed off from Ion (the Eos Handoff, ion-sad §6.6) — nodes are atoms identified by `publish_czd`, edges are the dependency relationships already resolved into the lock. Dependency resolution, lock parsing, and DAG construction MUST occur entirely upstream of the submission boundary, never inside the daemon. This is the concrete, submission-time form `[eos-scheduler-state-isolation]` takes for atom-DAG intake specifically.
+#### [eos-scheduler-dag-intake]
+
+The scheduler MUST receive the atom DAG at build submission as a structured `eos-core` type handed off from Ion (the Eos Handoff, ion-sad §6.6) — nodes are atoms identified by `publish_czd`, edges are the dependency relationships already resolved into the lock. Dependency resolution, lock parsing, and DAG construction MUST occur entirely upstream of the submission boundary, never inside the daemon. This is the concrete, submission-time form `[eos-scheduler-state-isolation]` takes for atom-DAG intake specifically.
 
 ```claim
 kind: constraint
@@ -216,7 +230,9 @@ because: [eos-scheduler-state-isolation]
 Verification will submit a build request and confirm DAG nodes/edges
 arrive pre-resolved, with no lock parsing in the daemon.
 
-**[eos-scheduler-lease-expiry]**: Every job in the `RUNNING` state MUST be covered by a valid `Lease`. If a lease expires without renewal (i.e., `now > lease.expires_at`), the scheduler MUST revoke the lease, dissociate the job from its assigned worker, and transition the job back to the `QUEUED` state for reassignment. This prevents zombie jobs from crashed or unresponsive workers.
+#### [eos-scheduler-lease-expiry]
+
+Every job in the `RUNNING` state MUST be covered by a valid `Lease`. If a lease expires without renewal (i.e., `now > lease.expires_at`), the scheduler MUST revoke the lease, dissociate the job from its assigned worker, and transition the job back to the `QUEUED` state for reassignment. This prevents zombie jobs from crashed or unresponsive workers.
 
 ```claim
 kind: constraint
@@ -226,7 +242,9 @@ evaluator: none
 Verification will withhold lease renewal and confirm the job returns
 to `QUEUED`.
 
-**[eos-scheduler-heartbeat-liveness]**: Every registered worker MUST send periodic heartbeat signals to the scheduler. If a worker's `last_heartbeat` exceeds the configured `heartbeat_deadline`, the scheduler MUST mark that worker as `healthy = false`, MUST NOT assign new jobs to it, and MUST revoke leases on all jobs currently assigned to that worker (triggering `[eos-scheduler-lease-expiry]` for each). When a previously unhealthy worker resumes heartbeats, the scheduler MAY restore it to `healthy = true` after a configurable stabilization interval.
+#### [eos-scheduler-heartbeat-liveness]
+
+Every registered worker MUST send periodic heartbeat signals to the scheduler. If a worker's `last_heartbeat` exceeds the configured `heartbeat_deadline`, the scheduler MUST mark that worker as `healthy = false`, MUST NOT assign new jobs to it, and MUST revoke leases on all jobs currently assigned to that worker (triggering `[eos-scheduler-lease-expiry]` for each). When a previously unhealthy worker resumes heartbeats, the scheduler MAY restore it to `healthy = true` after a configurable stabilization interval.
 
 ```claim
 kind: constraint
@@ -237,7 +255,9 @@ depends: [eos-scheduler-lease-expiry]
 Verification will suppress heartbeats from a worker and confirm
 health demotion and lease revocation.
 
-**[eos-scheduler-frozen-stability]** (P8): Once an EP transitions to `DISPATCHED` status, its coverage scope (`EpRecord.scope`) and worker assignment MUST NOT change. Re-coarsening MUST operate only on the MUTABLE partition (EPs in `PENDING` or `READY` status and unassigned plan nodes). An EP that has been dispatched MUST NOT be reassigned to a different worker by any mechanism other than the transient-failure path (`[fail-job]` with `failure_kind = transient`), which reverts the EP to `READY` for re-dispatch rather than transferring a running EP.
+#### [eos-scheduler-frozen-stability]
+
+(P8): Once an EP transitions to `DISPATCHED` status, its coverage scope (`EpRecord.scope`) and worker assignment MUST NOT change. Re-coarsening MUST operate only on the MUTABLE partition (EPs in `PENDING` or `READY` status and unassigned plan nodes). An EP that has been dispatched MUST NOT be reassigned to a different worker by any mechanism other than the transient-failure path (`[fail-job]` with `failure_kind = transient`), which reverts the EP to `READY` for re-dispatch rather than transferring a running EP.
 
 ```claim
 kind: constraint
@@ -245,7 +265,9 @@ evaluator: model-check
 because: [fail-job]
 ```
 
-**[eos-scheduler-bounded-window]** (P9′): When a ready EP has a feasible worker, the EP MUST be dispatched, reach `COMPLETE`, or reach `FAILED` within a bounded window of Δ ticks of entering the `READY` state. The window is confidence-gated: when prediction confidence is low, Δ = 0, degenerating to strict immediate dispatch (the original P9). Under high confidence, the scheduler MAY hold a ready EP for up to Δ to wait for a higher-affinity worker predicted to free up soon. Formally:
+#### [eos-scheduler-bounded-window]
+
+(P9′): When a ready EP has a feasible worker, the EP MUST be dispatched, reach `COMPLETE`, or reach `FAILED` within a bounded window of Δ ticks of entering the `READY` state. The window is confidence-gated: when prediction confidence is low, Δ = 0, degenerating to strict immediate dispatch (the original P9). Under high confidence, the scheduler MAY hold a ready EP for up to Δ to wait for a higher-affinity worker predicted to free up soon. Formally:
 
 ```
 P9': □( Q(s) = ready ∧ ∃w: feasible(s, w) ) ⟹ ◇≤Δ Q(s) ∈ {dispatched, complete, failed}
@@ -258,14 +280,18 @@ kind: constraint
 evaluator: model-check
 ```
 
-**[eos-scheduler-bounded-fair-dispatch]** (P12): No ready EP is starved. Under continuous higher-priority arrival, a ready EP with a feasible worker MUST still reach a terminal/dispatched state within a finite bound — generalizing P9′ from the top-priority ready EP (within Δ) to _every_ ready EP. The mechanism is a delay credit `γ · age(ep)` folded into the EP priority ordering (`prio(ep) = avg_OCT(ep) + γ·age(ep)`; see ADR-0004 §2b for the formula and the bounded-wait derivation): a waiting EP's effective priority rises without bound, so it overtakes any stream of higher-priority arrivals within ≈ (OCT spread)/γ ticks. At γ = 0 the credit vanishes and starvation reappears. Head-of-line freedom (the no-contention facet) and starvation-freedom (this contention facet) together constitute _bounded-fair-dispatch_ (P5′+P12). The delay credit is the greedy tier's reading of the same cost the federated MCMF tier places on a task's unscheduled edge — one shared cost model.
+#### [eos-scheduler-bounded-fair-dispatch]
+
+(P12): No ready EP is starved. Under continuous higher-priority arrival, a ready EP with a feasible worker MUST still reach a terminal/dispatched state within a finite bound — generalizing P9′ from the top-priority ready EP (within Δ) to _every_ ready EP. The mechanism is a delay credit `γ · age(ep)` folded into the EP priority ordering (`prio(ep) = avg_OCT(ep) + γ·age(ep)`; see ADR-0004 §2b for the formula and the bounded-wait derivation): a waiting EP's effective priority rises without bound, so it overtakes any stream of higher-priority arrivals within ≈ (OCT spread)/γ ticks. At γ = 0 the credit vanishes and starvation reappears. Head-of-line freedom (the no-contention facet) and starvation-freedom (this contention facet) together constitute _bounded-fair-dispatch_ (P5′+P12). The delay credit is the greedy tier's reading of the same cost the federated MCMF tier places on a task's unscheduled edge — one shared cost model.
 
 ```claim
 kind: constraint
 evaluator: model-check
 ```
 
-**[eos-scheduler-cache-filter-seam]**: The scheduler MUST query artifact existence ONLY through the `eos-core` `ArtifactStore` abstraction or the Cap'n Proto `SubstitutionService.query` surface (see [eos-network-protocol.md](eos-network-protocol.md):282-300). The scheduler MUST NOT import snix types, hold gRPC client code, or call `PathInfoService` directly. The `SubstitutionService` shim (deployable inside a worker or standalone) absorbs per-digest fan-out to the underlying store internally, presenting the scheduler with a single logical existence query per batch. This preserves `[eos-scheduler-state-isolation]` even when artifact existence checks are required.
+#### [eos-scheduler-cache-filter-seam]
+
+The scheduler MUST query artifact existence ONLY through the `eos-core` `ArtifactStore` abstraction or the Cap'n Proto `SubstitutionService.query` surface (see [eos-network-protocol.md](eos-network-protocol.md):282-300). The scheduler MUST NOT import snix types, hold gRPC client code, or call `PathInfoService` directly. The `SubstitutionService` shim (deployable inside a worker or standalone) absorbs per-digest fan-out to the underlying store internally, presenting the scheduler with a single logical existence query per batch. This preserves `[eos-scheduler-state-isolation]` even when artifact existence checks are required.
 
 ```claim
 kind: constraint
@@ -280,7 +306,9 @@ in the scheduler crate.
 
 ### Transitions
 
-**[submit-job]**: Add a new build task to the queue.
+#### [submit-job]
+
+Add a new build task to the queue.
 
 - **PRE**: A client submits a build request containing a `BuildEngine::Plan` — carrying the atom DAG handed off at submission (`[eos-scheduler-dag-intake]`). The request arrives via `EosDaemon.submitBuild()` over the Cap'n Proto RPC surface (see [eos-network-protocol.md](eos-network-protocol.md) §submit-build).
 - **POST**: If a job with `JobId == plan_digest(plan)` already exists, the client is added to `subscribers`. Otherwise, a new `Job` is created with state `QUEUED`, its `id` is set to `plan_digest(plan)`, and it is added to the scheduler's queue.
@@ -293,7 +321,9 @@ because: [eos-scheduler-dag-intake]
 
 Verification will audit submit transitions directly.
 
-**[assign-job]**: Dispatch a ready EP to an available worker.
+#### [assign-job]
+
+Dispatch a ready EP to an available worker.
 
 - **PRE**: A ready EP exists in the scheduling table with `EpStatus = READY`, a healthy worker is available under capacity limits (see `[eos-scheduler-concurrency-limits]`), and all EP-level dependencies are in `COMPLETE` status (ordering soundness, P1). The bounded dispatch window `[eos-scheduler-bounded-window]` permits the dispatch to proceed now.
 - **POST**: The scheduler selects the worker minimizing `EFT(ep, w) + OCT(ep, w)` per `[eos-scheduler-placement]`. The job state transitions to `RUNNING`, `assigned_worker` is set to the selected worker's ID, a `Lease` is created with `granted_at = now` and `expires_at = now + lease_duration`, and the EP transitions to `DISPATCHED` with its worker assignment frozen per `[eos-scheduler-frozen-stability]`.
@@ -305,7 +335,9 @@ depends: [eos-scheduler-bounded-window, eos-scheduler-placement, eos-scheduler-f
 because: [eos-scheduler-concurrency-limits]
 ```
 
-**[renew-lease]**: Extend the lease on a running job.
+#### [renew-lease]
+
+Extend the lease on a running job.
 
 - **PRE**: A job is in the `RUNNING` state with a valid (non-expired) `Lease`, and the assigned worker requests renewal.
 - **POST**: The lease's `expires_at` is updated to `now + lease_duration`. The job continues executing on the same worker.
@@ -317,7 +349,9 @@ evaluator: none
 
 Verification will test lease extension and the expiry boundary.
 
-**[complete-job]**: Mark execution as successfully finished.
+#### [complete-job]
+
+Mark execution as successfully finished.
 
 - **PRE**: A job is in the `RUNNING` state. The assigned worker has completed execution and published all output artifacts to the artifact store before reporting completion (publication precedes the completion signal to preserve P3).
 - **POST**: The job state transitions to `COMPLETED`, the EP transitions to `COMPLETE`, the lease is released, all subscribers are notified with the outputs, and the job is removed from the active queue. The profile store is updated with observed duration, memory, and CPU via EMA. Downstream pending EPs whose EP-level dependencies are now satisfied transition to `READY`.
@@ -327,7 +361,9 @@ kind: constraint
 evaluator: model-check
 ```
 
-**[fail-job]**: Handle task failures.
+#### [fail-job]
+
+Handle task failures.
 
 - **PRE**: A job is in the `RUNNING` state and execution has failed or aborted.
 - **POST** (deterministic failure — build error, reproducible failure): The job state transitions to `FAILED`, the EP transitions to `FAILED`, the lease is released, subscribers are notified of the error, failure cascades to downstream dependent EPs (P11), and the job is removed from the active queue.
@@ -343,7 +379,9 @@ depends: [eos-scheduler-placement]
 
 ### Forbidden States
 
-**[no-dangling-jobs]**: A job MUST NOT remain in the `RUNNING` state if its `assigned_worker` is disconnected, offline, or unhealthy. The scheduler MUST re-queue or fail the job within a bounded timeout, enforced by lease expiry (`[eos-scheduler-lease-expiry]`) and heartbeat monitoring (`[eos-scheduler-heartbeat-liveness]`).
+#### [no-dangling-jobs]
+
+A job MUST NOT remain in the `RUNNING` state if its `assigned_worker` is disconnected, offline, or unhealthy. The scheduler MUST re-queue or fail the job within a bounded timeout, enforced by lease expiry (`[eos-scheduler-lease-expiry]`) and heartbeat monitoring (`[eos-scheduler-heartbeat-liveness]`).
 
 ```claim
 kind: constraint
@@ -354,7 +392,9 @@ depends: [eos-scheduler-lease-expiry, eos-scheduler-heartbeat-liveness]
 Verification will run a heartbeat and lease-expiry failure injection
 test.
 
-**[no-duplicate-execution]**: No two workers MUST be concurrently executing jobs with the same `JobId`.
+#### [no-duplicate-execution]
+
+No two workers MUST be concurrently executing jobs with the same `JobId`.
 
 ```claim
 kind: constraint
@@ -363,7 +403,9 @@ evaluator: none
 
 Verification will audit multi-worker execution logs.
 
-**[no-dispatched-ep-reassignment]**: A `DISPATCHED` EP's coverage scope and worker assignment MUST NOT be modified by any event other than the transient-failure path (`[fail-job]` → revert to `READY`). Re-coarsening, new request arrivals, and cache-skip events MUST NOT touch the FROZEN partition of the scheduling table (EPs in `DISPATCHED`, `COMPLETE`, or `FAILED` status). This is the operational expression of `[eos-scheduler-frozen-stability]` (P8).
+#### [no-dispatched-ep-reassignment]
+
+A `DISPATCHED` EP's coverage scope and worker assignment MUST NOT be modified by any event other than the transient-failure path (`[fail-job]` → revert to `READY`). Re-coarsening, new request arrivals, and cache-skip events MUST NOT touch the FROZEN partition of the scheduling table (EPs in `DISPATCHED`, `COMPLETE`, or `FAILED` status). This is the operational expression of `[eos-scheduler-frozen-stability]` (P8).
 
 ```claim
 kind: constraint
@@ -375,7 +417,9 @@ because: [fail-job, eos-scheduler-frozen-stability]
 
 ### Behavioral Properties
 
-**[eventual-progress]**: Every `QUEUED` job MUST eventually transition to either `COMPLETED` or `FAILED` under the assumption of fair scheduling and non-zero healthy worker capacity.
+#### [eventual-progress]
+
+Every `QUEUED` job MUST eventually transition to either `COMPLETED` or `FAILED` under the assumption of fair scheduling and non-zero healthy worker capacity.
 
 - **Type**: Liveness
 
@@ -384,7 +428,9 @@ kind: constraint
 evaluator: model-check
 ```
 
-**[parallel-scheduling-non-interference]**: Scheduling independent jobs concurrently MUST yield a state equivalent to scheduling them sequentially in some order (concurrency safety).
+#### [parallel-scheduling-non-interference]
+
+Scheduling independent jobs concurrently MUST yield a state equivalent to scheduling them sequentially in some order (concurrency safety).
 
 - **Type**: Safety
 
@@ -395,7 +441,9 @@ evaluator: none
 
 Verification will audit parallel-vs-sequential schedule output.
 
-**[head-of-line-immunity]** (P5′): A large or slow EP on one worker MUST NOT block dispatch of unrelated ready EPs to other workers. The PEFT event loop evaluates all ready EPs on each pass; dispatch of EP `s` depends only on `epStatus[s]` and worker load, never on the status of unrelated EPs.
+#### [head-of-line-immunity]
+
+(P5′): A large or slow EP on one worker MUST NOT block dispatch of unrelated ready EPs to other workers. The PEFT event loop evaluates all ready EPs on each pass; dispatch of EP `s` depends only on `epStatus[s]` and worker load, never on the status of unrelated EPs.
 
 - **Type**: Liveness
 
@@ -404,7 +452,9 @@ kind: constraint
 evaluator: model-check
 ```
 
-**[bounded-window-dispatch]** (P9′): A ready EP with a feasible worker MUST be dispatched, reach `COMPLETE`, or reach `FAILED` within Δ ticks of entering the `READY` state. When prediction confidence is low, Δ = 0 and dispatch is immediate. The bounded window is stated operationally in `[eos-scheduler-bounded-window]`.
+#### [bounded-window-dispatch]
+
+(P9′): A ready EP with a feasible worker MUST be dispatched, reach `COMPLETE`, or reach `FAILED` within Δ ticks of entering the `READY` state. When prediction confidence is low, Δ = 0 and dispatch is immediate. The bounded window is stated operationally in `[eos-scheduler-bounded-window]`.
 
 - **Type**: Liveness
 
