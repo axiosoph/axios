@@ -229,7 +229,7 @@ not a git ObjectId, so the anchor does not inherit the repository's
 object hash algorithm at all. Git hash agility (SHA-1 → SHA-256) is
 handled by the charter, not by the backend: a re-hash rewrites history,
 so continuity across it is an explicit successor charter chaining to
-the founding charter (atom-transactions.md `[charter-succession]`);
+the founding charter ([charter-succession](atom-transactions.md#charter-succession));
 absent succession, the re-hashed repository is a distinct atom-set. The
 backend MUST treat the anchor as opaque bytes and MUST NOT rehash,
 truncate, or transform them.
@@ -261,7 +261,7 @@ evaluator: test
 An atom commit MUST have zero parents. Atoms
 are detached subtrees — they carry no history. Provenance is recorded
 in the `src` extra header and the publish payload, not in git's parent
-chain. (Satisfies atom-transactions.md `[atom-detached]`.)
+chain. (Satisfies [atom-detached](atom-transactions.md#atom-detached).)
 
 ```claim
 kind: constraint
@@ -296,7 +296,7 @@ evaluator: test
 
 The atom protocol's git backend enforces a
 three-point temporal ordering — the **authenticity vector**
-(atom-transactions.md `[charter-ancestry]`):
+([charter-ancestry](atom-transactions.md#charter-ancestry)):
 
 ```
 charter src → claim src → publish src
@@ -319,7 +319,13 @@ temporal floor — only content at or after the claim is publishable.
 **Per-publish verification:** To verify provenance of a published atom,
 the verifier MUST check that the publish's `src` is genuinely in the
 repository's history and is at or after the claim's `src`. This uses
-treeless commit-only fetching (`tree:0`) for efficiency.
+treeless commit-only fetching (`tree:0`) for efficiency. The check
+relies on the backend actually instantiating
+[backend-ancestry-sound](atom-backend-contract.md#backend-ancestry-sound)
+and [backend-ancestry-queryable](atom-backend-contract.md#backend-ancestry-queryable),
+over the parent relation [ancestry-hash-committed](#ancestry-hash-committed)
+commits into the object hash — the vector quantifies over that relation
+and no other.
 
 ```claim
 kind: constraint
@@ -342,14 +348,14 @@ This adopts the claim commit's *object shape* (empty tree, CozMessage in
 the message, lightweight object) but deliberately NOT its git-parent
 chaining. Claims chain via git parents because that parent chain IS the
 ownership-history audit trail, anchored by a single tip ref; charters
-instead receive one protective ref per czd (`[charter-ref-by-czd]`), so
+instead receive one protective ref per czd ([charter-ref-by-czd](#charter-ref-by-czd)), so
 garbage-collection reachability needs no parent chain, and the
 authoritative succession link is the signed `prior` czd in the payload
-(`[charter-succession-via-prior]`). Re-encoding succession as a git
+([charter-succession-via-prior](#charter-succession-via-prior)). Re-encoding succession as a git
 parent would duplicate that link in an unsigned channel that could
 diverge from the signed truth, and — collapsed onto a single mutable tip
 ref — would hide the divergent-successor fork that
-`[charter-succession-linear]` requires consumers to detect. Succession
+[charter-succession-linear](atom-transactions.md#charter-succession-linear) requires consumers to detect. Succession
 therefore lives in the signed payload alone.
 
 ```claim
@@ -365,7 +371,7 @@ MUST be a valid, complete `CozMessage` JSON object whose payload has
 `typ: "atom/charter"`. The message MUST be parseable as JSON and MUST
 pass Coz verification. No additional text, headers, or formatting
 SHOULD be present outside the CozMessage JSON. (The charter analogue of
-`[claim-message-is-coz]`.)
+[claim-message-is-coz](#claim-message-is-coz).)
 
 ```claim
 kind: constraint
@@ -380,16 +386,18 @@ following the **signed** `prior` czd of each `CharterPayload` — each
 `prior` resolved to its charter commit through
 `refs/atom/charter/d/{prior_czd}` — never by a git parent link and never
 by `now` (which is untrusted for authority ordering,
-`[charter-succession-linear]`). The founding charter is the unique
+[charter-succession-linear](atom-transactions.md#charter-succession-linear)). The founding charter is the unique
 charter carrying no `prior`; its czd is the anchor. The effective
 charter is the head of the chain — the charter that is no valid
 charter's `prior`. Two charters sharing one `prior` value are divergent
 successors: the git encoding materializes both (each has its own
 `charter/d/` ref), so a resolver enumerating the family observes the
 set-authority fork directly and MUST fail closed per
-`[charter-succession-linear]` rather than let a mutable pointer silently
-select a winner. This encoding satisfies `[charter-succession]`,
-`[charter-succession-linear]`, and `[charter-ancestry]`; it does not
+charter-succession-linear rather than let a mutable pointer silently
+select a winner. This encoding satisfies
+[charter-succession](atom-transactions.md#charter-succession),
+[charter-succession-linear](atom-transactions.md#charter-succession-linear), and
+[charter-ancestry](atom-transactions.md#charter-ancestry); it does not
 restate or alter them.
 
 ```claim
@@ -425,7 +433,7 @@ source that carries **no charter yet** MUST be treated as **local class**
 `czd(charter₀)` and no founding charter exists to supply one. For the
 `refs/atom/dev/{anchor}/{label}/{dev_version}` ref segment, such an atom
 MUST use the same well-known constant sentinel anchor as a filesystem
-source (atom-transactions.md `[fs-source-contract]`) — an unchartered git
+source ([fs-source-contract](atom-transactions.md#fs-source-contract)) — an unchartered git
 source is, for identity purposes, exactly as anchorless as a filesystem
 source. A local-class dev atom is available for local build consumption
 only; it carries no protocol trust and cannot be claimed or published
@@ -532,8 +540,8 @@ evaluator: test
 All `CozMessage` JSON stored in git objects
 (commit messages, tag messages) MUST be preserved bit-for-bit. The
 backend MUST NOT reformat, re-serialize, or alter the JSON in any
-way. (Satisfies atom-transactions.md `[backend-bit-perfect]`;
-discharges atom-backend-contract.md `[backend-carriage-bit-perfect]`.)
+way. (Satisfies [backend-bit-perfect](atom-transactions.md#backend-bit-perfect);
+discharges [backend-carriage-bit-perfect](atom-backend-contract.md#backend-carriage-bit-perfect).)
 
 ```claim
 kind: constraint
@@ -554,7 +562,7 @@ protocol refs define reachability). Deletion is permitted only through
 garbage collection of protocol-unreachable objects. Git's
 content-addressed object store provides this by construction; the
 constraint makes the reliance explicit rather than implicit.
-(Discharges atom-backend-contract.md `[backend-store-immutable]`.)
+(Discharges [backend-store-immutable](atom-backend-contract.md#backend-store-immutable).)
 
 ```claim
 kind: constraint
@@ -565,16 +573,16 @@ because: [backend-store-immutable]
 #### [refs-sole-mutable]
 
 Refs are the backend's ONLY mutable protocol
-state. Objects are immutable (`[odb-immutable]`) and ancestry is
+state. Objects are immutable ([odb-immutable](#odb-immutable)) and ancestry is
 derived from hash-committed object content
-(`[ancestry-hash-committed]`), so every protocol state transition is
+([ancestry-hash-committed](#ancestry-hash-committed)), so every protocol state transition is
 exactly a refs transaction. Implementations MUST NOT keep protocol
 state in any side store (index files, database tables, packed
 metadata) that can diverge from the refs — such state MAY exist only
 as a cache reconstructible from refs + objects. This is what makes
 liveness-by-reachability, rollback-by-old-ref, and GC arguments
-transfer to the intent store. (Discharges atom-backend-contract.md
-`[backend-refs-sole-mutability]`.)
+transfer to the intent store. (Discharges
+[backend-refs-sole-mutability](atom-backend-contract.md#backend-refs-sole-mutability).)
 
 ```claim
 kind: constraint
@@ -589,11 +597,11 @@ A git ObjectId commits to its entire
 ancestry: a commit's parent OIDs are part of the hashed commit
 preimage, so asserting false ancestry for an existing OID requires a
 hash collision. Every ancestry-dependent check in this spec
-(`[temporal-vector]`, `[no-backdated-src]`,
-`[anchor-vector-authenticity]`) quantifies over THIS parent relation —
+([temporal-vector](#temporal-vector), [no-backdated-src](#no-backdated-src),
+[anchor-vector-authenticity](#anchor-vector-authenticity)) quantifies over THIS parent relation —
 the hash-committed one — never over whatever a query layer happens to
-answer. (Discharges atom-backend-contract.md
-`[backend-ancestry-sound]`.)
+answer. (Discharges
+[backend-ancestry-sound](atom-backend-contract.md#backend-ancestry-sound).)
 
 ```claim
 kind: constraint
@@ -606,10 +614,10 @@ because: [backend-ancestry-sound]
 Protocol ancestry queries MUST resolve
 parents from hash-committed object content with object replacement
 disabled (`--no-replace-objects` semantics): `refs/replace/*` and
-grafts MUST NOT influence `[temporal-vector]`, `[no-backdated-src]`,
-or `[anchor-vector-authenticity]` checks — replacement rewrites the
+grafts MUST NOT influence [temporal-vector](#temporal-vector), [no-backdated-src](#no-backdated-src),
+or [anchor-vector-authenticity](#anchor-vector-authenticity) checks — replacement rewrites the
 operational parent function without changing the OID, which is
-exactly the divergence `[ancestry-hash-committed]` exists to exclude.
+exactly the divergence [ancestry-hash-committed](#ancestry-hash-committed) exists to exclude.
 Ancestry verification MUST NOT be attempted against a depth-limited
 (shallow) clone: a shallow boundary is indistinguishable from a true
 root to a naive walk, so the check MUST fail closed rather than pass;
@@ -625,7 +633,7 @@ depends: [ancestry-hash-committed]
 #### [czd-oid-disjoint]
 
 The seam law's git instance
-(atom-backend-contract.md `[backend-seam-typed]`): `Czd` values and
+([backend-seam-typed](atom-backend-contract.md#backend-seam-typed)): `Czd` values and
 git `ObjectId`s are disjoint types. The only OID-typed protocol
 identities are the payload fields `dig` and `src` and the atom
 snapshot's `src` extra header; every other protocol identity (anchor,
@@ -650,19 +658,19 @@ depends: [backend-seam-typed]
 `dig` and `src` inherit the repository's
 object hash algorithm; under git's SHA-1 default they are NOT
 collision-resistant, unlike every czd-sorted identity
-(`[anchor-hash-agile]`). This inheritance MUST be documented wherever
+([anchor-hash-agile](#anchor-hash-agile)). This inheritance MUST be documented wherever
 `dig` is presented as an artifact identity. The closure for `dig` is
 the protocol-level, publisher-signed `content_hash` field
-(atom-transactions.md `[content-hash-is-tree-digest]`), not any
+([content-hash-is-tree-digest](atom-transactions.md#content-hash-is-tree-digest)), not any
 git-specific mechanism — the git instantiation carries it bit-perfectly
 like any other payload field and does nothing further. `src`'s
 inheritance is NOT closed by `content_hash` or by any mechanism this
 specification defines: `src`-anchored ancestry verification
-(`[temporal-vector]`) depends on this repository's own commit-parent
+([temporal-vector](#temporal-vector)) depends on this repository's own commit-parent
 graph, whose links are this repository's own object hashes, and is
 irreducible without migrating this repository's history to a stronger
 hash (atom-transactions.md `[content-hash-obligation]`'s "Known
-limit"). (Registers atom-backend-contract.md `[backend-hash-strength]`
+limit"). (Registers [backend-hash-strength](atom-backend-contract.md#backend-hash-strength)
 for the git instantiation.)
 
 ```claim
@@ -685,7 +693,7 @@ This is a minimal fix, not a new mechanism: it makes an
 already-structural property (git `ObjectId` hex length is
 algorithm-determined; `gix` itself dispatches object decoding by OID
 length) an explicit, binding reading rule instead of an unstated
-assumption, consistent with `[czd-oid-disjoint]`'s "each family
+assumption, consistent with [czd-oid-disjoint](#czd-oid-disjoint)'s "each family
 renders exactly one sort" precedent for identity-bearing ref-path
 segments applied here to a header value instead. No untagged
 ambiguity exists to migrate away from: every `src` header written
@@ -759,7 +767,7 @@ commits from GC if the originating branch is deleted.
 
 Within a single registry, the `{label}`
 segment MUST be unique. No two atoms in the same registry MAY share a
-label. (Satisfies atom-transactions.md `[atomid-per-source-unique]`.)
+label. (Satisfies [atomid-per-source-unique](atom-transactions.md#atomid-per-source-unique).)
 
 ```claim
 kind: constraint
@@ -827,8 +835,8 @@ single identifier fixed for the whole chain. Each tag in a chain has
 its own distinct `czd` and therefore its own store ref: landing a new
 amendment tag creates a NEW `refs/atom/d/{blake3(new_publish_czd)}`
 ref without invalidating or rewriting any earlier tag's ref
-(`[publish-update-transition]`'s POST states this for the amendment
-case directly; `[store-ownership-migration]`, below, states the
+([publish-update-transition](#publish-update-transition)'s POST states this for the amendment
+case directly; [store-ownership-migration](#store-ownership-migration), below, states the
 analogous claim-replacement case). This ensures global uniqueness —
 distinct tags, base or amendment, produce distinct publish czds and
 therefore distinct flat ref keys — and ensures a lock pinned to any
@@ -909,11 +917,11 @@ and fetch (commit objects only), exactly as claim chains are.
 
 Each charter commit MUST be referenced by
 `refs/atom/charter/d/{charter_czd}`, a czd-hex ref family (conforming to
-the typed ref-path discipline of `[czd-oid-disjoint]`) that both protects
+the typed ref-path discipline of [czd-oid-disjoint](#czd-oid-disjoint)) that both protects
 the charter commit from garbage collection and addresses it by czd for
 `CharterStore::get_charter`. Enumerating `refs/atom/charter/d/*` yields
-the candidate charter set an `[anchor-resolvable]` consumer verifies
-against — the git instance of atom-transactions.md `[charter-transition]`
+the candidate charter set an [anchor-resolvable](atom-transactions.md#anchor-resolvable) consumer verifies
+against — the git instance of [charter-transition](atom-transactions.md#charter-transition)
 POST ("stored in the source's atom refs, enumerable by consumers and
 retrievable by its czd"). The family is identical in a source and a
 store; ingesting a set fetches its charter chain into the same family.
@@ -936,20 +944,21 @@ backend by creating a parentless charter commit.
   **founding** charter's payload carries no `prior`; a **successor**'s
   `prior` czd MUST resolve to an existing charter commit via
   `refs/atom/charter/d/{prior_czd}` whose `owner` authorizes the
-  successor's signing key (`[charter-succession]`). The charter
-  `CozMessage` MUST be valid (`[charter-message-is-coz]`). Authorization
+  successor's signing key ([charter-succession](atom-transactions.md#charter-succession)). The charter
+  `CozMessage` MUST be valid ([charter-message-is-coz](#charter-message-is-coz)). Authorization
   of a founding charter over a source that already carries pre-charter
   claims is governed protocol-side by atom-transactions.md
   `[charter-transition]` (the bootstrap gate); the backend enforces
   storage, not that authorization decision.
 - **POST**: A parentless charter commit exists with the well-known empty
   tree and the charter `CozMessage` as its message
-  (`[charter-commit-format]`), referenced by
-  `refs/atom/charter/d/{charter_czd}` (`[charter-ref-by-czd]`). A
+  ([charter-commit-format](#charter-commit-format)), referenced by
+  `refs/atom/charter/d/{charter_czd}` ([charter-ref-by-czd](#charter-ref-by-czd)). A
   founding charter's czd is thereby the atom-set `Anchor`. The charter is
-  enumerable and retrievable by czd, discharging atom-transactions.md
-  `[charter-transition]` POST for the git backend. Multi-ref writes
-  follow `[refs-atomic-multi]`.
+  enumerable and retrievable by czd, discharging
+  [charter-transition](atom-transactions.md#charter-transition)
+  POST for the git backend. Multi-ref writes
+  follow [refs-atomic-multi](#refs-atomic-multi).
 
 ```claim
 kind: constraint
@@ -964,8 +973,8 @@ detached claim commit.
 
 - **PRE**: The repository MUST have at least one commit. The atom-set's
   founding charter MUST be resolvable and verified — the claim's
-  `anchor` field is its czd (atom-transactions.md
-  `[claim-chains-charter]`). No active claim for
+  `anchor` field is its czd
+  ([claim-chains-charter](atom-transactions.md#claim-chains-charter)). No active claim for
   this label MUST exist (or the existing claim is being explicitly
   replaced). The claim `CozMessage` MUST be valid and include a
   `key` field. A source revision (`src`) for the claim point MUST
@@ -993,8 +1002,8 @@ publish tag.
 - **PRE**: An active claim for this label MUST exist in the registry
   (`refs/atom/claims/pub/{label}` is set). The source revision (`src`)
   from which the atom's content is extracted MUST be at or after the
-  claim's `src` in the repository's history (`[temporal-vector]`).
-  The atom commit MUST be deterministic per `[snapshot-deterministic]`.
+  claim's `src` in the repository's history ([temporal-vector](#temporal-vector)).
+  The atom commit MUST be deterministic per [snapshot-deterministic](#snapshot-deterministic).
   The publish `CozMessage` MUST reference the active claim's `czd`.
 - **POST**: An atom commit exists (parentless, deterministic, with
   `src` extra header). A publish tag points at it with the CozMessage
@@ -1007,8 +1016,8 @@ publish tag.
   tag creation. _(Raised from SHOULD 2026-07-12: the non-CAS write is
   a TOCTOU window — a publish can land against a claim state that no
   longer matches what the signer verified against. Discharges the
-  per-name register law, atom-backend-contract.md
-  `[backend-refs-linearizable]`.)_
+  per-name register law,
+  [backend-refs-linearizable](atom-backend-contract.md#backend-refs-linearizable).)_
 
 ```claim
 kind: constraint
@@ -1032,10 +1041,10 @@ another store) into a store.
   Version refs follow the store layout:
   `refs/atom/d/{blake3(publish_czd)}`. AtomId is preserved through
   ingestion. Refs MUST NOT be committed until all cryptographic
-  verification (`[verification-local]`) passes — objects may exist
+  verification ([verification-local](atom-transactions.md#verification-local)) passes — objects may exist
   in the ODB during verification, but are invisible to consumers
   until the refs transaction is committed. (Satisfies
-  atom-transactions.md `[ingest-preserves-identity]`.)
+  [ingest-preserves-identity](atom-transactions.md#ingest-preserves-identity).)
 
 ```claim
 kind: constraint
@@ -1055,7 +1064,7 @@ replaced (e.g., after key compromise).
 - **POST**: A new claim commit exists with the previous claim as its
   parent. The ref `refs/atom/claims/pub/{label}` is updated to point
   to the new tip of the claim chain. Future publishes MUST reference
-  the new claim's `czd` and satisfy `[temporal-vector]` with respect
+  the new claim's `czd` and satisfy [temporal-vector](#temporal-vector) with respect
   to the new claim. Existing publish tags remain valid under the old
   claim. The full claim history is walkable from the new tip.
 
@@ -1079,15 +1088,15 @@ chain.
   payload**: the same payload shape as a base publish, but with every
   identity-class field (atom-transactions.md `[amendment-field-
   classification]`) structurally absent — not present and checked
-  equal, absent. The amendment payload MUST be valid per `[sig-over-
-  pay]` (atom-transactions.md) and MUST set at least one overwrite- or
+  equal, absent. The amendment payload MUST be valid per
+  [sig-over-pay](atom-transactions.md#sig-over-pay) (atom-transactions.md) and MUST set at least one overwrite- or
   append-class field. Authorization is per amended-field class:
   - A tag that sets an overwrite-class field (`[amendment-field-
     classification]` class 2 — signing identity, `mode`, `meta`) MUST
     be signed by a key authorized by the base tag's claim's single
-    owner (`[claim-owner-single]`, under `[owner-authorization-
-    delegated]`'s per-value semantics — the same check
-    `[publish-transition]`'s own PRE already applies to the base
+    owner ([claim-owner-single](atom-transactions.md#claim-owner-single), under
+    [owner-authorization-delegated](atom-transactions.md#owner-authorization-delegated)'s per-value semantics — the same check
+    [publish-transition](atom-transactions.md#publish-transition)'s own PRE already applies to the base
     payload). This authorization check is against the SIGNING key, not
     the declared `tmb` field: a conforming verifier MUST first bind
     the declared `tmb` to the actual key that produced the signature —
@@ -1114,11 +1123,11 @@ chain.
     tier — this is a structural validity statement, not a trust one.
     Which verdict (`fact`/`evidence`/`refused`) a given consumer
     assigns a fact entry is governed entirely by the entry's fact-kind
-    authorization tier (atom-transactions.md `[fact-kind-table]`) as
+    authorization tier ([fact-kind-table](atom-transactions.md#fact-kind-table)) as
     evaluated through trust-model.md's consumer-local acceptance
-    policy (`[trust-role-authorization]`, atom-transactions.md
-    `[fact-claim-owner-gated]`) — fact acceptance is deliberately
-    signer-relative (`[trust-signer-relative]`, trust-model.md), never
+    policy ([trust-role-authorization](trust-model.md#trust-role-authorization),
+    [fact-claim-owner-gated](atom-transactions.md#fact-claim-owner-gated)) — fact acceptance is deliberately
+    signer-relative ([trust-signer-relative](trust-model.md#trust-signer-relative)), never
     a chain-level accept/reject gate.
   - A tag MAY set fields of both classes in one amendment; the
     overwrite-class authorization requirement above applies regardless
@@ -1130,7 +1139,7 @@ chain.
   `refs/atom/d/{blake3(new_publish_czd)}` is created pointing to the
   new tag; the previous ref `refs/atom/d/{blake3(old_publish_czd)}`
   persists, keeping any lock pin on the old publish_czd resolvable
-  (consistent with `[tag-chain-immutable]`). The old tag object
+  (consistent with [tag-chain-immutable](#tag-chain-immutable)). The old tag object
   persists in the object database. Git's tag-peeling resolves the
   chain to the underlying atom commit.
 
@@ -1144,11 +1153,11 @@ depends: [sig-over-pay, claim-owner-single, owner-authorization-delegated, publi
 
 The identity-class fields of a
 publish payload — `label`, `version`, `dig`, `src`, `path`,
-`content_hash`, `anchor`, and `claim` (atom-transactions.md
-`[amendment-field-classification]`) — MUST be set only by the base
+`content_hash`, `anchor`, and `claim`
+([amendment-field-classification](atom-transactions.md#amendment-field-classification)) — MUST be set only by the base
 publish payload: the first tag in a publish's update chain, the one
 targeting the atom commit directly. Every later tag in the chain
-carries an amendment payload (`[publish-update-transition]`) whose
+carries an amendment payload ([publish-update-transition](#publish-update-transition)) whose
 shape has no slot for these fields — they are structurally absent, not
 present and checked equal against the base tag's value. A backend or
 consumer walking the chain MUST read identity-class field values from
@@ -1156,14 +1165,14 @@ the base tag only, and MUST NOT read them from, or expect them present
 on, any later tag. (`typ` is identity-class in value — it never
 changes across a chain — but, uniquely, IS required and present on
 every tag, base or amendment alike: it is the `CozMessage`
-payload-family discriminator, atom-transactions.md `[publish-typ]`,
+payload-family discriminator, [publish-typ](atom-transactions.md#publish-typ),
 needed to parse the message at all, not per-chain data a resolver
 accumulates from the base tag.) Overwrite-class fields (signing
 metadata — `tmb`, `alg`, the envelope `key`, `now` — `meta`, the
 reproducibility `mode` field — chain-VARIABLE by design,
 promotable/demotable via signed chain appends per atom-model.md §6 and
-atom-transactions.md `[publish-mode]`) and append-class fields (facts,
-atom-transactions.md `[fact-kind-table]`) MAY be set by the base tag or
+[publish-mode](atom-transactions.md#publish-mode)) and append-class fields (facts,
+[fact-kind-table](atom-transactions.md#fact-kind-table)) MAY be set by the base tag or
 by any later tag in the chain. Altering the artifact identity (`dig`),
 version string, or source revision requires a new atom commit and a
 new publish ref — not an update to an existing tag chain.
@@ -1185,7 +1194,7 @@ cross-mirror consistency is convergence, not atomicity
 (atom-backend-contract.md `[backend-replica-reads]`). _(Promoted
 2026-07-12 from the Atomicity implementation guidance below to a
 tagged constraint; discharges the per-store half of
-atom-backend-contract.md `[backend-refs-atomic-multi]`.)_
+[backend-refs-atomic-multi](atom-backend-contract.md#backend-refs-atomic-multi).)_
 
 ```claim
 kind: constraint
@@ -1208,11 +1217,11 @@ be ingested into a git `AtomStore` without claims or publishes.
   tree object hash to prevent clobbering across concurrent evaluations.
   Every atom has an AtomId — git-sourced dev atoms use the set's
   charter anchor (`czd(charter₀)`); filesystem-sourced atoms use
-  a well-known constant sentinel anchor (see atom-transactions.md
-  `[fs-source-contract]`). A git source that has no charter yet is
+  a well-known constant sentinel anchor (see
+  [fs-source-contract](atom-transactions.md#fs-source-contract)). A git source that has no charter yet is
   identity-equivalent to a filesystem source: its dev atoms are
   local-class and carry the same sentinel anchor
-  (`[dev-atom-unchartered-local]`). Note: the dev atom's `dig` will inherently
+  ([dev-atom-unchartered-local](#dev-atom-unchartered-local)). Note: the dev atom's `dig` will inherently
   differ from the published `dig` because published atoms include a
   real `src` extra header — this is by design.
 
@@ -1234,7 +1243,7 @@ resolves through two namespaces in order of precedence:
    `blake3(publish_czd)`
 
 Published atoms from the local registry are ingested into `d/` via
-the same `[ingest-transition]` as remote atoms — there is no special
+the same [ingest-transition](#ingest-transition) as remote atoms — there is no special
 treatment. The `pub/` namespace is registry-write-time only; the
 resolver never queries it.
 
@@ -1267,7 +1276,7 @@ evaluator: none
 A publish tag MUST NOT exist in a registry
 without a corresponding claim commit reachable via
 `refs/atom/claims/pub/{label}` or `refs/atom/claims/d/{claim_czd}`.
-(Satisfies atom-transactions.md `[no-unclaimed-publish]`.)
+(Satisfies [no-unclaimed-publish](atom-transactions.md#no-unclaimed-publish).)
 
 ```claim
 kind: constraint
@@ -1280,7 +1289,7 @@ because: [no-unclaimed-publish]
 A publish MUST NOT reference a source revision
 (`src`) that precedes the claim's `src` in the repository's history.
 The publish's `src` MUST be at or after the claim's `src`. This is the
-enforcement mechanism for `[temporal-vector]`.
+enforcement mechanism for [temporal-vector](#temporal-vector).
 
 ```claim
 kind: constraint
@@ -1333,10 +1342,10 @@ evaluator: none
 Given a publish tag in a registry,
 the atom MUST be verifiable as authentic by checking the vector:
 (1) the claim's `anchor` field equals `czd(charter₀)` of the effective,
-verified charter (atom-transactions.md `[charter-anchor]`,
-`[claim-charter-authorization]`), (2) the publish payload's `claim` czd
+verified charter ([charter-anchor](atom-transactions.md#charter-anchor),
+[claim-charter-authorization](atom-transactions.md#claim-charter-authorization)), (2) the publish payload's `claim` czd
 resolves to a claim commit whose payload `src` is a descendant of (or
-equal to) the effective charter's `src` (`[charter-ancestry]`),
+equal to) the effective charter's `src` ([charter-ancestry](atom-transactions.md#charter-ancestry)),
 (3) the claim `CozMessage` in that commit's message is valid, AND
 (4) the publish's `src` is at or after the claim's `src`. This creates
 a "vector of authenticity": charter src → claim src → publish src.
