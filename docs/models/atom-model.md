@@ -156,6 +156,13 @@ first-class intent reification — the derivation is a build instruction,
 not a signed, human-meaningful declaration. Here the human-meaningful
 unit is the identity-bearing object, at every granularity stratum.
 
+#### [runtime-declare-required]
+
+```claim
+kind: invariant
+evaluator: none
+```
+
 ## 3. What the plane owns per stratum
 
 Two independent axes classify atoms, and this model keeps them separate
@@ -245,6 +252,13 @@ design work this model now governs rather than defers:
    some overwrite-class fields (e.g. `tmb`, `now`), so a
    presence-based trigger would fire on every tip move.
 
+#### [metadata-partition-law]
+
+```claim
+kind: invariant
+evaluator: none
+```
+
 ## 5. The signature-anchoring law
 
 Signers differ across the stack — publishers sign intent, executors
@@ -294,6 +308,13 @@ deliberately no third path; an out-of-band digest handoff (a signed but
 unpublished composition passed peer-to-peer and bound by raw digest) is
 out-of-protocol by definition, and refusing it is exactly what a trust
 policy is for (Execution Model §3.4).
+
+#### [signature-anchoring-law]
+
+```claim
+kind: invariant
+evaluator: none
+```
 
 ## 6. The reproducibility contract
 
@@ -560,6 +581,13 @@ closure's evidence fixpoint is P2's. This model only names what they
 jointly mean: the build closure is a determined projection of the
 composite, and the runtime closure is bounded by it and located by
 evidence.
+
+#### [proof-obligations-scope]
+
+```claim
+kind: invariant
+evaluator: none
+```
 
 ## 11. The spine and the cloud: the atom plane's own store
 
