@@ -75,13 +75,13 @@ fn every_violation_is_rejected() {
 
 /// c1a: every `[lock-no-*]` deliberate-absence violation is caught
 /// specifically by the raw forbidden-key check (p-violations).
-// docket: lock-no-compose :: cargo test -p ion-lock --test v2_corpus -- lock_no_star_violations_are_forbidden_key_errors --exact
-// docket: lock-no-params :: cargo test -p ion-lock --test v2_corpus -- lock_no_star_violations_are_forbidden_key_errors --exact
-// docket: lock-no-toolchain-section :: cargo test -p ion-lock --test v2_corpus -- lock_no_star_violations_are_forbidden_key_errors --exact
-// docket: lock-no-interfaces :: cargo test -p ion-lock --test v2_corpus -- lock_no_star_violations_are_forbidden_key_errors --exact
-// docket: lock-no-override-state :: cargo test -p ion-lock --test v2_corpus -- lock_no_star_violations_are_forbidden_key_errors --exact
-// docket: lock-no-foreign-metadata :: cargo test -p ion-lock --test v2_corpus -- lock_no_star_violations_are_forbidden_key_errors --exact
-// docket: lock-no-plan-digest :: cargo test -p ion-lock --test v2_corpus -- lock_no_star_violations_are_forbidden_key_errors --exact
+// @docket: lock-no-compose :: cargo test -p ion-lock --test v2_corpus -- lock_no_star_violations_are_forbidden_key_errors --exact
+// @docket: lock-no-params :: cargo test -p ion-lock --test v2_corpus -- lock_no_star_violations_are_forbidden_key_errors --exact
+// @docket: lock-no-toolchain-section :: cargo test -p ion-lock --test v2_corpus -- lock_no_star_violations_are_forbidden_key_errors --exact
+// @docket: lock-no-interfaces :: cargo test -p ion-lock --test v2_corpus -- lock_no_star_violations_are_forbidden_key_errors --exact
+// @docket: lock-no-override-state :: cargo test -p ion-lock --test v2_corpus -- lock_no_star_violations_are_forbidden_key_errors --exact
+// @docket: lock-no-foreign-metadata :: cargo test -p ion-lock --test v2_corpus -- lock_no_star_violations_are_forbidden_key_errors --exact
+// @docket: lock-no-plan-digest :: cargo test -p ion-lock --test v2_corpus -- lock_no_star_violations_are_forbidden_key_errors --exact
 #[test]
 fn lock_no_star_violations_are_forbidden_key_errors() {
     const LOCK_NO_STAR: &[&str] = &[
@@ -120,7 +120,7 @@ fn typed_parse_alone_silently_accepts_a_lock_no_star_violation() {
 
 /// [lock-requires-resolvable]: a `requires` edge naming a nonexistent entry
 /// is rejected, distinctly from a raw forbidden-key violation.
-// docket: lock-requires-resolvable :: cargo test -p ion-lock --test v2_corpus -- dangling_requires_edge_is_rejected --exact
+// @docket: lock-requires-resolvable :: cargo test -p ion-lock --test v2_corpus -- dangling_requires_edge_is_rejected --exact
 #[test]
 fn dangling_requires_edge_is_rejected() {
     let content = fixture("violations", "dangling-requires");
@@ -131,7 +131,7 @@ fn dangling_requires_edge_is_rejected() {
 }
 
 /// [lock-requires-acyclic]: a 2-cycle in the requires graph is rejected.
-// docket: lock-requires-acyclic :: cargo test -p ion-lock --test v2_corpus -- cyclic_requires_graph_is_rejected --exact
+// @docket: lock-requires-acyclic :: cargo test -p ion-lock --test v2_corpus -- cyclic_requires_graph_is_rejected --exact
 #[test]
 fn cyclic_requires_graph_is_rejected() {
     let content = fixture("violations", "cyclic-requires");
@@ -143,7 +143,7 @@ fn cyclic_requires_graph_is_rejected() {
 
 /// [lock-set-referenced]: a `[sets]` entry with no referencing dep entry is
 /// rejected.
-// docket: lock-set-referenced :: cargo test -p ion-lock --test v2_corpus -- unreferenced_set_is_rejected undeclared_set_is_rejected --exact
+// @docket: lock-set-referenced :: cargo test -p ion-lock --test v2_corpus -- unreferenced_set_is_rejected undeclared_set_is_rejected --exact
 #[test]
 fn unreferenced_set_is_rejected() {
     let content = fixture("violations", "unreferenced-set");

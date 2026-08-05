@@ -253,16 +253,16 @@ TypeOK ==
 OrderingSoundness ==
     \A e \in DependencyEdges :
         epStatus[e[2]] \in {"dispatched", "complete"} => epStatus[e[1]] = "complete"
-\* docket: assign-job :: docs/models/tla/run_model_check.sh
+\* @docket: assign-job :: docs/models/tla/run_model_check.sh
 
 CapacitySafety ==
     \A w \in Workers : workerLoad[w] <= WorkerCap[w]
-\* docket: eos-scheduler-concurrency-limits :: docs/models/tla/run_model_check.sh
+\* @docket: eos-scheduler-concurrency-limits :: docs/models/tla/run_model_check.sh
 
 ArtifactSafety ==
     \A s \in EntryPoints :
         epStatus[s] = "complete" => Outputs[s] \subseteq artifactStore
-\* docket: complete-job :: docs/models/tla/run_model_check.sh
+\* @docket: complete-job :: docs/models/tla/run_model_check.sh
 
 \* P11: Failure Isolation
 \* An EP can only be "failed" if:
@@ -276,7 +276,7 @@ FailureIsolation ==
             \/ (failureReason[s] = "cascade"
                 /\ \exists e \in DependencyEdges :
                       e[2] = s /\ epStatus[e[1]] = "failed")
-\* docket: fail-job :: docs/models/tla/run_model_check.sh
+\* @docket: fail-job :: docs/models/tla/run_model_check.sh
 
 \* P5': Head-of-line freedom (structural safety invariant; see EosScheduling.tla
 \* for full rationale). Dispatch(s, w) is gated ONLY by epStatus[s] and worker
@@ -320,8 +320,8 @@ FrozenStability == [][
             => /\ epStatus'[s] \in {"dispatched", "complete", "failed", "ready"}
                /\ (epStatus'[s] = "dispatched" => runningOn'[s] = w)
 ]_vars
-\* docket: eos-scheduler-frozen-stability :: docs/models/tla/run_model_check.sh
-\* docket: no-dispatched-ep-reassignment :: docs/models/tla/run_model_check.sh
+\* @docket: eos-scheduler-frozen-stability :: docs/models/tla/run_model_check.sh
+\* @docket: no-dispatched-ep-reassignment :: docs/models/tla/run_model_check.sh
 
 -----------------------------------------------------------------------------
 
@@ -337,14 +337,14 @@ CompletionPropagation ==
     NoInfiniteTransientFailures =>
         \A req_id \in AllPossibleRequestIds :
             <> (\A s \in AllPossibleEntryPoints : (req_id \in requestClientsSafe(s)) => epStatusSafe(s) \in {"complete", "failed"})
-\* docket: eventual-progress :: docs/models/tla/run_model_check.sh
+\* @docket: eventual-progress :: docs/models/tla/run_model_check.sh
 
 Progress ==
     NoInfiniteTransientFailures =>
         \A s \in AllPossibleEntryPoints :
             (epStatusSafe(s) = "ready" /\ (\exists w \in Workers : workerLoad[w] + PredictedLoad[s] <= WorkerCap[w]))
                 => <> (epStatusSafe(s) /= "ready")
-\* docket: eventual-progress :: docs/models/tla/run_model_check.sh
+\* @docket: eventual-progress :: docs/models/tla/run_model_check.sh
 
 \* P5': Head-of-Line Immunity (this model: the per-EP, dependency-aware shadow).
 \* Dispatch(s, w) is gated ONLY by epStatus[s] and workerLoad[w], never by any
@@ -363,7 +363,7 @@ HoLImmunity ==
                  /\ (\exists w \in Workers :
                         workerLoad[w] + PredictedLoad[s] <= WorkerCap[w]))
                 ~> (epStatusSafe(s) \in {"dispatched", "complete", "failed", "none"})
-\* docket: head-of-line-immunity :: docs/models/tla/run_model_check.sh
+\* @docket: head-of-line-immunity :: docs/models/tla/run_model_check.sh
 
 \* P9': Bounded-window work conservation (replaces the unbounded P9).
 \* When an EP is ready and a worker is feasible, it MAY be held but is
@@ -381,8 +381,8 @@ WorkConservation ==
             /\ [](ReadyFeasible(s) => clock <= readySinceSafe(s) + Delta)
             /\ ReadyFeasible(s)
                  ~> (epStatusSafe(s) \in {"dispatched", "complete", "failed", "none"})
-\* docket: eos-scheduler-bounded-window :: docs/models/tla/run_model_check.sh
-\* docket: bounded-window-dispatch :: docs/models/tla/run_model_check.sh
+\* @docket: eos-scheduler-bounded-window :: docs/models/tla/run_model_check.sh
+\* @docket: bounded-window-dispatch :: docs/models/tla/run_model_check.sh
 
 \* P10: Transient Recovery (explicit)
 \* A dispatched EP that experiences transient failure eventually
@@ -392,6 +392,6 @@ TransientRecovery ==
         \A s \in AllPossibleEntryPoints :
             (epStatusSafe(s) = "dispatched")
             ~> (epStatusSafe(s) \in {"complete", "failed", "none"})
-\* docket: fail-job :: docs/models/tla/run_model_check.sh
+\* @docket: fail-job :: docs/models/tla/run_model_check.sh
 
 =============================================================================
