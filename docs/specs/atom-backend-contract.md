@@ -158,7 +158,9 @@ answers ancestry queries from an unrelated index does not conform.
 
 ### Invariants
 
-**[backend-store-immutable]**: `get(put(x)) = x`, and a stored object
+#### [backend-store-immutable]
+
+`get(put(x)) = x`, and a stored object
 MUST NOT be mutable under its OID: `get` is a partial function of the
 OID alone, stable across time and replicas. (The artifact-store A1/A2
 analogue; every protocol claim of the form "the ref moved but the old
@@ -172,7 +174,9 @@ evaluator: none
 Verification will round-trip a store→get and confirm mutation
 attempts fail.
 
-**[backend-store-injective]**: The backend's content serialization
+#### [backend-store-injective]
+
+The backend's content serialization
 MUST be canonical: one content value, one byte serialization, one OID;
 two distinct content values MUST NOT share an OID (up to collision
 resistance of the backend hash). For atom content trees this is
@@ -189,7 +193,9 @@ evaluator: test
 Verification will audit canonical serialization against a fixture
 battery.
 
-**[backend-ancestry-sound]**: The ancestry relation `⊑` MUST be sound
+#### [backend-ancestry-sound]
+
+The ancestry relation `⊑` MUST be sound
 with respect to the backend's content-addressing: `a ⊑ b` MUST hold
 iff `a` is reachable from `b` through `parents`, and a revision
 identifier MUST commit to its entire ancestry — `parents` participates
@@ -216,7 +222,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[backend-ancestry-queryable]**: A conforming backend MUST support
+#### [backend-ancestry-queryable]
+
+A conforming backend MUST support
 ancestry queries (`a ⊑ b`) without transferring or materializing full
 content — revision metadata alone suffices (git discharges this with
 treeless `tree:0` fetching, `[temporal-vector]`). Provenance
@@ -236,7 +244,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[backend-refs-linearizable]**: On the **authoritative store** —
+#### [backend-refs-linearizable]
+
+On the **authoritative store** —
 the registry or store a write transition executes against — each ref
 MUST behave as a linearizable register per name: reads observe the
 latest committed write, and `cas(name, expected, new)` MUST atomically
@@ -267,7 +277,9 @@ evaluator: none
 Verification will run a concurrent CAS battery against one ref on the
 authoritative store.
 
-**[backend-refs-atomic-multi]**: The **authoritative store** MUST
+#### [backend-refs-atomic-multi]
+
+The **authoritative store** MUST
 support atomic multi-ref transactions: a protocol transition that
 writes several names (claim ref + protective src ref; version ref +
 src ref; ingestion of many versions with claims) MUST be
@@ -290,7 +302,9 @@ evaluator: test
 Verification will inject a crash/interrupt mid multi-ref transaction
 and confirm the result is all-or-nothing.
 
-**[backend-replica-reads]**: Mirrors and replicas are
+#### [backend-replica-reads]
+
+Mirrors and replicas are
 eventually-consistent reads of the authoritative store, and their
 lawful behavior is discharged at the protocol layer, cited here rather
 than re-invented: convergence is by monotone append propagation (the
@@ -309,7 +323,9 @@ evaluator: none
 depends: [backend-chain-append, mirror-staleness-tolerance, chain-monotonicity, atom-version-identity, no-conflicting-digest, czd-divergence-handling]
 ```
 
-**[backend-seam-typed]**: `Czd` and `OID` MUST be disjoint sorts, in
+#### [backend-seam-typed]
+
+`Czd` and `OID` MUST be disjoint sorts, in
 the specification and in implementations (distinct types, no implicit
 conversion). For any stored `CozMessage` `m`, `czd(m)` is computed by
 the coz layer over `m`'s payload bytes and MUST be independent of
@@ -361,7 +377,9 @@ the opposite of a disjoint-sorts encoding: one type carries `Czd` and
 `OID` values interchangeably. Grade `none`, not `type`, until a rename or
 a newtype split lands.
 
-**[backend-carriage-bit-perfect]**: The backend MUST carry protocol
+#### [backend-carriage-bit-perfect]
+
+The backend MUST carry protocol
 payloads byte-exactly: no re-serialization, reformatting, or
 normalization of `CozMessage` content, ever — verification is
 re-hashing, so a single altered byte severs the trust chain. This
@@ -379,7 +397,9 @@ because: [backend-bit-perfect]
 Verification will store a payload, retrieve it, and byte-compare
 (extends git-storage-format.md's `[coz-bit-perfect]` battery).
 
-**[backend-chain-append]**: The backend MUST realize each atom's
+#### [backend-chain-append]
+
+The backend MUST realize each atom's
 transaction and fact chains as **append-only** structures: appending a
 new chain element (claim replacement, publish update, fact append —
 [atom-model](../models/atom-model.md) §4) MUST NOT destroy, alter, or
@@ -395,7 +415,9 @@ evaluator: none
 because: [docs/models/atom-model#6]
 ```
 
-**[backend-enumeration]**: Given a source, a zero-trust consumer MUST
+#### [backend-enumeration]
+
+Given a source, a zero-trust consumer MUST
 be able to enumerate: candidate charters
 ([atom-transactions](atom-transactions.md) `[anchor-resolvable]`),
 the labels claimed there, the versions published per label, and each
@@ -411,7 +433,9 @@ evaluator: none
 depends: [anchor-resolvable]
 ```
 
-**[backend-refs-sole-mutability]**: Refs MUST be the backend's ONLY
+#### [backend-refs-sole-mutability]
+
+Refs MUST be the backend's ONLY
 mutable state: `Store` is immutable (`[backend-store-immutable]`),
 `⊑` is derived from hash-committed structure
 (`[backend-ancestry-sound]`), and every protocol-visible state change
@@ -427,7 +451,9 @@ evaluator: none
 depends: [backend-store-immutable, backend-ancestry-sound]
 ```
 
-**[backend-liveness-protection]**: State reachable from protocol refs
+#### [backend-liveness-protection]
+
+State reachable from protocol refs
 MUST be protected from the backend's garbage collection: an object the
 protocol can still name (a locked `publish_czd`'s chain, a claim
 referenced by surviving publishes, a `src` revision underpinning
@@ -442,7 +468,9 @@ evaluator: test
 depends: [backend-refs-sole-mutability]
 ```
 
-**[backend-hash-strength]**: The `dig` and `src` protocol fields
+#### [backend-hash-strength]
+
+The `dig` and `src` protocol fields
 inherit the **backend's** hash strength, not the coz layer's: a
 backend whose object hash is not collision-resistant (git's default
 SHA-1) makes `dig` forgeable in principle, independent of every
@@ -484,7 +512,9 @@ depends: [backend-carriage-bit-perfect, content-hash-obligation, content-hash-is
 
 ### Behavioral Properties
 
-**[backend-substitutable]**: Two conforming backends carrying the same
+#### [backend-substitutable]
+
+Two conforming backends carrying the same
 protocol state MUST be interchangeable to every consumer: the
 coalgebras a backend implements (`AtomSource`, `AtomRegistry`,
 `AtomStore` — [publishing-stack-layers](../models/publishing-stack-layers.md)
@@ -506,7 +536,9 @@ evaluator: none
 depends: [docs/models/publishing-stack-layers#2.1, docs/models/execution-model#6.1]
 ```
 
-**[backend-verification-carried]**: A conforming backend MUST make the
+#### [backend-verification-carried]
+
+A conforming backend MUST make the
 full local verification pipeline
 ([atom-transactions](atom-transactions.md) §Local Verification, steps
 1–13) executable from carried state alone — every transaction of every
