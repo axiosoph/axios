@@ -70,23 +70,28 @@ CURRENT_TLC_CHECKS=(
 run_tlc_checks CURRENT_TLC_CHECKS
 
 # --- Alloy : headless SimpleCLI, SAT4J solver ----------------------------
-# CAVEAT: atom_structure.als is itself mixed status. Its identity-bearing
-# sigs/assertions (AtomId, identity_content_addressed, verification_chain)
-# were re-derived over the claim's own czd (2026-08-05) and are current.
-# Its Charter { prior: lone Charter } succession chain is NOT current --
-# ADR-0007's own header names this file among "the stale formal models
-# that machine-check the superseded design" alongside
-# AtomCharter_Succession.cfg (docs/architecture/atom-sad.md Appendix E).
-# It stays in this section rather than the historical one below because
-# Alloy's SimpleCLI checks every assertion in one invocation with no
-# built-in per-assertion partition; splitting it cleanly would mean
-# restructuring the model or the invocation, out of this fix's scope.
-# Treat every assertion here that touches Charter succession as
-# unestablished by this run, exactly as the Appendix E entry states.
+# atom_structure.als's Charter succession chain (prior-chained charters,
+# the founding/successor anchor-derivation split, and the assertion that
+# backed it) was abolished 2026-08-05 -- ADR-0007 SS3 ("genesis-once,
+# facts-forever") forecloses that shape. See the file's own
+# charter_fork_distinction retirement comment and
+# docs/specs/atom-transactions.md's Verification section for the full
+# argument. The whole file's Charter/claim/identity modeling is current
+# as of that date; the mixed-status caveat this comment used to carry no
+# longer applies, and this file no longer belongs among ADR-0007's list
+# of stale formal models (docs/architecture/atom-sad.md Appendix E) --
+# only AtomCharter.tla's Succession/Rotation configs, HISTORICAL below,
+# still do.
+#
+# What a green run below does NOT certify: the fact-based owner-change
+# mechanism ADR-0007 SS3 requires ([charter-owner-fact],
+# [charter-owner-fact-linear], [claim-owner-fact]) has no model in this
+# file at all -- it is graded `evaluator: none` in atom-transactions.md
+# because nothing in this repository checks it yet, this file included.
 { echo "============================================================"
   echo "== Alloy: atom_structure.als (SimpleCLI, SAT4J)"
-  echo "== NOTE: identity assertions current; Charter succession chain"
-  echo "==       is NOT (superseded, ADR-0007 SS3) -- see comment above."
+  echo "== Charter/claim/identity modeling current as of 2026-08-05;"
+  echo "==   no owner-fact mechanism modeled (see comment above)."
   echo "============================================================"
 } | tee -a "$LOG"
 ( cd alloy
