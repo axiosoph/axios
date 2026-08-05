@@ -20,7 +20,7 @@
 //!
 //! [`AtomDigest`] is a compact, self-describing multihash of an [`AtomId`],
 //! used for store-level indexing and git ref paths. Multiple valid digests
-//! exist per identity — one per algorithm.
+//! exist per `AtomId` — one per algorithm.
 //!
 //! ## `content_hash`
 //!
@@ -484,7 +484,7 @@ pub trait AtomEntry {
     where
         Self: 'a;
 
-    /// The unique identity of the atom.
+    /// The atom's `AtomId`: its anchor+label coordinate.
     fn id(&self) -> &AtomId;
 
     /// Iterate over all resolved versions of the atom.
@@ -527,7 +527,7 @@ pub trait AtomSource: Send + Sync + 'static {
     /// Backend-specific error type.
     type Error: std::error::Error + Send + Sync + 'static;
 
-    /// Look up an atom by its identity.
+    /// Look up an atom by its `AtomId` coordinate.
     ///
     /// Returns `Ok(None)` if the atom is not present in this source.
     /// Returns `Err` on backend failure (network, disk, permission, etc.).
@@ -599,7 +599,7 @@ pub trait AtomContent: AtomSource {
     ///
     /// # Arguments
     ///
-    /// * `id` — the atom's identity
+    /// * `id` — the atom's `AtomId` coordinate
     /// * `dig` — backend-specific content snapshot digest (e.g., 20-byte git tree OID)
     ///
     /// Returns `None` if the content is not found.
@@ -618,7 +618,7 @@ pub trait AtomContent: AtomSource {
 /// Session ordering is enforced by data flow: [`claim`](Self::claim)
 /// returns a [`Czd`] that [`publish`](Self::publish) requires as input.
 pub trait AtomRegistry: AtomSource {
-    /// Establish ownership of an atom identity.
+    /// Claim a label, establishing the atom's identity.
     ///
     /// Returns the claim's [`Czd`] (coz digest), which must be passed
     /// to [`publish`](Self::publish) to authorize version publication.
