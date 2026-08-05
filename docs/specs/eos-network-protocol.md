@@ -592,8 +592,10 @@ mismatch causes rejection.
 
 #### [eos-signature-freshness]
 
-`NodeIdentity` payloads and
-`OriginAttestation` records MUST carry a timestamp and nonce. The receiving
+The `NodeIdentity` payloads
+[eos-network-sovereign-auth](#eos-network-sovereign-auth) authenticates with and the
+`OriginAttestation` records [eos-origin-attestation](#eos-origin-attestation) requires
+MUST carry a timestamp and nonce. The receiving
 node MUST reject payloads whose timestamp deviates from the receiver's system
 clock by more than a configurable freshness window (default: 5 minutes).
 Nonces MUST NOT be reused within the freshness window to prevent replay.
@@ -626,8 +628,8 @@ continues.
 
 #### [eos-progress-multiplexing]
 
-Multiple clients MUST be able to attach
-`ProgressStream` callbacks to the same `BuildJob` concurrently. Each
+Multiple clients MUST be able to
+[attach-progress](#attach-progress) `ProgressStream` callbacks to the same `BuildJob` concurrently. Each
 attached callback MUST receive the same sequence of `BuildStatus` updates.
 When a client drops its `ProgressStream` capability, the daemon MUST clean up
 that callback's resources without disturbing other attached clients.
@@ -660,7 +662,8 @@ transports.
 #### [eos-wot-substitution-threshold]
 
 When strict substitution policy is
-enabled, Eos MUST require that a substituted artifact carry attestations from
+enabled, Eos MUST require that a substituted artifact carry
+[eos-origin-attestation](#eos-origin-attestation)s from
 at least _M_ of _N_ configured trusted builders (Web of Trust threshold)
 before accepting the artifact. The threshold values _M_ and _N_ are
 deployment-configurable.
@@ -723,8 +726,9 @@ the daemon.
 - **PRE**: The daemon is in the listening state. A client opens a transport
   connection (Unix stream or TCP stream).
 - **POST**: The client and daemon exchange `HandshakeRequest` /
-  `HandshakeResponse` payloads. If authentication succeeds and capabilities
-  match, the connection is promoted to an authenticated Cap'n Proto RPC
+  `HandshakeResponse` payloads. If [eos-network-sovereign-auth](#eos-network-sovereign-auth) succeeds and
+  [eos-protocol-capability-matching](#eos-protocol-capability-matching)
+  finds a common backend and version, the connection is promoted to an authenticated Cap'n Proto RPC
   session. The client receives an `EosDaemon` bootstrap capability. If
   authentication fails, the connection is closed with a rejection reason.
 
@@ -782,7 +786,7 @@ delivery.
 Detach from progress streaming without cancelling the
 build.
 
-- **PRE**: A client has an attached `ProgressStream` callback.
+- **PRE**: A client has a callback [attach-progress](#attach-progress) attached as a `ProgressStream`.
 - **POST**: The client drops its `ProgressStream` capability. The Cap'n
   Proto runtime notifies the daemon of the dropped reference. The daemon
   removes that callback from the job's subscriber list and reclaims
@@ -801,7 +805,7 @@ without interrupting the build.
 
 Cancel a running build.
 
-- **PRE**: A client holds a `BuildJob` capability for a job in `Queued` or
+- **PRE**: A client holds the `BuildJob` capability [submit-build](#submit-build) returned, for a job in `Queued` or
   `Building` state.
 - **POST**: The client invokes `cancel()` on the `BuildJob`. The daemon
   transitions the job to `Cancelled` state and notifies all attached
@@ -825,9 +829,10 @@ Query remote caches for pre-built artifacts.
 - **PRE**: An Eos daemon has a plan in the `NeedsBuild` state and at least
   one configured remote substituter.
 - **POST**: The daemon sends a `SubstitutionQuery` to each configured
-  `SubstitutionService`. If a valid `SubstitutionResult` is returned
-  containing verified `OriginAttestation`s that satisfy the Web of Trust
-  threshold, Eos fetches the artifact via `fetchArtifact()`, verifies the
+  `SubstitutionService`, per [eos-trustless-substitution](#eos-trustless-substitution). If a valid `SubstitutionResult` is returned
+  containing verified [eos-origin-attestation](#eos-origin-attestation)s that satisfy the
+  [eos-wot-substitution-threshold](#eos-wot-substitution-threshold),
+  Eos fetches the artifact via `fetchArtifact()`, verifies the
   content digest, and bypasses local build execution.
 
 ```claim
@@ -844,10 +849,11 @@ digest checks.
 Graceful or abrupt session termination.
 
 - **PRE**: A client has an active RPC session.
-- **POST**: All capability references held by the client are dropped. The
-  Cap'n Proto runtime cleans up associated server-side state (progress
-  callbacks, pending responses). No running builds are cancelled — only
-  explicit `cancel()` terminates builds.
+- **POST**: All capability references held by the client are dropped, which
+  under [eos-capability-lifecycle](#eos-capability-lifecycle) detaches progress streaming but never cancels a
+  build. The Cap'n Proto runtime cleans up associated server-side state
+  (progress callbacks, pending responses). No running builds are cancelled —
+  only explicit `cancel()` terminates builds.
 
 ```claim
 kind: constraint
@@ -881,9 +887,9 @@ removal.
 #### [no-unattested-substitution]
 
 Eos MUST NOT accept artifacts from
-substituters that lack valid `OriginAttestation`s when strict substitution
+substituters that lack valid [eos-origin-attestation](#eos-origin-attestation)s when strict substitution
 policy is enabled. Artifacts without attestations meeting the configured
-Web of Trust threshold MUST be rejected.
+[eos-wot-substitution-threshold](#eos-wot-substitution-threshold) MUST be rejected.
 
 ```claim
 kind: constraint
@@ -911,7 +917,8 @@ wire payloads.
 
 A connection MUST NOT be promoted to an
 authenticated RPC session if the `HandshakeRequest` signature does not
-validate against the declared `NodeIdentity` (sovereign principal).
+validate against the declared `NodeIdentity`, the sovereign principal
+[eos-network-sovereign-auth](#eos-network-sovereign-auth) requires.
 
 ```claim
 kind: constraint
@@ -925,7 +932,8 @@ connection rejection.
 #### [no-cancel-on-drop]
 
 Dropping a `BuildJob` or `ProgressStream` capability
-MUST NOT implicitly cancel the associated build. Only an explicit `cancel()`
+MUST NOT implicitly cancel the associated build, per
+[eos-capability-lifecycle](#eos-capability-lifecycle). Only an explicit `cancel()`
 invocation MAY terminate a build.
 
 ```claim
@@ -940,6 +948,7 @@ completes.
 #### [no-unauthenticated-capability]
 
 The `EosDaemon` bootstrap capability
+[client-connect](#client-connect) returns
 MUST NOT be issued to a connection that has not completed the authenticated
 handshake. Unauthenticated transports MUST NOT expose any RPC surface.
 
@@ -959,7 +968,8 @@ rejected.
 #### [eventual-cache-consistency]
 
 If a build artifact is successfully pushed
-to a remote binary cache, subsequent `SubstitutionQuery` requests for that
+to a remote binary cache, subsequent [request-substitute](#request-substitute)
+`SubstitutionQuery` requests for that
 artifact's plan hash MUST return the artifact within a bounded propagation
 delay.
 
@@ -995,7 +1005,8 @@ confirm detection.
 
 #### [capability-cleanup-on-disconnect]
 
-When a client disconnects (gracefully
+When a client
+[client-disconnect](#client-disconnect)s (gracefully
 or abruptly), all server-side resources associated with that client's
 capabilities MUST be reclaimed within a bounded interval. No resource leak
 MAY persist after the Cap'n Proto runtime processes the disconnection.
