@@ -176,7 +176,7 @@ digest)` for every read of the composed closure during a build or
 check-phase run — this daemon is the _only_ source of those bytes, making it
 an unbypassable observation point (htc-sad.md §6.3, the Trace Observer).
 The resulting observed read-set MUST be a subset of the declared closure
-(`[htc-declared-closure-enforced]`, htc-sad.md §1.1: reads ⊆ declared,
+([htc-declared-closure-enforced](../architecture/htc-sad.md#htc-declared-closure-enforced), htc-sad.md §1.1: reads ⊆ declared,
 enforced by the sandbox, never merely trusted from the build's own
 behavior). The read-set MUST be hashed and the digest MUST populate the
 `BuildRecord.observed_read_set_digest` field (htc-sad.md §2.3) — this
@@ -219,10 +219,11 @@ sandboxing of their own -- all isolation is executor-side.
 
 Build execution MUST NOT write
 outside the temporary directory allocated for the build task. Inputs MUST
-be mounted read-only (§FHS-View Materialization). This invariant is
+be mounted read-only, per
+[eos-sandbox-fhs-materialization](#eos-sandbox-fhs-materialization). This invariant is
 strengthened by its declared-closure form: the build's _observed_ read set
 MUST be contained within its _declared_ closure —
-`[htc-declared-closure-enforced]` (htc-sad.md §1.1) — a containment property
+[htc-declared-closure-enforced](../architecture/htc-sad.md#htc-declared-closure-enforced) (htc-sad.md §1.1) — a containment property
 the sandbox enforces directly (by denying reads outside the materialized
 view), not one inferred after the fact from the read-set log
 (§Read-Set Capture is the log; this invariant is the enforcement it
@@ -289,8 +290,8 @@ confirm refusal plus a log entry.
 
 A build process MUST NOT be able to
 read any byte not present in its materialized atom closure or toolchain
-composition, plus whatever the fetch proxy separately permits (§Network
-Containment). This is enforced by denying the read at the sandbox boundary,
+composition, plus whatever the fetch proxy separately permits under
+[eos-build-sandbox-network-containment](#eos-build-sandbox-network-containment). This is enforced by denying the read at the sandbox boundary,
 not by post-hoc audit of the read-set log.
 
 ```claim
