@@ -92,7 +92,9 @@ TYPE  Lockfile = {
 
 ### Invariants
 
-**[version-semantics-semver]**: Ion MUST use [Semantic Versioning
+#### [version-semantics-semver]
+
+Ion MUST use [Semantic Versioning
 2.0.0](https://semver.org) for atom version ordering and constraint
 matching. This is ion's implementation of atom-sourcing.md's
 `[version-total-order]`. The version comparison semantics are those
@@ -110,7 +112,9 @@ The lock's top-level `version` field is specified by
 [lock-file-schema.md](lock-file-schema.md) `[lock-schema-version]`.
 Resolution does not constrain it further.
 
-**[lock-sets-capture]**: The lock file MUST capture the mapping from
+#### [lock-sets-capture]
+
+The lock file MUST capture the mapping from
 anchors to mirror sets. This is the set-level information required by
 atom-sourcing.md `[lock-entry-sufficient]`. Each entry in the `[sets]`
 table MUST contain the set's `tag` (for human readability) and its
@@ -122,7 +126,9 @@ evaluator: none
 because: [lock-entry-sufficient]
 ```
 
-**[lock-atom-entry-fields]**: Each locked atom dependency MUST contain:
+#### [lock-atom-entry-fields]
+
+Each locked atom dependency MUST contain:
 `set`, `label`, `version`, and `publish_czd` (publish transaction
 digest). The `publish_czd` is the digest of the publish `CozMessage` —
 from it, the claim czd, anchor, label, version, and provenance (src,
@@ -140,7 +146,9 @@ evaluator: none
 because: [lock-entry-sufficient]
 ```
 
-**[lock-requires-graph]**: Each locked atom dependency SHOULD include
+#### [lock-requires-graph]
+
+Each locked atom dependency SHOULD include
 a `requires` field listing the **`publish_czd`** values of its
 direct atom dependencies. This enables dependency graph reconstruction
 from the lock file without re-resolving and supports targeted updates
@@ -151,7 +159,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[lock-direct-flag]**: Each locked atom dependency SHOULD include a
+#### [lock-direct-flag]
+
+Each locked atom dependency SHOULD include a
 `direct` field indicating whether it is a direct dependency (from the
 root manifest) or transitive. Direct dependencies default to `true`;
 the field MAY be omitted for direct deps. Transitive deps MUST set
@@ -162,7 +172,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[lock-compose-capture]**: The lock file MUST capture the resolved
+#### [lock-compose-capture]
+
+The lock file MUST capture the resolved
 composer configuration. This includes the `publish_czd` and version
 of the composer atom (for `with` variant), or the evaluation
 mode (for `as` variants). The composer is resolved through the same
@@ -173,7 +185,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[lock-plugin-entries]**: Lock entries produced by direct dependency
+#### [lock-plugin-entries]
+
+Lock entries produced by direct dependency
 plugins (per ion-manifest.md `[plugin-lock-contract]`) MUST be
 stored in the same `[[deps]]` array as atom entries, distinguished
 by their type tag. This ensures a single lock file contains the
@@ -187,7 +201,9 @@ because: [plugin-lock-contract]
 
 ### Resolution Properties
 
-**[resolution-complete]**: If a valid assignment of versions to all
+#### [resolution-complete]
+
+If a valid assignment of versions to all
 declared dependencies exists, the resolver MUST find one. The resolver
 MUST NOT fail for solvable instances. (Completeness.)
 
@@ -196,7 +212,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[resolution-deterministic]**: Given the same manifest and the same
+#### [resolution-deterministic]
+
+Given the same manifest and the same
 set of available atoms, the resolver MUST produce the same lock file.
 Non-deterministic resolution (e.g., random tie-breaking) is forbidden.
 ALL provider and discovery outputs (candidate enumeration, dependency
@@ -210,7 +228,9 @@ evaluator: none
 because: [docs/architecture/atom-sad#6.1, docs/architecture/atom-sad#6.7]
 ```
 
-**[resolution-highest-match]**: When multiple versions of an atom
+#### [resolution-highest-match]
+
+When multiple versions of an atom
 satisfy a constraint, the resolver SHOULD prefer the highest
 compatible version. This is a SHOULD, not MUST — the resolver MAY
 select a lower version if it is necessary to satisfy other constraints
@@ -221,7 +241,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[resolution-unsolvable-diagnostic]**: If no valid assignment exists,
+#### [resolution-unsolvable-diagnostic]
+
+If no valid assignment exists,
 the resolver MUST report the conflict clearly. The error SHOULD
 identify the conflicting constraints and the atoms involved. A bare
 "resolution failed" message is insufficient.
@@ -231,7 +253,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[resolution-transitive]**: The resolver MUST resolve the transitive
+#### [resolution-transitive]
+
+The resolver MUST resolve the transitive
 closure of atom dependencies. If atom A depends on atom B, and atom B
 depends on atom C, then C MUST appear in the lock file even though
 the root manifest does not mention it.
@@ -243,7 +267,9 @@ evaluator: none
 
 ### Transitions
 
-**[reconcile]**: Before any operation that reads the lock file, ion
+#### [reconcile]
+
+Before any operation that reads the lock file, ion
 MUST reconcile the lock with the current manifest.
 
 - **PRE**: A valid manifest and a lock file (possibly empty, stale,
@@ -263,7 +289,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[lock-freeze]**: After reconciliation, the lock file is frozen
+#### [lock-freeze]
+
+After reconciliation, the lock file is frozen
 for the current operation. Subsequent reads within the same operation
 (e.g., publish, build) MUST use the reconciled lock, not re-resolve.
 
@@ -289,7 +317,9 @@ state is written.
 
 ### Forbidden States
 
-**[no-partial-lock]**: A lock file MUST NOT contain a partial
+#### [no-partial-lock]
+
+A lock file MUST NOT contain a partial
 resolution. Either all dependencies are resolved and captured, or
 the lock file is not written. A lock file with some deps resolved
 and others missing is invalid.
@@ -299,7 +329,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[no-stale-lock-entry]**: After reconciliation, the lock file MUST
+#### [no-stale-lock-entry]
+
+After reconciliation, the lock file MUST
 NOT contain entries for dependencies that are no longer declared in
 the manifest (directly or transitively). Stale entries MUST be purged.
 
@@ -318,7 +350,9 @@ evaluator: none
 > [ADR-0005](../adr/0005-hermetic-transactional-composition.md) §Open
 > Items. No semantic change to this invariant in this pass.
 
-**[no-constraint-violation]**: The lock file MUST NOT contain a
+#### [no-constraint-violation]
+
+The lock file MUST NOT contain a
 version that violates a declared constraint. If the manifest says
 `foo = "^1.0"` and the lock contains `foo` at version `2.0.0`, the
 lock is invalid.
@@ -330,7 +364,9 @@ evaluator: none
 
 ### Behavioral Properties
 
-**[lock-reproducibility]**: Given the same lock file and the same
+#### [lock-reproducibility]
+
+Given the same lock file and the same
 mirror state, fetching all dependencies MUST produce the same set of
 artifacts. This is a consequence of atom-sourcing.md's
 `[resolution-reproducible]`, restated in ion's context. Content
@@ -347,7 +383,9 @@ evaluator: none
 because: [resolution-reproducible]
 ```
 
-**[reconcile-idempotent]**: Reconciling an already-reconciled lock
+#### [reconcile-idempotent]
+
+Reconciling an already-reconciled lock
 file against an unchanged manifest MUST produce no changes. The
 reconcile operation is idempotent.
 
@@ -358,7 +396,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[plugin-dep-sanitization]**: During reconciliation, plugin
+#### [plugin-dep-sanitization]
+
+During reconciliation, plugin
 dependencies MUST be sanitized against the current manifest's
 `[deps.direct]` section, just as atom dependencies are sanitized
 against `[deps.from]`. Plugin entries whose names no longer appear
@@ -378,7 +418,9 @@ entry]` above: this would purge tool-recorded fetch entries the
 > [ADR-0005](../adr/0005-hermetic-transactional-composition.md) §Open
 > Items. No semantic change to this invariant in this pass.
 
-**[git-tag-version-inference]**: For direct dependencies referencing
+#### [git-tag-version-inference]
+
+For direct dependencies referencing
 git repositories (via plugins), implementations MAY infer version
 ordering from semver-compatible git tags. This is a convenience for
 backends whose storage format uses semver-tagged refs. This capability
