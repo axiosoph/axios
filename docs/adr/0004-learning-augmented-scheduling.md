@@ -146,13 +146,16 @@ stable across versions**. Build #1 and build #1000 of atom X
 share the same atom-id. This gives us a high-quality
 prediction oracle:
 
-(Note: **CONTRADICTS** the keystone identity decision (2026-06-28) and
-[ADR-0005](0005-hermetic-transactional-composition.md) — `AtomId` is the
-abstract pair `(anchor, label)`, not a digest of it (atom-sad §6.1,
-`[identity-content-addressed]`). The argument's substance — that atom
-identity is stable across builds and therefore a high-quality prediction
-key — survives unchanged over the pair; only the digest formula above is
-wrong and is struck.)
+(Note: the 2026-06-28 keystone identity decision briefly read `AtomId`
+as the abstract pair `(anchor, label)`, but that reading was itself
+repudiated 2026-07-18 — identity is the claim record's czd, and the
+pair is only the pre-signature preimage for an unclaimed development
+atom (`docs/models/atom-model.md` §2). The argument's substance — that
+atom identity is stable across builds and therefore a high-quality
+prediction key — survives over the claim czd unchanged; only the
+digest formula above is wrong, and it is struck in
+[ADR-0005](0005-hermetic-transactional-composition.md) §Supersede
+ADR-0004.)
 
 - **Duration**: atom X consistently takes ~45s to evaluate,
   ~120s to build
@@ -1221,7 +1224,8 @@ that close most of the gap to theoretical optimality:
    superseded claim at §The Atom-Id Advantage above — see
    the note there and
    [ADR-0005](0005-hermetic-transactional-composition.md);
-   the stability argument survives over the abstract pair.)
+   the stability argument survives over the claim czd, not the
+   abstract pair.)
 
 3. **Fail-safe packing**: The $\beta_e$ decay mechanism
    (§3) guarantees that when predictions fail, the scoring
