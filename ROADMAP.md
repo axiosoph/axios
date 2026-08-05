@@ -111,9 +111,11 @@ milestone consumes directly:
 **Scope:**
 
 - Conformance-test the `atom-git` and `atom-core` crates against the current
-  specifications: the pair-only `AtomId`, two-value lock entries, blake3-of-
-  publish-digest store keying, name-anchored acquisition with moved-tip
-  warning semantics, and the publish-time reproducibility mode field.
+  specifications: claim-czd identity (`AtomId` as the `(anchor, label)`
+  pair-preimage only for an unclaimed development atom), two-value lock
+  entries, blake3-of-publish-digest store keying, name-anchored
+  acquisition with moved-tip warning semantics, and the publish-time
+  reproducibility mode field.
 - Build the backend-conformance battery: an executable test suite that
   checks a storage backend against every obligation of the
   [atom backend contract](docs/specs/atom-backend-contract.md), turning the
