@@ -68,8 +68,10 @@ intent, they do not sign it.
 
 Atom owns:
 
-- **Identity** — the `AtomId = (anchor, label)` pair: a stable, algorithm-free,
-  permanent name for an atom across all its versions and ownership changes.
+- **Identity** — the claim record's czd: a stable, algorithm-free, permanent
+  name for an atom across all its versions and ownership changes (§6.1). The
+  `(anchor, label)` pair is its pre-claim preimage — identity's only
+  manifestation as a value before any claim exists.
 - **Ownership** — the signed claim→publish protocol (via Coz) that binds an owner
   to an identity and makes every _published_ atom cryptographically accountable.
 - **Content-addressed storage** — append-only publish/claim history over git

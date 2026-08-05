@@ -31,8 +31,8 @@ git CAS gap relabeled a present correctness defect._
 
 **Problem Domain:** The atom protocol is backend-agnostic by design:
 its transactions (charter, claim, publish) are coz objects, its
-identity is the abstract `(anchor, label)` pair, and its verification
-pipeline is local computation over signed payloads
+identity is the claim record's czd, and its verification pipeline is
+local computation over signed payloads
 ([atom-transactions](atom-transactions.md)). Git is the reference
 backend, specified concretely in
 [git-storage-format](git-storage-format.md). What has never been
