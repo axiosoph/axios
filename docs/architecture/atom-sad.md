@@ -20,9 +20,10 @@
 
   Maintained as Architecture-as-Code. Diagrams are Mermaid.js, inline.
 
-  Settled design inputs: the keystone resolution (AtomId = abstract (anchor,label)
-  pair; 2-value name-anchored lock; blake3(publish_czd)-keyed store; algorithm
-  agility deleted from identity, retained only in the Coz czd); the
+  Settled design inputs: the keystone resolution (AtomId's pair form as the
+  pre-claim, algorithm-free coordinate — not identity, which is the claim czd,
+  §6.1; 2-value name-anchored lock; blake3(publish_czd)-keyed store; algorithm
+  agility retained only in the Coz czd); the
   composition-unit repositioning (atom sits ABOVE language package
   managers — one implementation, per-ecosystem internals as plugins);
   the atom protocol-plane formalization (atom-model.md,
@@ -118,7 +119,7 @@ graph TB
 
 | Boundary      | Inside Atom                                                                             | Outside Atom                                                                    |
 | :------------ | :-------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------ |
-| **Identity**  | `AtomId = (anchor, label)`; anchor = `czd(charter₀)`, the founding charter's coz digest | Key material, signature primitives (Coz/Cyphr)                                  |
+| **Identity**  | The claim record's czd (§6.1); its pre-claim coordinate is `AtomId = (anchor, label)`, anchor = `czd(charter₀)`, the founding charter's coz digest | Key material, signature primitives (Coz/Cyphr)                                  |
 | **Ownership** | claim/publish protocol; claim/publish chains; the owner→identity binding                | Owner identity _systems_ (Coz `tmb`, Cyphr `PR`) — `Owner` is opaque            |
 | **Storage**   | git-object encoding; registry + store ref layout; ingest                                | Build execution, artifact store (L3)                                            |
 | **Discovery** | object-free ref advertisement; set→mirrors indirection                                  | Version _semantics_ (`VersionScheme` is a trait; its per-ecosystem dialects are internal plugins above L1, §1.1) |
@@ -244,8 +245,9 @@ Defines the four traits and their algebraic relationships (`atom-core/src/lib.rs
 
 ### 3.2 atom-id — Identity Primitives
 
-`Anchor`, `Label`, and `AtomId = (anchor, label)`. The `AtomId` is the **pair
-itself** — not a hash of it. No digest type is exported for identity (see §6.1).
+`Anchor`, `Label`, and `AtomId = (anchor, label)` — the pre-claim, algorithm-free
+pair coordinate. `AtomId` is **not** the atom's identity; identity is the claim
+record's czd (see §6.1).
 
 ### 3.3 atom-uri — URI Parsing
 
@@ -362,16 +364,29 @@ carve-out obligation instantiate); and a publish carries a declared
 (atom-model §6; the payload field is a pending `atom-transactions.md`
 amendment, tracked in atom-model §8).
 
-### 6.1 Identity is the Abstract Pair
+### 6.1 Identity: the Claim czd, Not the Pair
 
-**Invariant `[identity-content-addressed]`**: an atom's identity (`AtomId`) MUST be
-determined solely by the pair `(anchor, label)`, and MUST NOT depend on any key,
-signature, signed message, or hash algorithm. The `AtomId` is **not a hash of
-`(anchor, label)`** — it is the pair. ("Content-addressed" here means the _anchor_ is
-a content hash and identity is permanent; it does **not** mean the id is a digest.)
-There is no `AtomDigest` of identity and no store-chosen algorithm agility at this
-layer. **Invariant `[identity-stability]`**: the `AtomId` MUST NOT change across
-versions, ownership transfers, or key rotations.
+**Identity is the claim record's czd — not the `(anchor, label)` pair, and not a
+hash of it.** The pair once served as `AtomId` and was named as identity; that
+naming is glossary-repudiated (2026-07-18, atom-model.md §2; glossary, _Atom
+identity_). The pair's only legitimate roles are as the **pre-signature
+preimage** of an unclaimed development atom — its sole manifestation as a
+value, before any claim exists — and as a **teaching form**: the simplest
+shape for conveying the naming principle, used only where prose says so
+explicitly. Identity stability holds regardless; it is now carried by the
+claim czd rather than the pair.
+
+The pair itself stays algorithm-free by construction and stable across
+versions, ownership transfers, and key rotations, since `anchor` and `label`
+never change (`atom-transactions.md` `[identity-content-addressed]`,
+`[identity-stability]`) — properties of the pair's construction, not of
+identity. Those two invariants still name the pair as "identity" in their own
+prose; that is drift against the 2026-07-18 correction, tracked in Appendix D
+rather than repeated here.
+
+There is no `AtomDigest` type over the pair, and no store-chosen algorithm
+agility at this layer — the algorithm agility that exists belongs to the claim
+czd, a Coz-native property (§6.3), not something `atom-id` re-implements.
 
 ### 6.2 The Anchor
 
@@ -432,7 +447,9 @@ the **bare** `publish_czd` (original algorithm — the lock represents the _actu
 cryptographic security the signature covers). `set` resolves to mirrors via a shared
 `[sets] → mirrors` table.
 
-- **No hashed `id`** — the `(set, label)` pair _is_ the identity and the map key.
+- **No hashed `id`** — the `(set, label)` pair is the map key; it is not the
+  atom's identity (that is the claim czd, §6.1) but its pre-claim coordinate,
+  so no separate hashed identifier is needed to key a lock entry.
 - **No `rev`** — the atom commit is peelable from the `publish_czd`'s tag chain.
 - **`dig` is not stored** — it lives in the signed publish payload (the czd-pinned
   source of truth); on acquisition the peeled content-addressed sha **MUST equal**
@@ -550,7 +567,7 @@ Out of scope for the atom layer:
 | Composite      | The genus an atom reifies as intent: a package, environment, or system with its determined closure (atom-model §2) |
 | Mode           | The publish-carried reproducibility declaration, `reproducible` \| `witnessed` (atom-model §6)                     |
 | Anchor         | `czd(charter₀)` — the founding charter's coz digest; immutable atom-set identity |
-| AtomId         | The abstract pair `(anchor, label)` — the identity, not a hash                   |
+| AtomId         | The abstract pair `(anchor, label)` — the pre-claim coordinate, not the atom's identity (§6.1); used as the lock/store key |
 | Atom-set       | Atoms sharing a common anchor                                                    |
 | Label          | Human-readable atom name (UAX #31)                                               |
 | OwnerRef       | `{kind, value}` — a `kind`-tagged opaque identity digest (Coz `tmb`, Cyphr `PR`); `kind` names the identity framework (`single-key` implemented; `hierarchical`/`rooted-identity` reserved), `value` stays opaque to the protocol regardless of `kind` |
@@ -605,6 +622,14 @@ the git backend's storage encoding and ref layout for charter transactions is no
 yet specified (`git-storage-format.md` Open Questions #6) — tracked as
 atom-milestone design work, not silent drift. (The L4 consequences — the ion lock
 cross-references and the eos handoff — are tracked by `ion-sad.md`.)
+
+A further drift, opened by the 2026-07-18 identity correction (§6.1): the
+`[identity-content-addressed]` and `[identity-stability]` invariants
+(`atom-transactions.md`) still name the `(anchor, label)` pair itself as
+identity — the framing this SAD corrected in §6.1. Per this document's own
+precedence rule (front matter), the formal-semantics correction
+(atom-model.md §2) governs and this SAD already realigns; `atom-transactions.md`'s
+invariant prose does not yet, and is tracked here as owed, not silent, drift.
 
 The 2026-07-12 plane formalization (atom-model.md, atom-backend-contract.md)
 obligates a set of spec amendments that are **registered, not yet landed**:
