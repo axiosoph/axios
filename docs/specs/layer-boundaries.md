@@ -298,7 +298,7 @@ proceeds.
 
 L1 (atom) owns:
 
-- Identity primitives: `AtomId` (`(anchor, label)` pair), `Label`, `Tag`, `Identifier`, `Anchor`
+- Identity primitives: `AtomId`, `Label`, `Tag`, `Identifier`, `Anchor`
 - URI parsing: `RawAtomUri`, `AtomUri`, alias resolution
 - Protocol traits: `AtomSource`, `AtomRegistry`, `AtomStore`
 - Protocol types: `Manifest`, `VersionScheme`, `ClaimPayload`,
@@ -542,7 +542,7 @@ be conflated.
 | :------------------ | :-------------------------------------- | :--------------------------------------------------------------------------------------------------------- |
 | **Data**            | Atom source trees (source code)         | Build outputs (derivations, binaries)                                                                      |
 | **Trait**           | `AtomSource` / `AtomStore` (atom-core)  | `ArtifactStore` (eos-core)                                                                                 |
-| **Addressing**      | `AtomId` (pair) / `blake3(publish_czd)` | Plan hash / output digest                                                                                  |
+| **Addressing**      | Anchor/label ref path; `blake3(publish_czd)` disambiguates | Plan hash / output digest                                                                                  |
 | **Primary backend** | git                                     | CAS (L2/HTC; `snix-castore`-backed — the fork-vs-speak-upstream-snix call is deferred to P3, ADR-0005 §10) |
 | **Populated by**    | Ion (ingestion), eos composite source   | Eos (build outputs)                                                                                        |
 | **Read by**         | Eos (build inputs via `AtomSource`)     | Eos (cache hits), ion (build results)                                                                      |

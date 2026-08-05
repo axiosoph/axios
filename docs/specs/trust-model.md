@@ -117,7 +117,9 @@ SORT  Tmb      -- Coz signing-key thumbprint. For authorization
                   `[trust-acceptance-procedure]` step 2.
 SORT  Anchor   -- atom-set anchor = czd(charter₀) (atom-transactions.md
                   [charter-anchor]) — a Czd value, NOT a trust anchor
-SORT  AtomId   -- (anchor, label), the composite's identity
+SORT  AtomId   -- (anchor, label): a `RuleScope` selector for targeting
+                  a specific atom — NOT the atom's identity, which is
+                  the claim record's czd (glossary, _Atom identity_)
 
 TYPE  SignerRole = "builder" | "assertor"
       -- builder:  authorizes DERIVED facts — execution records and
