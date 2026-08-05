@@ -204,7 +204,9 @@ The protocol formalizes this topology through three roles
 - `ingest(dyn AtomSource) → Result<()>` — import from a remote source
 - `contains(AtomId) → bool` — check local availability
 
-**[trait-async-io]**: The `AtomSource` and `AtomStore` traits MUST use async methods for operations that MAY involve I/O. Specifically:
+#### [trait-async-io]
+
+The `AtomSource` and `AtomStore` traits MUST use async methods for operations that MAY involve I/O. Specifically:
 
 - `AtomSource::resolve()` — MUST be async. Implementations MAY need to fetch from remote registries.
 - `AtomSource::discover()` — MUST be async. Remote search queries involve network I/O.
@@ -263,7 +265,9 @@ kind: constraint
 evaluator: type
 ```
 
-**[composite-source-concurrent]**: A composite source SHOULD resolve multiple atoms concurrently. When a `BuildRequest` contains N atom dependencies, the composite source SHOULD spawn N concurrent resolution tasks (bounded by a configurable concurrency limit). This is the primary performance justification for the async trait requirement (`[trait-async-io]`).
+#### [composite-source-concurrent]
+
+A composite source SHOULD resolve multiple atoms concurrently. When a `BuildRequest` contains N atom dependencies, the composite source SHOULD spawn N concurrent resolution tasks (bounded by a configurable concurrency limit). This is the primary performance justification for the async trait requirement (`[trait-async-io]`).
 
 No `CompositeAtomSource` implementation exists anywhere in the
 codebase yet; this depends on `[trait-async-io]`.
@@ -442,7 +446,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[charter-typ]**: A charter transaction's payload MUST carry
+#### [charter-typ]
+
+A charter transaction's payload MUST carry
 `typ: "atom/charter"`.
 
 ```claim
@@ -450,7 +456,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[charter-anchor]**: The atom-set's anchor MUST equal the coz digest of
+#### [charter-anchor]
+
+The atom-set's anchor MUST equal the coz digest of
 the founding charter: `Anchor == czd(charter₀)`, where the founding
 charter is the unique charter in the succession chain carrying no
 `prior` field.
@@ -460,7 +468,9 @@ kind: constraint
 evaluator: model-check
 ```
 
-**[claim-chains-charter]**: Every claim's `anchor` field MUST equal
+#### [claim-chains-charter]
+
+Every claim's `anchor` field MUST equal
 `czd(charter₀)` — the founding charter's czd, exactly. Succession
 governs _authorization_, never the anchor value (a successor's czd is
 not an anchor and MUST NOT appear as one). This is the claim-level
@@ -472,7 +482,9 @@ kind: constraint
 evaluator: model-check
 ```
 
-**[claim-charter-authorization]** _(amended 2026-07-14 — owner-set
+#### [claim-charter-authorization]
+
+_(amended 2026-07-14 — owner-set
 membership)_: A claim's signing key MUST be authorized by membership
 in the effective charter's `owner` set — some entry in the set
 authorizes the signer, under that entry's own `kind`
@@ -488,7 +500,9 @@ kind: constraint
 evaluator: model-check
 ```
 
-**[claim-replacement-authority]** _(amended 2026-07-14 — governance
+#### [claim-replacement-authority]
+
+_(amended 2026-07-14 — governance
 path reworded for owner-set membership)_: A claim MAY be replaced by
 a new claim carrying `prior: czd(replaced claim)`, under exactly two
 authorities, distinguishable by every consumer:
@@ -561,7 +575,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[charter-ancestry]**: A claim's `src` MUST be a descendant of (or equal
+#### [charter-ancestry]
+
+A claim's `src` MUST be a descendant of (or equal
 to) the effective charter's `src`. Together with the existing
 claim→publish ancestry, the temporal floor becomes
 `charter.src ⟶ claim.src ⟶ publish.src`, rooted at a signed object.
@@ -577,7 +593,9 @@ kind: constraint
 evaluator: model-check
 ```
 
-**[charter-succession]** _(amended 2026-07-14 — owner-set
+#### [charter-succession]
+
+_(amended 2026-07-14 — owner-set
 membership)_: A successor charter (carrying `prior`) MUST be signed
 by a key authorized under `[owner-authorization-delegated]`'s set
 composition rule by the charter named in `prior`'s `owner` set, and
@@ -607,7 +625,9 @@ kind: constraint
 evaluator: model-check
 ```
 
-**[charter-succession-linear]** _(amended 2026-07-14 — owner-set
+#### [charter-succession-linear]
+
+_(amended 2026-07-14 — owner-set
 add/remove semantics)_: A charter has at most one valid successor.
 Nothing can prevent a key from _signing_ two successors naming the
 same `prior`; the constraint therefore binds consumers: observing
@@ -678,7 +698,9 @@ kind: constraint
 evaluator: model-check
 ```
 
-**[chain-monotonicity]**: Consumers MUST record the czd of the charter
+#### [chain-monotonicity]
+
+Consumers MUST record the czd of the charter
 chain head (and SHOULD record the claim czds) under which they acted,
 and MUST refuse any served chain that regresses below a recorded head
 — a prefix of previously observed state is a detected rollback, not an
@@ -691,7 +713,9 @@ kind: constraint
 evaluator: model-check
 ```
 
-**[charter-fork-distinction]**: A charter with no valid succession chain
+#### [charter-fork-distinction]
+
+A charter with no valid succession chain
 from another set's founding charter defines a **distinct atom-set**,
 regardless of shared source history. Forks are therefore explicit by
 construction: a fork cannot share the origin's anchor (it cannot forge
@@ -703,7 +727,9 @@ kind: constraint
 evaluator: model-check
 ```
 
-**[identity-content-addressed]**: An atom's identity (`AtomId`) MUST be
+#### [identity-content-addressed]
+
+An atom's identity (`AtomId`) MUST be
 determined solely by the pair `(anchor, label)`. The `AtomId` MUST NOT
 depend on any key, signature, signed message, or hash algorithm. Identity
 is permanent and content-addressed. The `AtomId` is the abstract pair —
@@ -714,7 +740,9 @@ kind: constraint
 evaluator: model-check
 ```
 
-**[identity-stability]**: An atom's `AtomId` MUST NOT change across
+#### [identity-stability]
+
+An atom's `AtomId` MUST NOT change across
 versions, ownership transfers, or key rotations. The `AtomId` is
 determined by `anchor` and `label`, neither of which changes.
 (Model §1 olog: identity stability diagram.)
@@ -724,7 +752,9 @@ kind: constraint
 evaluator: model-check
 ```
 
-**[owner-abstract]** _(amended 2026-07-14 — owner_kind, charter-as-set)_:
+#### [owner-abstract]
+
+_(amended 2026-07-14 — owner_kind, charter-as-set)_:
 An `OwnerRef = { kind: OwnerKind, value: Vec<u8> }` is the protocol's
 unit of identity. `value` MUST be an opaque byte vector representing
 a cryptographic identity digest; the protocol MUST NOT impose any
@@ -770,7 +800,9 @@ kind: constraint
 evaluator: model-check
 ```
 
-**[owner-kind-required]**: Every `OwnerRef`'s `kind` field MUST be
+#### [owner-kind-required]
+
+Every `OwnerRef`'s `kind` field MUST be
 present and MUST be one of `OwnerKind`'s three named values — there
 is no implicit default, not even for `"single-key"`; a producer MUST
 tag every owner-reference explicitly. A consumer encountering
@@ -785,7 +817,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[claim-owner-single]**: `ClaimPayload.owner` MUST be a single
+#### [claim-owner-single]
+
+`ClaimPayload.owner` MUST be a single
 `OwnerRef`. A claim represents accountability: within an
 organization, exactly one identity is responsible for a specific
 label. This is unchanged by the charter-level set generalization
@@ -797,7 +831,9 @@ kind: constraint
 evaluator: type
 ```
 
-**[charter-owner-set]**: `CharterPayload.owner` MUST be a non-empty
+#### [charter-owner-set]
+
+`CharterPayload.owner` MUST be a non-empty
 set of `OwnerRef` values (`Vec<OwnerRef>`; membership only — order
 carries no semantic meaning). A charter declares who is on the team
 under this anchor, not who owns one thing: team membership is
@@ -814,7 +850,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[charter-owner-set-non-empty]**: A charter transaction (founding or
+#### [charter-owner-set-non-empty]
+
+A charter transaction (founding or
 successor) whose `owner` set would contain zero entries MUST be
 rejected. This is a direct consequence of `[charter-owner-set]`'s
 non-empty requirement, restated as its own constraint because it is
@@ -827,7 +865,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[owner-authorization-delegated]** _(amended 2026-07-14 — owner_kind,
+#### [owner-authorization-delegated]
+
+_(amended 2026-07-14 — owner_kind,
 set composition)_: The meaning of "signing key MUST be authorized by
 owner-reference `o`" is **delegated to `o.kind`**. The protocol
 defines the requirement but not the mechanism:
@@ -856,7 +896,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[owner-compatibility]**: Upgrading from a simpler to a richer
+#### [owner-compatibility]
+
+Upgrading from a simpler to a richer
 identity framework (e.g., raw key → GPG master → Cyphr PR)
 MUST NOT alter the `AtomId`. The `AtomId` is derived from
 `(anchor, label)`, which is independent of the owner. A claim
@@ -869,7 +911,9 @@ kind: constraint
 evaluator: model-check
 ```
 
-**[symmetric-payloads]**: `ClaimPayload` and a publish's **base
+#### [symmetric-payloads]
+
+`ClaimPayload` and a publish's **base
 payload** (`[amendment-field-classification]` class 1 — the first tag
 in an update chain, the one targeting the atom commit) MUST carry raw
 `anchor` and `label` fields. A consumer MUST be able to reconstruct
@@ -901,7 +945,9 @@ kind: constraint
 evaluator: type
 ```
 
-**[publish-chains-claim]**: The `claim` field in a publish's **base
+#### [publish-chains-claim]
+
+The `claim` field in a publish's **base
 payload** (`[amendment-field-classification]` class 1) MUST contain
 the `czd` of a valid claim for the same `(anchor, label)`. This
 creates the cryptographic chain from publish back to claim. A non-base
@@ -921,7 +967,9 @@ kind: constraint
 evaluator: model-check
 ```
 
-**[claim-typ]**: The `typ` field of a `ClaimPayload` MUST be the
+#### [claim-typ]
+
+The `typ` field of a `ClaimPayload` MUST be the
 literal string `"atom/claim"`. The protocol is the authority.
 
 ```claim
@@ -929,7 +977,9 @@ kind: constraint
 evaluator: type
 ```
 
-**[publish-typ]**: The `typ` field of a `PublishPayload` MUST be the
+#### [publish-typ]
+
+The `typ` field of a `PublishPayload` MUST be the
 literal string `"atom/publish"`.
 
 ```claim
@@ -937,7 +987,9 @@ kind: constraint
 evaluator: type
 ```
 
-**[sig-over-pay]**: All Coz messages MUST follow Coz v1.0: the
+#### [sig-over-pay]
+
+All Coz messages MUST follow Coz v1.0: the
 signature (`sig`) is computed over the canonical digest (`cad`) of
 the raw `pay` bytes. Payload field ordering MUST be preserved
 exactly as constructed.
@@ -947,7 +999,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[dig-is-atom-snapshot]**: The `dig` field in `PublishPayload` MUST
+#### [dig-is-atom-snapshot]
+
+The `dig` field in `PublishPayload` MUST
 be the content-addressed hash of the atom snapshot — the
 reproducible, detached artifact produced by the publisher. The atom
 snapshot uses deterministic metadata (e.g., constant timestamps and
@@ -958,7 +1012,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[src-is-source-revision]**: The `src` field in `PublishPayload`
+#### [src-is-source-revision]
+
+The `src` field in `PublishPayload`
 MUST be the content-addressed hash of the source revision from
 which the atom was extracted.
 
@@ -967,7 +1023,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[path-is-subdir]**: The `path` field in `PublishPayload` MUST be
+#### [path-is-subdir]
+
+The `path` field in `PublishPayload` MUST be
 the subdirectory path within the source content tree where the
 atom's content resides. This MUST be the exact path needed to
 navigate from the source revision's root to the atom's subtree.
@@ -977,7 +1035,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[publish-mode]**: The OPTIONAL root-level `mode` field of a
+#### [publish-mode]
+
+The OPTIONAL root-level `mode` field of a
 `PublishPayload` declares the atom's reproducibility mode
 (atom-model.md §6): `"reproducible"` asserts that every action the
 publish denotes yields `record_core`-equal records at fixed
@@ -998,7 +1058,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[content-hash-is-tree-digest]**: The OPTIONAL root-level
+#### [content-hash-is-tree-digest]
+
+The OPTIONAL root-level
 `content_hash` field of a `PublishPayload` is a BLAKE3 digest over the
 atom's content entries — the same `(path, data-or-target, executable)`
 set a backend's own content-tree construction consumes — computed and
@@ -1016,7 +1078,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[content-hash-algorithm]**: Where present, `content_hash` MUST be
+#### [content-hash-algorithm]
+
+Where present, `content_hash` MUST be
 computed by the canonical recursion below, which mirrors — deliberately,
 not coincidentally — the same recursive structure a backend's own
 canonical content-tree construction already builds (git:
@@ -1093,7 +1157,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[content-hash-obligation]**: `content_hash`'s obligation is
+#### [content-hash-obligation]
+
+`content_hash`'s obligation is
 three-tiered, and each tier MUST be read independently — none of the
 three follows from either of the others:
 
@@ -1135,7 +1201,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[amendment-field-classification]**: Every `PublishPayload` field is
+#### [amendment-field-classification]
+
+Every `PublishPayload` field is
 classified into exactly one of three kinds. The classification is a
 fixed protocol table, not a per-message choice, and covers every field
 in the `PublishPayload` type declaration (above) without exception:
@@ -1199,7 +1267,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[fact-kind-table]**: An append-class entry (`[amendment-field-
+#### [fact-kind-table]
+
+An append-class entry (`[amendment-field-
 classification]` class 3) MUST carry one of the following fact kinds.
 The species column is atom-model.md §4's own partition: a **derived**
 fact is produced only by building or independently inspecting the
@@ -1267,7 +1337,9 @@ evaluator: none
 Verification will round-trip fact entries and confirm the kind name
 is drawn from the reserved table.
 
-**[fact-claim-owner-gated]**: For an append-class entry of a
+#### [fact-claim-owner-gated]
+
+For an append-class entry of a
 claim-owner-gated fact kind (`yanked`, `deprecated`, `superseded-by`,
 `runtime-requires`; `[fact-kind-table]` tier column), the
 `assertor`-role authorization that `[trust-role-authorization]`
@@ -1307,7 +1379,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[rawversion-opaque]**: `RawVersion` MUST be treated as an opaque
+#### [rawversion-opaque]
+
+`RawVersion` MUST be treated as an opaque
 string by the protocol layer. Semantic interpretation MUST be
 deferred to a `VersionScheme` implementor.
 
@@ -1319,7 +1393,9 @@ evaluator: type
 Verification will confirm `RawVersion` is a newtype with no
 `Deref`/`AsRef`/`Into` impl.
 
-**[claim-key-required]**: A claim `CozMessage` MUST include a `key`
+#### [claim-key-required]
+
+A claim `CozMessage` MUST include a `key`
 field containing the public key used for signing. This enables
 trust-on-first-use (TOFU) verification without external key
 discovery.
@@ -1331,7 +1407,9 @@ evaluator: test
 
 Verification is tested in the claim roundtrip.
 
-**[publish-key-optional]**: A publish `CozMessage` MAY include a
+#### [publish-key-optional]
+
+A publish `CozMessage` MAY include a
 `key` field. It SHOULD be included when the signing key differs
 from the claim's key (e.g., after key rotation). It
 MAY be omitted when the same key signed both claim and publish.
@@ -1341,7 +1419,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[anchor-immutable]** _(amended 2026-07-08)_: An anchor MUST NOT
+#### [anchor-immutable]
+
+_(amended 2026-07-08)_: An anchor MUST NOT
 change over the lifetime of its atom-set: it is `czd(charter₀)`
 permanently; succession never alters it (`[charter-succession]`).
 
@@ -1350,7 +1430,9 @@ kind: constraint
 evaluator: model-check
 ```
 
-**[anchor-content-addressed]** _(amended 2026-07-08)_: An anchor MUST
+#### [anchor-content-addressed]
+
+_(amended 2026-07-08)_: An anchor MUST
 be the coz digest of the signed founding charter — content-addressed
 over an _owned_ payload, never derived from unowned or mutable source
 metadata (the pre-charter genesis-hash derivation is retired).
@@ -1360,7 +1442,9 @@ kind: constraint
 evaluator: model-check
 ```
 
-**[anchor-resolvable]** _(supersedes [anchor-discoverable],
+#### [anchor-resolvable]
+
+_(supersedes [anchor-discoverable],
 2026-07-08)_: Given a source, any party MUST be able to enumerate
 candidate charters and verify a given anchor against its founding
 charter without trusting the publisher. _Selecting_ among candidate
@@ -1373,7 +1457,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[manifest-minimal]**: The `Manifest` trait MUST require exactly
+#### [manifest-minimal]
+
+The `Manifest` trait MUST require exactly
 `label` and `version`. All other metadata is ecosystem-specific
 and MUST NOT be required by the protocol.
 
@@ -1382,7 +1468,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[backend-bit-perfect]**: A backend MUST NOT alter the content
+#### [backend-bit-perfect]
+
+A backend MUST NOT alter the content
 of stored `CozMessage`s. Signed messages are immutable binary
 blobs (cf. Coz bit-perfect preservation).
 
@@ -1391,7 +1479,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[atomid-per-source-unique]**: Within a single source, an `AtomId`
+#### [atomid-per-source-unique]
+
+Within a single source, an `AtomId`
 MUST be unique — no two atoms in the same source MAY share the same
 label. All atoms in a source share the same anchor, so label uniqueness
 within a source directly implies `(anchor, label)` pair uniqueness.
@@ -1402,7 +1492,9 @@ kind: constraint
 evaluator: model-check
 ```
 
-**[publish-claim-coherence]**: A publish's `claim` field MUST reference
+#### [publish-claim-coherence]
+
+A publish's `claim` field MUST reference
 the `czd` of a valid claim whose `(anchor, label)` matches the
 publish's `(anchor, label)`. Multiple claims for the same `AtomId` by
 different owners MAY coexist (e.g., forks sharing the same anchor).
@@ -1416,7 +1508,9 @@ kind: constraint
 evaluator: model-check
 ```
 
-**[atom-detached]**: An atom MUST be a self-contained, detached
+#### [atom-detached]
+
+An atom MUST be a self-contained, detached
 subtree. It MUST NOT carry source history. Provenance is recorded
 in the publish payload (`src`, `path`) and verified separately.
 
@@ -1425,7 +1519,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[uri-not-metadata]**: Atom URIs MUST NOT appear in signed
+#### [uri-not-metadata]
+
+Atom URIs MUST NOT appear in signed
 transaction payloads, persisted protocol state, or any metadata
 that participates in cryptographic operations. URIs are a user
 convenience — all persistent references MUST use canonical forms.
@@ -1438,7 +1534,9 @@ evaluator: type
 Verification will audit the payload structs and confirm no URI type
 is present.
 
-**[trait-signature-pure]**: Protocol trait signatures (`AtomSource`,
+#### [trait-signature-pure]
+
+Protocol trait signatures (`AtomSource`,
 `AtomRegistry`, `AtomStore`) MUST NOT contain backend-specific types.
 Backend specifics MUST be expressed exclusively through associated
 types on the traits.
@@ -1448,7 +1546,9 @@ kind: constraint
 evaluator: review
 ```
 
-**[crypto-layer-separation]**: Within the atom crate hierarchy,
+#### [crypto-layer-separation]
+
+Within the atom crate hierarchy,
 cryptographic operations (hashing, signing, verification) MUST be
 owned by atom-id. atom-core MUST NOT have any direct dependency
 on cryptographic libraries — all crypto MUST flow through atom-id.
@@ -1461,7 +1561,9 @@ evaluator: none
 Verification will audit atom-core's `Cargo.toml` and confirm it has
 no `coz-rs` dependency.
 
-**[crypto-via-coz]**: All cryptographic operations MUST conform to
+#### [crypto-via-coz]
+
+All cryptographic operations MUST conform to
 the Coz specification semantics. The atom protocol relies on Coz
 for signing, verification, digest computation, and key thumbprint
 derivation.
@@ -1473,7 +1575,9 @@ evaluator: type
 
 Verification confirms atom-id's `Cargo.toml` depends on `coz-rs`.
 
-**[key-management-deferred]**: The atom protocol MUST NOT define
+#### [key-management-deferred]
+
+The atom protocol MUST NOT define
 mechanisms for public key storage, discovery, or trust
 establishment. These concerns are deferred to the identity
 framework in use (e.g., Cyphr). The atom
@@ -1490,7 +1594,9 @@ kind: constraint
 evaluator: review
 ```
 
-**[charter-transition]**: An atom-set MAY be chartered by constructing
+#### [charter-transition]
+
+An atom-set MAY be chartered by constructing
 a `CharterPayload`, signing it, and producing a `CozMessage` that
 includes the public key.
 
@@ -1522,7 +1628,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[claim-transition]**: An atom MAY be claimed by constructing a
+#### [claim-transition]
+
+An atom MAY be claimed by constructing a
 `ClaimPayload`, signing it with a Coz-compatible key, and producing
 a `CozMessage` that includes the public key.
 
@@ -1545,7 +1653,9 @@ evaluator: test
 
 Verification is `verify_claim_roundtrip`: sign, then verify.
 
-**[publish-transition]**: A version MAY be published for a claimed
+#### [publish-transition]
+
+A version MAY be published for a claimed
 atom by constructing a `PublishPayload`, signing it, and producing
 a `CozMessage`.
 
@@ -1556,7 +1666,9 @@ evaluator: test
 
 Verification is `verify_publish_roundtrip`: sign, then verify.
 
-**[claim-replacement-transition]**: A claim MAY be replaced per
+#### [claim-replacement-transition]
+
+A claim MAY be replaced per
 `[claim-replacement-authority]` — owner replacement unmarked,
 governance replacement marked `governance: true` — the replacement
 carrying `prior: czd(replaced claim)`. (This defines the transition
@@ -1589,7 +1701,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[session-ordering]**: Claim MUST precede publish (model §3.1).
+#### [session-ordering]
+
+Claim MUST precede publish (model §3.1).
 Enforced by:
 (a) data flow — `publish` requires `claim` czd, which can only be
 obtained from a completed claim; (b) temporal ordering —
@@ -1602,7 +1716,9 @@ kind: constraint
 evaluator: model-check
 ```
 
-**[no-unclaimed-publish]**: A publish transaction MUST NOT exist for
+#### [no-unclaimed-publish]
+
+A publish transaction MUST NOT exist for
 an `AtomId` that has no corresponding claim. If a backend discovers
 a publish without a verifiable claim, it MUST treat the publish as
 invalid.
@@ -1612,7 +1728,9 @@ kind: constraint
 evaluator: model-check
 ```
 
-**[no-duplicate-version]**: For a given `AtomId`, a backend MUST NOT
+#### [no-duplicate-version]
+
+For a given `AtomId`, a backend MUST NOT
 store two publish transactions with the same `version` string.
 Republishing the same version MUST be rejected. Version
 immutability — once published, a version is sealed.
@@ -1622,7 +1740,9 @@ kind: constraint
 evaluator: model-check
 ```
 
-**[no-cross-layer-crypto]**: atom-core MUST NOT import, depend on,
+#### [no-cross-layer-crypto]
+
+atom-core MUST NOT import, depend on,
 or transitively require any cryptographic crate. All crypto flows
 through atom-id via Coz.
 
@@ -1631,7 +1751,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[no-backdated-publish]**: A publish's **base payload** — the first
+#### [no-backdated-publish]
+
+A publish's **base payload** — the first
 tag in the chain (`[amendment-field-classification]` class 1) — with
 `now` less than or equal to the `now` of the referenced claim MUST be
 rejected. Publishes MUST be temporally ordered after their authorizing
@@ -1651,7 +1773,9 @@ kind: constraint
 evaluator: model-check
 ```
 
-**[verification-local]**: Given an atom snapshot, its publish
+#### [verification-local]
+
+Given an atom snapshot, its publish
 `CozMessage`, and the corresponding claim `CozMessage`, a consumer
 MUST be able to verify artifact integrity, signature validity,
 claim chain, temporal ordering, and identity derivation using
@@ -1664,7 +1788,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[verification-provenance]**: Given the additional ability to fetch
+#### [verification-provenance]
+
+Given the additional ability to fetch
 individual source objects (revision metadata and content tree
 structure, without full content), a consumer MUST be able to verify
 that the atom's content tree is contained within the source content
@@ -1679,7 +1805,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[atom-snapshot-reproducible]**: The atom snapshot at `dig` MUST be
+#### [atom-snapshot-reproducible]
+
+The atom snapshot at `dig` MUST be
 reproducible: given the same source content at `src`/`path` and
 the same deterministic metadata, any party MUST be able to
 independently construct the atom snapshot and produce the same
@@ -1692,7 +1820,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[ingest-preserves-identity]**: When an atom is ingested from one
+#### [ingest-preserves-identity]
+
+When an atom is ingested from one
 `AtomSource` into an `AtomStore`, its `AtomId` MUST be preserved.
 (Model §2.3 — ingest ⊇ condition.)
 
@@ -1703,7 +1833,9 @@ kind: constraint
 evaluator: model-check
 ```
 
-**[backend-agnostic-protocol]**: All protocol-level types (`AtomId`,
+#### [backend-agnostic-protocol]
+
+All protocol-level types (`AtomId`,
 `ClaimPayload`, `PublishPayload`, `RawVersion`) MUST be
 backend-agnostic. Backend-specific concerns are expressed through
 associated types on traits.
@@ -1715,7 +1847,9 @@ kind: constraint
 evaluator: review
 ```
 
-**[publish-payload-extensible]**: The publish `CozMessage` payload
+#### [publish-payload-extensible]
+
+The publish `CozMessage` payload
 MAY contain additional user-defined fields beyond the required set
 (`anchor`, `label`, `claim`, `dig`, `src`, `path`, `version`) and
 the optional protocol field `mode` (`[publish-mode]`). For
@@ -1739,7 +1873,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[claim-payload-extensible]**: A claim `CozMessage` payload MAY
+#### [claim-payload-extensible]
+
+A claim `CozMessage` payload MAY
 contain additional user-defined fields beyond the required set
 (`alg`, `anchor`, `label`, `now`, `owner`, `pkg`, `src`, `tmb`).
 Like publish payloads, all ecosystem-specific or user-defined
@@ -1767,7 +1903,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[fs-source-contract]**: An `AtomSource` implementation MAY exist
+#### [fs-source-contract]
+
+An `AtomSource` implementation MAY exist
 for filesystem directories (paths without git history). Such a source:
 
 - MUST support `discover` (scan for manifests) and `resolve` (read
@@ -1810,7 +1948,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[format-version-discriminator]**: Any new persisted wire format — a
+#### [format-version-discriminator]
+
+Any new persisted wire format — a
 distinct serialized object type intended for storage, exchange, or
 retention, such as a lock, a composition, a build record, or an
 interface manifest — SHOULD carry a top-level version/schema
@@ -1833,7 +1973,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[format-unknown-field-tolerance]**: Any persisted format that admits
+#### [format-unknown-field-tolerance]
+
+Any persisted format that admits
 third-party or ecosystem-specific extension MUST preserve fields it
 does not itself define — nested under that format's designated
 extension namespace (e.g. a `meta` object) — rather than silently
@@ -1854,7 +1996,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[format-reserved-names]**: The following namespace, field, and kind
+#### [format-reserved-names]
+
+The following namespace, field, and kind
 identifiers are already in live protocol use and are reserved bare
 names — a third-party or ecosystem-specific extension MUST NOT
 redefine any of them with incompatible meaning. Interface-analyzer
