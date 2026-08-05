@@ -108,7 +108,9 @@ TYPE  LockEntry = {
 
 ### Invariants
 
-**[set-anchor-bijection]**: The mapping between set names and anchors
+#### [set-anchor-bijection]
+
+The mapping between set names and anchors
 MUST be bijective. Specifically:
 
 - An anchor MUST NOT appear in more than one set.
@@ -123,7 +125,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[atom-version-identity]**: If two mirrors in the same set advertise
+#### [atom-version-identity]
+
+If two mirrors in the same set advertise
 the same atom (same label) at the same version, their atom snapshot
 digests (`dig`) MUST be identical. A mismatch MUST be treated as
 evidence of tampering or misconfiguration. Implementations MUST reject
@@ -135,7 +139,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[mirror-staleness-tolerance]**: One mirror having MORE atoms or
+#### [mirror-staleness-tolerance]
+
+One mirror having MORE atoms or
 versions than another mirror in the same set is NOT an error. Mirrors
 MAY sync at different cadences. The invariant constrains conflicting
 content, not missing content. Resolvers SHOULD aggregate availability
@@ -146,7 +152,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[version-total-order]**: The ecosystem adapter MUST define a total
+#### [version-total-order]
+
+The ecosystem adapter MUST define a total
 order over version strings for each atom type. The protocol treats
 versions as opaque strings; the adapter provides comparison semantics
 (e.g., semver for cargo, PEP 440 for pypi). Resolvers rely on this
@@ -157,7 +165,9 @@ kind: constraint
 evaluator: property-test
 ```
 
-**[lock-entry-sufficient]**: A lock entry for a **published** atom
+#### [lock-entry-sufficient]
+
+A lock entry for a **published** atom
 MUST capture at minimum: `set`, `label`, `version`, and
 `publish_czd`. Mirror URLs are NOT per-entry — the lock MUST separately
 capture the mapping from anchors to mirror sets (anchor → mirrors),
@@ -185,7 +195,9 @@ because: [docs/architecture/atom-sad#6.5]
 
 ### Transitions
 
-**[source-discovery]**: A resolver MAY discover atom sources from
+#### [source-discovery]
+
+A resolver MAY discover atom sources from
 manifest declarations.
 
 - **PRE**: The manifest declares one or more mirror sets, each with at
@@ -207,7 +219,9 @@ evaluator: none
 depends: [set-anchor-bijection]
 ```
 
-**[mirror-validation]**: Before aggregating atoms from a set's mirrors,
+#### [mirror-validation]
+
+Before aggregating atoms from a set's mirrors,
 the resolver MUST validate mirror consistency.
 
 - **PRE**: At least one mirror in the set has been queried. The set's
@@ -227,7 +241,9 @@ evaluator: none
 depends: [set-anchor-bijection, atom-version-identity, mirror-staleness-tolerance]
 ```
 
-**[lock-capture]**: After version selection, the resolver MUST capture
+#### [lock-capture]
+
+After version selection, the resolver MUST capture
 the resolution in a lock entry.
 
 - **PRE**: A specific version of a specific atom has been selected. The
@@ -253,7 +269,9 @@ depends: [lock-entry-sufficient]
 
 ### Forbidden States
 
-**[no-cross-set-anchor]**: An anchor MUST NOT appear in more than one
+#### [no-cross-set-anchor]
+
+An anchor MUST NOT appear in more than one
 named set within a single resolution context. If detected, the resolver
 MUST reject the entire resolution — not just the conflicting set.
 
@@ -263,7 +281,9 @@ evaluator: none
 depends: [set-anchor-bijection]
 ```
 
-**[no-conflicting-digest]**: Two mirrors in the same set MUST NOT
+#### [no-conflicting-digest]
+
+Two mirrors in the same set MUST NOT
 advertise the same atom at the same version with different digests. If
 detected, the resolver MUST reject the atom and SHOULD identify the
 conflicting mirrors.
@@ -274,7 +294,9 @@ evaluator: none
 depends: [atom-version-identity]
 ```
 
-**[no-unpublished-dependency]**: An atom MUST NOT be publishable if any
+#### [no-unpublished-dependency]
+
+An atom MUST NOT be publishable if any
 of its **direct** atom dependencies exist only as local development
 versions (no remote published version exists). All direct dependencies
 MUST be published and locked to remote references before the depending
@@ -294,7 +316,9 @@ evaluator: none
 
 ### Behavioral Properties
 
-**[aggregation-monotonic]**: Adding a mirror to a set MUST NOT reduce
+#### [aggregation-monotonic]
+
+Adding a mirror to a set MUST NOT reduce
 the set of available atoms. A resolver that aggregates from N mirrors
 MUST make available at least the union of atoms from all N mirrors.
 This is a consequence of `[mirror-staleness-tolerance]`.
@@ -307,7 +331,9 @@ evaluator: none
 depends: [mirror-staleness-tolerance]
 ```
 
-**[resolution-reproducible]**: Given the same lock file, a resolver
+#### [resolution-reproducible]
+
+Given the same lock file, a resolver
 MUST reproduce the same fetch targets. Lock entries contain sufficient
 information (`set`, `label`, `version`, `publish_czd`, sources) to
 deterministically identify the exact atom version without re-resolving.
@@ -320,7 +346,9 @@ evaluator: none
 depends: [lock-entry-sufficient]
 ```
 
-**[concurrent-validation-safe]**: Implementations SHOULD support
+#### [concurrent-validation-safe]
+
+Implementations SHOULD support
 concurrent validation of mirrors within a set for performance.
 Concurrent validation MUST produce the same result as sequential
 validation — the invariant checks are commutative over mirror ordering.
@@ -332,7 +360,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[czd-divergence-handling]**: If two mirrors in the same set advertise
+#### [czd-divergence-handling]
+
+If two mirrors in the same set advertise
 the same atom at the same version with identical `dig` but different
 `publish_czd` values, the resolver MUST derive each publish's claim
 (from the publish payload) and check whether the claims are in the
@@ -455,7 +485,9 @@ A resolver or build system MAY accept atom content from a peer client as a fallb
 
 Peer-assisted resolution is a transport-level concern: the atom content enters the store through the same `AtomStore::ingest()` path as any other source. The peer acts as an `AtomSource` that the store ingests from. All ingestion invariants apply — the store verifies atom integrity before accepting content from a peer, just as it would from a registry.
 
-**[peer-source-last-resort]**: Peer-assisted resolution SHOULD be the lowest-priority source. The resolution priority order is:
+#### [peer-source-last-resort]
+
+Peer-assisted resolution SHOULD be the lowest-priority source. The resolution priority order is:
 
 1. Local store (previously ingested atoms)
 2. Remote mirrors (authoritative sources)
