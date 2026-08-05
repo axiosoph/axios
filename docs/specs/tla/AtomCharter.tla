@@ -296,7 +296,16 @@ Claim(anchor, label, owner, key, src) ==
 \*                         charter's owner set but NOT by the replaced
 \*                         claim's owner; governance = TRUE (marked, first-
 \*                         class seizure).
-\* Anchor/label are never altered by replacement (identity is stable).
+\* Anchor/label are copied unchanged from `old` below -- a structural
+\* consistency check, not a definition of identity (glossary-repudiated,
+\* 2026-07-18: anchor+label are never identity, only a claim's
+\* pre-signature preimage). The atom's actual identity -- the label-scope
+\* genesis claim's czd (atom-model.md §2) -- survives replacement because
+\* `prior` chains back to that genesis claim, which is written exactly
+\* once and never reissued: identity persistence here is a consequence of
+\* this model's append-only construction (no claim's `czd` or `prior` is
+\* ever mutated once created), not a state-space property this action's
+\* guards independently establish.
 ClaimReplace(old, key, src) ==
     LET czd     == ClaimCzd(KeyOwner[key], key, src, clock)
         ownerOK == Authorized(key, old.owner)
@@ -441,12 +450,21 @@ TransferDualSigned ==
 
 \* [claim-replacement-authority]: every replacement is validly authorized and
 \* its governance flag is set iff (and only iff) it is a governance seizure.
+\* The anchor/label conjuncts below are a regression guard on ClaimReplace's
+\* construction (both fields are copied unchanged from `old` there, so
+\* these two conjuncts hold at every reachable state by that construction
+\* alone) -- NOT a machine-checked proof that identity is stable. This
+\* model has no state where anchor/label COULD drift on replacement, so
+\* TLC exploring this conjunct proves the guard exists, not that identity
+\* -- the genesis claim's czd -- persists; that persistence is definitional
+\* (an append-only chain whose czds are never mutated or reissued), the
+\* same review-residue category as [charter-typ], not a state-space fact.
 ReplacementAuthority ==
     \A cl \in claims :
         cl.prior # NoClaimPrior =>
             \E old \in claims :
                 /\ old.czd = cl.prior
-                /\ cl.anchor = old.anchor        \* identity never altered
+                /\ cl.anchor = old.anchor        \* regression guard, not identity
                 /\ cl.label = old.label
                 /\ ( \/ (Authorized(cl.key, old.owner) /\ cl.governance = FALSE)
                      \/ (~Authorized(cl.key, old.owner)
@@ -455,8 +473,13 @@ ReplacementAuthority ==
                                /\ AuthorizedBySet(cl.key, c.owner))
                          /\ cl.governance = TRUE) )
 
-\* [anchor-immutable]: a claim's anchor equals its authorizing charter's anchor,
-\* so identity is fixed to the founding czd across claims and replacements.
+\* [anchor-immutable]: a claim's anchor equals its authorizing charter's
+\* anchor -- the ATOM-SET's anchor stays fixed to the founding charter's
+\* czd across claims and replacements. This is anchor (atom-set) stability,
+\* not individual atom identity: many claims, many labels, share one
+\* anchor. An atom's own identity is its (genesis) claim's czd, never the
+\* anchor (glossary-repudiated, 2026-07-18: naming the anchor, or the
+\* fused anchor+label pair, as identity).
 \* @docket: anchor-immutable :: docs/specs/run_model_check.sh
 AnchorImmutable ==
     \A cl \in claims :
