@@ -120,8 +120,6 @@ flow strictly downward through the layer stack. A crate at layer
 Lₙ MUST NOT depend (directly or transitively) on any crate at
 layer Lₘ where m > n.
 
-VERIFIED: _pending_
-
 ```claim
 kind: constraint
 evaluator: review
@@ -143,8 +141,6 @@ target contract crates, not implementation crates. A crate in
 workspace W₁ MUST NOT depend on an implementation crate in
 workspace W₂.
 
-VERIFIED: _pending_
-
 ```claim
 kind: constraint
 evaluator: none
@@ -164,8 +160,6 @@ FORBIDDEN:     ion-eos → eos            (implementation)
 **[boundary-impl-isolation]**: Implementation crates MUST NOT be
 depended upon by any crate outside their own workspace.
 
-VERIFIED: _pending_
-
 ```claim
 kind: constraint
 evaluator: none
@@ -184,8 +178,6 @@ all other layers.
 dependency direction is unconstrained. Implementation crates
 MAY depend on their workspace's contract crates and on each
 other as needed.
-
-VERIFIED: _pending_
 
 ```claim
 kind: constraint
@@ -209,8 +201,6 @@ of any cross-layer trait method, or that are exchanged as the
 serialized interface artifact between two layers, MUST reside in
 a contract crate of the _consuming_ layer.
 
-VERIFIED: _pending_
-
 ```claim
 kind: constraint
 evaluator: review
@@ -221,6 +211,9 @@ producing layer depends on the consumer's contract crate to
 serialize conforming output. This mirrors how `eos-core` defines
 `BuildEngine` (the contract eos exposes) and ion depends on
 `eos-core` to invoke it.
+
+A manual audit found no current violations of this constraint,
+following the lock file's reclassification to L4 (§4.2).
 
 | Interface artifact              | Producer           | Consumer       | Contract crate      |
 | :------------------------------ | :----------------- | :------------- | :------------------ |
@@ -244,8 +237,6 @@ have ≤ 5 non-`std` dependencies. Contract crates at L3 and L4
 SHOULD have ≤ 10 non-`std` dependencies. Implementation crates
 have no dependency budget.
 
-VERIFIED: _pending_
-
 ```claim
 kind: constraint
 evaluator: none
@@ -263,8 +254,6 @@ expose backend-specific types in their public API. Snix types,
 gix types, nix-compat types, and other backend-specific types
 MUST NOT appear in the public signatures of `eos-core`, `atom-core`,
 or any other contract crate.
-
-VERIFIED: _pending_
 
 ```claim
 kind: constraint
@@ -315,8 +304,6 @@ L1 MUST NOT own: manifest _formats_ (that's L4), build recipes
 (that's L2/L3), dependency resolution (that's L4), or lock files
 (that's L4).
 
-VERIFIED: _pending_
-
 **[boundary-L2-concerns]**: L2 (HTC — Hermetic Transactional
 Composition) owns:
 
@@ -360,8 +347,6 @@ _declaration_, or the manifest (that's L4), or scheduling policy,
 worker placement, or the atom-DAG (that's L3 — L2 is what L3's
 executor trait dispatches _to_, not the scheduler itself).
 
-VERIFIED: _pending_
-
 **[boundary-L3-concerns]**: L3 (eos) owns:
 
 - Build engine trait: `BuildEngine`, `BuildPlan`
@@ -393,8 +378,6 @@ or **frontend-specific serialization formats** including the lock
 file (that's L4). Eos reads atom content through the `AtomSource`
 trait (L1) and MUST NOT implement its own atom fetching logic.
 
-VERIFIED: _pending_
-
 **[boundary-L4-concerns]**: L4 (ion) owns:
 
 - Manifest format: `ion.toml` / `atom.toml` parsing and validation
@@ -421,8 +404,6 @@ L4 MUST NOT own: identity primitives (that's L1), build engine
 internals (that's L3), fetch-set _execution_ (that's L2), or
 storage backends (that's L1/L2).
 
-VERIFIED: _pending_
-
 **[boundary-L5-concerns]**: L5 (plugins) extends L4 with
 ecosystem-specific dependency handling. Plugins MAY produce
 lock file entries that conform to the lock file schema
@@ -431,16 +412,12 @@ resolution pipeline to interact with eos directly. Plugin
 boundary constraints are deferred until the plugin system
 matures.
 
-VERIFIED: _pending_
-
 ### §4.2 — Lock File Ownership
 
 **[boundary-lock-ownership]**: The lock file format (`atom.lock`)
 is owned by L4 (ion). The lock file is ion's serialization of
 resolved dependencies — it is a frontend-specific artifact, not
 an inter-layer contract type.
-
-VERIFIED: _pending_
 
 ```claim
 kind: constraint
@@ -507,8 +484,6 @@ layers. They MUST:
    lower layer's contract surface in both directions — not
    re-export verbatim
 
-VERIFIED: _pending_
-
 ```claim
 kind: constraint
 evaluator: review
@@ -561,8 +536,6 @@ snix gRPC calls in scheduler code. This preserves
 required interface pattern for cache-skip scans (see
 [`eos-scheduler.md`](eos-scheduler.md)).
 
-VERIFIED: _pending_
-
 ```claim
 kind: constraint
 evaluator: none
@@ -590,8 +563,6 @@ construct the dependency graph, and verify:
 The script SHOULD be implemented as a `cargo xtask` command or
 a standalone Rust/shell script in `tools/`.
 
-VERIFIED: _pending_
-
 ```claim
 kind: constraint
 evaluator: none
@@ -617,8 +588,6 @@ by naming convention:
 - `*-cli`, `*-daemon`, `*-git`, `*-snix` → implementation
 - `*-eos` (in ion/) → bridge
 
-VERIFIED: _pending_
-
 ```claim
 kind: constraint
 evaluator: none
@@ -636,8 +605,6 @@ Each exception MUST carry:
 
 The enforcement script MUST allow exceptions listed in this file.
 The exception count SHOULD trend toward zero.
-
-VERIFIED: _pending_
 
 ```claim
 kind: constraint
@@ -788,28 +755,3 @@ apply these questions in order:
    domain (`[boundary-L*-concerns]`) covers the type's purpose.
    If ambiguous, HALT and record an ownership decision as an
    amendment to this spec.
-
----
-
-## Verification Status
-
-| Constraint                       | Tag                     | Method                                    | Status                                                 |
-| :------------------------------- | :---------------------- | :---------------------------------------- | :----------------------------------------------------- |
-| `[boundary-downward-only]`       | `UNVERIFIED`            | `cargo metadata` graph analysis           | Pending CI script                                      |
-| `[boundary-contract-only]`       | `UNVERIFIED`            | `cargo metadata` graph analysis           | Pending CI script                                      |
-| `[boundary-impl-isolation]`      | `UNVERIFIED`            | `cargo metadata` graph analysis           | Pending CI script                                      |
-| `[boundary-intra-workspace]`     | `VERIFIED: agent-check` | By definition (unconstrained)             | Trivially satisfied                                    |
-| `[boundary-contract-types]`      | `UNVERIFIED`            | Manual audit                              | No current violations after lock reclassification      |
-| `[boundary-contract-dep-budget]` | `UNVERIFIED`            | `cargo metadata` dep count                | Pending CI script                                      |
-| `[boundary-no-backend-leakage]`  | `UNVERIFIED`            | Public API audit                          | Pending                                                |
-| `[boundary-L1-concerns]`         | `VERIFIED: agent-check` | Cross-referenced with ADR-0001            | Consistent                                             |
-| `[boundary-L2-concerns]`         | `UNVERIFIED`            | Cross-referenced with ADR-0005/htc-sad.md | New layer (2026-07-05); no crate workspace yet (P3/P4) |
-| `[boundary-L3-concerns]`         | `VERIFIED: agent-check` | Cross-referenced with ADR-0001            | Amended: lock file removed from L3                     |
-| `[boundary-L4-concerns]`         | `VERIFIED: agent-check` | Cross-referenced with ADR-0001            | Amended: lock file format added to L4                  |
-| `[boundary-L5-concerns]`         | `VERIFIED: agent-check` | Deferred                                  | Minimal constraints pending plugin maturity            |
-| `[boundary-lock-ownership]`      | `VERIFIED: agent-check` | Cargo-atom test; format vs contract       | §4.2 rationale                                         |
-| `[boundary-bridge-crate]`        | `VERIFIED: agent-check` | `ion-eos` Cargo.toml verified             | Conforms                                               |
-| `[boundary-store-separation]`    | `UNVERIFIED`            | Manual audit                              | New constraint; pending implementation                 |
-| `[boundary-ci-enforcement]`      | `UNVERIFIED`            | Script does not yet exist                 | Pending implementation                                 |
-| `[boundary-crate-metadata]`      | `UNVERIFIED`            | Metadata not yet present                  | Pending implementation                                 |
-| `[boundary-violation-budget]`    | `UNVERIFIED`            | File does not yet exist                   | Pending implementation                                 |

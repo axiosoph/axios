@@ -123,12 +123,14 @@ fork's build protocol).
 file and directory in the mounted view MUST be read-only and digest-verified
 by the CAS at materialization time — a build process MUST NOT be able to
 write into any part of the mounted closure.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
 evaluator: none
 ```
+
+Verification will confirm a composed rootfs (not per-input dirs) is
+mounted read-only for a build.
 
 ### Network Containment
 
@@ -150,13 +152,15 @@ This supersedes the prior fixed-output-derivation (FOD) exception model —
 there is no evaluator to produce a FOD marker; the recorded/replayed fetch
 set is itself the exception mechanism, keyed by content rather than by a
 derivation-level flag.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
 evaluator: none
 because: [htc-fetch-set-lock-plugin]
 ```
+
+Verification will confirm non-proxy network access is refused and
+check record/replay mode behavior.
 
 ### Read-Set Capture
 
@@ -172,13 +176,15 @@ behavior). The read-set MUST be hashed and the digest MUST populate the
 `BuildRecord.observed_read_set_digest` field (htc-sad.md §2.3) — this
 document requires the executor capture and populate that field; it does not
 redefine the `BuildRecord` schema itself.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
 evaluator: none
 depends: [htc-declared-closure-enforced]
 ```
+
+Verification will confirm every read during a build is logged and
+the digest lands in `BuildRecord`.
 
 ### Build Sandbox Delegation
 
@@ -190,12 +196,14 @@ executor) applies
 platform-appropriate sandboxing (OCI runtime or Bubblewrap, reusing
 `snix-build`, htc-sad.md §2, §3.5). The daemon holds no opinion on how a
 given executor achieves isolation (eos-sad.md §6.2).
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
 evaluator: none
 ```
+
+Verification will audit that the Eos daemon and scheduler perform no
+sandboxing of their own -- all isolation is executor-side.
 
 ### Host Isolation
 
@@ -209,13 +217,15 @@ the sandbox enforces directly (by denying reads outside the materialized
 view), not one inferred after the fact from the read-set log
 (§Read-Set Capture is the log; this invariant is the enforcement it
 verifies).
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
 evaluator: none
 depends: [eos-sandbox-fhs-materialization, htc-declared-closure-enforced]
 ```
+
+Verification will attempt writes outside the scratch dir and reads
+outside the declared closure, and confirm both are denied.
 
 ### Materialization Tiers
 
@@ -234,13 +244,15 @@ The sandbox this document specifies operates exclusively at the Observe
 tier. Fast and Export tiers are runtime/deployment concerns outside build
 sandboxing's scope — see htc-sad.md §5.2–§5.3 for their mechanics, not
 restated here.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
 evaluator: none
 depends: [htc-materialization-tiers]
 ```
+
+Verification will confirm builds and check-phase runs use the
+Observe tier exclusively, with no Fast/Export mount at build time.
 
 ---
 
@@ -250,19 +262,20 @@ depends: [htc-materialization-tiers]
 network request MUST NOT be served unless it exactly matches an entry in
 the lock's recorded fetch set. Any other request MUST result in a refused
 connection, logged.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
 evaluator: none
 ```
 
+Verification will issue unrecorded requests in replay mode and
+confirm refusal plus a log entry.
+
 **[no-read-outside-declared-closure]**: A build process MUST NOT be able to
 read any byte not present in its materialized atom closure or toolchain
 composition, plus whatever the fetch proxy separately permits (§Network
 Containment). This is enforced by denying the read at the sandbox boundary,
 not by post-hoc audit of the read-set log.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -270,31 +283,20 @@ evaluator: none
 depends: [eos-build-sandbox-network-containment]
 ```
 
+Verification will attempt reads of undeclared paths and confirm
+denial at the mount boundary.
+
 **[no-write-outside-build-scratch]**: A build process MUST NOT write to any
 path outside the scratch directory allocated for its build task. The
 mounted closure is read-only; there is no writable path inside it.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
 evaluator: none
 ```
 
----
-
-## Verification
-
-| Constraint                              | Method                | Result     | Detail                                                                                      |
-| :-------------------------------------- | :-------------------- | :--------- | :------------------------------------------------------------------------------------------ |
-| `eos-sandbox-fhs-materialization`       | Sandbox mount test    | UNVERIFIED | Verify a composed rootfs (not per-input dirs) is mounted read-only for a build              |
-| `eos-build-sandbox-network-containment` | Build socket test     | UNVERIFIED | Verify non-proxy network access is refused; verify record/replay mode behavior              |
-| `eos-sandbox-read-set-capture`          | FUSE log inspection   | UNVERIFIED | Verify every read during a build is logged and the digest lands in `BuildRecord`            |
-| `eos-build-sandbox-delegation`          | Architecture audit    | UNVERIFIED | Verify Eos daemon/scheduler perform no sandboxing; all isolation is executor-side           |
-| `eos-build-sandbox-host-isolation`      | Filesystem probe test | UNVERIFIED | Attempt writes outside scratch dir and reads outside declared closure; verify denial        |
-| `eos-sandbox-materialization-tiers`     | Tier dispatch test    | UNVERIFIED | Verify builds/check-phases use Observe tier exclusively; no Fast/Export mount at build time |
-| `no-fetch-outside-recorded-set`         | Replay-mode fuzz test | UNVERIFIED | Issue unrecorded requests in replay mode, verify refusal + log entry                        |
-| `no-read-outside-declared-closure`      | Sandbox escape test   | UNVERIFIED | Attempt reads of undeclared paths, verify denial at the mount boundary                      |
-| `no-write-outside-build-scratch`        | Sandbox escape test   | UNVERIFIED | Attempt writes to the read-only mounted closure, verify denial                              |
+Verification will attempt writes to the read-only mounted closure
+and confirm denial.
 
 ---
 

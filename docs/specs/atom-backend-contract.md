@@ -163,12 +163,14 @@ MUST NOT be mutable under its OID: `get` is a partial function of the
 OID alone, stable across time and replicas. (The artifact-store A1/A2
 analogue; every protocol claim of the form "the ref moved but the old
 object persists" rests on it.)
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
 evaluator: none
 ```
+
+Verification will round-trip a store→get and confirm mutation
+attempts fail.
 
 **[backend-store-injective]**: The backend's content serialization
 MUST be canonical: one content value, one byte serialization, one OID;
@@ -178,12 +180,14 @@ load-bearing for `[snapshot-deterministic]`-class reproducibility:
 any party constructing the same atom content MUST obtain the same
 carrier identity. This is P16, the intent-store analogue of the
 artifact store's P10.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
 evaluator: test
 ```
+
+Verification will audit canonical serialization against a fixture
+battery.
 
 **[backend-ancestry-sound]**: The ancestry relation `⊑` MUST be sound
 with respect to the backend's content-addressing: `a ⊑ b` MUST hold
@@ -206,7 +210,6 @@ whatever its other properties. This is P15; the protocol properties
 that quantify over it are `[charter-ancestry]`, `[temporal-vector]`,
 `[no-backdated-src]`, and the claim that "the charter's `src`
 transitively pins the genesis."
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -227,7 +230,6 @@ CANNOT be discharged from a shallow view — a shallow boundary is
 indistinguishable from a true root to a naive walk, so a
 depth-limited fetch MUST NOT serve as the basis for any
 `[temporal-vector]`/`[charter-ancestry]` judgment.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -256,12 +258,14 @@ consumers who compare nothing. Cross-consumer equivocation detection
 requires gossip or witness-cosigning machinery that is trust-layer
 future work — registered under Open Questions, alongside the
 acceptance-policy spec (Execution Model §9.7).
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
 evaluator: none
 ```
+
+Verification will run a concurrent CAS battery against one ref on the
+authoritative store.
 
 **[backend-refs-atomic-multi]**: The **authoritative store** MUST
 support atomic multi-ref transactions: a protocol transition that
@@ -277,12 +281,14 @@ time (`[backend-replica-reads]`).
 (Reference instantiation: `gix::refs::Transaction` + atomic push,
 [git-storage-format](git-storage-format.md) §Implementation Guidance,
 Atomicity — promoted here from guidance to law.)
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
 evaluator: test
 ```
+
+Verification will inject a crash/interrupt mid multi-ref transaction
+and confirm the result is all-or-nothing.
 
 **[backend-replica-reads]**: Mirrors and replicas are
 eventually-consistent reads of the authoritative store, and their
@@ -296,7 +302,6 @@ recorded head is a detected rollback (`[chain-monotonicity]`,
 divergence in content is tamper evidence, not a race
 (`[atom-version-identity]`, `[no-conflicting-digest]`,
 `[czd-divergence-handling]` — [atom-sourcing](atom-sourcing.md)).
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -329,7 +334,6 @@ prefix-naming convention over a bare `String` type does not discharge
 this clause. (The two landed identity-conflation defects were both
 violations of this law; see §Verification for what the existing models
 could and could not catch.)
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -365,13 +369,15 @@ generalizes [git-storage-format](git-storage-format.md)
 `[coz-bit-perfect]` and satisfies
 [atom-transactions](atom-transactions.md) `[backend-bit-perfect]` at
 the contract level: it binds every backend, not the git encoding.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
 evaluator: test
 because: [backend-bit-perfect]
 ```
+
+Verification will store a payload, retrieve it, and byte-compare
+(extends git-storage-format.md's `[coz-bit-perfect]` battery).
 
 **[backend-chain-append]**: The backend MUST realize each atom's
 transaction and fact chains as **append-only** structures: appending a
@@ -382,7 +388,6 @@ audit trail ([git-storage-format](git-storage-format.md)
 `[tag-chain-immutable]`, generalized). Monotone history is
 load-bearing for the plane's laws (atom-model §6, "monotone history is
 the structural cost").
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -399,7 +404,6 @@ the publisher (enumeration yields candidates; verification is local).
 Version discovery MUST be object-free where the transport allows
 (git: `ls-refs` advertisement, atom-sad §6.8). The backend provides
 carriage and enumeration, never trust.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -416,7 +420,6 @@ reasoning to the intent store — liveness is reachability from refs,
 rollback is retaining an old ref target, GC is dropping the
 unreachable — and it is the premise `[backend-liveness-protection]`
 leans on.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -432,7 +435,6 @@ ancestry checks) MUST NOT be collected while so named. Where the
 backend's native GC cannot see protocol reachability, the
 instantiation MUST write protective names (git: `refs/atom/src/{oid}`,
 `[store-claim-ref]`'s GC-protection purpose).
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -473,7 +475,6 @@ mechanism, not an oversight.
 
 The anchor and all czd-sorted identities are unaffected by
 construction (`[anchor-hash-agile]`).
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -498,7 +499,6 @@ MUST produce the expected results) — which establishes conformance on
 the tested trace set, never the universally-quantified claim itself.
 
 - **Type**: Safety
-  `VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -514,7 +514,6 @@ chain retrievable bit-perfect, every ancestry premise queryable — with
 zero writes and zero further network round-trips once state is local.
 
 - **Type**: Safety
-  `VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -565,27 +564,9 @@ abstract, trusted numeric order (`Descends(a,b) == a >= b` over
 naturals) — assumed sound, never derived from hash commitment. The
 landed defects were carrier-seam and fabrication bugs, which live
 exactly on the surfaces the existing models do not carry. Until the
-model lands, `[backend-seam-typed]`'s discharge is the rustc row
-below plus review.
-
-| Constraint                   | Method           | Result  | Detail                                                              |
-| :--------------------------- | :--------------- | :------ | :------------------------------------------------------------------ |
-| backend-store-immutable      | integration-test | pending | store→get round-trip; mutation attempts fail                        |
-| backend-store-injective      | unit-test (P16)  | pending | canonical serialization audit + fixture battery                     |
-| backend-ancestry-sound       | review + Alloy (P15) | pending | per-backend Merkle argument; replacement disabled on protocol paths; abstract row in seam model |
-| backend-ancestry-queryable   | integration-test | pending | ancestry check with content transfer disabled; shallow view rejected as ancestry basis |
-| backend-refs-linearizable    | integration-test | pending | concurrent CAS battery on one ref, authoritative store (split-view boundary: Open Questions) |
-| backend-refs-atomic-multi    | integration-test | pending | multi-ref txn: crash/interrupt yields all-or-nothing, per store     |
-| backend-replica-reads        | review-residue   | pending | discharged at the protocol layer (cited sourcing + monotonicity constraints) |
-| backend-seam-typed           | rustc + machine (Alloy) | pending | disjoint newtypes; no cross-construction outside named surfaces; ref-segment rehydration audit; seam model |
-| backend-carriage-bit-perfect | integration-test | pending | store → retrieve → byte-compare (extends coz-bit-perfect)           |
-| backend-chain-append         | integration-test | pending | append preserves prior chain objects and their retrievability       |
-| backend-enumeration          | integration-test | pending | charters/labels/versions/tips enumerable object-free                |
-| backend-refs-sole-mutability | integration-test | pending | protocol-visible mutation outside the ref namespace absent/rejected |
-| backend-liveness-protection  | integration-test | pending | GC pass collects nothing protocol-reachable                         |
-| backend-hash-strength        | review-residue   | pending | documentation obligation; closure is protocol-level (`content_hash`, atom-transactions.md), not backend-level |
-| backend-substitutable        | integration-test | pending | golden-trace conformance across two backends (Execution Model §6.1 testable form; trace-set conformance, not the universal claim) |
-| backend-verification-carried | integration-test | pending | pipeline steps 1–13 offline against carried state                   |
+model lands, `[backend-seam-typed]`'s discharge is disjoint newtypes
+checked by rustc, an audit that no cross-construction occurs outside
+the named surfaces, and a ref-segment rehydration audit, plus review.
 
 ## Appendix A: The Git Instantiation
 

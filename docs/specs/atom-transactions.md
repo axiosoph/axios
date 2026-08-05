@@ -217,8 +217,6 @@ Data accessor traits (`AtomEntry`, `AtomVersion`, `Manifest`) MUST remain synchr
 
 `AtomRegistry::claim()` and `AtomRegistry::publish()` MAY remain synchronous in v1 (registries are local git repos). If remote registry write operations are added in vN, these SHOULD be made async.
 
-`VERIFIED: type (atom/atom-core/src/lib.rs -- AtomSource::resolve/discover are async fn (lines 124, 130); AtomStore::ingest/contains are async fn (lines 250, 253); the accessor traits AtomEntry/AtomVersion/Manifest are sync fn (lines 70, 87, 54); AtomRegistry::claim/publish are sync fn (lines 210, 223) -- the async/sync split is type-enforced: six real implementations compile against these exact signatures (atom-git's GitSource, GitRegistry, GitStore; eos-daemon/src/scheduler.rs's test-only RecordingSource), and an impl violating the split would fail to compile)`
-
 The critical architectural property: **a store IS a source**. The
 `AtomStore` trait extends `AtomSource`, so any component that reads
 from an `AtomSource` can read from either a remote source or a local
@@ -266,8 +264,9 @@ evaluator: type
 ```
 
 **[composite-source-concurrent]**: A composite source SHOULD resolve multiple atoms concurrently. When a `BuildRequest` contains N atom dependencies, the composite source SHOULD spawn N concurrent resolution tasks (bounded by a configurable concurrency limit). This is the primary performance justification for the async trait requirement (`[trait-async-io]`).
-`VERIFIED: unverified`
-`RESIDUE: Phase 1/2 -- no CompositeAtomSource implementation exists anywhere in the codebase yet; depends on [trait-async-io]`
+
+No `CompositeAtomSource` implementation exists anywhere in the
+codebase yet; this depends on `[trait-async-io]`.
 
 Each role uses **associated types** to remain backend-agnostic:
 
@@ -445,7 +444,6 @@ evaluator: none
 
 **[charter-typ]**: A charter transaction's payload MUST carry
 `typ: "atom/charter"`.
-`VERIFIED: review-residue (payload schema literal; rustc at impl — cf. [claim-typ]/[publish-typ])`
 
 ```claim
 kind: constraint
@@ -456,7 +454,6 @@ evaluator: none
 the founding charter: `Anchor == czd(charter₀)`, where the founding
 charter is the unique charter in the succession chain carrying no
 `prior` field.
-`VERIFIED: machine (TLC)`
 
 ```claim
 kind: constraint
@@ -469,7 +466,6 @@ governs _authorization_, never the anchor value (a successor's czd is
 not an anchor and MUST NOT appear as one). This is the claim-level
 analogue of
 `[publish-chains-claim]`: charter : claim :: claim : publish.
-`VERIFIED: machine (Alloy)`
 
 ```claim
 kind: constraint
@@ -486,7 +482,6 @@ at claim time.) This replaces unscoped first-come label TOFU with
 set-governed claiming; open or delegated claiming is expressible
 through the owner abstraction's identity frameworks, not through
 protocol exceptions.
-`VERIFIED: machine (TLC)`
 
 ```claim
 kind: constraint
@@ -552,12 +547,14 @@ authorities, distinguishable by every consumer:
 
 Publishes chained to a replaced claim remain verifiable history;
 new publishes MUST chain to the current claim.
-`VERIFIED: machine (TLC) (pre-existing owner-replacement/governance-
-replacement split — subject to the AtomCharter.tla owner-set-rework
-staleness already tracked separately, out of this node's scope); the
-claim-authority fail-closed rule above is UNVERIFIED — new protocol
-text mirroring `[charter-succession-linear]`'s ForkFailClosed
-mechanism, but no TLA+ module models the claim-replacement chain`
+
+The owner-replacement/governance-replacement split is machine-
+verified by a pre-existing TLC model (subject to the AtomCharter.tla
+owner-set-rework staleness tracked separately, out of this
+constraint's scope). The claim-authority fail-closed rule above —
+new protocol text mirroring `[charter-succession-linear]`'s
+ForkFailClosed mechanism — has no TLA+ module modeling the
+claim-replacement chain yet.
 
 ```claim
 kind: constraint
@@ -574,7 +571,6 @@ consumer obligation, not narrative: a resolver encountering a claim
 whose `src` does not descend from the effective charter's `src` MUST
 treat it as unowned by this set — neither silently valid nor silently
 dropped, but surfaced as pre-charter state awaiting re-claim.
-`VERIFIED: machine (TLC)`
 
 ```claim
 kind: constraint
@@ -605,7 +601,6 @@ Single-key-tier entries are the degenerate case — a `"single-key"`
 principal has no internal growth mechanism of its own, so it cannot
 add a key without a membership change (a new `OwnerRef` entry, or
 replacing its own).
-`VERIFIED: machine (TLC)`
 
 ```claim
 kind: constraint
@@ -677,7 +672,6 @@ extension point here keeps the flat MVP default honest about what it
 does and does not protect against: it is not a complete answer to
 unilateral capture, only to a removed member blocking its own
 removal.
-`VERIFIED: machine (TLC)`
 
 ```claim
 kind: constraint
@@ -691,7 +685,6 @@ and MUST refuse any served chain that regresses below a recorded head
 alternative. First contact with a set is a TOFU decision, as all first
 contact is. Locks participate: a resolved lock pins the charter head
 its resolution consulted (a follow-up field in the lock schema).
-`VERIFIED: machine (TLC)`
 
 ```claim
 kind: constraint
@@ -704,7 +697,6 @@ regardless of shared source history. Forks are therefore explicit by
 construction: a fork cannot share the origin's anchor (it cannot forge
 succession), and cross-fork `(anchor, label)` collision is structurally
 impossible.
-`VERIFIED: machine (Alloy)`
 
 ```claim
 kind: constraint
@@ -716,7 +708,6 @@ determined solely by the pair `(anchor, label)`. The `AtomId` MUST NOT
 depend on any key, signature, signed message, or hash algorithm. Identity
 is permanent and content-addressed. The `AtomId` is the abstract pair —
 not a hash of it; there is no identity-layer digest type.
-`VERIFIED: machine (Alloy)`
 
 ```claim
 kind: constraint
@@ -727,7 +718,6 @@ evaluator: model-check
 versions, ownership transfers, or key rotations. The `AtomId` is
 determined by `anchor` and `label`, neither of which changes.
 (Model §1 olog: identity stability diagram.)
-`VERIFIED: machine (TLC)`
 
 ```claim
 kind: constraint
@@ -774,7 +764,6 @@ on `kind`. An `OwnerRef`'s `value` is stable across key rotations,
 upgrades, and delegation — only the authorization semantics of
 "signing key authorized by this `OwnerRef`" vary, per
 `[owner-authorization-delegated]`.
-`VERIFIED: machine (Alloy)`
 
 ```claim
 kind: constraint
@@ -790,7 +779,6 @@ the `OwnerRef` as unauthorizable) rather than attempt to interpret
 `value` — those tiers are named and reserved, not implemented; only
 `"single-key"` carries a working evaluator
 (`[owner-authorization-delegated]`).
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -803,7 +791,6 @@ organization, exactly one identity is responsible for a specific
 label. This is unchanged by the charter-level set generalization
 below (`[charter-owner-set]`) — the two fields share `OwnerRef`'s
 shape, not its cardinality.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -821,7 +808,6 @@ identity distinct from "not on the team"). A charter (founding or
 successor) whose `owner` set is empty is a charter nobody could ever
 claim under; `[charter-owner-set-non-empty]` makes rejecting it
 explicit.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -835,7 +821,6 @@ non-empty requirement, restated as its own constraint because it is
 exactly the failure mode a removal-only transfer path
 (`[charter-succession-linear]`) could otherwise reach silently at
 implementation time.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -865,7 +850,6 @@ single-valued authorization, never a distinct mechanism of its own.
 Where `owner` is single-valued (`[claim-owner-single]`), the
 per-value rule above applies directly and unchanged; there is no
 composition step.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -879,7 +863,6 @@ MUST NOT alter the `AtomId`. The `AtomId` is derived from
 replacement (`[claim-replacement-transition]`) MAY update the
 `owner` to a new identity system without changing the atom's
 identity.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -907,10 +890,11 @@ from an amendment payload in isolation is NOT possible by design — a
 consumer MUST walk the chain to the base tag
 (`[tag-chain-semantic-immutable]`) to recover it, the same obligation
 the resolver already has for every other identity-class field.
-`VERIFIED: unverified (ClaimPayload/base-PublishPayload carrying
-anchor+label is rustc-verified today; the amendment-payload exclusion
-is new protocol design — the base/amendment Rust type split is not yet
-implemented, [amendment-field-classification])`
+
+`ClaimPayload`/base-`PublishPayload` carrying `anchor`+`label` is
+rustc-verified today; the amendment-payload exclusion is new protocol
+design — the base/amendment Rust type split
+(`[amendment-field-classification]`) is not yet implemented.
 
 ```claim
 kind: constraint
@@ -927,9 +911,10 @@ identity-class, structurally absent from every tag but the base
 this same chain, and therefore this same claim, is established by
 chain position (`[tag-chain-semantic-immutable]`), never by restating
 this field.
-`VERIFIED: machine (TLC) (base-payload case); the amendment-payload
-exclusion is UNVERIFIED — new protocol design, no TLA+ model of the
-publish tag chain exists yet`
+
+The base-payload case is machine-verified (TLC); the amendment-payload
+exclusion is unverified — new protocol design, no TLA+ model of the
+publish tag chain exists yet.
 
 ```claim
 kind: constraint
@@ -938,7 +923,6 @@ evaluator: model-check
 
 **[claim-typ]**: The `typ` field of a `ClaimPayload` MUST be the
 literal string `"atom/claim"`. The protocol is the authority.
-`VERIFIED: rustc (TYP_CLAIM const, verify_claim checks typ)`
 
 ```claim
 kind: constraint
@@ -947,7 +931,6 @@ evaluator: type
 
 **[publish-typ]**: The `typ` field of a `PublishPayload` MUST be the
 literal string `"atom/publish"`.
-`VERIFIED: rustc (TYP_PUBLISH const, verify_publish checks typ)`
 
 ```claim
 kind: constraint
@@ -958,7 +941,6 @@ evaluator: type
 signature (`sig`) is computed over the canonical digest (`cad`) of
 the raw `pay` bytes. Payload field ordering MUST be preserved
 exactly as constructed.
-`VERIFIED: unit-test (verify_claim_roundtrip, verify_publish_roundtrip)`
 
 ```claim
 kind: constraint
@@ -970,7 +952,6 @@ be the content-addressed hash of the atom snapshot — the
 reproducible, detached artifact produced by the publisher. The atom
 snapshot uses deterministic metadata (e.g., constant timestamps and
 authorship) to ensure reproducibility across backends.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -980,7 +961,6 @@ evaluator: none
 **[src-is-source-revision]**: The `src` field in `PublishPayload`
 MUST be the content-addressed hash of the source revision from
 which the atom was extracted.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -991,7 +971,6 @@ evaluator: test
 the subdirectory path within the source content tree where the
 atom's content resides. This MUST be the exact path needed to
 navigate from the source revision's root to the atom's subtree.
-`VERIFIED: rustc (path: String field in PublishPayload)`
 
 ```claim
 kind: constraint
@@ -1013,7 +992,6 @@ backend spec), NEVER as a new version: a mode transition changes
 no immutable payload field, so `[no-duplicate-version]`'s
 same-version rejection does not apply to it and MUST NOT be
 weakened to permit it — the chain append is the lawful path.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -1032,7 +1010,6 @@ same content identity `dig` already asserts through the backend's own
 object hash; where absent, no claim beyond `dig` is made. The exact
 algorithm is `[content-hash-algorithm]`; the exact obligation level is
 `[content-hash-obligation]`.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -1110,7 +1087,6 @@ applies here unchanged: the explicit mode digits and NUL-delimited
 framing make the per-level serialization unambiguous independent of
 which total order is used to sort siblings, and the git tie-break rule
 above supplies that order.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -1153,7 +1129,6 @@ ancestry guarantee is irreducible without migrating the mainline
 repository itself to a stronger hash; this specification does not
 attempt it and no such mechanism should be inferred from
 `content_hash`'s existence.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -1218,7 +1193,6 @@ This is the sole resolution algorithm for a publish chain — pairwise
 inter-tag comparison MUST NOT be used to enforce identity-field
 immutability; class 1's payload shape enforces it structurally, so
 there is nothing to compare.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -1284,12 +1258,14 @@ needed for facts: a resolver never special-cases by `typ`; it
 classifies every field it encounters by kind
 (`[amendment-field-classification]`), uniformly, for every tag in the
 chain.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
 evaluator: none
 ```
+
+Verification will round-trip fact entries and confirm the kind name
+is drawn from the reserved table.
 
 **[fact-claim-owner-gated]**: For an append-class entry of a
 claim-owner-gated fact kind (`yanked`, `deprecated`, `superseded-by`,
@@ -1325,7 +1301,6 @@ transaction VALIDITY (an append-class entry from any signer is a
 structurally valid amendment); this constraint governs TRUST (which
 verdict a specific claim-owner-gated entry earns from a given
 consumer).
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -1335,29 +1310,31 @@ evaluator: none
 **[rawversion-opaque]**: `RawVersion` MUST be treated as an opaque
 string by the protocol layer. Semantic interpretation MUST be
 deferred to a `VersionScheme` implementor.
-`VERIFIED: rustc (RawVersion newtype, no Deref/AsRef/Into)`
 
 ```claim
 kind: constraint
 evaluator: type
 ```
 
+Verification will confirm `RawVersion` is a newtype with no
+`Deref`/`AsRef`/`Into` impl.
+
 **[claim-key-required]**: A claim `CozMessage` MUST include a `key`
 field containing the public key used for signing. This enables
 trust-on-first-use (TOFU) verification without external key
 discovery.
-`VERIFIED: unit-test (claim roundtrip uses key in CozMessage)`
 
 ```claim
 kind: constraint
 evaluator: test
 ```
 
+Verification is tested in the claim roundtrip.
+
 **[publish-key-optional]**: A publish `CozMessage` MAY include a
 `key` field. It SHOULD be included when the signing key differs
 from the claim's key (e.g., after key rotation). It
 MAY be omitted when the same key signed both claim and publish.
-`VERIFIED: unit-test (publish roundtrip works with/without key)`
 
 ```claim
 kind: constraint
@@ -1367,7 +1344,6 @@ evaluator: test
 **[anchor-immutable]** _(amended 2026-07-08)_: An anchor MUST NOT
 change over the lifetime of its atom-set: it is `czd(charter₀)`
 permanently; succession never alters it (`[charter-succession]`).
-`VERIFIED: machine (TLC)`
 
 ```claim
 kind: constraint
@@ -1378,7 +1354,6 @@ evaluator: model-check
 be the coz digest of the signed founding charter — content-addressed
 over an _owned_ payload, never derived from unowned or mutable source
 metadata (the pre-charter genesis-hash derivation is retired).
-`VERIFIED: machine (Alloy)`
 
 ```claim
 kind: constraint
@@ -1392,7 +1367,6 @@ charter without trusting the publisher. _Selecting_ among candidate
 anchors is a recorded consumer trust decision (in locks and URIs), not
 a derivation — the anchor is given, then verified; it is no longer
 derivable from source content alone.
-`VERIFIED: review-residue (procedural: enumeration + local verification capability — see Verification note)`
 
 ```claim
 kind: constraint
@@ -1402,7 +1376,6 @@ evaluator: none
 **[manifest-minimal]**: The `Manifest` trait MUST require exactly
 `label` and `version`. All other metadata is ecosystem-specific
 and MUST NOT be required by the protocol.
-`VERIFIED: machine (Alloy)`
 
 ```claim
 kind: constraint
@@ -1412,7 +1385,6 @@ evaluator: none
 **[backend-bit-perfect]**: A backend MUST NOT alter the content
 of stored `CozMessage`s. Signed messages are immutable binary
 blobs (cf. Coz bit-perfect preservation).
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -1424,7 +1396,6 @@ MUST be unique — no two atoms in the same source MAY share the same
 label. All atoms in a source share the same anchor, so label uniqueness
 within a source directly implies `(anchor, label)` pair uniqueness.
 This prevents ambiguous references within a source.
-`VERIFIED: machine (TLC)`
 
 ```claim
 kind: constraint
@@ -1439,7 +1410,6 @@ The publish→claim chain is the sole mechanism for binding a publish to
 a specific claim. Publishes from different claims MUST NOT
 cross-pollinate — a consumer selects which claim to trust based on
 the `owner`.
-`VERIFIED: machine (TLC)`
 
 ```claim
 kind: constraint
@@ -1449,7 +1419,6 @@ evaluator: model-check
 **[atom-detached]**: An atom MUST be a self-contained, detached
 subtree. It MUST NOT carry source history. Provenance is recorded
 in the publish payload (`src`, `path`) and verified separately.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -1460,18 +1429,19 @@ evaluator: none
 transaction payloads, persisted protocol state, or any metadata
 that participates in cryptographic operations. URIs are a user
 convenience — all persistent references MUST use canonical forms.
-`VERIFIED: rustc (no URI type in payload structs)`
 
 ```claim
 kind: constraint
 evaluator: type
 ```
 
+Verification will audit the payload structs and confirm no URI type
+is present.
+
 **[trait-signature-pure]**: Protocol trait signatures (`AtomSource`,
 `AtomRegistry`, `AtomStore`) MUST NOT contain backend-specific types.
 Backend specifics MUST be expressed exclusively through associated
 types on the traits.
-`VERIFIED: review (AtomSource/AtomRegistry/AtomStore signatures use only AtomId, OwnerRef, Czd, RawVersion, &[u8], and associated types Self::Entry/Self::Error — atom/atom-core/src/lib.rs:523-697)`
 
 ```claim
 kind: constraint
@@ -1482,23 +1452,26 @@ evaluator: review
 cryptographic operations (hashing, signing, verification) MUST be
 owned by atom-id. atom-core MUST NOT have any direct dependency
 on cryptographic libraries — all crypto MUST flow through atom-id.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
 evaluator: none
 ```
 
+Verification will audit atom-core's `Cargo.toml` and confirm it has
+no `coz-rs` dependency.
+
 **[crypto-via-coz]**: All cryptographic operations MUST conform to
 the Coz specification semantics. The atom protocol relies on Coz
 for signing, verification, digest computation, and key thumbprint
 derivation.
-`VERIFIED: cargo-dep (atom-id depends on coz-rs = "0.4")`
 
 ```claim
 kind: constraint
 evaluator: type
 ```
+
+Verification confirms atom-id's `Cargo.toml` depends on `coz-rs`.
 
 **[key-management-deferred]**: The atom protocol MUST NOT define
 mechanisms for public key storage, discovery, or trust
@@ -1506,7 +1479,9 @@ establishment. These concerns are deferred to the identity
 framework in use (e.g., Cyphr). The atom
 verification function MUST accept raw public key bytes as a
 parameter.
-`VERIFIED: review (verify_claim/verify_publish/verify_claim_key_thumbprint/verify_publish_key_thumbprint all take pub_key: &[u8]; atom-id has no key-storage, discovery, or trust-establishment code — atom/atom-id/src/lib.rs:1008-1201)`
+
+Verification will audit the atom workspace and confirm no key
+storage crate exists.
 
 ### Transitions
 
@@ -1534,8 +1509,13 @@ includes the public key.
   MUST exceed the prior charter's `now`.
 - **POST**: The charter message is stored in the source's atom refs,
   enumerable by consumers and retrievable by its czd.
-  `VERIFIED: unverified (pending implementation)`
-  `RESIDUE: Phase 1 -- construction/signature correctness is tested (atom/atom-id/tests/charter/construction.rs), but the PRE bootstrap-gate authorization check has no implementation to call: bootstrap_gate.rs's own red test states "no bootstrap-gate authorization check exists yet"; the POST storage-in-atom-refs requirement has no atom-git charter storage implementation either`
+
+Construction and signature correctness are tested
+(`atom/atom-id/tests/charter/construction.rs`), but the PRE
+bootstrap-gate authorization check has no implementation to call:
+`bootstrap_gate.rs`'s own red test states "no bootstrap-gate
+authorization check exists yet"; the POST storage-in-atom-refs
+requirement has no atom-git charter storage implementation either.
 
 ```claim
 kind: constraint
@@ -1557,12 +1537,13 @@ a `CozMessage` that includes the public key.
   `key` field with the signing public key.
 - **POST**: The claim message (including `key`) MUST be stored in
   a backend-specific location retrievable by `AtomId`.
-  `VERIFIED: unit-test (verify_claim_roundtrip)`
 
 ```claim
 kind: constraint
 evaluator: test
 ```
+
+Verification is `verify_claim_roundtrip`: sign, then verify.
 
 **[publish-transition]**: A version MAY be published for a claimed
 atom by constructing a `PublishPayload`, signing it, and producing
@@ -1572,6 +1553,8 @@ a `CozMessage`.
 kind: constraint
 evaluator: test
 ```
+
+Verification is `verify_publish_roundtrip`: sign, then verify.
 
 **[claim-replacement-transition]**: A claim MAY be replaced per
 `[claim-replacement-authority]` — owner replacement unmarked,
@@ -1584,8 +1567,13 @@ previously referenced by `[owner-compatibility]` but never specified.)
   unchanged (replacement never alters identity).
 - **POST**: the replacement is stored alongside the replaced claim;
   both remain retrievable (history is never erased).
-  `VERIFIED: unverified (pending implementation)`
-  `RESIDUE: Phase 1 -- construction.rs::claim_replacement_transactions_verify tests replacement shape (prior linkage, governance marking, distinct signing keys) and signature validity, but its own module docstring is explicit: "construction correctness only -- no ... authorization validation runs anywhere in this corpus; that is Phase 1". No storage backend exists either.`
+
+`construction.rs::claim_replacement_transactions_verify` tests
+replacement shape (prior linkage, governance marking, distinct
+signing keys) and signature validity, but its own module docstring
+is explicit: "construction correctness only -- no ... authorization
+validation runs anywhere in this corpus." No storage backend exists
+either.
 
 - **PRE**: `claim` MUST be the `czd` of a valid, non-revoked claim
   for this `(anchor, label)`. `version` MUST be a non-empty string.
@@ -1595,7 +1583,6 @@ previously referenced by `[owner-compatibility]` but never specified.)
   key MUST be authorized by the claim's `owner`.
 - **POST**: The publish transaction is stored associating
   `(AtomId, version)` with the signed `CozMessage`.
-  `VERIFIED: unit-test (verify_publish_roundtrip)`
 
 ```claim
 kind: constraint
@@ -1607,7 +1594,6 @@ Enforced by:
 (a) data flow — `publish` requires `claim` czd, which can only be
 obtained from a completed claim; (b) temporal ordering —
 `publish.now > claim.now` MUST hold.
-`VERIFIED: machine (TLC)`
 
 ### Forbidden States
 
@@ -1620,7 +1606,6 @@ evaluator: model-check
 an `AtomId` that has no corresponding claim. If a backend discovers
 a publish without a verifiable claim, it MUST treat the publish as
 invalid.
-`VERIFIED: machine (TLC)`
 
 ```claim
 kind: constraint
@@ -1631,7 +1616,6 @@ evaluator: model-check
 store two publish transactions with the same `version` string.
 Republishing the same version MUST be rejected. Version
 immutability — once published, a version is sealed.
-`VERIFIED: machine (TLC)`
 
 ```claim
 kind: constraint
@@ -1641,7 +1625,6 @@ evaluator: model-check
 **[no-cross-layer-crypto]**: atom-core MUST NOT import, depend on,
 or transitively require any cryptographic crate. All crypto flows
 through atom-id via Coz.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -1660,7 +1643,6 @@ its own distinct `now` — but only the base payload's `now`
 participates in this temporal-floor check; an amendment's `now`
 records when the amendment was signed, not a new temporal floor for
 the publish event.
-`VERIFIED: unverified`
 
 ### Behavioral Properties
 
@@ -1676,7 +1658,6 @@ claim chain, temporal ordering, and identity derivation using
 only local computation — zero network round-trips.
 
 - **Type**: Safety
-  `VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -1692,7 +1673,6 @@ verification MUST NOT require fetching full file content or the
 complete source history.
 
 - **Type**: Safety
-  `VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -1706,7 +1686,6 @@ independently construct the atom snapshot and produce the same
 hash.
 
 - **Type**: Safety
-  `VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -1718,7 +1697,6 @@ evaluator: none
 (Model §2.3 — ingest ⊇ condition.)
 
 - **Type**: Safety
-  `VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -1731,7 +1709,6 @@ backend-agnostic. Backend-specific concerns are expressed through
 associated types on traits.
 
 - **Type**: Safety
-  `VERIFIED: review (AtomId/ClaimPayload/PublishPayload/RawVersion carry only Anchor, Label, OwnerRef, Czd, Thumbprint, Vec<u8>, String, u64 fields — no backend-specific type (e.g. gix::ObjectId) appears; those live only in atom-git — atom/atom-id/src/lib.rs:217-782)`
 
 ```claim
 kind: constraint
@@ -1756,7 +1733,6 @@ This prevents forward-compatibility collisions if a future protocol
 version introduces new required fields.
 
 - **Type**: Safety
-  `VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -1779,8 +1755,12 @@ transitions** — when a new claim replaces a previous one. The
 of the transition to consumers who may hold the old claim.
 
 - **Type**: Safety
-  `VERIFIED: unverified`
-  `RESIDUE: Phase 1/2 -- ClaimPayload (atom/atom-id/src/lib.rs) has a fixed field set with no "meta" field or unknown-field-preservation mechanism; default serde deserialize silently drops fields not in the struct rather than preserving them, so this constraint is not yet satisfied by the landed type, let alone verified`
+
+`ClaimPayload` (`atom/atom-id/src/lib.rs`) has a fixed field set with
+no `meta` field or unknown-field-preservation mechanism; default
+serde deserialize silently drops fields not in the struct rather than
+preserving them, so this constraint is not yet satisfied by the
+landed type, let alone verified.
 
 ```claim
 kind: constraint
@@ -1810,7 +1790,6 @@ target, allowing any storage backend to serve as the `AtomStore` for
 ingested filesystem atoms.
 
 - **Type**: Safety
-  `VERIFIED: unverified`
 
 ### Extensibility & Evolution
 
@@ -1848,7 +1827,6 @@ pre-existing gaps this principle does not retroactively close; they
 are noted here for the record, not addressed by this document.)
 
 - **Type**: Safety
-  `VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -1870,7 +1848,6 @@ deserialization — this principle names the target state that residue
 is measured against, it does not resolve it.)
 
 - **Type**: Safety
-  `VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -1902,7 +1879,6 @@ additions, mirroring in spirit — not in mechanism —
 submission process governs it.
 
 - **Type**: Safety
-  `VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -2005,8 +1981,8 @@ satisfiable (SAT), confirming the charter facts are consistent.
 **Review-residue justifications (2026-07-08):**
 
 - `[charter-typ]` — a payload carries `typ: "atom/charter"`: a serialization
-  schema literal, identical in kind to `[claim-typ]`/`[publish-typ]` (both
-  `VERIFIED: rustc`). In a structural model the message type is already
+  schema literal, identical in kind to `[claim-typ]`/`[publish-typ]`
+  (both discharged by `rustc`). In a structural model the message type is already
   carried by the sig/record, so a model-checker "discharge" would be a
   vacuous restatement. Deferred to `rustc` (a `TYP_CHARTER` const check) at
   implementation, on the established typ-literal precedent.
@@ -2060,73 +2036,6 @@ _The rows added or amended for the charter constraints are marked (amended)._
 > assertions (`ownership_independence` and others) are unaffected —
 > that model carries no `owner` field at all, so `[owner-abstract]`'s
 > `machine (Alloy)` status stands unchanged.
-
-| Constraint                    | Method           | Result   | Detail                                                                    | Phase |
-| :---------------------------- | :--------------- | :------- | :------------------------------------------------------------------------ | :---- |
-| identity-content-addressed    | machine (Alloy)  | **pass** | Alloy `identity_content_addressed`                                        | —     |
-| identity-stability            | machine (TLC)    | **pass** | TLA+ `IdentityStability` — 2 configs                                      | —     |
-| owner-abstract                | machine (Alloy)  | **pass** | Alloy `ownership_independence`                                            | —     |
-| owner-compatibility           | machine (Alloy)  | **pass** | Alloy `ownership_independence`                                            | —     |
-| owner-authorization-delegated | integration-test | pending  | Signing key auth varies by identity system; set composition adds a disjunction over per-value checks | 4     |
-| owner-kind-required           | unit-test        | pending  | `kind` required, no default; `hierarchical`/`rooted-identity` rejected cleanly | 4     |
-| claim-owner-single             | rustc            | pending  | `ClaimPayload.owner: OwnerRef` (not a collection)                          | 4     |
-| charter-owner-set             | unit-test        | pending  | `CharterPayload.owner: Vec<OwnerRef>`; empty set rejected                  | 4     |
-| charter-owner-set-non-empty   | unit-test        | pending  | Founding/successor charter with empty resulting `owner` set rejected      | 4     |
-| symmetric-payloads            | rustc            | **pass** | Both structs have `anchor` + `label`                                      | 1     |
-| publish-chains-claim          | machine (TLC)    | **pass** | TLA+ `PublishChainsClaim` — 2 configs                                     | —     |
-| claim-typ                     | rustc            | **pass** | `TYP_CLAIM` const = `"atom/claim"`                                        | 1     |
-| publish-typ                   | rustc            | **pass** | `TYP_PUBLISH` const = `"atom/publish"`                                    | 1     |
-| sig-over-pay                  | unit-test        | **pass** | sign→verify roundtrip in atom-id tests                                    | 1     |
-| dig-is-atom-snapshot          | unit-test        | pending  | Snapshot hash matches `dig` field                                         | 4     |
-| src-is-source-revision        | integration-test | pending  | Git revision hash matches `src` field                                     | 4     |
-| content-hash-is-tree-digest   | unit-test        | pending  | Present `content_hash` is BLAKE3 over content entries, publisher-signed   | 4     |
-| content-hash-algorithm        | unit-test        | pending  | Two independent inputs of same content → byte-identical digest            | 4     |
-| content-hash-obligation       | integration-test | pending  | Optional schema; present ⇒ consumer verifies or rejects; SHOULD on weak backend | 4 |
-| amendment-field-classification | unit-test       | pending  | Amendment payload has no identity-field slot; base tag is sole source     | 4     |
-| fact-kind-table               | unit-test        | pending  | Fact entries round-trip; kind name drawn from the reserved table          | 4     |
-| fact-claim-owner-gated        | policy-test       | pending  | Claim-owner-gated fact (incl. runtime-requires) from non-owner assertor → evidence, never fact | 4 |
-| path-is-subdir                | rustc            | **pass** | `path` field type constrains to subdir                                    | 1     |
-| rawversion-opaque             | rustc            | **pass** | Newtype, no `Deref`/`AsRef`/`Into`                                        | 1     |
-| claim-key-required            | unit-test        | **pass** | CozMessage key — tested in claim roundtrip                                | 1     |
-| publish-key-optional          | unit-test        | **pass** | CozMessage key — optional per Coz format                                  | 1     |
-| crypto-layer-separation       | cargo-dep        | pending  | atom-core Cargo.toml has no coz-rs                                        | 3     |
-| crypto-via-coz                | cargo-dep        | **pass** | atom-id Cargo.toml depends on coz-rs                                      | 1     |
-| key-management-deferred       | cargo-dep        | pending  | No key storage crate in atom workspace                                    | 3     |
-| claim-transition              | unit-test        | **pass** | `verify_claim_roundtrip` sign→verify                                      | 1     |
-| publish-transition            | unit-test        | **pass** | `verify_publish_roundtrip` sign→verify                                    | 1     |
-| session-ordering              | machine (TLC)    | **pass** | TLA+ `SessionOrdering` — 2 configs                                        | —     |
-| no-unclaimed-publish          | machine (TLC)    | **pass** | TLA+ `NoUnclaimedPublish` — 2 configs                                     | —     |
-| no-duplicate-version          | machine (TLC)    | **pass** | TLA+ `NoDuplicateVersion` — 2 configs                                     | —     |
-| no-cross-layer-crypto         | cargo-dep        | pending  | atom-core has zero crypto deps                                            | 3     |
-| no-backdated-publish          | machine (TLC)    | **pass** | TLA+ `NoBackdatedPublish` — 2 configs                                     | —     |
-| verification-local            | integration-test | pending  | Pipeline steps 1–13 offline                                               | 4     |
-| verification-provenance       | integration-test | pending  | Pipeline steps 14–18 with source access                                   | 4     |
-| atom-snapshot-reproducible    | unit-test        | pending  | Same inputs → same snapshot hash                                          | 4     |
-| ingest-preserves-identity     | machine (Alloy)  | **pass** | Alloy `ingest_preserves_identity`                                         | —     |
-| backend-agnostic-protocol     | rustc            | pending  | Trait sigs use only associated types                                      | 3     |
-| charter-typ                   | review-residue   | **pass** | Schema literal; rustc at impl (cf. claim-typ)                             | —     |
-| charter-anchor                | machine (TLC)    | **pass** | AtomCharter `AnchorIsFoundingCzd`/`FoundingUnique`                        | —     |
-| claim-chains-charter          | machine (Alloy)  | **pass** | Alloy `claim_chains_charter`                                              | —     |
-| claim-charter-authorization   | machine (TLC)    | **pass** | AtomCharter `ClaimAuthorized`                                             | —     |
-| claim-replacement-authority   | machine (TLC)    | **pass** | AtomCharter `ReplacementAuthority`                                        | —     |
-| charter-ancestry              | machine (TLC)    | **pass** | AtomCharter `ClaimAncestry`                                               | —     |
-| charter-succession            | machine (TLC)    | **pass** | AtomCharter `SuccessionAuthorized`                                        | —     |
-| charter-succession-linear     | machine (TLC)    | **pass** | AtomCharter `TransferDualSigned`/`ForkFailClosed`                         | —     |
-| chain-monotonicity            | machine (TLC)    | **pass** | AtomCharter `MonotonicHead` property                                      | —     |
-| charter-fork-distinction      | machine (Alloy)  | **pass** | Alloy `charter_fork_distinction`                                          | —     |
-| anchor-immutable              | machine (TLC)    | **pass** | AtomCharter `AnchorIsFoundingCzd` — succession preserves anchor (amended) | —     |
-| anchor-content-addressed      | machine (Alloy)  | **pass** | Alloy `anchor_content_addressed` (amended)                                | —     |
-| anchor-resolvable             | review-residue   | **pass** | Procedural; enumeration + local verify (amended)                          | —     |
-| manifest-minimal              | machine (Alloy)  | **pass** | Alloy `manifest_properties` fact                                          | —     |
-| backend-bit-perfect           | integration-test | pending  | CozMessage bytes unchanged after store                                    | 4     |
-| atomid-per-source-unique      | machine (TLC)    | **pass** | TLA+ `AtomIdPerSourceUnique` — 2 configs                                  | —     |
-| publish-claim-coherence       | machine (TLC)    | **pass** | TLA+ `PublishClaimCoherence` — 2 configs                                  | —     |
-| atom-detached                 | integration-test | pending  | Atom subtree has no parent refs                                           | 4     |
-| uri-not-metadata              | rustc            | **pass** | URI type absent from payload structs                                      | 1     |
-| trait-signature-pure          | rustc            | pending  | No backend types in trait signatures                                      | 3     |
-| publish-payload-extensible    | unit-test        | pending  | Extra fields in payload round-trip                                        | 3     |
-| publish-mode                  | unit-test        | pending  | Absent mode reads witnessed; transition = chain append, never new version | 3     |
-| fs-source-contract            | integration-test | pending  | FsSource discover+resolve, no claim/pub                                   | 4     |
 
 ## Implications
 
