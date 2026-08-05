@@ -62,7 +62,9 @@ with the commitments ([lock-annotation-consistency]).
 These bind the schema as a whole; every section constraint below serves
 one of them.
 
-**[lock-sufficiency]**: The lock MUST pin every worldly discovery needed
+#### [lock-sufficiency]
+
+The lock MUST pin every worldly discovery needed
 to form execution requests for the atom: the transitive dependency
 closure by content identity, and every fetch payload not adopted from an
 ecosystem lockfile in the atom's sources. Build-time resolution or
@@ -79,7 +81,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[lock-recomputability]**: The lock MUST be the output of deterministic
+#### [lock-recomputability]
+
+The lock MUST be the output of deterministic
 resolution: the same manifest and the same discovery snapshot (as pinned
 by [lock-set-snapshot]) MUST re-derive a byte-identical lock.
 Serialization MUST be canonical (see [lock-canonical-form]).
@@ -94,7 +98,9 @@ evaluator: none
 depends: [lock-set-snapshot, lock-canonical-form]
 ```
 
-**[lock-choice-policy]**: The choice function is fixed and canonical:
+#### [lock-choice-policy]
+
+The choice function is fixed and canonical:
 among candidates satisfying the manifest's constraints, resolution MUST
 select the highest version under the atom's declared scheme order,
 deviating only through declared, manifest-side overrides. Determinism in
@@ -111,7 +117,9 @@ evaluator: none
 because: [docs/models/composition-model#6]
 ```
 
-**[lock-groundness]**: Every lock value MUST be ground: names bound to
+#### [lock-groundness]
+
+Every lock value MUST be ground: names bound to
 content identities and exact version strings. Version constraints,
 ranges, override declarations, and any other unresolved intent MUST NOT
 appear in the lock; they are manifest-side. The only equality relation a
@@ -126,7 +134,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[lock-closure-completeness]**: The `[deps]` section MUST contain the
+#### [lock-closure-completeness]
+
+The `[deps]` section MUST contain the
 full transitive closure of the atom's dependencies as resolved. Which
 entries are direct is the manifest's knowledge and MUST NOT be
 duplicated in the lock (no root marker, no `[self]`).
@@ -139,7 +149,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[lock-action-totality]**: The lock, together with the manifest in the
+#### [lock-action-totality]
+
+The lock, together with the manifest in the
 same atom snapshot, MUST determine — by pure elaboration, with no
 discovery — all three inputs of the atom's `action_id` (Execution Model
 §2.4): `atom_czd_closure_root` from the dep pins; `params` from the
@@ -167,7 +179,9 @@ depends: [docs/models/execution-model#2.4, lock-closure-completeness]
 because: [docs/models/execution-model#8]
 ```
 
-**[lock-in-snapshot-locality]**: The lock is carried inside the atom
+#### [lock-in-snapshot-locality]
+
+The lock is carried inside the atom
 snapshot it serves — it is reviewed, signed intent. An edit to an atom's
 lock therefore legitimately changes that atom's _own_ action identity
 (its pinned inputs changed). What MUST NOT happen is cross-action
@@ -189,7 +203,9 @@ because: [lock-no-plan-digest]
 
 ## Top level
 
-**[lock-schema-version]**: The lock MUST contain a top-level integer
+#### [lock-schema-version]
+
+The lock MUST contain a top-level integer
 field `version`, in minimal decimal form. This document specifies
 `version = 0`, denoting a pre-MVP schema: the shape is unstable and no
 compatibility is promised across changes until an MVP fixes it.
@@ -205,7 +221,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[lock-tool-owned]**: The lock is tool-authored; humans review lock
+#### [lock-tool-owned]
+
+The lock is tool-authored; humans review lock
 diffs and never hand-edit them in supported workflows. The canonical
 form contains no comments: generator provenance belongs in VCS metadata
 and tool output, never in lock bytes.
@@ -221,7 +239,9 @@ evaluator: none
 
 ## `[sets]` — set anchors and discovery snapshots
 
-**[lock-set-anchor]**: Each key under `[sets]` is a local set alias; its
+#### [lock-set-anchor]
+
+Each key under `[sets]` is a local set alias; its
 `anchor` field MUST be the algorithm-prefixed coz digest of the
 atom-set's founding charter transaction: `anchor = czd(charter₀)`
 (atom-transactions.md's `[charter-anchor]`). The anchor IS the set's
@@ -256,7 +276,9 @@ depends: [charter-anchor]
 because: [charter-ancestry]
 ```
 
-**[lock-set-charter-head]**: Each `[sets]` entry MUST record a
+#### [lock-set-charter-head]
+
+Each `[sets]` entry MUST record a
 `charter_head` field: the algorithm-prefixed coz digest of the charter
 transaction — the founding charter, or a later successor — that this
 lock's resolution observed as the **effective charter**
@@ -289,7 +311,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[lock-set-snapshot]**: Each `[sets]` entry MUST record a `snapshot`
+#### [lock-set-snapshot]
+
+Each `[sets]` entry MUST record a `snapshot`
 field: the algorithm-prefixed object id of the set repository's tip
 commit at discovery time. This pins the discovery snapshot (Composition
 Model §6): re-resolving the same manifest against the same set
@@ -306,7 +330,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[lock-set-mirrors]**: The `mirrors` field MUST be an array of
+#### [lock-set-mirrors]
+
+The `mirrors` field MUST be an array of
 transport hints: URLs, or the `"::"` sentinel denoting the local
 workspace source (no remote). Mirrors are NEVER identity and NEVER
 trusted: content fetched from any mirror MUST verify against the
@@ -321,7 +347,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[lock-set-referenced]**: Every set alias appearing in a `[deps]` key
+#### [lock-set-referenced]
+
+Every set alias appearing in a `[deps]` key
 path MUST have an entry under `[sets]`, and every `[sets]` entry MUST be
 referenced by at least one dep entry.
 
@@ -395,7 +423,9 @@ Dependency entries are nested tables keyed by set alias, then atom
 label. This two-level keying is the `(set, label)` name anchor; there is
 no per-entry type dispatch and no `set` field.
 
-**[lock-single-version]**: A lock MUST bind at most one version per
+#### [lock-single-version]
+
+A lock MUST bind at most one version per
 `(set, label)` — the nested keying makes this structural. Within one
 atom's closure, resolution reconciles to a single shared choice per
 name (Composition Model §4); diamond requirements that cannot reconcile
@@ -414,7 +444,9 @@ evaluator: none
 because: [docs/models/composition-model#4]
 ```
 
-**[lock-dep-version]**: The `version` field MUST be the exact, non-empty
+#### [lock-dep-version]
+
+The `version` field MUST be the exact, non-empty
 version string of the resolved publish, recorded byte-verbatim as
 published (raw scheme — no normalization of any kind; scheme
 interpretation is a manifest/resolution concern, never a lock concern).
@@ -428,7 +460,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[lock-dep-publish]**: The `publish` field MUST be the content digest
+#### [lock-dep-publish]
+
+The `publish` field MUST be the content digest
 of the resolved publish transaction (the bare publish czd), prefixed
 with its hash algorithm. This is the entry's identity.
 
@@ -442,7 +476,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[lock-annotation-consistency]**: `version` and the `(set, label)` key
+#### [lock-annotation-consistency]
+
+`version` and the `(set, label)` key
 path MUST equal the values derivable from the entry's `publish`
 transaction. A mismatch is a hard validation error: annotations exist
 for humans and indexing, never as independent authority.
@@ -456,7 +492,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[lock-dep-requires]**: The `requires` field MUST be an array listing
+#### [lock-dep-requires]
+
+The `requires` field MUST be an array listing
 the entry's direct dependencies as dotted key paths (`"<set>.<label>"`
 for dep entries, `"fetch.<name>"` for fetch entries), sorted bytewise.
 Requires edges are the closure's graph structure. Provider-side owner
@@ -472,7 +510,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[lock-requires-resolvable]**: Every `requires` edge MUST name an entry
+#### [lock-requires-resolvable]
+
+Every `requires` edge MUST name an entry
 that exists in this lock. Dangling edges are a hard validation error.
 
 ```claim
@@ -480,7 +520,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[lock-requires-acyclic]**: The requires graph MUST be acyclic — it is
+#### [lock-requires-acyclic]
+
+The requires graph MUST be acyclic — it is
 the skeleton of the action DAG, and a cyclic build dependency is
 unrealizable.
 
@@ -489,7 +531,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[lock-dep-liveness]**: Dep-entry liveness is reachability from the
+#### [lock-dep-liveness]
+
+Dep-entry liveness is reachability from the
 manifest's direct dependencies — the graph's roots, which live
 manifest-side per [lock-closure-completeness]. The lock alone is
 deliberately not a self-contained GC domain: sanitization MUST take its
@@ -505,7 +549,9 @@ evaluator: none
 depends: [lock-closure-completeness]
 ```
 
-**[lock-dep-ordering]**: Dep entries MUST be serialized in bytewise
+#### [lock-dep-ordering]
+
+Dep entries MUST be serialized in bytewise
 lexicographic order of set alias, then label. (Fetch entries sort
 independently within `[fetch]`; no cross-section ordering relation
 exists or is needed.)
@@ -526,7 +572,9 @@ reviewed, signed intent; Execution Model §3.3). Origin coincides with
 section: everything under `[fetch]` is promotion-authored and NOT
 regenerable by resolution.
 
-**[lock-fetch-digest]**: Each fetch entry MUST contain a `digest` field:
+#### [lock-fetch-digest]
+
+Each fetch entry MUST contain a `digest` field:
 the algorithm-prefixed content digest of the fetched payload. The digest
 is the identity; the `url` field is a transport hint and MUST NOT be
 treated as authoritative.
@@ -541,7 +589,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[lock-fetch-naming]**: Fetch names are lock-local labels with no
+#### [lock-fetch-naming]
+
+Fetch names are lock-local labels with no
 cross-lock meaning. The promoting tool MUST derive names
 deterministically from the discovery context, and a promotion whose
 name collides with an existing entry carrying a different digest MUST
@@ -557,7 +607,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[lock-fetch-liveness]**: A fetch entry is live while at least one
+#### [lock-fetch-liveness]
+
+A fetch entry is live while at least one
 `requires` edge references it. Automated sanitization MUST NOT remove a
 live fetch entry, and MUST NOT remove a dead one except under an
 explicit user-invoked purge — promoted knowledge is not regenerable and
@@ -571,7 +623,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[lock-fetch-adopted-absent]**: Dependencies pinned by an **adopted**
+#### [lock-fetch-adopted-absent]
+
+Dependencies pinned by an **adopted**
 ecosystem lockfile (e.g. `Cargo.lock` shipped inside the atom's sources)
 MUST NOT be re-declared as fetch entries. The adopted lockfile is the
 pin payload, already inside the atom snapshot.
@@ -587,7 +641,9 @@ evaluator: none
 
 ## Canonical form and write discipline
 
-**[lock-canonical-form]**: Serialization MUST be canonical, defined
+#### [lock-canonical-form]
+
+Serialization MUST be canonical, defined
 concretely as: UTF-8, LF newlines, exactly one terminating newline; no
 comments; fixed section order (`schema`, `[sets]`, `[deps]`, `[fetch]`);
 keys sorted bytewise at every nesting level; exactly one blank line
@@ -609,7 +665,9 @@ kind: constraint
 evaluator: none
 ```
 
-**[lock-atomic-write]**: Every lock mutation MUST be a whole-file
+#### [lock-atomic-write]
+
+Every lock mutation MUST be a whole-file
 atomic write: after any crash or interruption, either the old lock is
 intact or the new lock has completely replaced it, with no intermediate
 state observable. Implementations SHOULD write to a temporary file and
@@ -633,7 +691,9 @@ because: [docs/models/execution-model#8]
 Each absence is a decision with a source; adding any of these is a
 regression, not an extension.
 
-**[lock-no-compose]**: The lock MUST NOT contain a `[compose]` section,
+#### [lock-no-compose]
+
+The lock MUST NOT contain a `[compose]` section,
 composer selection, or evaluator arguments of any kind (ADR-0006 §3).
 
 ```claim
@@ -641,7 +701,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[lock-no-params]**: Action parameters MUST NOT appear in the lock.
+#### [lock-no-params]
+
+Action parameters MUST NOT appear in the lock.
 They are declared in the manifest, which ships inside the atom snapshot
 (they are declared, not resolved).
 
@@ -650,7 +712,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[lock-no-toolchain-section]**: The lock MUST NOT contain a toolchain
+#### [lock-no-toolchain-section]
+
+The lock MUST NOT contain a toolchain
 section or toolchain entry type. Toolchain-role defaults are ordinary
 dependencies declared in the manifest and pinned as ordinary dep
 entries; the _effective_ toolchain after role-keyed override
@@ -662,7 +726,9 @@ evaluator: test
 because: [lock-action-totality]
 ```
 
-**[lock-no-interfaces]**: Interface manifests MUST NOT appear in the
+#### [lock-no-interfaces]
+
+Interface manifests MUST NOT appear in the
 lock. They are facts, not choices; they live on the atom metadata chain
 beside build records.
 
@@ -671,7 +737,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[lock-no-override-state]**: Override declarations (target-keyed or
+#### [lock-no-override-state]
+
+Override declarations (target-keyed or
 role-keyed, forced or bounded) MUST NOT appear in the lock. The lock
 records their ground _results_; the pin-diff is the audit trail.
 
@@ -680,7 +748,9 @@ kind: constraint
 evaluator: test
 ```
 
-**[lock-no-foreign-metadata]**: The lock MUST NOT contain registry
+#### [lock-no-foreign-metadata]
+
+The lock MUST NOT contain registry
 metadata, timestamps, resolution history, environment markers, or
 conditional entries of any kind. (The `snapshot` field is a content
 identity, not a timestamp.)
@@ -692,7 +762,9 @@ evaluator: test
 
 ## Whole-lock hashing is not an identity
 
-**[lock-no-plan-digest]**: Consumers MUST NOT use a digest of the whole
+#### [lock-no-plan-digest]
+
+Consumers MUST NOT use a digest of the whole
 lock file as a cache key, plan identity, job identity, or build
 identity for any action other than the owning atom's own (whose
 snapshot legitimately contains the lock, per
