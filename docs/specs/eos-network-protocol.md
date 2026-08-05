@@ -254,11 +254,13 @@ their replacements and marks them formally deprecated:
   §Atom-DAG Intake Surface below), which is opaque to the daemon.
 - **`BuildRequest.evalArgs`** — superseded by `ActionParams.variantFlags`
   (same successor as `ComposerSpec`).
-- **`AtomId.digest`** — this shipped shape names a hash of the
-  `(anchor, label)` pair, which CONTRADICTS the keystone identity decision
-  that `AtomId` is the abstract pair itself, not a digest of it (atom-sad
-  §6.1, `[identity-content-addressed]`). See the PROPOSED successor shape
-  below.
+- **`AtomId.digest`** — this shipped shape is a digest, which does **not**
+  contradict current identity doctrine: identity is the claim record's czd,
+  itself a digest — not the `(anchor, label)` pair (glossary, _Atom
+  identity_, repudiated 2026-07-18). It is listed here only because a
+  PROPOSED successor below cited the now-repudiated decision as grounds to
+  replace it; that successor's justification is marked void where it
+  appears.
 
 #### Atom-DAG Intake Surface — PROPOSED (Post-ADR-0005)
 
@@ -313,11 +315,27 @@ struct AtomDagEdge {
 #   dagNodes     @5 :List(AtomDagNode); # atom-DAG nodes, by publish_czd
 #   dagEdges     @6 :List(AtomDagEdge); # dependency edges, read off the lock
 #   actionParams @7 :ActionParams;      # successor of composer/evalArgs
+```
 
-# PROPOSED successor to AtomId (append-only; keystone re-spec — ADR-0005,
-# atom-sad §6.1 `[identity-content-addressed]`). The shipped `AtomId.digest`
-# field (Implemented Schema, above) is deprecated per the note above; the
-# target shape references the atom by the abstract pair, not a digest of it:
+> **JUSTIFICATION VOID (2026-07-18 repudiation) — MUST NOT be promoted
+> out of PROPOSED on this basis.** The `struct AtomId` successor below
+> was proposed on the strength of the keystone decision that `AtomId`
+> is the abstract `(anchor, label)` pair, not a digest of it (ADR-0005,
+> atom-sad §6.1 `[identity-content-addressed]`). That decision is
+> repudiated (glossary, _Atom identity_): identity is the claim
+> record's czd, itself a digest, and the shipped `AtomId.digest` field
+> this proposal targets for replacement does not actually contradict
+> current doctrine (see the corrected note under Deprecated Fields,
+> above). The proposal is kept, unpromoted, as the record of the
+> question it raised — a correct successor shape, if the shipped field
+> needs one, is a separate design decision not made here.
+
+```capnp
+# PROPOSED successor to AtomId (append-only) — VOID JUSTIFICATION, see
+# the callout above. Originally cited the keystone re-spec (ADR-0005,
+# atom-sad §6.1 `[identity-content-addressed]`) as grounds to replace
+# the shipped `AtomId.digest` field with the pair below; that citation
+# no longer holds.
 struct AtomId {
   set   @0 :Text;   # anchor hash of the atom-set (see AtomSetEntry.anchor)
   label @1 :Text;   # human-readable atom label within the set
