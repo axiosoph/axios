@@ -130,7 +130,6 @@ TYPE  Manifest = {
 **[manifest-required-sections]**: A valid `atom.toml` MUST contain
 both a `[package]` section and a `[compose]` section. The `[deps]`
 section is OPTIONAL and defaults to empty (no dependencies).
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -142,7 +141,6 @@ a `label` field (a valid `Label`) and a `version` field (a valid
 semantic version as defined by the [Semantic Versioning 2.0.0
 specification](https://semver.org)). The `description` field is
 OPTIONAL.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -153,7 +151,6 @@ evaluator: none
 `[deps.from.<set>]` MUST have a corresponding entry in
 `[package.sets]`. A manifest that references an undeclared set MUST
 be rejected during validation.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -162,7 +159,6 @@ evaluator: test
 
 **[set-mirror-minimum]**: Each set declared in `[package.sets]` MUST
 contain at least one mirror (either a URL or the local sentinel `::`).
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -172,7 +168,6 @@ evaluator: test
 **[composer-set-reference]**: If the composer uses the `with` variant,
 the `from` field MUST reference a set declared in `[package.sets]`.
 The referenced atom MUST be resolvable from that set.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -185,7 +180,6 @@ defined by the `semver` crate (compatible with the node-semver range
 grammar). Ion's `[version-total-order]` implementation (per
 atom-sourcing.md) is semver. Examples: `"^1.0.0"`, `">=2.0,<3.0"`,
 `"=1.2.3"`, `"*"`.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -196,7 +190,6 @@ depends: [version-total-order]
 **[deny-unknown-fields]**: A valid manifest MUST reject any fields not
 defined by the manifest schema or by registered plugins. This prevents
 silent misconfiguration from typos or deprecated fields.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -208,7 +201,6 @@ evaluator: test
 consequence of atom-transactions.md atom identity, restated here for
 manifest clarity: publishing a new snapshot under an existing
 (label, version) pair is forbidden.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -223,7 +215,6 @@ for non-atom dependencies. Each plugin is identified by a tag (e.g.,
 `nix`) and occupies its own namespace under `[deps.direct.<plugin>]`.
 The schema within each plugin namespace is defined by the plugin, not
 by ion core.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -242,7 +233,6 @@ lock entries containing at minimum:
 The hash format is plugin-defined (e.g., NixHash for the nix plugin,
 SHA256 for others). Ion core does not interpret the hash — it captures
 it in the lock and passes it through.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -255,7 +245,6 @@ carry a type tag that identifies both the plugin and the specific
 fetch strategy (e.g., `"nix"`, `"nix+git"`, `"nix+tar"`,
 `"nix+build"`). This tag enables eos to select the correct fetch and
 verification strategy without understanding ion's plugin mechanism.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -269,7 +258,6 @@ SHOULD include an `owner` field containing the owning atom's
 `publish_czd` (a Czd). This enables dependency
 graph reconstruction and targeted re-resolution when the owning atom
 updates.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -281,7 +269,6 @@ depends: [plugin-extension-point]
 within ion (or the plugin itself). Eos MUST NOT be required to
 understand the plugin's resolution logic. Eos consumes only the lock
 output: type tag, name, URL, and hash.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -309,7 +296,6 @@ any resolution or publish operation.
   (`[manifest-required-sections]`, `[set-declaration-completeness]`,
   `[composer-set-reference]`, `[deny-unknown-fields]`) hold. Invalid
   manifests MUST be rejected with a diagnostic error.
-  `VERIFIED: test (ion/ion-manifest/src/lib.rs::IonManifest::parse -- test_valid_manifest_parsing, test_manifest_missing_required_sections, test_manifest_deny_unknown_fields, test_set_declaration_completeness, ion_manifest_invalid_rejected property test)`
 
 ```claim
 kind: constraint
@@ -326,8 +312,9 @@ MUST update the manifest and trigger re-resolution.
   dependency. If the set was not previously declared, it is added to
   `[package.sets]`. The lock file is updated via the resolution
   pipeline. The manifest is re-validated after modification.
-  `VERIFIED: unverified`
-  `RESIDUE: Phase 1/2 -- no CLI "add" command or re-resolution pipeline exists; ion-manifest only parses/validates a manifest already on disk`
+
+No CLI `add` command or re-resolution pipeline exists; ion-manifest
+only parses and validates a manifest already on disk.
 
 ```claim
 kind: constraint
@@ -344,8 +331,9 @@ validate the mirror's anchor against the set's established anchor.
   mirror singleton is promoted to a mirror array if needed. The
   anchor of the new mirror has been verified consistent with existing
   mirrors per atom-sourcing.md `[set-anchor-bijection]`.
-  `VERIFIED: unverified`
-  `RESIDUE: Phase 1/2 -- no mirror-add or anchor-bijection-validation logic exists anywhere in the codebase`
+
+No mirror-add or anchor-bijection-validation logic exists anywhere in
+the codebase.
 
 ```claim
 kind: constraint
@@ -359,8 +347,14 @@ depends: [set-anchor-bijection]
 referenced by NEITHER `[deps.from]` NOR `[compose.with]` is NOT an
 error — sets MAY be declared for future use or for mirror management.
 This is explicitly NOT forbidden.
-`VERIFIED: unverified`
-`RESIDUE: Uncertain, flagged for review -- IonManifest::parse (ion/ion-manifest/src/lib.rs) never checks the sets-to-deps direction, so an orphaned set is accepted by construction (satisfying this permissive constraint), but no dedicated test asserts that case; the property-based roundtrip test can generate it incidentally but does not name it as the behavior under test. Conservative RESIDUE pending a dedicated positive test.`
+
+`IonManifest::parse` (`ion/ion-manifest/src/lib.rs`) never checks the
+sets-to-deps direction, so an orphaned set is accepted by
+construction, satisfying this permissive constraint — but no
+dedicated test asserts that case; the property-based roundtrip test
+can generate it incidentally without naming it as the behavior under
+test. Flagged for review: this grade is conservative pending a
+dedicated positive test.
 
 ```claim
 kind: constraint
@@ -370,7 +364,6 @@ evaluator: none
 **[no-undeclared-set-reference]**: A `[deps.from.<set>]` section MUST
 NOT reference a set not declared in `[package.sets]`. Corollary of
 `[set-declaration-completeness]`.
-`VERIFIED: test (ion/ion-manifest/src/lib.rs::IonManifest::parse set-declaration-completeness check -- test_set_declaration_completeness, ion_manifest_invalid_rejected case 1 "undeclared-set-name")`
 
 ```claim
 kind: constraint
@@ -381,7 +374,6 @@ depends: [set-declaration-completeness]
 **[no-self-dependency]**: An atom MUST NOT declare a dependency on
 itself (same label from the local set). Implementations MUST detect
 and reject self-referential dependencies.
-`VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -397,7 +389,6 @@ equivalent document. Field ordering and formatting MAY differ (per
 identical.
 
 - **Type**: Safety
-  `VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -410,7 +401,6 @@ just the first one. This enables users to fix multiple issues without
 repeated parse-fix-parse cycles.
 
 - **Type**: Liveness (usability)
-  `VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -423,7 +413,6 @@ is strictly limited to its own namespace under `[deps.direct.<tag>]`
 and its corresponding lock entries.
 
 - **Type**: Safety
-  `VERIFIED: unverified`
 
 ```claim
 kind: constraint
@@ -473,26 +462,6 @@ nixpkgs.version = ">=24.05"
 > (ADR-0006 §Consequences) — treat these shapes as dead.
 
 ## Verification
-
-| Constraint                   | Method      | Result | Detail                                                             |
-| :--------------------------- | :---------- | :----- | :----------------------------------------------------------------- |
-| manifest-required-sections   | agent-check | pass   | Two required sections, well-defined defaults for optional          |
-| package-identity-required    | agent-check | pass   | label + version are minimal identity; consistent with AtomId model |
-| set-declaration-completeness | agent-check | pass   | Forward reference check; no contradiction with optional sets       |
-| set-mirror-minimum           | agent-check | pass   | Empty set is useless; at least one mirror is constructive          |
-| composer-set-reference       | agent-check | pass   | Composer must resolve; unresolvable composer is a fatal error      |
-| version-constraint-syntax    | agent-check | pass   | Uses semver crate grammar; well-defined and widely understood      |
-| deny-unknown-fields          | agent-check | pass   | Prevents misconfiguration; compatible with plugin extension        |
-| label-version-uniqueness     | agent-check | pass   | Restated from atom-transactions; no new constraint                 |
-| plugin-extension-point       | agent-check | pass   | Namespaced under deps.direct; no collision with core sections      |
-| plugin-lock-contract         | agent-check | pass   | Minimal (name, url, hash) is sufficient for fetch+verify           |
-| plugin-lock-type-tag         | agent-check | pass   | Enables eos dispatch without plugin knowledge                      |
-| plugin-owner-tracking        | agent-check | pass   | SHOULD, not MUST; backward compatible                              |
-| plugin-resolution-locality   | agent-check | pass   | Keeps eos clean; consistent with ion-as-adapter model              |
-| manifest-roundtrip           | agent-check | pass   | Standard serde/toml_edit property; no contradiction                |
-| manifest-validation-total    | agent-check | pass   | Usability property; no safety contradiction                        |
-| plugin-isolation             | agent-check | pass   | Prevents plugin from corrupting core state                         |
-| no-self-dependency           | agent-check | pass   | Self-reference is always a cycle; trivially detectable             |
 
 All constraints are internally consistent. No contradictions detected
 with atom-sourcing.md, atom-transactions.md, or git-storage-format.md
