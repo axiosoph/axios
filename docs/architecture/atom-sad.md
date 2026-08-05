@@ -63,6 +63,8 @@ publish chain of the set that packaged it — not from upstream's own
 release artifacts; upstream's bytes are pinned _inside_ that signed
 intent, they do not sign it.
 
+#### [atom-layer-ownership-boundary]
+
 Atom owns:
 
 - **Identity** — the `AtomId = (anchor, label)` pair: a stable, algorithm-free,
@@ -78,6 +80,11 @@ Atom does **not** own: evaluation or build (L3, eos), dependency resolution or t
 lock file as a whole (L4, ion), or key management and signing primitives (Cyphr/Coz,
 below L1). Atom defines the identity contract those layers consume; it never
 consumes them.
+
+```claim
+kind: requirement
+evaluator: none
+```
 
 ### 1.2 External Actors
 
