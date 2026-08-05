@@ -21,9 +21,10 @@
   Maintained as Architecture-as-Code. Diagrams are Mermaid.js, inline.
 
   Settled design inputs: the keystone resolution (AtomId's pair form as the
-  pre-claim, algorithm-free coordinate — not identity, which is the claim czd,
-  §6.1; 2-value name-anchored lock; blake3(publish_czd)-keyed store; algorithm
-  agility retained only in the Coz czd); the
+  pre-signature preimage of an unclaimed development atom — not identity,
+  which is the claim czd, §6.1; 2-value name-anchored lock;
+  blake3(publish_czd)-keyed store; algorithm agility retained only in the Coz
+  czd); the
   composition-unit repositioning (atom sits ABOVE language package
   managers — one implementation, per-ecosystem internals as plugins);
   the atom protocol-plane formalization (atom-model.md,
@@ -119,7 +120,7 @@ graph TB
 
 | Boundary      | Inside Atom                                                                             | Outside Atom                                                                    |
 | :------------ | :-------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------ |
-| **Identity**  | The claim record's czd (§6.1); its pre-claim coordinate is `AtomId = (anchor, label)`, anchor = `czd(charter₀)`, the founding charter's coz digest | Key material, signature primitives (Coz/Cyphr)                                  |
+| **Identity**  | The claim record's czd (§6.1); `AtomId = (anchor, label)` is its pre-signature preimage, anchor = `czd(charter₀)`, the founding charter's coz digest | Key material, signature primitives (Coz/Cyphr)                                  |
 | **Ownership** | claim/publish protocol; claim/publish chains; the owner→identity binding                | Owner identity _systems_ (Coz `tmb`, Cyphr `PR`) — `Owner` is opaque            |
 | **Storage**   | git-object encoding; registry + store ref layout; ingest                                | Build execution, artifact store (L3)                                            |
 | **Discovery** | object-free ref advertisement; set→mirrors indirection                                  | Version _semantics_ (`VersionScheme` is a trait; its per-ecosystem dialects are internal plugins above L1, §1.1) |
@@ -245,9 +246,9 @@ Defines the four traits and their algebraic relationships (`atom-core/src/lib.rs
 
 ### 3.2 atom-id — Identity Primitives
 
-`Anchor`, `Label`, and `AtomId = (anchor, label)` — the pre-claim, algorithm-free
-pair coordinate. `AtomId` is **not** the atom's identity; identity is the claim
-record's czd (see §6.1).
+`Anchor`, `Label`, and `AtomId = (anchor, label)` — the algorithm-free pair
+that is the pre-signature preimage of an unclaimed development atom. `AtomId`
+is **not** the atom's identity; identity is the claim record's czd (see §6.1).
 
 ### 3.3 atom-uri — URI Parsing
 
@@ -384,10 +385,6 @@ identity. Those two invariants still name the pair as "identity" in their own
 prose; that is drift against the 2026-07-18 correction, tracked in Appendix D
 rather than repeated here.
 
-There is no `AtomDigest` type over the pair, and no store-chosen algorithm
-agility at this layer — the algorithm agility that exists belongs to the claim
-czd, a Coz-native property (§6.3), not something `atom-id` re-implements.
-
 ### 6.2 The Anchor
 
 **(Amended 2026-07-08 — the charter.)** The anchor is the coz digest of the
@@ -441,15 +438,20 @@ specs** and are consolidated here:
 
 ### 6.5 The Lock Contribution (2-value)
 
-The atom-required lock entry (`[lock-entry-sufficient]`, `[lock-capture]`) is keyed
-by `AtomId = (set, label)` and carries exactly two values: the resolved `version` and
-the **bare** `publish_czd` (original algorithm — the lock represents the _actual_
-cryptographic security the signature covers). `set` resolves to mirrors via a shared
-`[sets] → mirrors` table.
+The atom-required lock entry (`[lock-entry-sufficient]`, `[lock-capture]`)
+currently uses `AtomId = (set, label)` as its map key and carries exactly two
+values: the resolved `version` and the **bare** `publish_czd` (original
+algorithm — the lock represents the _actual_ cryptographic security the
+signature covers). That map key is a lock-schema implementation choice, not a
+claim about the atom's identity or its resolution path: `set` resolves to
+mirrors via a shared `[sets] → mirrors` table, and `label` is what a claim is
+actually found by within that set's log — never a fused pair (§6.1; glossary,
+_Atom identity_, _Deprecated and repudiated formulations_).
 
-- **No hashed `id`** — the `(set, label)` pair is the map key; it is not the
-  atom's identity (that is the claim czd, §6.1) but its pre-claim coordinate,
-  so no separate hashed identifier is needed to key a lock entry.
+- **No hashed `id`** — the lock's map key, `(set, label)`, is sufficient on
+  its own for a unique entry, so no separate hashed identifier is needed. This
+  is the same implementation-choice caveat as above, not a claim that the pair
+  is the atom's identity (§6.1) or its lookup path.
 - **No `rev`** — the atom commit is peelable from the `publish_czd`'s tag chain.
 - **`dig` is not stored** — it lives in the signed publish payload (the czd-pinned
   source of truth); on acquisition the peeled content-addressed sha **MUST equal**
@@ -478,11 +480,13 @@ copied lock fields:
   atom's git object via `AtomContent`.
 - **Ion** may derive wire-handoff fields from that same object at resolution time.
 
-Nothing about the atom is copied into the lock beyond the `(set, label) →
-{version, publish_czd}` pointer. The L3/L4 boundary is `AtomContent` (the forgetful
-functor dropping store-mutating observers). _Note:_ `ion-eos-contract.md`
-`[handoff-atom-fields]` carries only the minimal pointer `(set, label, version,
-publish_czd)`; eos reads `rev`/`dig`/content from the self-describing git object.
+Nothing about the atom is copied into the lock beyond the map entry `(set,
+label) → {version, publish_czd}` — the lock-schema key described in §6.5, not
+a claim about atom identity or lookup path. The L3/L4 boundary is
+`AtomContent` (the forgetful functor dropping store-mutating observers).
+_Note:_ `ion-eos-contract.md` `[handoff-atom-fields]` carries only the minimal
+field tuple `(set, label, version, publish_czd)`; eos reads `rev`/`dig`/content
+from the self-describing git object.
 (Earlier drafts mandated eos _receive_ `rev`/`id` — that over-specification has
 been realigned.)
 
@@ -567,7 +571,7 @@ Out of scope for the atom layer:
 | Composite      | The genus an atom reifies as intent: a package, environment, or system with its determined closure (atom-model §2) |
 | Mode           | The publish-carried reproducibility declaration, `reproducible` \| `witnessed` (atom-model §6)                     |
 | Anchor         | `czd(charter₀)` — the founding charter's coz digest; immutable atom-set identity |
-| AtomId         | The abstract pair `(anchor, label)` — the pre-claim coordinate, not the atom's identity (§6.1); used as the lock/store key |
+| AtomId         | The abstract pair `(anchor, label)` — the pre-signature preimage of an unclaimed development atom, not the atom's identity (§6.1); the lock's current map key (§6.5) |
 | Atom-set       | Atoms sharing a common anchor                                                    |
 | Label          | Human-readable atom name (UAX #31)                                               |
 | OwnerRef       | `{kind, value}` — a `kind`-tagged opaque identity digest (Coz `tmb`, Cyphr `PR`); `kind` names the identity framework (`single-key` implemented; `hierarchical`/`rooted-identity` reserved), `value` stays opaque to the protocol regardless of `kind` |
@@ -611,11 +615,13 @@ Out of scope for the atom layer:
 
 ## Appendix D: Known Specification Drift
 
-The keystone realignment — pair-only `AtomId` (no
-`AtomDigest`/`[digest-algorithm-agile]`), the 2-value name-anchored lock, the flat
-`blake3(publish_czd)` store, and name-anchored acquisition — has been applied across
-`atom-transactions.md`, `atom-sourcing.md`, and `git-storage-format.md`, which are
-aligned to this SAD. The 2026-07-08 charter amendment (`Anchor := czd(charter₀)`,
+The keystone realignment — the `AtomId` pair as the lock's map key (not
+identity, §6.1), the 2-value name-anchored lock, the flat
+`blake3(publish_czd)` store, and name-anchored acquisition — has been applied
+across `atom-transactions.md`, `atom-sourcing.md`, and `git-storage-format.md`,
+which are aligned to this SAD in those respects. (The identity portion of that
+realignment is itself superseded by the 2026-07-18 correction — see the next
+paragraph.) The 2026-07-08 charter amendment (`Anchor := czd(charter₀)`,
 atom-transactions.md `[charter-anchor]`) has likewise been propagated across those
 specifications and this SAD (§6.2). One deliberate, explicitly marked gap remains:
 the git backend's storage encoding and ref layout for charter transactions is not
@@ -660,4 +666,4 @@ follow-on design work, not silent drift.
 | Document                   | Issue                                                                      | Corrected In                                                                                                                                    |
 | :------------------------- | :------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------- |
 | `alloy/atom_structure.als` | `identity_content_addressed` assertion name could be misread as hash-based | Clarifying comment added; name **kept** to match the retained `[identity-content-addressed]` spec tag + evaluator linkage; body already correct |
-| `tla/AtomTransactions.tla` | none — comment accurately reads "deterministic function of (anchor,label)" | No change needed; body and comment already correct                                                                                              |
+| `tla/AtomTransactions.tla` | Its "deterministic function of `(anchor,label)`" identity formula encodes the pair-as-identity doctrine, repudiated 2026-07-18 (§6.1) | **Certification withdrawn, not reissued.** This row previously recorded an "already correct" verdict that assumed the repudiated doctrine; that verdict no longer holds, and this SAD does not re-certify the file's current body. The model's identity formula is under separate rework; re-audit is owed once that lands, not performed here. |
