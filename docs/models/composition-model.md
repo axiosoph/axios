@@ -461,8 +461,8 @@ environment atom  manifest ──formation───▶ certificate  (pinned inte
 The certificate is the environment's lockfile — the same
 intent→pinned-elaboration shape, fourth instantiation of the binding
 algebra. Both strata version and resolve through ion's existing
-machinery; environment members ARE references (set/label/version
-constraints) — what environments lack is not dependency _declaration_ but
+machinery; environment members ARE references (`set`, `label`, and
+`version` constraints) — what environments lack is not dependency _declaration_ but
 build-input _semantics_ (no toolchain, no fetch set, no build/runtime dep
 split).
 

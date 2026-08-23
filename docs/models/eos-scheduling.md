@@ -131,9 +131,8 @@ below, which depend on these same symbols):
   htc-sad §6.5: $H(\text{atom\_czd\_closure\_root},
   \text{toolchain\_composition\_root}, \text{action\_params})$)
   (globally unique, deterministic)
-- $\text{name}(v)$: the atom label, from the owning atom's
-  `(set, label)` pair (human-readable, structurally stable
-  across versions)
+- $\text{name}(v)$: the owning atom's `label`, within its `set`
+  (human-readable, structurally stable across versions)
 - $\text{cached}(v) \in \{\text{true}, \text{false}\}$:
   whether $v$'s output exists in the artifact store at
   the time of DAG construction
