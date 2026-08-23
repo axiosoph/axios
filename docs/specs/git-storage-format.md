@@ -883,7 +883,6 @@ evaluator: test
 ```
 refs/atom/claims/pub/{label}                       → claim commit [→ fact chain] → (tip)
 refs/atom/pub/{label}/{version}                  → publish tag [→ chain] → atom commit
-refs/atom/src/{oid}                              → src commit (provenance-protected)
 ```
 
 The claim ref is the tip of the claim's own fact chain (`[claim-fact-
@@ -891,9 +890,13 @@ chain]`): claim-owner facts (key rotation, transfer, seizure) parent to
 the previous fact commit, or to the claim commit itself for the first
 fact — never a second claim commit. All historical facts are reachable
 by walking the chain to its root, the one permanent claim commit — no
-separate `claims/d/` refs are needed in the registry. `refs/atom/src/`
-protects source revision commits from GC if the originating branch is
-deleted.
+separate `claims/d/` refs are needed in the registry. There is no
+dedicated `refs/atom/src/` protective-ref family: GC protection for a
+source revision commit is no longer a ref an implementer maintains by
+hand — the anchor's own record log carries it intrinsically for every
+publish ever made, transitively, from a single ref, and a registry
+implementing this specification does not additionally write or read
+`refs/atom/src/*`.
 
 ##### [registry-ref-label-unique]
 
@@ -1140,9 +1143,10 @@ detached claim commit.
   point MUST be provided.
 - **POST**: A claim commit exists, parentless, with the well-known
   empty tree and the CozMessage (containing `src`) as the commit
-  message. The ref `refs/atom/claims/pub/{label}` points to it. A
-  protective ref `refs/atom/src/{src_oid}` is written to prevent GC of
-  the claim's source revision.
+  message. The ref `refs/atom/claims/pub/{label}` points to it. No
+  protective ref is written for the claim's source revision — GC
+  protection for it is the anchor's record log's job, not this
+  transition's (see the Registry Refs prose above).
 
 ```claim
 kind: constraint
@@ -1706,9 +1710,9 @@ depends: [docs/models/publishing-stack-layers#2.3]
   fact (`[claim-owner-fact-storage]`) reuses the same object shape but
   parents onto the claim commit or the previous fact commit, forming
   the fact chain (`[claim-fact-chain]`). The `src` in the claim payload
-  ties the commit hash to the source revision. Write two refs at claim
-  time: `claims/pub/{label}` and `src/{src_oid}`; a fact commit updates
-  only `claims/pub/{label}` to its own new tip.
+  ties the commit hash to the source revision. Write one ref at claim
+  time, `claims/pub/{label}`; a fact commit updates that same ref to
+  its own new tip. No `src/{src_oid}` protective ref is written.
 
 - **Publish tags**: Use gix's tag object creation API with the
   CozMessage as tag message. The `claim` czd in the payload identifies
