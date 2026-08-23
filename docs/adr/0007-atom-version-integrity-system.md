@@ -2052,8 +2052,8 @@ from mattering, which is the opposite of what this system needs.
   drafting pass.
 - [`eml`](https://github.com/Cyphrme/eml) — the formally verified,
   canonical, multi-hash-algorithm Merkle library (`polydigest(cml)@k=2`)
-  this ADR's record-log, closure, and content-commitment structures
-  (§5, §7) are built on, not a hand-rolled construction; see §7.2 for
+  this ADR's record-log structure (§5, §7) is built on, not a
+  hand-rolled construction; see §7.2 for
   the canonicalization argument and the no-prefix design rationale. Not
   yet vendored/pinned as a dependency — implementation work, not
   decided here.
