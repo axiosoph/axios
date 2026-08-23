@@ -2153,19 +2153,27 @@ depends: [registry-ref-claim, registry-ref-version, charter-ref-by-czd]
   empty message — no extra headers. The `dig` field in PublishPayload
   is this commit's ObjectId, a pure function of its tree.
 
-- **Claim commits**: Use gix to create commits with the well-known
-  empty tree, no extra headers, ATOM_AUTHOR/ATOM_TIMESTAMP, and the
-  CozMessage as commit message. The claim commit is always parentless —
+- **Claim commits**: Use gix to create commits carrying the anchor's
+  record-log tree at the claim genesis leaf's append point, no extra
+  headers, ATOM_AUTHOR/ATOM_TIMESTAMP, and a fixed, empty message — the
+  CozMessage is written to the log as the claim genesis leaf, never to
+  this commit's own message
+  ([log-anchored-message-fixed](#log-anchored-message-fixed)). The
+  claim commit is always parentless —
   genesis-once, one ever per label (`[claim-detached]`). A claim-owner
   fact (`[claim-owner-fact-storage]`) reuses the same object shape but
   parents onto the claim commit or the previous fact commit, forming
   the fact chain (`[claim-fact-chain]`). The `src` in the claim payload
-  ties the commit hash to the source revision. Write one ref at claim
-  time, `claims/pub/{label}`; a fact commit updates that same ref to
-  its own new tip. No `src/{src_oid}` protective ref is written.
+  ties the claim to the source revision cryptographically (via the
+  claim's czd); the commit's own hash carries no such binding. Write
+  one ref at claim time, `claims/pub/{label}`; a fact commit updates
+  that same ref to its own new tip. No `src/{src_oid}` protective ref
+  is written.
 
-- **Publish commits**: Use gix's commit creation API with the
-  CozMessage as commit message. The chain's first commit targets the
+- **Publish commits**: Use gix's commit creation API with a fixed,
+  empty message — the CozMessage is written to the log as the
+  publish's (or fact's) own leaf, never to this commit's own message.
+  The chain's first commit targets the
   content commit as its sole git parent; the `claim` czd in its
   payload identifies the authorizing claim. For fact-extending
   updates, the new commit targets the previous commit in the SAME
@@ -2341,11 +2349,14 @@ depends: [registry-ref-claim, registry-ref-version, charter-ref-by-czd]
    ergonomics.
 
 5. **Charter storage representation** — RESOLVED (2026-07-13);
-   **re-resolved for genesis-once (2026-08-05)**: The git object
-   encoding and ref layout for the charter transaction is specified. A
-   charter is a **charter commit** — a parentless, empty-tree commit
-   carrying the charter `CozMessage` (`[charter-commit-format]`,
-   `[charter-message-is-coz]`) — addressed by
+   **re-resolved for genesis-once (2026-08-05)**; **re-resolved again
+   for the record-anchored publishing design (2026-08-23)**: The git
+   object encoding and ref layout for the charter transaction is
+   specified. A charter is a **charter commit** — a parentless commit
+   carrying the anchor's record-log tree at the charter genesis leaf's
+   append point, with a fixed, inert message, the charter `CozMessage`
+   read as that log leaf (`[charter-commit-format]`,
+   `[record-is-log-leaf]`) — addressed by
    `refs/atom/charter/d/{charter_czd}` (`[charter-ref-by-czd]`).
    Genesis-once (`[atom-genesis-and-facts]`) retired the original
    resolution's successor-charter chain
@@ -2372,12 +2383,22 @@ depends: [registry-ref-claim, registry-ref-version, charter-ref-by-czd]
    defers "the concrete fact-record wire shape... scoping it is a
    git-storage-format.md / atom-backend-contract.md concern" as an Open
    Item; this pass supplies the git container per that obligation but
-   deliberately does not fabricate the payload's protocol-level content,
-   since ADR-0007 does not settle it either (its own §7.4/§7.5 — the
-   closure-tree and fact-tag-chain mechanics the ADR cites repeatedly —
-   are themselves never given their own numbered subsection in the ADR
-   text, a drafting gap in the ADR itself, not something this
-   amendment can safely resolve by invention). A follow-up amendment to
+   deliberately does not fabricate the payload's protocol-level content.
+   **Updated 2026-08-23**: the earlier form of this note claimed
+   ADR-0007 didn't settle this either because its §7.4/§7.5 were
+   "never given their own numbered subsection" — that claim is now
+   stale and was struck: ADR-0007 §7.1–§7.5 (the record log,
+   checkpoints, the content commit, and the three materialized view
+   chains) are now fully drafted, numbered sections on
+   `campaign/atom-version-integrity`, and this document's own git
+   object model has been brought into agreement with them (`LogTree`,
+   `[log-tree-opaque]`, `[record-is-log-leaf]`, and the tree/message
+   fields of `CharterCommitFormat`, `ClaimCommitFormat`,
+   `FactCommitFormat`, and `PublishChainCommitFormat`). What ADR-0007
+   §7 STILL does not settle — and what remains genuinely open here —
+   is `FactPayload`'s own field shape: its `typ` value(s) and the
+   owner-vs-governance discriminator `[claim-owner-fact]` requires. A
+   follow-up amendment to
    atom-transactions.md (or a joint one with atom-backend-contract.md)
    MUST settle `FactPayload` before `[charter-fact-chain]` /
    `[claim-fact-chain]` / `[claim-owner-fact-storage]` can move past
