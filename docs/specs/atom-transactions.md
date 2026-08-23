@@ -505,7 +505,7 @@ TYPE  VersionScheme = trait {                                      (atom-id)
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 ```
 
 #### [atom-genesis-and-facts]
@@ -531,7 +531,7 @@ buggy client, a dishonest one, or a compromised key.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: model-check
 depends: [charter-fork-distinction]
 ```
 
@@ -542,7 +542,7 @@ A charter transaction's payload MUST carry
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: type
 ```
 
 #### [charter-anchor]
@@ -717,7 +717,7 @@ the fact-based claim-owner-change rule anywhere in this repository.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: model-check
 ```
 
 #### [charter-ancestry]
@@ -799,7 +799,7 @@ own, so it cannot add a key without a membership change (a new
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: model-check
 ```
 
 #### [charter-owner-fact-linear]
@@ -879,7 +879,7 @@ consistency, not this restatement's correctness.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: model-check
 ```
 
 #### [charter-owner-threshold]
@@ -911,7 +911,7 @@ extension, not a present obligation on every charter.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: property-test
 depends: [charter-owner-fact]
 ```
 
@@ -935,7 +935,7 @@ obligation.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 depends: [claim-charter-authorization]
 ```
 
@@ -1053,7 +1053,7 @@ not a smaller version of the old one.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: model-check
 ```
 
 #### [owner-abstract]
@@ -1214,7 +1214,7 @@ replacement — there is only ever the one claim, the one `czd`
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: type
 ```
 
 #### [symmetric-payloads]
@@ -1321,7 +1321,7 @@ authorship) to ensure reproducibility across backends.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 ```
 
 #### [src-is-source-revision]
@@ -1344,7 +1344,7 @@ navigate from the source revision's root to the atom's subtree.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 ```
 
 #### [publish-mode]
@@ -1610,7 +1610,7 @@ there is nothing to compare.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 ```
 
 #### [fact-kind-table]
@@ -1677,7 +1677,7 @@ chain.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 ```
 
 Verification will round-trip fact entries and confirm the kind name
@@ -1722,7 +1722,7 @@ consumer).
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 ```
 
 #### [rawversion-opaque]
@@ -1803,7 +1803,7 @@ derivable from source content alone.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 ```
 
 #### [manifest-minimal]
@@ -1814,7 +1814,7 @@ and MUST NOT be required by the protocol.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: type
 ```
 
 #### [backend-bit-perfect]
@@ -1825,7 +1825,7 @@ blobs (cf. Coz bit-perfect preservation).
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: property-test
 ```
 
 #### [atomid-per-source-unique]
@@ -1887,7 +1887,7 @@ in the publish payload (`src`, `path`) and verified separately.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 ```
 
 #### [uri-not-metadata]
@@ -1926,7 +1926,7 @@ on cryptographic libraries — all crypto MUST flow through atom-id.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 ```
 
 Verification will audit atom-core's `Cargo.toml` and confirm it has
@@ -2110,7 +2110,7 @@ through atom-id via Coz.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 ```
 
 #### [no-backdated-publish]
@@ -2147,7 +2147,7 @@ only local computation — zero network round-trips.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 ```
 
 #### [verification-provenance]
@@ -2164,7 +2164,7 @@ complete source history.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 ```
 
 #### [atom-snapshot-reproducible]
@@ -2179,7 +2179,7 @@ hash.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: property-test
 ```
 
 #### [ingest-preserves-identity]
@@ -2313,7 +2313,7 @@ vocabulary those principles govern.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 ```
 
 #### [format-version-discriminator]
@@ -2338,7 +2338,7 @@ are noted here for the record, not addressed by this document.)
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: review
 ```
 
 #### [format-unknown-field-tolerance]
@@ -2361,7 +2361,7 @@ is measured against, it does not resolve it.)
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: property-test
 ```
 
 #### [format-reserved-names]
@@ -2394,7 +2394,7 @@ submission process governs it.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: review
 ```
 
 ## Verification Pipeline
