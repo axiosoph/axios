@@ -23,7 +23,7 @@ pub struct LockFileV2 {
     pub schema: u64,
     /// Set aliases to their anchor/charter/discovery data (`[sets]`).
     pub sets: HashMap<String, SetEntry>,
-    /// Ground dependency pins, nested by `(set, label)` (`[deps.<set>.<label>]`).
+    /// Ground dependency pins, nested by `set` then `label` (`[deps.<set>.<label>]`).
     pub deps: HashMap<String, HashMap<String, DepEntry>>,
     /// Promoted fetch pins (`[fetch.<name>]`).
     pub fetch: HashMap<String, FetchEntry>,
@@ -52,9 +52,10 @@ pub struct SetEntry {
 }
 
 /// A `[deps.<set>.<label>]` entry: a ground dependency pin
-/// (`docs/specs/lock-file-schema.md:194-244`). The nesting key path IS
-/// `(set, label)` — there is no `set`/`label`/`id`/`rev`/`direct` field on
-/// the entry itself (all structurally eliminated vs v1's `AtomDep`).
+/// (`docs/specs/lock-file-schema.md:194-244`). The entry is reached by
+/// nesting on `set` then `label` — there is no `set`/`label`/`id`/`rev`/
+/// `direct` field on the entry itself (all structurally eliminated vs v1's
+/// `AtomDep`).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct DepEntry {
     /// The bare publish czd (`sha256`) — this entry's identity
