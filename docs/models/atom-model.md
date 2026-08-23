@@ -635,6 +635,28 @@ evaluator: none
 depends: [spine-chain-complete]
 ```
 
+The anchor is not a declared field anywhere, not even on the charter
+genesis leaf itself, which cannot self-reference the value in
+question ([ADR-0007 §4](../adr/0007-atom-version-integrity-system.md)).
+It is discovered by walking a spine's `prior` chain back to its first
+leaf, never carried: a spine whose first leaf is anything other than
+a charter genesis record names no anchor at all.
+
+#### [spine-genesis-first]
+
+A spine's first leaf — reached by walking the
+`prior` links [spine-chain-complete](#spine-chain-complete) guarantees
+are unbroken, back to their root — MUST be a charter genesis record. A
+spine whose first leaf is a claim, a publish, or an amendment is
+invalid and names no anchor; there is no discovery path that produces
+an anchor from such a spine.
+
+```claim
+kind: invariant
+evaluator: none
+depends: [spine-chain-complete]
+```
+
 **The cloud holds fact** — yank, deprecation, advisories, attestations,
 interface manifests, build records — as a history-independent
 authenticated set, writable by any anchored signer holding the role, with

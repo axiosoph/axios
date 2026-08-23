@@ -508,6 +508,33 @@ kind: constraint
 evaluator: none
 ```
 
+#### [atom-genesis-and-facts]
+
+Charter, claim, and publish are each a
+permanent, single genesis record for their scope: written exactly
+once, at the moment that scope first comes into existence, and never
+again — never reissued, never superseded by a second record of the
+same kind for the same scope. The only way to establish a new one is a
+genuine fork, a deliberate, out-of-band new anchor
+([charter-fork-distinction](#charter-fork-distinction)), never an
+in-protocol succession. A
+second genesis record for an already-founded scope — a second claim
+for an already-claimed label, a second publish for an already-published
+`(label, version)` — is void, and every conforming verifier MUST reject
+it, independent of any registry's own ref state. This is a fail-safe,
+not the primary discipline: a conforming client is expected to check
+its own already-fetched history and refuse to construct a duplicate
+charter, claim, or publish before ever signing one — that client-side
+discipline is not yet itself a specified constraint (Open Items); the
+rejection rule above exists for when it does not hold regardless — a
+buggy client, a dishonest one, or a compromised key.
+
+```claim
+kind: constraint
+evaluator: none
+depends: [charter-fork-distinction]
+```
+
 #### [charter-typ]
 
 A charter transaction's payload MUST carry
@@ -833,15 +860,15 @@ that could reach an empty set.
 human-configurable per-charter governance policy — e.g., a project
 declaring "changes to this charter's owner set require 3-of-5 member
 signatures" rather than the flat "any current member" default this
-constraint specifies (a distinct mechanism from ADR-0007 §3's own
-declared multi-signature threshold for *arbitrary* owner-authoritative
-facts, which this document does not yet incorporate — Open Items).
-This is specifically where quorum-style protection against unilateral
-capture (a single compromised member signing an arbitrary, damaging
-fact) would eventually land. Naming the extension point here keeps the
-flat MVP default honest about what it does and does not protect
-against: it is not a complete answer to unilateral capture, only to a
-removed member blocking its own removal.
+constraint specifies — a distinct mechanism from the declared
+multi-signature threshold `[charter-owner-threshold]` specifies below
+for *arbitrary* owner-authoritative facts, which no implementation
+incorporates yet. This is specifically where quorum-style protection
+against unilateral capture (a single compromised member signing an
+arbitrary, damaging fact) would eventually land. Naming the extension
+point here keeps the flat MVP default honest about what it does and
+does not protect against: it is not a complete answer to unilateral
+capture, only to a removed member blocking its own removal.
 
 **Not machine-verified as stated.** `AtomCharter.tla`'s "succession"
 config checks this rule's *predecessor* — the successor-charter shape
@@ -853,6 +880,63 @@ consistency, not this restatement's correctness.
 ```claim
 kind: constraint
 evaluator: none
+```
+
+#### [charter-owner-threshold]
+
+The charter MAY declare a signing threshold
+for owner-authoritative actions — for example, requiring 2 of 3
+current owners to agree before an owner-rotation fact takes effect.
+No native multisig primitive is needed: every additional required
+signature is its own record. A threshold-gated fact is signed once by
+its primary signer, exactly like any other
+[charter-owner-fact](#charter-owner-fact); each additional required
+signer produces their own, independently
+signed co-sign fact naming the primary record's own czd, authorized by
+the same fold-check the target itself uses. Verification counts
+distinct current-owner-fold members among the primary signer plus
+every co-signer; the action takes effect only once that count meets
+the charter's declared threshold. A record short of threshold is not
+invalid or malformed — it is simply not yet effective. Once a primary
+record has, at any point while walking the history forward,
+accumulated threshold-many distinct valid co-signers, it is
+permanently effective; a later retraction of one co-sign fact does not
+undo an action that already took effect — retraction only has power
+before threshold is crossed, where it may delay or prevent a
+not-yet-effective action from ever reaching threshold. Not yet
+incorporated by any implementation (the flat, single-signer
+`[charter-owner-fact]` default is what conforming implementations
+build against today); this constraint specifies the optional
+extension, not a present obligation on every charter.
+
+```claim
+kind: constraint
+evaluator: none
+depends: [charter-owner-fact]
+```
+
+#### [publish-delegate-role]
+
+An owner-fold MAY declare a lower-privilege
+`publish-delegate` role, authorizing a distinct key to sign routine
+publish records without holding full owner-governance authority — the
+same declared-role discipline `attesters`/`witnesses` roles already
+use for third-party fact authorization. Optional, not required: a
+project with no declared publish-delegate authorizes publish through
+the ordinary owner-fold, exactly as
+[claim-charter-authorization](#claim-charter-authorization) already
+specifies. Declaring one trades exposing the full
+owner-governance key on every routine publish for a narrower,
+revocable signing surface — routine, frequent signing should not need
+to expose the same key that governs owner rotation, label transfer,
+and threshold membership. Not yet incorporated by any implementation;
+this constraint specifies the optional extension, not a present
+obligation.
+
+```claim
+kind: constraint
+evaluator: none
+depends: [claim-charter-authorization]
 ```
 
 #### [chain-monotonicity]
