@@ -962,15 +962,21 @@ depends: [publish-commit-format, odb-immutable, log-tree-opaque, log-anchored-me
 
 #### [coz-bit-perfect]
 
-All `CozMessage` JSON stored in git commit
-messages MUST be preserved bit-for-bit. The
-backend MUST NOT reformat, re-serialize, or alter the JSON in any
-way. (Satisfies [backend-bit-perfect](atom-transactions.md#backend-bit-perfect);
+All `CozMessage` JSON stored as a record-log
+leaf ([record-is-log-leaf](#record-is-log-leaf)) MUST be preserved
+bit-for-bit. The backend MUST NOT reformat, re-serialize, or alter the
+JSON in any way — this bound applied to a git commit's own `message`
+field before the record-anchored publishing design and now applies to
+the log leaf a commit's `tree` carries instead, since that leaf is
+where a `CozMessage`'s bytes actually live for every log-anchored
+commit this backend writes. (Satisfies
+[backend-bit-perfect](atom-transactions.md#backend-bit-perfect);
 discharges [backend-carriage-bit-perfect](atom-backend-contract.md#backend-carriage-bit-perfect).)
 
 ```claim
 kind: constraint
 evaluator: test
+depends: [record-is-log-leaf]
 because: [backend-bit-perfect, backend-carriage-bit-perfect]
 ```
 
@@ -1501,8 +1507,10 @@ targets it as its sole git parent.
   genesis-once ([atom-genesis-and-facts]).
 - **POST**: A content commit exists (parentless, deterministic, a pure
   function of its tree). A publish commit targets it as its sole git
-  parent, with the CozMessage as the commit message (containing the
-  `claim` czd binding) — [publish-commit-format](#publish-commit-format),
+  parent, carrying the anchor's record-log tree (containing the
+  `claim` czd binding as a log leaf — never in the commit's own
+  message) and a fixed, inert message —
+  [publish-commit-format](#publish-commit-format),
   [publish-claim-binding](#publish-claim-binding). The ref
   `refs/atom/pub/{label}/{version}` points to the publish commit. No
   protective ref is written for the source revision — GC protection
@@ -1585,7 +1593,8 @@ label's current owner — a marked seizure event).
   `[claim-detached]`). The fact `CozMessage` MUST be valid and
   authorized under exactly one of the two tiers
   ([claim-owner-fact](atom-transactions.md#claim-owner-fact)).
-- **POST**: A new fact commit exists (`FactCommitFormat`, empty tree)
+- **POST**: A new fact commit exists (`FactCommitFormat`, carrying the
+  anchor's record-log tree at this fact's append point)
   whose parent is the current tip of the claim's fact chain (the claim
   commit itself, if this is the first fact). The ref
   `refs/atom/claims/pub/{label}` is updated to point to the new tip.
@@ -1800,19 +1809,44 @@ depends: [ingest-transition]
 
 ### Forbidden States
 
-#### [no-non-empty-claim]
+#### [no-non-empty-claim] — RETIRED 2026-08-23
 
-A claim commit or claim fact commit MUST
-have the well-known empty tree as its `tree`. If either has a
-non-empty tree, the backend MUST reject it as malformed. A claim
-commit's parent (if present) MUST be another claim commit's — but this
-never happens under genesis-once: see `[no-second-claim-genesis]`. A
-fact commit's parent MUST be the claim commit or another fact commit
-in the SAME label's own chain (`[claim-fact-chain]`).
+**Retired, not amended.** This constraint required a claim commit's or
+claim fact commit's `tree` to be the well-known empty tree, rejecting
+any non-empty tree as malformed. The record-anchored publishing design
+inverts this: `[claim-detached]` and `[claim-fact-chain]` now REQUIRE
+these commits to carry the anchor's record-log tree, which is never
+empty once the anchor's charter genesis has landed (the log's first
+leaf). `[claim-tree-is-log]`, below, restates the forbidden-state half
+this constraint protected — a claim or claim-fact commit whose `tree`
+is anything OTHER than the record log's own tree at that leaf's append
+point, empty tree included, is malformed. A claim commit's parent (if
+present) MUST still be another claim commit's — but this never happens
+under genesis-once: see `[no-second-claim-genesis]`. A fact commit's
+parent MUST still be the claim commit or another fact commit in the
+SAME label's own chain (`[claim-fact-chain]`) — neither of those
+parent-shape rules changes here.
 
 ```claim
 kind: constraint
 evaluator: none
+```
+
+#### [claim-tree-is-log]
+
+A claim commit's or claim fact commit's
+`tree` MUST be the anchor's record-log tree at the point that leaf was
+appended ([log-tree-opaque](#log-tree-opaque)) — the backend MUST
+reject any other tree, including the well-known empty tree, as
+malformed. This is the forbidden-state half of
+[claim-detached](#claim-detached) and
+[claim-fact-chain](#claim-fact-chain)'s own requirement, named
+directly for a resolver auditing storage rather than constructing it.
+
+```claim
+kind: constraint
+evaluator: none
+depends: [log-tree-opaque, claim-detached, claim-fact-chain]
 ```
 
 #### [no-second-charter-genesis]
@@ -1943,7 +1977,8 @@ verified charter ([charter-anchor](atom-transactions.md#charter-anchor),
 [claim-charter-authorization](atom-transactions.md#claim-charter-authorization)), (2) the publish payload's `claim` czd
 resolves to a claim commit whose payload `src` is a descendant of (or
 equal to) the charter's `src` ([charter-ancestry](atom-transactions.md#charter-ancestry)),
-(3) the claim `CozMessage` in that commit's message is valid, AND
+(3) the claim `CozMessage` — read as the log leaf that commit's
+`tree` carries ([record-is-log-leaf](#record-is-log-leaf)) — is valid, AND
 (4) the publish's `src` is at or after the claim's `src`. This creates
 a "vector of authenticity": charter src → claim src → publish src.
 
@@ -1952,7 +1987,7 @@ a "vector of authenticity": charter src → claim src → publish src.
 ```claim
 kind: constraint
 evaluator: test
-depends: [charter-anchor, claim-charter-authorization, charter-ancestry]
+depends: [charter-anchor, claim-charter-authorization, charter-ancestry, record-is-log-leaf]
 ```
 
 #### [ingestion-portable]
@@ -2010,15 +2045,16 @@ The publish's materialized view chain
 first commit) MUST be traversable. A consumer MUST be able to
 reconstruct the full update history by walking the chain's ordinary
 git parent links from the ref tip to the first commit. Each commit in
-the chain carries its own `CozMessage`, enabling verification of the
-complete signing history.
+the chain carries its own log leaf, readable from the `LogTree` its
+`tree` field carries ([record-is-log-leaf](#record-is-log-leaf)),
+enabling verification of the complete signing history.
 
 - **Type**: Safety
 
 ```claim
 kind: constraint
 evaluator: none
-depends: [publish-fact-chain]
+depends: [publish-fact-chain, record-is-log-leaf]
 ```
 
 #### [peel-content-integrity]
