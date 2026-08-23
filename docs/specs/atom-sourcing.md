@@ -124,7 +124,7 @@ violation is detected.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: property-test
 ```
 
 #### [atom-version-identity]
@@ -138,7 +138,7 @@ error message.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: property-test
 ```
 
 #### [mirror-staleness-tolerance]
@@ -151,7 +151,7 @@ across all mirrors in a set and resolve from the union.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: property-test
 ```
 
 #### [version-total-order]
@@ -193,7 +193,7 @@ that the resolution is local-only.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 because: [docs/architecture/atom-sad#6.5]
 ```
 
@@ -219,7 +219,7 @@ pipeline reading manifest declarations into a `MirrorSet` exists; the
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 depends: [set-anchor-bijection]
 ```
 
@@ -241,7 +241,7 @@ implemented, but no mirror-validation/aggregation pipeline exists.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 depends: [set-anchor-bijection, atom-version-identity, mirror-staleness-tolerance]
 ```
 
@@ -269,7 +269,7 @@ unreconciled with the v2 lock schema.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 depends: [lock-entry-sufficient]
 ```
 
@@ -285,7 +285,7 @@ conflicting set.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: property-test
 depends: [set-anchor-bijection]
 ```
 
@@ -299,7 +299,7 @@ conflicting mirrors.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: property-test
 depends: [atom-version-identity]
 ```
 
@@ -320,7 +320,7 @@ closure.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 ```
 
 ### Behavioral Properties
@@ -336,7 +336,7 @@ This is a consequence of [mirror-staleness-tolerance](#mirror-staleness-toleranc
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: property-test
 depends: [mirror-staleness-tolerance]
 ```
 
@@ -352,7 +352,7 @@ deterministically identify the exact atom version without re-resolving.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: property-test
 depends: [lock-entry-sufficient]
 ```
 
@@ -367,7 +367,7 @@ validation — the invariant checks are commutative over mirror ordering.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: property-test
 ```
 
 #### [czd-divergence-handling]
@@ -388,7 +388,7 @@ reject the atom.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 because: [claim-payload-extensible]
 ```
 
@@ -509,7 +509,7 @@ This ordering ensures that authoritative sources are preferred and that the peer
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 ```
 
 ## Verification

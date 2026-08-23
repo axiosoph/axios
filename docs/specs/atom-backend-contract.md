@@ -168,7 +168,7 @@ object persists" rests on it.)
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 ```
 
 Verification will round-trip a store→get and confirm mutation
@@ -219,7 +219,7 @@ transitively pins the genesis."
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: model-check
 ```
 
 #### [backend-ancestry-queryable]
@@ -271,7 +271,7 @@ acceptance-policy spec (Execution Model §9.7).
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 ```
 
 Verification will run a concurrent CAS battery against one ref on the
@@ -369,7 +369,7 @@ existing models could and could not catch.)
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: model-check
 ```
 
 #### [czd-oid-phantom-typed]
@@ -428,7 +428,7 @@ the structural cost").
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 because: [docs/models/atom-model#6]
 ```
 
@@ -446,7 +446,7 @@ carriage and enumeration, never trust.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 depends: [anchor-resolvable]
 ```
 
@@ -464,7 +464,7 @@ leans on.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: review
 depends: [backend-store-immutable, backend-ancestry-sound]
 ```
 
@@ -541,7 +541,7 @@ construction ([anchor-hash-agile](git-storage-format.md#anchor-hash-agile)).
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 depends: [backend-carriage-bit-perfect, content-hash-obligation, content-hash-is-tree-digest, content-hash-algorithm, anchor-hash-agile]
 ```
 
@@ -567,7 +567,7 @@ the tested trace set, never the universally-quantified claim itself.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 depends: [docs/models/publishing-stack-layers#2.1, docs/models/execution-model#6.1]
 ```
 
@@ -584,7 +584,7 @@ zero writes and zero further network round-trips once state is local.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 ```
 
 ## Proof Obligations

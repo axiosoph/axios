@@ -160,7 +160,7 @@ unit is the identity-bearing object, at every granularity stratum.
 
 ```claim
 kind: invariant
-evaluator: none
+evaluator: test
 ```
 
 ## 3. What the plane owns per stratum
@@ -256,7 +256,7 @@ design work this model now governs rather than defers:
 
 ```claim
 kind: invariant
-evaluator: none
+evaluator: review
 ```
 
 ## 5. The signature-anchoring law
@@ -313,7 +313,7 @@ policy is for (Execution Model §3.4).
 
 ```claim
 kind: invariant
-evaluator: none
+evaluator: review
 ```
 
 ## 6. The reproducibility contract
@@ -370,7 +370,7 @@ however its dependencies were configured.
 
 ```claim
 kind: invariant
-evaluator: none
+evaluator: property-test
 ```
 
 The mode mechanism, its violation/adjudication semantics, and the
@@ -612,7 +612,7 @@ omission is **unconstructible**, not merely detectable.
 
 ```claim
 kind: invariant
-evaluator: none
+evaluator: model-check
 ```
 
 Authorization is computed by folding the spine's amendment chain
@@ -631,7 +631,7 @@ offline-verifiable.
 
 ```claim
 kind: invariant
-evaluator: none
+evaluator: type
 depends: [spine-chain-complete]
 ```
 
@@ -653,7 +653,7 @@ an anchor from such a spine.
 
 ```claim
 kind: invariant
-evaluator: none
+evaluator: model-check
 depends: [spine-chain-complete]
 ```
 
@@ -678,7 +678,7 @@ stateful.
 
 ```claim
 kind: invariant
-evaluator: none
+evaluator: test
 ```
 
 **The store is sufficient.** A store holding an atom's closure — spine
@@ -698,7 +698,7 @@ suffices for every operation except discovery.
 
 ```claim
 kind: invariant
-evaluator: none
+evaluator: test
 depends: [spine-chain-complete, withdrawal-terminal]
 ```
 
@@ -711,6 +711,6 @@ Every operation is offline-correct over what it already holds.
 
 ```claim
 kind: invariant
-evaluator: none
+evaluator: test
 because: [store-sufficiency]
 ```
