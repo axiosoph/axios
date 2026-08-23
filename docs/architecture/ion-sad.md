@@ -11,8 +11,9 @@
 
   Consumes the atom (L1) identity contract — see atom-sad.md. Key inputs:
   identity is the claim record's czd, not the (anchor,label) pair (atom-sad
-  §6.1); the lock's AtomId = (set, label) dep key; the 2-value atom lock
-  contribution {version, publish_czd}; the self-describing atom git object.
+  §6.1); the lock's `AtomId`-digest dep key, nested `set`/`label`; the
+  2-value atom lock contribution {version, publish_czd}; the self-describing
+  atom git object.
 -->
 
 # Ion Software Architecture Document (SAD)
@@ -31,7 +32,8 @@ Ion owns:
 - **The manifest** — the human-authored declaration of direct dependencies and
   version constraints, extensible by plugins for non-atom dependency types.
 - **Resolution** — solving the transitive constraint graph to one version per
-  `(anchor, label)`, deterministically, with actionable diagnostics on failure.
+  label within its anchor, deterministically, with actionable diagnostics on
+  failure.
 - **The lock** — the reproducible, verifiable pin of the resolved graph: the
   atom-core entry (from L1) plus ion's graph extensions, keyed by `AtomId`.
 - **The eos handoff** — turning the lock into a build request eos can execute.
@@ -62,7 +64,7 @@ graph TB
   DEV -->|"edit deps"| MAN
   MAN -->|"constraints"| RES
   RES -->|"discover versions; read manifests"| SRC
-  RES -->|"one version per (anchor,label)"| LOCK
+  RES -->|"one version per label within its anchor"| LOCK
   LOCK -->|"serialize"| BR
   BR -->|"build request (atom pointers)"| EOS
   EOS -->|"read content"| SRC
@@ -141,7 +143,7 @@ ranges, the `[compose]` declaration, and plugin-typed non-atom deps. Parsed by
 
 Drives `ion-resolve`: discovers candidate versions (object-free `ls-refs` over L1
 `AtomSource`), lazily fetches each reached atom's manifest, and solves to one
-version per `(anchor, label)`. Output is the resolved graph.
+version per label within its anchor. Output is the resolved graph.
 
 ### 2.3 Lock
 
@@ -200,7 +202,7 @@ graph TB
 | Crate          | Role                                                                             |
 | :------------- | :------------------------------------------------------------------------------- |
 | `ion-manifest` | Parse the manifest; dispatch direct-dep types (atom + plugin-registered)         |
-| `ion-resolve`  | The constraint solver; transitive resolution to one version per `(anchor,label)` |
+| `ion-resolve`  | The constraint solver; transitive resolution to one version per label within its anchor |
 | `ion-lock`     | The lock schema and (de)serialization; the `DepMap` keyed by `AtomId`            |
 | `ion-eos`      | Translate the lock into an eos `BuildRequest`; the L3 handoff                    |
 | `ion-cli`      | Developer entry point (resolve, lock, build orchestration)                       |
@@ -221,9 +223,9 @@ sequenceDiagram
     Res->>Src: get_dependencies(version) [fetch manifest — lazy]
     Src-->>Res: that atom's deps
   end
-  Note over Res: solve to ONE version per (anchor,label)\n([resolution-complete], deterministic)
+  Note over Res: solve to ONE version per label within its anchor\n([resolution-complete], deterministic)
   Res-->>CLI: solution
-  CLI->>CLI: lock-capture → DepMap{(set,label): {version, publish_czd, requires, direct}}
+  CLI->>CLI: lock-capture → DepMap{set: {label: {version, publish_czd, requires, direct}}}
 ```
 
 ### 4.2 Lock → Build Request (eos handoff)
@@ -247,7 +249,7 @@ sequenceDiagram
 stateDiagram-v2
   [*] --> Solving: resolve(manifest)
   Solving --> Solving: propagate / decide / backtrack (solver-internal; not spec-mandated)
-  Solving --> Solved: one version per (anchor,label)
+  Solving --> Solved: one version per label within its anchor
   Solving --> Unsolvable: no valid assignment
   Solved --> [*]: write lock
   Unsolvable --> [*]: actionable diagnostic ([resolution-unsolvable-diagnostic])
@@ -283,16 +285,17 @@ resolver — PubGrub or a SAT solver such as resolvo — MAY implement them):
 
 ### 6.2 Single Version per Identity
 
-Exactly one version is locked per `AtomId = (anchor, label)`. This is structural:
-the lock's `DepMap` is keyed by `AtomId`, so uniqueness holds by construction.
-(Multi-version coexistence is a roadmap concern, not the current contract.)
+Exactly one version is locked per label within its anchor. This is structural:
+the lock's `DepMap` nests by `set` then `label`, so uniqueness holds by
+construction. (Multi-version coexistence is a roadmap concern, not the
+current contract.)
 
 ### 6.3 The Lock Model (atom-core + ion extensions)
 
 The lock entry composes two layers (see §7 for the schema):
 
-- **Atom core** (defined by L1 `[lock-entry-sufficient]`): keyed by
-  `AtomId = (set, label)`, value `{version, publish_czd}`. Ion does **not**
+- **Atom core** (defined by L1 `[lock-entry-sufficient]`): keyed by nesting on
+  `set` then `label`, value `{version, publish_czd}`. Ion does **not**
   redefine these — it inherits them.
 - **Ion extensions**: `requires` (the resolved direct-dep edges, for offline graph
   reconstruction without re-resolving) and `direct` (declared-vs-transitive). These
@@ -333,8 +336,8 @@ implementation choice that does not change the lock or the atom contract.)
 ### 6.7 Determinism and Reproducibility
 
 `[resolution-deterministic]` + the lock's deterministic serialization
-(`BTreeMap` ordering on the `(set, label)` key) make the lock a reproducible
-artifact. A run-twice property test is the standing guard against provider-order
+(`BTreeMap` ordering on the nested `set`/`label` key) make the lock a
+reproducible artifact. A run-twice property test is the standing guard against provider-order
 leaks (§6.1).
 
 ### 6.8 Composition
@@ -451,8 +454,9 @@ evaluator: none
 
 ## 7. The Lock Schema
 
-Keyed by `Either<AtomId, Name>` where `AtomId = (set, label)`; atom entries sort
-lexicographically on the pair. A representative atom entry:
+Keyed by `Either<AtomId, Name>` where `AtomId` nests `set` then `label`; atom
+entries sort lexicographically on `set` then `label`. A representative atom
+entry:
 
 ```toml
 [sets.<anchor>]
@@ -484,7 +488,7 @@ direct      = true              # ion extension — declared vs transitive
 | :-- | :------------------------------ | :---------------------------------------------------------------------- |
 | 8.1 | Unsatisfiable constraints       | `[resolution-unsolvable-diagnostic]` — "because…" explanation, no lock  |
 | 8.2 | Provider returns unstable order | determinism violation — forbidden (§6.1); caught by run-twice test      |
-| 8.3 | Cross-reference dangling        | a `requires`/`owner` pair with no matching `(set,label)` entry → reject |
+| 8.3 | Cross-reference dangling        | a `requires`/`owner` pair with no matching `set`/`label` entry → reject |
 | 8.4 | Unknown plugin `type`           | core dispatches by `type`; unregistered type → error, not silent drop   |
 | 8.5 | Upstream metadata advanced      | non-fatal — warn + optional `publish_czd` bump (atom-sad §6.4)          |
 
@@ -511,7 +515,7 @@ Out of scope for ion:
 | :-------------- | :---------------------------------------------------------------- |
 | Manifest        | Human-authored direct-dependency declaration with version ranges  |
 | Lock            | Reproducible pin of the fully resolved transitive graph           |
-| AtomId          | `(anchor, label)` pair (from L1) — the lock's dep key             |
+| AtomId          | Digest of the pre-signature `(anchor, label)` preimage (from L1); the lock nests its dep key by `set` then `label` |
 | Atom core       | The L1-defined lock entry fields `{version, publish_czd}`         |
 | Ion extension   | Ion-layer lock fields (`requires`, `direct`) over the atom core   |
 | Cross-reference | An intra-lock atom reference, named by the target's `publish_czd` |
@@ -545,7 +549,7 @@ Out of scope for ion:
 
 None outstanding. The lock-layer realignment to this SAD has been applied across
 `lock-file-schema.md` (no hashed `id`/`rev`; `publish_czd` cross-references; the
-`(set, label)` key), `ion-resolution.md` (`AtomDep` without `cad`; `requires` over
+nested `set`/`label` key), `ion-resolution.md` (`AtomDep` without `cad`; `requires` over
 `publish_czd`; determinism ordering), `ion-manifest.md` (`owner` over `publish_czd`),
 `ion-eos-contract.md` (minimal-pointer handoff), and `layer-boundaries.md`
 (`blake3(publish_czd)` addressing). The schema `version` is `0` and the anchor lock
