@@ -580,13 +580,15 @@ cache-skipping decision tree at the executor's granularity.
 
 ```
 ⊕ {
-  from_registry:  !&dyn AtomSource . ?Result<()> . end,
-  from_local:     !&dyn AtomSource . ?Result<()> . end
+  from_registry:  !&dyn AtomContent . ?Result<()> . end,
+  from_local:     !&dyn AtomContent . ?Result<()> . end
 }
 ```
 
 Ion selects which population method to use. Both branches use `ingest`
-with different source implementations (remote registry vs local path).
+with different source implementations (remote registry vs local
+path); ingest's own signature (§2.3) takes `dyn AtomContent`, not
+`dyn AtomSource`, so this session must carry the same type.
 
 ### 4. Concurrency, Scheduling, and Error Recovery
 
