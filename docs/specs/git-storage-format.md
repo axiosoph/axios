@@ -133,7 +133,7 @@ claim or publish transactions exist, the ingested atoms are
 **unsigned** — they are available for build consumption but do not
 carry provenance guarantees. The store SHOULD mark such atoms as
 unsigned to distinguish them from atoms ingested from registries.
-No publish tags or claim refs are created for unsigned atoms.
+No publish commits or claim refs are created for unsigned atoms.
 Unsigned dev atoms are stored under `refs/atom/dev/{anchor}/{label}`
 (see Ref Layout).
 
@@ -221,8 +221,9 @@ TYPE  FactCommitFormat = {
       -- CozMessage-in-message, git-parent chaining for a cheap, walkable
       -- audit trail — for a different purpose: the chain no longer
       -- replaces an identity, it layers status on a fixed one, exactly
-      -- as [publish-update-transition]'s tag chain already layers facts
-      -- onto a fixed publish identity. `FactPayload`'s own field shape
+      -- as [publish-fact-chain](#publish-fact-chain) already layers
+      -- facts onto a fixed publish identity at the publish scope.
+      -- `FactPayload`'s own field shape
       -- (its `typ` value; the owner-vs-governance discriminator
       -- atom-transactions.md's [claim-owner-fact] requires; a `retracts`
       -- analogue) is NOT settled here: atom-transactions.md explicitly
@@ -232,22 +233,39 @@ TYPE  FactCommitFormat = {
       -- container, not the payload's protocol-level content (Open
       -- Questions #6).
 
-TYPE  PublishTagFormat = {
-        target:        AtomCommit | PublishTag,   -- atom commit (initial) or prev tag (update)
-        tag:           String,                    -- git tag object `tag` header (metadata)
-        tagger:        <real tagger>,             -- the publisher
-        timestamp:     <real timestamp>,          -- time of publish
-        message:       CozMessage(PublishPayload),         -- the signed publish, JSON
+TYPE  PublishChainCommitFormat = {
+        tree:          EMPTY_TREE,                -- well-known empty tree hash
+        parent:        AtomCommit                 -- the content commit (chain's
+                       | PublishChainCommit,        -- first commit only) or the
+                                                      -- previous commit in THIS
+                                                      -- publish's own chain (every
+                                                      -- later, fact-extending commit)
+        author:        <real author>,             -- the publisher, or fact signer
+        committer:     <real committer>,
+        timestamp:     <real timestamp>,          -- time of publish or fact
+        message:       CozMessage(PublishPayload
+                        | FactPayload),            -- the signed record, JSON
       }
-      -- The `claim` czd in the publish payload provides the cryptographic
-      -- binding to the authorizing claim. Claims are looked up via
-      -- `refs/atom/claims/d/{czd}` or `refs/atom/claims/pub/{label}`.
-      --
-      -- Publish payloads MAY include additional user-defined fields beyond
-      -- the required set. For example, a reproducible-build artifact hash
-      -- can be signed into the payload to cryptographically tie the final
-      -- artifact to the source. This extensibility is a property of the
-      -- Coz message format and the protocol's payload structure.
+      -- The chain's first commit (the publish itself, before any facts
+      -- extend it) carries the content commit as its ONLY git parent —
+      -- the auxiliary reachability edge that keeps the content object
+      -- alive from this chain, the same mechanism the anchor's own
+      -- record log uses to keep a source commit alive from its
+      -- checkpoints (Decision 5 of the record-anchored publishing
+      -- amendment). This is the ONLY path by which a consumer obtains
+      -- a package's content; the chain has no other edge to it, and no
+      -- edge at all to a source revision commit. Every later commit in
+      -- the chain — a fact about this publish (yank, security
+      -- advisory, deprecation, mode promotion, meta revision) — parents
+      -- onto the previous commit in the SAME chain instead, exactly as
+      -- FactCommitFormat already does for the charter and claim scopes.
+      -- The `claim` czd in the root's PublishPayload provides the
+      -- cryptographic binding to the authorizing claim; no extra git
+      -- header is needed, the signed payload is the sole binding.
+      -- Publish and fact payloads alike MAY include additional
+      -- user-defined fields beyond the required set — a property of
+      -- the Coz message format and the protocol's payload structure,
+      -- not of this git encoding.
 ```
 
 ### Constants
@@ -504,7 +522,7 @@ exists; a resolver reaches the charter's own `src` and identity by
 walking the chain's `parent` links to its root, which MUST be the
 parentless charter commit (`[charter-commit-format]`) — never a second
 genesis (`[no-second-charter-genesis]`). This is the direct structural
-analogue of `[publish-update-transition]`'s tag chain: a fixed identity
+analogue of `[publish-fact-chain]`'s own chain: a fixed identity
 at the root, status layered on top by appending, never replacing.
 
 ```claim
@@ -609,7 +627,7 @@ by walking the chain's `parent` links to its root, which MUST be the
 parentless claim commit (`[claim-detached]`) — never a second genesis
 (`[no-second-claim-genesis]`). This is the direct structural analogue
 of `[charter-fact-chain]` at the claim scope, and of
-`[publish-update-transition]`'s tag chain at the publish scope: one
+`[publish-fact-chain]` at the publish scope: one
 unified shape (a fixed genesis object, a chain of appended facts) at
 every scope this document instantiates, matching ADR-0007 §3's "one
 unified fact mechanism serves every scope."
@@ -620,68 +638,162 @@ evaluator: test
 depends: [claim-detached, no-second-claim-genesis]
 ```
 
-#### [publish-tag-targets-correct]
+#### [publish-tag-targets-correct] — RETIRED 2026-08-23
 
-An initial publish tag MUST target
-an atom commit (a deterministic, parentless commit with a `src` extra
-header). An update publish tag MUST target the previous publish tag for
-the same `(label, version)`. A publish tag MUST NOT target a regular
-commit, tree, or blob.
+**Retired, not amended.** This constraint governed what a publish
+*tag* MAY target: an atom commit for the initial publish, the
+previous tag for an update, nothing else. There is no publish tag
+under the record-anchored publishing amendment — a publish is a
+materialized view chain of ordinary commits, not a chain of tag
+objects — so there is nothing left with a tag's targeting rule to
+police. `[publish-commit-format]`, below, states the analogous
+targeting rule for the chain's own commits.
+
+```claim
+kind: constraint
+evaluator: none
+```
+
+#### [publish-commit-format]
+
+The chain's first commit — the
+publish itself — MUST have the well-known empty tree
+(`EMPTY_TREE`) and MUST target the atom (content) commit
+([snapshot-parentless](#snapshot-parentless)) as its sole git parent; it MUST NOT target
+any other object, and MUST NOT be itself parentless. Every later
+commit in the SAME publish's chain (a fact about this publish) MUST
+target the immediately preceding commit in that chain instead, and
+MUST NOT target the content commit directly — only the chain's first
+commit reaches it. A commit in a publish chain MUST NOT target a
+regular commit, tree, or blob outside these two cases
+(`PublishChainCommitFormat`, Type Declarations, above). This is the
+ONLY path by which a consumer obtains the package's content, and this
+chain has no path at all to a source revision commit.
+
+```claim
+kind: constraint
+evaluator: test
+depends: [snapshot-parentless]
+```
+
+#### [publish-tag-claim-binding] — RETIRED 2026-08-23
+
+**Retired, not amended.** This constraint bound a publish *tag's*
+CozMessage payload to its authorizing claim by the payload's `claim`
+field. The binding mechanism is unchanged in substance — it was
+always the signed payload, never a git header — but there is no
+publish tag left to carry it. `[publish-claim-binding]`, below,
+restates the identical requirement for the publish chain's first
+commit.
+
+```claim
+kind: constraint
+evaluator: none
+```
+
+#### [publish-claim-binding]
+
+The publish chain's first commit's
+CozMessage payload MUST contain a `claim` field whose value is the
+czd of the authorizing claim. The claim commit is looked up via
+`refs/atom/claims/d/{czd}` (or `refs/atom/claims/pub/{label}` in the
+originating registry). No extra git header is needed — the signed
+payload is the sole binding.
 
 ```claim
 kind: constraint
 evaluator: test
 ```
 
-#### [publish-tag-claim-binding]
+#### [publish-tag-message-is-coz] — RETIRED 2026-08-23
 
-A publish tag's CozMessage payload
-MUST contain a `claim` field whose value is the czd of the authorizing
-claim. The claim commit is looked up via `refs/atom/claims/d/{czd}`
-(or `refs/atom/claims/pub/{label}` in the originating registry). No
-extra header is needed — the signed payload is the sole binding.
+**Retired, not amended.** This constraint validated a publish tag's
+message body as a CozMessage. There is no publish tag;
+`[publish-message-is-coz]`, below, restates the identical requirement
+for the publish chain's first commit.
 
 ```claim
 kind: constraint
-evaluator: test
+evaluator: none
 ```
 
-#### [publish-tag-message-is-coz]
+#### [publish-message-is-coz]
 
-The message body of a publish tag
-MUST be a valid, complete `CozMessage` JSON object whose payload has
-`typ: "atom/publish"`. The message MUST be parseable as JSON and MUST
-pass Coz verification. No additional text or formatting SHOULD be
-present outside the CozMessage JSON.
+The message of a publish chain's
+first commit MUST be a valid, complete `CozMessage` JSON object whose
+payload has `typ: "atom/publish"`. The message MUST be parseable as
+JSON and MUST pass Coz verification. No additional text or formatting
+SHOULD be present outside the CozMessage JSON. (The publish analogue
+of [charter-message-is-coz](#charter-message-is-coz) and
+[claim-message-is-coz](#claim-message-is-coz).)
 
 ```claim
 kind: constraint
 evaluator: test
+because: [claim-message-is-coz]
 ```
 
-#### [tag-chain-immutable]
+#### [tag-chain-immutable] — RETIRED 2026-08-23
 
-Publish tag updates MUST be implemented by
-creating a new tag object that targets the _previous_ tag object (not
-the atom commit directly). Git's tag-peeling mechanism resolves the
-chain to the underlying atom commit. The ref is updated to point to
-the new tip of the chain. Old tag objects MUST NOT be deleted — they
-persist in the git object database as an immutable audit trail.
+**Retired, not amended.** This constraint required a publish update
+to append a new tag targeting the previous tag, never deleting old
+tag objects, so lock pins stayed resolvable and the full update
+history stayed walkable. There is no tag chain to keep immutable.
+What it protected — every prior state of a publish staying reachable,
+never rewritten or dropped — is now the general append-only property
+every protocol object already has (`[odb-immutable]`),
+applied to the publish chain's own commits the same way it already
+applies to the charter's and claim's fact chains
+(`[charter-fact-chain]`, `[claim-fact-chain]`). `[publish-fact-chain]`,
+below, states the publish scope's own chain-extension rule this
+constraint's audit-trail argument now falls out of directly.
 
-This ensures: (a) lock files referencing old tag ObjectIds remain
-resolvable, (b) the full update history is structurally represented,
-(c) consumers can reconstruct the complete chain of ownership/signing
-by walking the tag chain.
+```claim
+kind: constraint
+evaluator: none
+```
+
+#### [publish-fact-chain]
+
+A fact about an existing publish
+(yank, security advisory, deprecation, supersession, a
+reproducibility-mode promotion or demotion per atom-model.md §6, or a
+`meta` revision — previously carried by a publish tag update,
+[publish-update-transition](#publish-update-transition)) is stored as
+a commit in `PublishChainCommitFormat`'s fact-extending shape (Type
+Declarations, above): its `parent` is the chain's first commit (the
+publish itself) for the first fact, or the previous fact commit in
+the SAME chain for a later one — never the content commit, which only
+the chain's first commit ever targets
+([publish-commit-format](#publish-commit-format)). The ref
+`refs/atom/pub/{label}/{version}` MUST point to the chain's **tip**
+once any fact exists, exactly as `[charter-fact-chain]` and
+`[claim-fact-chain]` already require at their own scopes — the same
+unified fact mechanism, extended here to the publish scope. A
+resolver reaches the publish's own identity and content by walking
+the chain's `parent` links to its root, which MUST be the chain's
+first commit; every earlier fact and the first commit itself remain
+in the repository's history, walkable from the tip, since nothing in
+this design deletes a chain commit
+([odb-immutable](#odb-immutable)). Every commit in this chain — the
+first as much as any fact — carries the well-known empty tree, never
+a copy of the anchor's own record-log tree: the "traversal accelerator,
+never a fetch reducer" tree-choice the record log's own checkpoints
+face does not bear on this encoding at all, since no commit here ever
+carries such a copy in the first place — the signed payload lives in
+the commit message, and the tree stays empty regardless of which way
+that choice is made elsewhere.
 
 ```claim
 kind: constraint
 evaluator: test
+depends: [publish-commit-format, odb-immutable]
 ```
 
 #### [coz-bit-perfect]
 
-All `CozMessage` JSON stored in git objects
-(commit messages, tag messages) MUST be preserved bit-for-bit. The
+All `CozMessage` JSON stored in git commit
+messages MUST be preserved bit-for-bit. The
 backend MUST NOT reformat, re-serialize, or alter the JSON in any
 way. (Satisfies [backend-bit-perfect](atom-transactions.md#backend-bit-perfect);
 discharges [backend-carriage-bit-perfect](atom-backend-contract.md#backend-carriage-bit-perfect).)
@@ -699,9 +811,9 @@ against the original.
 
 The backend MUST treat the object database as
 append-only for protocol objects (charter/claim/atom commits, publish
-tags): a protocol object, once written, MUST NOT be mutated in place,
-and MUST NOT be deleted while protocol-reachable (the protective and
-protocol refs define reachability). Deletion is permitted only through
+commits): a protocol object, once written, MUST NOT be mutated in place,
+and MUST NOT be deleted while protocol-reachable (the protocol refs
+define reachability). Deletion is permitted only through
 garbage collection of protocol-unreachable objects. Git's
 content-addressed object store provides this by construction; the
 constraint makes the reliance explicit rather than implicit.
@@ -882,7 +994,7 @@ evaluator: test
 
 ```
 refs/atom/claims/pub/{label}                       → claim commit [→ fact chain] → (tip)
-refs/atom/pub/{label}/{version}                  → publish tag [→ chain] → atom commit
+refs/atom/pub/{label}/{version}                  → publish commit [→ fact chain] → (tip)
 ```
 
 The claim ref is the tip of the claim's own fact chain (`[claim-fact-
@@ -918,7 +1030,12 @@ fact exists — the tip of its fact chain (`[claim-fact-chain]`). When a
 fact lands, this ref MUST be updated to point to the new fact commit.
 Every earlier fact and the claim commit itself remain in the
 repository's history, walkable from the tip. Claim refs are separated
-from atom version refs to avoid polluting the version subtree.
+from atom version refs to avoid polluting the version subtree. This is
+one of three per-scope materialized view chains this backend
+maintains — charter, claim, publish
+([registry-ref-version](#registry-ref-version) is the publish-scope
+analogue) — and, like the other two, its target is derivable directly
+from the scope's own key (`label`, here) with no discovery round trip.
 
 ```claim
 kind: constraint
@@ -928,25 +1045,35 @@ evaluator: test
 ##### [registry-ref-version]
 
 The ref `refs/atom/pub/{label}/{version}`
-MUST point to an annotated tag object (the publish tag tip), which
-either directly targets the deterministic atom commit (initial publish)
-or targets a previous tag in the update chain (updates). The
-`{version}` segment is the `RawVersion` string from the publish payload.
+MUST point to the tip of the publish's own materialized view chain:
+the chain's first commit
+([publish-commit-format](#publish-commit-format)) for a publish with
+no facts yet, or the most recent fact commit
+([publish-fact-chain](#publish-fact-chain)) once any fact has landed.
+This chain shares no prefix with the charter or claim chains — it
+starts at the publish itself, never at either of them, even though a
+publish is logically under both a charter and a claim — and its name
+is fully derivable from `(label, version)` alone, with no discovery
+round trip: a resolver holding a lock entry can request this ref
+alongside the claim and charter refs in one connection. The
+`{version}` segment is the `RawVersion` string from the publish
+payload.
 
 ```claim
 kind: constraint
 evaluator: test
+depends: [publish-commit-format, publish-fact-chain]
 ```
 
 #### Store Refs (consumer repository)
 
 ```
 # Published atoms (d = digest-addressed)
-refs/atom/d/{blake3(publish_czd)}                → publish tag [→ chain] → atom commit
+refs/atom/d/{blake3(publish_czd)}                → publish commit [→ fact chain] → atom commit
 refs/atom/claims/d/{claim_czd}                   → claim commit (shallow-fetched)
 
 # Development atoms (unsigned, identified by the (anchor, label) pair, versioned)
-refs/atom/dev/{anchor}/{label}/{dev_version}        → atom commit (no tags, no claims)
+refs/atom/dev/{anchor}/{label}/{dev_version}        → atom commit (no publish, no claims)
 ```
 
 Dev versions SHOULD include the tree object hash to avoid clobbering
@@ -964,18 +1091,19 @@ registry label-addressed claims.
 
 Store version refs MUST be keyed by
 `blake3(publish_czd)`, where `publish_czd` is the `czd` of the
-**specific publish tag `CozMessage` the ref addresses** — the base tag
-or any amendment tag in the same update chain
+**specific commit's `CozMessage` the ref addresses** — the chain's
+first commit or any fact commit in the same materialized view chain
 (atom-transactions.md `[amendment-field-classification]`) — never a
-single identifier fixed for the whole chain. Each tag in a chain has
-its own distinct `czd` and therefore its own store ref: landing a new
-amendment tag creates a NEW `refs/atom/d/{blake3(new_publish_czd)}`
-ref without invalidating or rewriting any earlier tag's ref
+single identifier fixed for the whole chain. Each commit in a chain
+has its own distinct `czd` and therefore its own store ref: landing a
+new fact commit creates a NEW `refs/atom/d/{blake3(new_publish_czd)}`
+ref without invalidating or rewriting any earlier commit's ref
 ([publish-update-transition](#publish-update-transition)'s POST states this for the amendment
-case directly). This ensures global uniqueness — distinct tags, base or
-amendment, produce distinct publish czds and therefore distinct flat
-ref keys — and ensures a lock pinned to any tag in the chain, not only
-the base, remains resolvable for as long as that tag's ref persists.
+case directly). This ensures global uniqueness — distinct commits,
+base or amendment, produce distinct publish czds and therefore
+distinct flat ref keys — and ensures a lock pinned to any commit in
+the chain, not only the first, remains resolvable for as long as that
+commit's ref persists.
 
 ```claim
 kind: constraint
@@ -994,7 +1122,7 @@ alike have empty trees, the chain is lightweight (only commit objects).
 This ref serves two purposes: (1) protecting the claim commit and its
 fact chain from garbage collection, and (2) enabling efficient claim
 retrieval by czd for local verification. The chain also makes the full
-ownership history locally auditable. If a publish tag's payload
+ownership history locally auditable. If a publish's payload
 references a claim czd but no corresponding claim commit exists in the
 object store, this MUST be treated as an error.
 
@@ -1018,7 +1146,7 @@ this constraint's distinguishing mechanism no longer exists to state.
 What it protected — that a consumer can tell whether a given publish
 was authorized under the current owner or an earlier one — is real and
 is now answered a different way: every publish's payload still
-references the one, permanent claim czd (`[publish-tag-claim-binding]`
+references the one, permanent claim czd (`[publish-claim-binding]`
 is unaffected), and "which owner was in force" is resolved by walking
 the claim's fact chain to the state that was current at the publish's
 signing time (`[publish-transition-git]`'s claim-authorization PRE),
@@ -1035,7 +1163,7 @@ evaluator: none
 When a store ref
 `refs/atom/d/{blake3(publish_czd)}` is deleted (e.g., cache eviction),
 the backend SHOULD check whether any remaining store refs reference the
-same claim czd (by inspecting the publish tag payloads reachable from
+same claim czd (by inspecting the publish payloads reachable from
 surviving `refs/atom/d/` refs). If no remaining store ref references
 that claim czd, the backend SHOULD also delete the corresponding
 `refs/atom/claims/d/{claim_czd}` ref to prevent orphaned claim
@@ -1157,8 +1285,8 @@ depends: [claim-chains-charter, no-second-claim-genesis]
 #### [publish-transition-git]
 
 A version MAY be published for a
-claimed atom by creating an atom commit and annotating it with a
-publish tag.
+claimed atom by creating a content commit and a publish commit that
+targets it as its sole git parent.
 
 - **PRE**: A claim for this label MUST exist in the registry
   (`refs/atom/claims/pub/{label}` is set — the permanent claim commit,
@@ -1166,28 +1294,32 @@ publish tag.
   [claim-fact-chain](#claim-fact-chain)). The source revision (`src`)
   from which the atom's content is extracted MUST be at or after the
   claim's `src` in the repository's history ([temporal-vector](#temporal-vector)).
-  The atom commit MUST be deterministic per [snapshot-deterministic](#snapshot-deterministic).
+  The content commit MUST be deterministic per [snapshot-deterministic](#snapshot-deterministic).
   The publish `CozMessage` MUST reference the claim's `czd` — always the
   permanent claim commit's own czd, never a fact commit's, per
   genesis-once ([atom-genesis-and-facts]).
-- **POST**: An atom commit exists (parentless, deterministic, with
-  `src` extra header). A publish tag points at it with the CozMessage
-  as the message (containing the `claim` czd binding). The ref
-  `refs/atom/pub/{label}/{version}` points to the publish tag.
-  A protective ref `refs/atom/src/{src_oid}` is written to prevent
-  GC of the source revision. The ref write MUST use a
+- **POST**: A content commit exists (parentless, deterministic, a pure
+  function of its tree). A publish commit targets it as its sole git
+  parent, with the CozMessage as the commit message (containing the
+  `claim` czd binding) — [publish-commit-format](#publish-commit-format),
+  [publish-claim-binding](#publish-claim-binding). The ref
+  `refs/atom/pub/{label}/{version}` points to the publish commit. No
+  protective ref is written for the source revision — GC protection
+  for it is the anchor's record log's job (see the Registry Refs prose,
+  above), not this transition's. The ref write MUST use a
   compare-and-swap (CAS) on `refs/atom/claims/pub/{label}` to ensure
   the claim's fact chain has not advanced (an ownership-affecting fact
-  landed) between payload construction and tag creation. _(Raised from
-  SHOULD 2026-07-12: the non-CAS write is a TOCTOU window — a publish
-  can land against a claim state that no longer matches what the
-  signer verified against. Discharges the per-name register law,
+  landed) between payload construction and publish commit creation.
+  _(Raised from SHOULD 2026-07-12: the non-CAS write is a TOCTOU
+  window — a publish can land against a claim state that no longer
+  matches what the signer verified against. Discharges the per-name
+  register law,
   [backend-refs-linearizable](atom-backend-contract.md#backend-refs-linearizable).)_
 
 ```claim
 kind: constraint
 evaluator: test
-depends: [temporal-vector, snapshot-deterministic]
+depends: [temporal-vector, snapshot-deterministic, publish-commit-format, publish-claim-binding]
 because: [backend-refs-linearizable]
 ```
 
@@ -1198,15 +1330,18 @@ another store) into a store.
 
 - **PRE**: The source has discoverable atoms (resolvable refs). The
   store is a valid git repository.
-- **POST**: For each ingested atom: the atom commit exists in the
-  store, the publish tag (and its chain) exists in the store, the
-  claim commit (and its chain of previous claims) is fetched and
-  referenced by `refs/atom/claims/d/{claim_czd}`. Claim chains are
-  lightweight by design (empty trees) and require no special filtering.
-  Version refs follow the store layout:
-  `refs/atom/d/{blake3(publish_czd)}`. AtomId is preserved through
-  ingestion. Refs MUST NOT be committed until all cryptographic
-  verification ([verification-local](atom-transactions.md#verification-local)) passes — objects may exist
+- **POST**: For each ingested atom: the atom (content) commit exists
+  in the store, and the publish's materialized view chain — fetched
+  WHOLE, from its tip to its first commit, never depth-limited
+  ([publish-chain-fetched-whole](#publish-chain-fetched-whole); a
+  depth-limited fetch would omit the content commit hanging off the
+  chain's first commit) — exists in the store, the claim commit (and
+  its chain of previous claims) is fetched and referenced by
+  `refs/atom/claims/d/{claim_czd}`. Claim chains are lightweight by
+  design (empty trees) and require no special filtering. Version refs
+  follow the store layout: `refs/atom/d/{blake3(publish_czd)}`. AtomId
+  is preserved through ingestion. Refs MUST NOT be committed until all
+  cryptographic verification ([verification-local](atom-transactions.md#verification-local)) passes — objects may exist
   in the ODB during verification, but are invisible to consumers
   until the refs transaction is committed. (Satisfies
   [ingest-preserves-identity](atom-transactions.md#ingest-preserves-identity).)
@@ -1214,7 +1349,7 @@ another store) into a store.
 ```claim
 kind: constraint
 evaluator: test
-depends: [verification-local]
+depends: [verification-local, publish-chain-fetched-whole]
 because: [ingest-preserves-identity]
 ```
 
@@ -1255,9 +1390,9 @@ label's current owner — a marked seizure event).
   `refs/atom/claims/pub/{label}` is updated to point to the new tip.
   The claim commit itself, and its czd, are unchanged — future
   publishes continue to reference the SAME permanent claim czd
-  (`[tag-chain-semantic-immutable]`'s identity-class discipline, the
-  same rule at the claim scope) and satisfy [temporal-vector](#temporal-vector)
-  against the claim's own, unchanging `src`. Existing publish tags
+  (`[publish-update-transition]`'s identity-class discipline, the
+  same rule at the publish scope) and satisfy [temporal-vector](#temporal-vector)
+  against the claim's own, unchanging `src`. Existing publishes
   remain valid, their authorization now resolved against whichever
   owner-fold state was current at their own signing time, not against
   the fact chain's current tip. The full fact history is walkable from
@@ -1271,24 +1406,25 @@ depends: [claim-fact-chain, claim-detached, temporal-vector]
 
 #### [publish-update-transition]
 
-A publish tag MAY be updated (e.g.,
-after key revocation or resigning, to carry a reproducibility-mode
+A publish MAY be updated (e.g., after
+key revocation or resigning, to carry a reproducibility-mode
 transition — promotion or demotion per atom-model.md §6 — or to append
 overwrite- or append-class fields per atom-transactions.md
-`[amendment-field-classification]`) by appending a new tag to the
-chain.
+`[amendment-field-classification]`) by chaining a new fact commit onto
+its materialized view chain.
 
-- **PRE**: An existing publish tag chain for this `(label, version)`
-  exists. The new tag's `CozMessage` MUST carry an **amendment
-  payload**: the same payload shape as a base publish, but with every
-  identity-class field (atom-transactions.md `[amendment-field-
-  classification]`) structurally absent — not present and checked
-  equal, absent. The amendment payload MUST be valid per
+- **PRE**: An existing publish chain for this `(label, version)`
+  exists ([publish-fact-chain](#publish-fact-chain)). The new commit's
+  `CozMessage` MUST carry an **amendment payload**: the same payload
+  shape as the base publish, but with every identity-class field
+  (atom-transactions.md `[amendment-field-classification]`)
+  structurally absent — not present and checked equal, absent. The
+  amendment payload MUST be valid per
   [sig-over-pay](atom-transactions.md#sig-over-pay) (atom-transactions.md) and MUST set at least one overwrite- or
   append-class field. Authorization is per amended-field class:
-  - A tag that sets an overwrite-class field (`[amendment-field-
+  - A commit that sets an overwrite-class field (`[amendment-field-
     classification]` class 2 — signing identity, `mode`, `meta`) MUST
-    be signed by a key authorized by the base tag's claim's single
+    be signed by a key authorized by the base publish's claim's single
     owner ([claim-owner-single](atom-transactions.md#claim-owner-single), under
     [owner-authorization-delegated](atom-transactions.md#owner-authorization-delegated)'s per-value semantics — the same check
     [publish-transition](atom-transactions.md#publish-transition)'s own PRE already applies to the base
@@ -1298,91 +1434,94 @@ chain.
     `tmb(verifying_key) == pay.tmb` MUST hold, the same binding
     atom-transactions.md's Verification Pipeline step 6 already
     requires for charter/claim — and only THEN evaluate claim-owner
-    authorization against that bound key. A tag whose declared `tmb`
-    does not equal the thumbprint of its actual signing key MUST be
-    rejected before any claim-owner authorization check runs: without
-    this binding, a declared `tmb` naming the claim owner proves
-    nothing — the envelope's own `key` field can belong to an
+    authorization against that bound key. A commit whose declared
+    `tmb` does not equal the thumbprint of its actual signing key MUST
+    be rejected before any claim-owner authorization check runs:
+    without this binding, a declared `tmb` naming the claim owner
+    proves nothing — the envelope's own `key` field can belong to an
     unrelated signer, and the signature still verifies validly against
     IT, letting an attacker declare `tmb = <claim owner's thumbprint>`
     while actually signing with their own key. This is a
-    protocol-level validity requirement: a tag that sets an
+    protocol-level validity requirement: a commit that sets an
     overwrite-class field without both the tmb-binding check and
     claim-owner authorization MUST be rejected — it is not a valid
     amendment. This closes the gap an unauthorized `tmb`/`key`/`alg`/
     `mode` change would otherwise leave open ("no undeclared key signs
     anything").
-  - A tag that sets an append-class field (class 3, a fact entry)
+  - A commit that sets an append-class field (class 3, a fact entry)
     carries NO protocol-level signer restriction: any validly-signed
-    tag MAY add a fact entry, from any signer, regardless of fact-kind
-    tier — this is a structural validity statement, not a trust one.
-    Which verdict (`fact`/`evidence`/`refused`) a given consumer
-    assigns a fact entry is governed entirely by the entry's fact-kind
-    authorization tier ([fact-kind-table](atom-transactions.md#fact-kind-table)) as
+    commit MAY add a fact entry, from any signer, regardless of
+    fact-kind tier — this is a structural validity statement, not a
+    trust one. Which verdict (`fact`/`evidence`/`refused`) a given
+    consumer assigns a fact entry is governed entirely by the entry's
+    fact-kind authorization tier ([fact-kind-table](atom-transactions.md#fact-kind-table)) as
     evaluated through trust-model.md's consumer-local acceptance
     policy ([trust-role-authorization](trust-model.md#trust-role-authorization),
     [fact-claim-owner-gated](atom-transactions.md#fact-claim-owner-gated)) — fact acceptance is deliberately
     signer-relative ([trust-signer-relative](trust-model.md#trust-signer-relative)), never
     a chain-level accept/reject gate.
-  - A tag MAY set fields of both classes in one amendment; the
+  - A commit MAY set fields of both classes in one amendment; the
     overwrite-class authorization requirement above applies regardless
     of any append-class content also present.
-- **POST**: A new tag object is created targeting the _previous_ tag
-  object (not the atom commit). The ref
+- **POST**: A new fact commit exists (`PublishChainCommitFormat`'s
+  fact-extending shape) targeting the chain's previous tip. The ref
   `refs/atom/pub/{label}/{version}` (registry) is updated to point to
   the new tip. In the store, a new flat ref
   `refs/atom/d/{blake3(new_publish_czd)}` is created pointing to the
-  new tag; the previous ref `refs/atom/d/{blake3(old_publish_czd)}`
+  new commit; the previous ref `refs/atom/d/{blake3(old_publish_czd)}`
   persists, keeping any lock pin on the old publish_czd resolvable
-  (consistent with [tag-chain-immutable](#tag-chain-immutable)). The old tag object
-  persists in the object database. Git's tag-peeling resolves the
-  chain to the underlying atom commit.
-
-```claim
-kind: constraint
-evaluator: none
-depends: [sig-over-pay, claim-owner-single, owner-authorization-delegated, publish-transition, fact-kind-table, trust-role-authorization, fact-claim-owner-gated, trust-signer-relative, tag-chain-immutable]
-```
-
-#### [tag-chain-semantic-immutable]
-
-The identity-class fields of a
-publish payload — `label`, `version`, `dig`, `src`, `path`,
-`content_hash`, `anchor`, and `claim`
-([amendment-field-classification](atom-transactions.md#amendment-field-classification)) — MUST be set only by the base
-publish payload: the first tag in a publish's update chain, the one
-targeting the atom commit directly. Every later tag in the chain
-carries an amendment payload ([publish-update-transition](#publish-update-transition)) whose
-shape has no slot for these fields — they are structurally absent, not
-present and checked equal against the base tag's value. A backend or
-consumer walking the chain MUST read identity-class field values from
-the base tag only, and MUST NOT read them from, or expect them present
-on, any later tag. (`typ` is identity-class in value — it never
-changes across a chain — but, uniquely, IS required and present on
-every tag, base or amendment alike: it is the `CozMessage`
-payload-family discriminator, [publish-typ](atom-transactions.md#publish-typ),
-needed to parse the message at all, not per-chain data a resolver
-accumulates from the base tag.) Overwrite-class fields (signing
-metadata — `tmb`, `alg`, the envelope `key`, `now` — `meta`, the
-reproducibility `mode` field — chain-VARIABLE by design,
-promotable/demotable via signed chain appends per atom-model.md §6 and
-[publish-mode](atom-transactions.md#publish-mode)) and append-class fields (facts,
-[fact-kind-table](atom-transactions.md#fact-kind-table)) MAY be set by the base tag or
-by any later tag in the chain. Altering the artifact identity (`dig`),
-version string, or source revision requires a new atom commit and a
-new publish ref — not an update to an existing tag chain.
+  (consistent with [publish-fact-chain](#publish-fact-chain)'s
+  never-delete guarantee). The identity-class fields of the publish
+  payload — `label`, `version`, `dig`, `src`, `path`, `content_hash`,
+  `anchor`, and `claim`
+  ([amendment-field-classification](atom-transactions.md#amendment-field-classification)) — remain set ONLY by the
+  chain's first commit; the amendment payload's shape has no slot for
+  them, so a backend or consumer walking the chain MUST read
+  identity-class field values from the first commit only, and MUST
+  NOT read them from, or expect them present on, any later commit.
+  (`typ` is identity-class in value — it never changes across a chain
+  — but, uniquely, IS required and present on every commit, base or
+  amendment alike: it is the `CozMessage` payload-family discriminator,
+  [publish-typ](atom-transactions.md#publish-typ), needed to parse the
+  message at all, not per-chain data a resolver accumulates from the
+  first commit.) Overwrite-class fields (signing metadata — `tmb`,
+  `alg`, the envelope `key`, `now` — `meta`, the reproducibility `mode`
+  field — chain-VARIABLE by design, promotable/demotable via signed
+  chain appends per atom-model.md §6 and
+  [publish-mode](atom-transactions.md#publish-mode)) and append-class
+  fields (facts, [fact-kind-table](atom-transactions.md#fact-kind-table))
+  MAY be set by the first commit or by any later commit in the chain.
+  Altering the artifact identity (`dig`), version string, or source
+  revision requires a new content commit and a new publish ref — not
+  an update to an existing chain.
 
 ```claim
 kind: constraint
 evaluator: test
-depends: [amendment-field-classification, publish-update-transition, publish-typ, publish-mode, fact-kind-table]
+depends: [sig-over-pay, claim-owner-single, owner-authorization-delegated, publish-transition, fact-kind-table, trust-role-authorization, fact-claim-owner-gated, trust-signer-relative, publish-fact-chain, amendment-field-classification, publish-typ, publish-mode]
+```
+
+#### [tag-chain-semantic-immutable] — RETIRED 2026-08-23
+
+**Retired, not amended.** This constraint required identity-class
+publish fields to be set only by the base tag, never by a later tag
+in the chain. There is no tag chain; the identical requirement is now
+stated directly in `[publish-update-transition]`'s own POST, alongside
+the mechanism that carries it (the amendment payload's shape has no
+slot for identity-class fields, chain-commit or tag alike), rather
+than as a separate claim about tag semantics specifically.
+
+```claim
+kind: constraint
+evaluator: none
 ```
 
 #### [refs-atomic-multi]
 
-Multi-ref protocol transitions (claim +
-protective ref; publish tag + version ref + protective ref; multi-atom
-ingestion) MUST be committed atomically within the store — all named
+Multi-ref protocol transitions (ingestion, writing
+both a store version ref and a store claim ref for one atom;
+multi-atom ingestion) MUST be committed atomically within the
+store — all named
 refs move together or none do — so no consumer can observe a torn
 intermediate state. This binds the authoritative store per-store;
 cross-mirror consistency is convergence, not atomicity
@@ -1406,8 +1545,8 @@ be ingested into a git `AtomStore` without claims or publishes.
   (as defined in atom-transactions.md). The store is a valid git
   AtomStore.
 - **POST**: Atom commits exist in the store for each discovered atom,
-  referenced by `refs/atom/dev/{anchor}/{label}/{dev_version}`. No publish
-  tags or claim refs exist for dev atoms. The store MUST treat dev atoms
+  referenced by `refs/atom/dev/{anchor}/{label}/{dev_version}`. No
+  publish or claim refs exist for dev atoms. The store MUST treat dev atoms
   as unsigned/unclaimed. The dev version string SHOULD incorporate the
   tree object hash to prevent clobbering across concurrent evaluations.
   Every atom has an AtomId — git-sourced dev atoms use the set's
@@ -1530,7 +1669,7 @@ because: [atom-genesis-and-facts]
 
 #### [no-orphan-publish]
 
-A publish tag MUST NOT exist in a registry
+A publish commit MUST NOT exist in a registry
 without a corresponding claim commit reachable via
 `refs/atom/claims/pub/{label}` or `refs/atom/claims/d/{claim_czd}`.
 (Satisfies [no-unclaimed-publish](atom-transactions.md#no-unclaimed-publish).)
@@ -1581,7 +1720,7 @@ evaluator: none
 
 #### [no-missing-store-claim]
 
-In a store, if a publish tag's payload
+In a store, if a publish's payload
 references a claim czd, the corresponding claim commit MUST exist in
 the store's object database and MUST be reachable via
 `refs/atom/claims/d/{claim_czd}`. A missing claim MUST be treated as
@@ -1596,7 +1735,7 @@ evaluator: none
 
 #### [anchor-vector-authenticity]
 
-Given a publish tag in a registry,
+Given a publish in a registry,
 the atom MUST be verifiable as authentic by checking the vector:
 (1) the claim's `anchor` field equals `czd(charter₀)` of the
 verified charter ([charter-anchor](atom-transactions.md#charter-anchor),
@@ -1617,12 +1756,14 @@ depends: [charter-anchor, claim-charter-authorization, charter-ancestry]
 
 #### [ingestion-portable]
 
-Atom commits, publish tag objects (and their
-chains), and claim commits MUST be transferable between git
-repositories via standard git pack negotiation (`git fetch`). No
-custom transport extensions are REQUIRED. Claim commits SHOULD be
-shallow-fetched (without their ancestry) into stores to minimize
-transfer cost.
+Atom commits, publish commits (and their
+materialized view chains), and claim commits MUST be transferable
+between git repositories via standard git pack negotiation
+(`git fetch`). No custom transport extensions are REQUIRED. Claim
+commits SHOULD be shallow-fetched (without their ancestry) into
+stores to minimize transfer cost; a publish's materialized view chain
+MUST NOT be shallow-fetched — see
+[publish-chain-fetched-whole](#publish-chain-fetched-whole).
 
 - **Type**: Safety
 
@@ -1631,40 +1772,79 @@ kind: constraint
 evaluator: none
 ```
 
+#### [publish-chain-fetched-whole]
+
+A publish's materialized view
+chain MUST always be fetched in its entirety — from the ref tip to
+the chain's first commit — and MUST NEVER be fetched depth-limited
+(`--depth=1` or any other shallow bound). This is not a performance
+compromise a client is trusted to apply carefully; a shallow fetch of
+a publish ref is not merely incomplete, it is silently WRONG: the
+content commit hangs off the chain's first commit as that commit's
+sole git parent ([publish-commit-format](#publish-commit-format)), so
+a depth-limited fetch of any commit before that root would omit the
+content commit entirely, handing a client a verified publish record
+with none of the bytes it just verified the hash of. This is the
+opposite discipline from the anchor's own main record log
+(specified in the ADR governing this backend's git object model),
+which IS correctly fetched at depth 1 — its entire append-only record
+lives in the tip's own tree, so shallow-on-commits is complete on
+that ref. The two refs are structurally different objects and MUST
+NOT be given the same fetch discipline: depth-1 is the correct,
+complete read of the main log ref; depth-1 on a publish view ref is a
+silent data-loss bug.
+
+- **Type**: Safety
+
+```claim
+kind: constraint
+evaluator: test
+depends: [publish-commit-format]
+```
+
 #### [update-chain-auditable]
 
-The tag chain structure (new → old → ...
-→ atom commit) MUST be traversable. A consumer MUST be able to
-reconstruct the full update history by walking the tag chain from the
-ref tip. Each tag object in the chain carries its own `CozMessage`,
-enabling verification of the complete signing history.
+The publish's materialized view chain
+([publish-fact-chain](#publish-fact-chain)) structure (tip → ... →
+first commit) MUST be traversable. A consumer MUST be able to
+reconstruct the full update history by walking the chain's ordinary
+git parent links from the ref tip to the first commit. Each commit in
+the chain carries its own `CozMessage`, enabling verification of the
+complete signing history.
 
 - **Type**: Safety
 
 ```claim
 kind: constraint
 evaluator: none
+depends: [publish-fact-chain]
 ```
 
 #### [peel-content-integrity]
 
 When acquiring an atom via
-`refs/atom/d/{blake3(publish_czd)}`, a consumer MUST walk the publish
-tag chain from the tip (following tag-to-tag pointers until reaching
-an atom commit), then verify that the **peeled content-addressed sha
-equals `payload.dig`** in the publish `CozMessage`. A mismatch MUST
-be treated as tampering — the fetched atom MUST be rejected (SAD
-§8.3). Open failure mode: if a serving mirror has garbage-collected a
-chain tip (e.g., for a superseded publish_czd no longer advertised),
-the chain walk may fail to locate the expected tag; the backend SHOULD
-surface this as a distinct "chain tip unavailable" error and MUST NOT
-silently fall back to a different publish.
+`refs/atom/d/{blake3(publish_czd)}`, a consumer MUST walk the publish's
+materialized view chain from the tip, following ordinary git parent
+links, until reaching the chain's first commit, then take THAT
+commit's own parent — the content commit
+([publish-commit-format](#publish-commit-format)) — and verify that
+its content-addressed sha equals `payload.dig` in the publish
+`CozMessage`. (This replaces the retired tag-peeling mechanism with
+an ordinary commit-parent walk; there is no tag left to peel.) A
+mismatch MUST be treated as tampering — the fetched atom MUST be
+rejected (SAD §8.3). Open failure mode: if a serving mirror has
+garbage-collected a chain's first commit (e.g., for a superseded
+publish_czd no longer advertised), the walk may fail to locate the
+content commit; the backend SHOULD surface this as a distinct "chain
+root unavailable" error and MUST NOT silently fall back to a
+different publish.
 
 - **Type**: Safety
 
 ```claim
 kind: constraint
 evaluator: none
+depends: [publish-commit-format]
 because: [docs/architecture/atom-sad#8]
 ```
 
@@ -1680,6 +1860,39 @@ ingested atom. (Model §2.3, ⊇ condition.)
 kind: constraint
 evaluator: test
 depends: [docs/models/publishing-stack-layers#2.3]
+```
+
+#### [client-evaluates-not-replays]
+
+A client MUST NOT merge or
+replay the charter, claim, and publish materialized view chains to
+reconstruct the anchor's own log order. Because every chain commit
+that carries the anchor's own record data does so via the signed
+payload in its message (never a synthesized subset of the log), there
+are no partial views for a client to reconcile against one another —
+the three refs are freshness bookmarks naming where each scope's
+latest relevant record sits, not three separate data sources. What a
+client MUST do instead is evaluate trust state — which facts bear on
+this publish, is the signing key still trusted, has anything been
+withdrawn — directly against the records it already holds, never by
+replaying chain order to derive it. All three ref names are fully
+derivable from data the client already has, with no discovery round
+trip: `refs/atom/charter/d/{charter_czd}`
+([charter-ref-by-czd](#charter-ref-by-czd)) from the anchor's own czd
+(there is exactly one, per anchor), `refs/atom/claims/pub/{label}`
+([registry-ref-claim](#registry-ref-claim)) from the label alone
+([registry-ref-label-unique](#registry-ref-label-unique)), and
+`refs/atom/pub/{label}/{version}`
+([registry-ref-version](#registry-ref-version)) from the label and
+version together. A resolver holding a lock entry MAY therefore
+request all three refs in one connection.
+
+- **Type**: Safety
+
+```claim
+kind: constraint
+evaluator: none
+depends: [registry-ref-claim, registry-ref-version, charter-ref-by-czd]
 ```
 
 <!-- [publish-extensible] moved to atom-transactions.md — this is a
@@ -1714,16 +1927,19 @@ depends: [docs/models/publishing-stack-layers#2.3]
   time, `claims/pub/{label}`; a fact commit updates that same ref to
   its own new tip. No `src/{src_oid}` protective ref is written.
 
-- **Publish tags**: Use gix's tag object creation API with the
-  CozMessage as tag message. The `claim` czd in the payload identifies
-  the authorizing claim. For updates, the tag targets the previous tag
-  object (not the atom commit).
+- **Publish commits**: Use gix's commit creation API with the
+  CozMessage as commit message. The chain's first commit targets the
+  content commit as its sole git parent; the `claim` czd in its
+  payload identifies the authorizing claim. For fact-extending
+  updates, the new commit targets the previous commit in the SAME
+  chain instead (never the content commit).
 
-- **Publish tag metadata**: Clients SHOULD leverage
+- **Publish fact metadata**: Clients SHOULD leverage
   `[publish-payload-extensible]` to provide programmatic overwrite-
   class metadata in the publish `CozMessage` payload's `meta` object
   (atom-transactions.md `[amendment-field-classification]` — `meta` is
-  an overwrite-class field; the latest tag's `meta` value is current).
+  an overwrite-class field; the latest commit's `meta` value is
+  current).
   One recommended field remains here:
   - `meta.min-compatible: "1.0.0"` — minimum compatible version for
     semver-unaware ecosystems. This is a publisher-asserted
@@ -1746,7 +1962,7 @@ depends: [docs/models/publishing-stack-layers#2.3]
   `meta.deprecated` → `deprecated`, `meta.build-hash` →
   `build-record`. All `meta` and fact-kind fields alike are signed as
   part of the `CozMessage` and carry cryptographic assurance. Publish
-  tag updates (`[publish-update-transition]`) enable both
+  updates (`[publish-update-transition]`) enable both
   overwrite-class `meta` revision and append-class fact accumulation,
   without altering the base publish.
 
@@ -1785,20 +2001,24 @@ depends: [docs/models/publishing-stack-layers#2.3]
   bound to the specific transition it describes — the same binding the
   retired design had, now expressing a fact rather than a new identity.
 
-- **Tag peeling**: When resolving a version ref to its content, peel
-  the tag chain to the final atom commit. The atom commit is always
-  the terminal object (parentless commit with `src` header). gix
-  provides `peel_to_commit()` for this.
+- **Resolving content**: When resolving a version ref to its content,
+  walk the materialized view chain's ordinary git parent links from
+  the ref tip to the chain's first commit, then take that commit's own
+  parent — the atom (content) commit. There is no tag to peel; this is
+  an ordinary commit-parent walk, always terminating in a parentless
+  content commit ([snapshot-parentless](#snapshot-parentless)).
 
-- **Store ingestion**: Fetch atom commits, tag chains, claim commits,
-  and their fact chains via gix pack negotiation. Create published
-  atom refs under `refs/atom/d/`, claim refs under
+- **Store ingestion**: Fetch atom commits and a publish's whole
+  materialized view chain (never depth-limited —
+  [publish-chain-fetched-whole](#publish-chain-fetched-whole)), claim
+  commits and their fact chains, via gix pack negotiation. Create
+  published atom refs under `refs/atom/d/`, claim refs under
   `refs/atom/claims/d/`. Claim and claim-fact commits can be fetched
-  shallowly (no need for their ancestry).
+  shallowly (no need for their ancestry) — a publish chain MUST NOT be.
 
 - **Dev atom ingestion**: Create atom commits from filesystem content.
   Reference under `refs/atom/dev/{anchor}/{label}/{dev_version}`. No
-  tags, no claims, no verification ceremony. Dev version SHOULD include
+  publish, no claims, no verification ceremony. Dev version SHOULD include
   tree hash (e.g., `1.0.0.dev-{tree_hash_prefix}`) to avoid clobbering
   across concurrent evaluations. AtomId is derivable for all atoms
   (git atoms use the set's `czd(charter₀)` anchor, FS atoms use the
@@ -1858,10 +2078,14 @@ depends: [docs/models/publishing-stack-layers#2.3]
    directory/file conflicts in the refname filesystem (e.g., publishing
    `1.0` then `1.0/beta`).
 
-2. **Tag extra headers in gix** — RESOLVED: Publish tags no longer
-   require extra headers (the `claim-commit` header has been removed in
-   favor of the signed payload's `claim` czd). This resolves the
-   original open question about whether gix supports tag extra headers.
+2. **Tag extra headers in gix** — RESOLVED, then MOOT: the question
+   was already answered (the `claim-commit` header was removed in
+   favor of the signed payload's `claim` czd) before the
+   record-anchored publishing amendment retired publish tags
+   entirely; a publish is now an ordinary commit
+   ([publish-commit-format](#publish-commit-format)), so the question
+   of tag extra-header support in gix no longer applies to this
+   document at all.
 
 3. **FsSource contract**: The abstract `AtomSource` contract for
    filesystem directories (manifest discovery strategy, path resolution,
