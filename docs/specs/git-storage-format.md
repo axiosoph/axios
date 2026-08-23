@@ -85,8 +85,11 @@ the SAME git tree object the log's own checkpoint carries at the point
 its leaf was appended — never a synthesized subset, and never the
 well-known empty tree (ADR-0007 §7.5) — so a client already holding
 the object can always recompute the log's own root and detect a fact
-the object's own chain omitted. Every one of these objects' own commit
-fields (`author`, `committer`, `message`) stays fixed and inert; the
+the object's own chain omitted. Every one of these objects' own
+`message` field stays fixed and inert (`author`/`committer` are also
+fixed for charter, claim, and fact commits; a publish chain commit
+keeps the publisher's or fact signer's real author/committer instead,
+unchanged from before this amendment); the
 signed record itself lives as a leaf inside the tree the commit
 carries, never as a second copy in the commit's own `message`.
 
