@@ -324,6 +324,119 @@ F_registry(R) = F_source(R)                   -- inherits AtomSource
 Trait inheritance (`AtomRegistry: AtomSource`) is a coalgebra morphism —
 the forgetful map dropping claim/publish observers.
 
+#### 2.2a. MaterializedView (registry-internal, derived — not a trait)
+
+One underlying carrier — the record log `L` that `F_registry`'s own
+observers (`resolve`, `discover`, `genesis_claim`, `owner_fold`, §1)
+already fold over — with three per-scope views into it, used in the
+term's formal database-theory sense (record-anchored publishing
+amendment, Decision 12): a materialized index over one base relation,
+not a second source of truth.
+
+```
+view_s : Target_s → Chain          for s ∈ {Charter, Claim, Publish}
+```
+
+`Target_s` is the scope's own anchor: the repository's single charter
+for `s = Charter`; `(Anchor, Label)` — the pair `genesis_claim`
+resolves, §1 — for `s = Claim`; `(Anchor, Label, Version)` for
+`s = Publish`. Each `view_s` starts at its own target and is extended
+by one commit per record relevant to that scope as it lands; the three
+chains share no prefix — `view_Publish` does not begin with the
+commits `view_Charter` or `view_Claim` would also contain, even though
+a publish is logically under both.
+
+**A view is a derived structure over `L`, not an independent
+coalgebra.** It would be possible to give `Chain` its own coalgebra
+`c: Chain → F(Chain)` and a bisimulation closure over it, the way
+§2.1–§2.3's traits are modeled — but that would assert `Chain` carries
+behavioral identity worth checking on its own terms, i.e. that two
+views producing the same observations are thereby equivalent and
+trustworthy. That is precisely the authority a view must never carry
+(below). `L` remains the only carrier with real coalgebraic identity
+in this scope; `view_s` is a memoized projection of it, and its
+correctness is stated as a relation TO `L`, never as an equivalence
+class of its own.
+
+**[view-structure-not-query]** For the record portion, `view_s` is a
+*filter* over `L` — it selects the subsequence of records relevant to
+`Target_s`, in `L`'s own order, following `L`'s own `pay.under` links —
+never a *join* across scopes. Concretely: appending one record to `L`
+performs materialization work in exactly the views whose scope that
+record belongs to (O(1) chains touched), never in a descendant view
+merely because it is logically "under" the changed scope. *Falsifier:*
+a single fact append that requires extending or rewriting a chain
+belonging to a different, unrelated target — e.g. a claim-level fact
+forcing an update to one specific unrelated publish's chain. That is
+the exact write-amplification shape a single interleaved chain per
+publish would have had, and the reason three separate chains replaced
+it.
+
+**[view-derived-not-authoritative]** A client that has independently
+fetched and verified `L` (or the reachable portion of it for the scope
+in question) resolves the true state of `Target_s` by walking `L`'s
+own signed `under`/`prior` links — never by trusting `chain.tip`'s
+content alone. `view_s`'s relation to `L` is therefore soundness-only,
+an inclusion rather than an equality:
+
+```
+named(view_s(Target_s))  ⊆  reachable_in_L(Target_s)
+```
+
+every commit in the chain names a record that is present, unaltered,
+at the log position it claims — checkable by recomputing that commit's
+tree hash against `L`'s own tree at that position (the same
+never-trust-the-git-object pattern Decision 1 states for checkpoint
+parent edges, applied one level up to a chain built from them; made
+checkable at all by Decision 10's choice to point each chain commit at
+`L`'s actual tree rather than a synthesized subset). *Falsifier:* a
+chain commit whose named record does not appear in `L`, or appears
+altered from what `L` holds at that position — this is what would make
+a view deceptive rather than merely stale, and Decision 10's
+same-tree choice makes it structurally unrepresentable, not merely
+disallowed by convention.
+
+**[view-liveness]** A conforming registry MUST advance
+`view_s(Target_s)`'s chain tip to include every record in `L` relevant
+to `Target_s` by the time it next serves a read of that view. Let
+`tip_L(Target_s)` be the tip reachable by walking `L`'s own
+`under`/`prior` chain for scope `s`:
+
+```
+∀ read of view_s(Target_s):  tip(view_s(Target_s)) ⊒ tip_L(Target_s)
+```
+
+This is a liveness property, independent of [view-derived-not-authoritative]'s
+safety property: a registry can violate [view-liveness] (serve a
+stale-but-honest chain) without ever violating
+[view-derived-not-authoritative] (nothing in that stale chain is
+altered or invented) — precisely "can only be slow or broken, never
+deceptive." *Falsifier:* fetch `L` directly (paying the full-log cost)
+and find a record relevant to `Target_s`, reachable via
+`under`/`prior`, that `view_s(Target_s)`'s current chain tip does not
+include.
+
+**[view-record-vs-content]** The three invariants above bind the
+RECORD portion of a view uniformly across all three scopes. The
+CONTENT portion (the atom-content commit, hung as a second parent off
+`view_Publish(Target_Publish)`'s *first* chain commit — never a later
+one, since that commit is unambiguously "the publish commit" once the
+three chains share no prefix) is a distinct mechanism and must not be
+described by the same pair. Content has no staleness state — it is
+attached once, at chain-commit creation, and no later fact ever
+extends or replaces it — and no accelerator framing: it is not a cache
+of something reachable another way, it is the only path to a package's
+payload. *Falsifier for conflation:* [view-liveness] would tolerate a
+registry temporarily lagging `tip_L`; nothing tolerates the content
+commit's absence even momentarily — the ref is unusable without it
+(the publish record is unreachable-with-payload, not merely stale).
+Any invariant above whose violation the content commit's absence would
+satisfy is proof the two were wrongly merged into one construct.
+
+**Bisimulation:** deliberately not stated. A view has no independent
+behavioral identity to be bisimilar under — see the derived-structure
+note above.
+
 #### 2.3. AtomStore (atom-core, L1)
 
 ```
@@ -619,6 +732,9 @@ not a limitation — the model extends to async without restructuring.
 | Content factoring    | PASS    | F_content × F_source product preserves bisimulation;        |
 |                      |         | forgetful F_content → F_source drops content observer only  |
 | Session type duality | PASS    | All duals well-formed; ⊕/& inversion checks out             |
+| View safety/liveness | PASS    | §2.2a's soundness (⊆) and liveness (⊒) conditions are       |
+|                      |         | independent — each has its own falsifier and neither        |
+|                      |         | subsumes the other; deliberately not modeled as a coalgebra |
 | Formalism coverage   | PARTIAL | Manifest/VersionScheme are algebraic (constructors), not    |
 |                      |         | coalgebraic (observers) — correctly omitted from coalgebras |
 | Minimality           | PASS    | No unused formalisms; each captures a distinct concern      |
