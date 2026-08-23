@@ -101,7 +101,9 @@ TYPE  LockEntry = {
       -- Minimum per-entry fields. Mirror URLs are captured at the set
       -- level (anchor → mirrors), not per-entry. `dig` is NOT stored —
       -- it lives in the signed publish payload and MUST be verified by
-      -- peeling the publish_czd tag chain on acquisition. Adapters MAY
+      -- walking the atom commit's second-parent edge off the first
+      -- commit of the publish_czd's materialized view chain on
+      -- acquisition. Adapters MAY
       -- add src (provenance), requires (transitive deps), pkg (PURL
       -- type), or any ecosystem-specific fields.
 ```
@@ -176,11 +178,13 @@ These four fields are sufficient to reproduce the exact fetch without
 re-resolving: `set` + `label` + `version` locates the atom by name;
 `publish_czd` pins the exact signed publish. The atom's `dig` is NOT
 stored in the lock — it lives in the signed publish payload (the
-`publish_czd`-pinned source of truth); on acquisition the peeled
-content-addressed sha MUST equal `payload.dig`, or the fetch MUST be
-rejected as tampered (SAD §6.5; SAD §8 failure mode 8.3). The atom
-commit is peelable from the `publish_czd` tag chain; no `rev` field is
-needed. Adapters MAY extend the lock entry with additional fields.
+`publish_czd`-pinned source of truth); on acquisition the atom commit
+reached by walking the second-parent edge off the first commit of
+`publish_czd`'s materialized view chain MUST hash to `payload.dig`, or
+the fetch MUST be rejected as tampered (SAD §6.5; SAD §8 failure mode
+8.3). That second-parent edge is the atom commit's only path to a
+consumer; no `rev` field is needed. Adapters MAY extend the lock entry
+with additional fields.
 
 Local development atoms (see §Local Development Sets) are exempt from
 the `publish_czd` requirement — they have no publish. A dev lock entry
@@ -247,13 +251,15 @@ After version selection, the resolver MUST capture
 the resolution in a lock entry.
 
 - **PRE**: A specific version of a specific atom has been selected. The
-  atom's `publish_czd` is known (located in the publish tag chain). At
+  atom's `publish_czd` is known (read from the record reached by
+  resolving the publish ref to its materialized view chain). At
   least one source set (anchor) is known.
 - **POST**: A `LockEntry` exists with `set`, `label`, `version`, and
   `publish_czd` populated per [lock-entry-sufficient](#lock-entry-sufficient). The `dig` is
-  NOT stored in the lock; it is verified on acquisition by peeling the
-  publish tag chain (`payload.dig` MUST equal the peeled atom commit
-  sha). The lock entry is sufficient to reproduce the fetch and verify
+  NOT stored in the lock; it is verified on acquisition by walking the
+  second-parent edge off the first commit of the publish view chain
+  (`payload.dig` MUST equal the atom commit reached that way). The
+  lock entry is sufficient to reproduce the fetch and verify
   integrity without re-resolving.
 
 As with `[source-discovery]`, the source traits exist and are
