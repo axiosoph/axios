@@ -1065,6 +1065,35 @@ evaluator: test
 depends: [publish-commit-format, publish-fact-chain]
 ```
 
+##### [view-ref-liveness]
+
+A registry MUST advance each of its
+three materialized view refs — charter
+([charter-ref-by-czd](#charter-ref-by-czd)), claim
+([registry-ref-claim](#registry-ref-claim)), and publish
+([registry-ref-version](#registry-ref-version)) — to the tip of the
+chain reachable from the anchor's own record log for that scope, as
+each new relevant fact lands. A view ref, at any point in time, MUST
+point at or beyond the tip reachable by walking the record log's own
+prior-record chain for that scope; it MUST NOT lag behind a fact the
+log already carries. The worst a malfunctioning or malicious registry
+can do by violating this is fail to advance a ref — never fabricate a
+fact the log does not carry, since a materialized chain is only ever
+a derived convenience index over the signed log, never itself
+authoritative. Failing to advance a ref is therefore never
+deceptive, only more expensive to detect than trusting the view: any
+client willing to pay the cost of a full main-log fetch can check a
+view ref's claimed tip against what the log itself reaches for that
+scope. A client that fetches only view refs is trusting the
+registry's liveness; a client that walks the main log directly trusts
+nothing.
+
+```claim
+kind: constraint
+evaluator: none
+depends: [charter-ref-by-czd, registry-ref-claim, registry-ref-version]
+```
+
 #### Store Refs (consumer repository)
 
 ```
