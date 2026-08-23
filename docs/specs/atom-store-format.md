@@ -40,18 +40,35 @@ verifier crosses to accept a publish at all.
 
 ### The published object
 
-A publish's committed object is a parentless commit whose `tree` **is**
-the source tree — the same OID `position:path` already resolves to — and
-whose `message` carries a verbatim copy of the publish record. The commit
-is transport, never authority: its structural shape carries zero security
-weight ([ADR-0007's Alt 1](../adr/0007-atom-version-integrity-system.md),
-inherited unmodified by ADR-0009 Decision 5).
+A publish's committed object is reached in two steps, neither of which
+carries any security weight of its own: git is transport, never
+authority ([ADR-0007's Alt 1](../adr/0007-atom-version-integrity-system.md)).
+The publish ref targets the tip of the publish's own materialized view
+chain — a chain of checkpoint commits over the append-only record,
+starting at the publish and extended by one commit per fact that later
+lands about it. A consumer MUST read and verify the record carried by
+that chain before content is reachable at all: the ref names the
+record, never a bare content pointer, so there is no path that
+bypasses reading and verifying the record first.
+
+The atom's content lives in a second, parentless commit whose `tree`
+**is** the source tree — the same OID `position:path` already resolves
+to — with fixed, inert fields (blank author/committer, zero timestamp,
+empty message, no signature) and no other content. It hangs off the
+FIRST commit of the publish chain as a second parent, contributing
+exactly itself, its tree, and its blobs; nothing else is reachable
+from it. A consumer reaches it only by walking that second-parent edge
+from the chain's first commit — never from the publish ref directly,
+and never from a later commit the chain has since grown to.
 
 #### [publish-ref-transport-bundle]
 
-The publish ref targets a parentless commit whose `tree` is the source
-tree (same OID) and whose `message` carries a verbatim copy of the
-publish record. The commit is transport, never authority.
+The publish ref targets the tip of the publish's materialized view
+chain, never a content commit directly. The chain's first commit
+carries a second parent: a parentless commit whose `tree` is the
+source tree (same OID) and whose `message` is empty. That second
+parent is the only path to the atom's content. Both commits are
+transport, never authority.
 
 ```claim
 kind: constraint
