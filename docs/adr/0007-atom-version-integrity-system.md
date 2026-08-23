@@ -823,6 +823,139 @@ CAS-updated on every append — git's own ref-update compare-and-swap is
 the entire write-gate mechanism for the log (§19 has no separate
 mechanism to add).
 
+**A checkpoint that records a publish carries a second parent.** Every
+other checkpoint — anchor genesis, claim genesis, and every fact append
+at any scope — has exactly one parent, the previous checkpoint. A
+checkpoint recording a *publish* additionally takes the source commit
+the publish was built from (`position`, §4) as a second parent. This one
+edge does two jobs at once: it protects that source commit, and
+everything it makes reachable, from garbage collection for as long as
+`refs/atom/log` exists — intrinsically, transitively, for every publish
+ever made from this anchor — and it means a full verification fetch of
+the log tip is already complete, with no second, bespoke mechanism
+needed to keep a referenced source commit alive. The original
+derivation's dedicated GC-protection ref namespace, `refs/atom/src/{oid}`
+(§15), is unnecessary for this reason and carries no protective role
+here or anywhere else in this design. Like the first-parent chain, this
+edge carries no trust weight of its own — nothing signed claims it, so
+nothing cross-checks it; the source binding a verifier actually trusts
+remains the publish record's own signed `position` field (§4),
+unchanged by its existence.
+
+**7.4. The content commit: a demoted, minimal fetch handle for one
+publish's content.** A publish's content — the same tree
+`position:path` already resolves to for each declared subject (§5) —
+is also the tree of one further git commit, kept deliberately inert:
+parentless, fixed fields (blank author/committer, a zero timestamp, an
+empty message, no signature, no extra headers beyond Coz's own), tree
+equal to that content. Its identity is a pure function of the tree
+alone — nothing about how, when, or from what source revision it was
+published is encoded in the object, so two honest parties publishing
+bit-identical content produce the identical commit, even from two
+different source revisions.
+
+The reason this object exists is narrower and more concrete than "git
+needs a commit for a ref to point at": the git library this system's
+client is built on supports shallow fetch but not partial or filtered
+fetch — there is no way to ask a git host for "this directory only" out
+of a larger repository. A parentless commit whose tree is exactly the
+content needed is a ref-reachable, minimal object closure by
+construction: fetching it pulls the commit, its tree, and its blobs,
+and nothing else is reachable from it at any depth — no filter, no
+partial-clone support, and no git host capability beyond an ordinary
+fetch is required to get exactly the bytes and nothing more. This
+commit is reached only by walking a publish view chain's own second
+parent (§7.5) — it is never itself a ref target, and it carries no
+parent of its own back toward its source; that binding lives entirely
+on the main log's own checkpoint (above), never here.
+
+**7.5. Three materialized view chains — charter, claim, publish — each
+starting at its own target, with no shared prefix.** Rather than one
+chain per publish interleaving every fact at every enclosing scope, each
+scope gets its own chain: a charter chain (one per anchor), a claim
+chain (one per label), and a publish chain (one per published version).
+Each chain starts at its own scope's genesis commit and is extended by
+one further commit for every later fact that lands on that scope — the
+claim chain never carries the charter's own facts, and the publish
+chain never carries the claim's or the charter's; a publish is
+logically "under" both, but its own chain does not begin with either.
+This is a deliberate rejection of the interleaved alternative, not an
+oversight: an interleaved chain per publish materializes a *query* — a
+join across three scopes' facts — which has to be re-maintained, at
+every one of potentially thousands of publish chains, on every single
+write to any of its inputs. Three separate chains materialize the
+*structure* that already exists: `pay.under` (§2) already names, per
+scope, independently, "the enclosing scope's most recent leaf at
+signing time." Materializing structure costs one commit and one ref
+update per fact, always, regardless of how many publishes descend from
+the scope the fact lands on; materializing a query costs write
+amplification proportional to fan-out — a single charter-level fact
+would otherwise require appending to and re-pointing every publish
+chain ever descended from that anchor.
+
+Each chain commit's own tree is the *same* full record-log tree the
+originating checkpoint (§7.3) carries — never a synthesized subset
+containing only the records relevant to that chain. For the record
+portion of a chain this is a traversal accelerator, never a fetch
+reducer: it saves nothing in bytes moved, because the whole record log
+is small at this domain's real cardinality, and it exists so a client
+walking a view chain can always recompute the full log's own root and
+detect a relevant fact the chain's own edges omitted — a subset tree
+could never be checked against anything, since there would be nothing
+left to recompute it from. This property is scoped to records only and
+does not extend to content: a chain commit's tree choice buys nothing
+for content by itself, and must never be described with the same
+sentence as the content commit (§7.4), which is what actually keeps
+content out of the ordinary fetch path, structurally, regardless of
+which choice is made for record trees.
+
+**Content hangs off the publish chain's first commit, specifically, as
+a second parent — and this is the only path by which a consumer ever
+obtains a package's content.** "The publish commit" is, unambiguously,
+the first commit of the publish chain (never a commit shared with the
+charter or claim chains, since the chains do not share a prefix); the
+content commit (§7.4) is that commit's second parent, contributing
+exactly itself, its tree, and its blobs. A publish view chain
+consequently has **no path to a source commit at all** — the tie back
+to the repository's real history is the second parent on the *main
+log's own checkpoint* (above), and that edge lives only there, never on
+a publish chain. This makes over-fetching the monorepo when resolving a
+publish structurally impossible rather than a discipline a client has
+to remember: there is nothing in a publish chain's object graph that
+reaches the monorepo, regardless of how a client fetches it.
+
+**A materialized chain is a convenience index, never itself trusted.**
+The signed `under` pointers (§2) are the ground truth a client checks
+against directly; a chain a registry built incorrectly — omitting a
+link, ordering it wrong, injecting a spurious commit — produces a chain
+that simply disagrees with those signed pointers, which a client
+holding the full log (because a chain's own tree, above, is never a
+subset) can always detect. A wrong materialization can therefore only
+be slow or broken, never deceptive — the same trust property that
+already lets checkpoint commits (§7.3) exist unsigned and untrusted,
+carried one level up to the chains built from them. A registry MUST
+advance each view ref to the latest relevant record as facts land; the
+worst a buggy or malicious registry can do by failing this is let a
+view ref fall behind, which is checkable, at the cost of a full fetch
+of `refs/atom/log`, by any client willing to pay it — discoverable, not
+hidden, in either failure mode.
+
+A client does not merge or replay these three chains against each
+other. Because every chain commit points at the complete log tree
+(above), there is no partial view to reconcile — the three refs are
+freshness bookmarks saying where each scope's latest relevant record
+sits, not three separate data sources. What a client does instead is
+evaluate a state (which facts bear on this publish, is the signing key
+still trusted, has anything been withdrawn) directly against the log it
+already holds; reconstructing log order client-side by replaying the
+chains would put the log's own shape into client logic, which this
+design does not need and does not want. All three ref names are fully
+derivable from `(label, version)` alone, with no discovery round trip:
+one charter per repository, the claim ref named by label (labels are
+unique within an anchor's own claim, §2), the publish ref named by
+label plus version — a resolver holding a lock entry can request all
+three in one connection.
+
 ### 8. The ref-leaf discriminator principle [atom-ref-leaf-principle]
 
 **Governing law, applying to every ref-format decision in this
