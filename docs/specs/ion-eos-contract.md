@@ -184,8 +184,8 @@ commit), resolved via L1 `AtomSource` by `publish_czd`; these are
 git-object-readable, not lock/wire-copied. Whether eos reads the object
 directly or ion materializes wire fields from it at handoff time is an
 implementation choice that does not change the contract's minimal
-required set. The `(set, label)` pair is the dependency graph key (used
-by `requires`, `owner`, and the composer reference). The minimal pointer
+required set. The dependency graph is keyed by `label` within its `set`
+(used by `requires`, `owner`, and the composer reference). The minimal pointer
 `(set, label, version, publish_czd)` is sufficient for eos's
 `AtomSource` to: (1) resolve the atom from configured sources (local
 store, registry mirrors, ion peer fallback), (2) identify the atom
@@ -436,7 +436,7 @@ operations:
 
 | Method          | Signature                      | Purpose                                                                                                |
 | :-------------- | :----------------------------- | :----------------------------------------------------------------------------------------------------- |
-| `resolve(id)`   | `AtomId → Option<AtomMeta>`    | Look up specific atom metadata (label, version, set, mirrors) by `AtomId` — the `(anchor, label)` pair |
+| `resolve(id)`   | `AtomId → Option<AtomMeta>`    | Look up specific atom metadata (label, version, set, mirrors) by `AtomId` — a digest of the atom's `(anchor, label)` preimage |
 | `contains(id)`  | `AtomId → Bool`                | Existence check — returns whether eos has knowledge of the given atom                                  |
 | `search(query)` | `SearchQuery → List<AtomMeta>` | Find atoms matching a label pattern, atom-set filter, version range, or combination thereof            |
 

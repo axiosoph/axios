@@ -420,21 +420,21 @@ evaluator: none
 ## `[deps.<set>.<label>]` — the ground pins
 
 Dependency entries are nested tables keyed by set alias, then atom
-label. This two-level keying is the `(set, label)` name anchor; there is
+label. This two-level keying is each entry's name anchor; there is
 no per-entry type dispatch and no `set` field.
 
 #### [lock-single-version]
 
 A lock MUST bind at most one version per
-`(set, label)` — the nested keying makes this structural. Within one
+`label` within its `set` — the nested keying makes this structural. Within one
 atom's closure, resolution reconciles to a single shared choice per
 name (Composition Model §4); diamond requirements that cannot reconcile
 are a resolution failure at this layer. Divergent-version coexistence
 is scope territory — environment certificates and co-installation —
 never package-lock state.
 
-The nested `(set, label)` keying structurally prevents two versions
-under one key, but the substantive claim (diamond requirements
+The nested `set`/`label` keying structurally prevents two versions
+under one entry, but the substantive claim (diamond requirements
 reconcile to a single shared choice) is SAT-resolution logic, not
 implemented (`ion-resolve/src/lib.rs`).
 
@@ -478,12 +478,12 @@ evaluator: none
 
 #### [lock-annotation-consistency]
 
-`version` and the `(set, label)` key
-path MUST equal the values derivable from the entry's `publish`
+`version` and the entry's `set`/`label` nesting
+MUST equal the values derivable from the entry's `publish`
 transaction. A mismatch is a hard validation error: annotations exist
 for humans and indexing, never as independent authority.
 
-No code cross-references `version`/`(set, label)` against the
+No code cross-references `version`/`set`/`label` against the
 publish transaction's own payload; that would require decoding the
 signed publish `CozMessage` during lock validation, not implemented.
 
