@@ -183,36 +183,55 @@ states form a three-element progression with no cycles, so the
 order-freedom Decision 3 relies on is a structural consequence of what
 the field is about, not a policy choice layered on top of it.
 
-### 5. The published object is verified by inclusion proof against the spine; the closure has no artifact of its own [acp-published-object]
+### 5. The published object is reached only through the record; the closure has no artifact of its own [acp-published-object]
 
-A publish's committed object is a parentless commit whose tree is the
-source tree — the same OID `position:path` already resolves to — and
-whose message carries a verbatim copy of the publish record: a
-transport bundle, never an authority. What this document depends on
-explicitly, rather than by inheriting it silently, is
-[ADR-0007's Alt 1](0007-atom-version-integrity-system.md): the
-carrier's structural shape — parent pointers, tree entries, tag
-targets — carries zero security weight, distinguished sharply from a
-proposal (rejected, unmodified) where the carrier's own structure would
-be part of what a verifier reasons about.
+A publish's ref targets the tip of the publish's own materialized view
+chain — an ordinary commit chain over the append-only record, starting
+at the publish and extended by one commit per later fact, never a tag
+or a tag chain. A consumer reads and verifies the record that chain
+carries before content is reachable at all: the ref names the record,
+never a bare content pointer, so there is no path that bypasses
+reading and verifying the record first (Decision 2 of the
+record-anchored publishing amendment this section now states). The
+atom's content is a second, parentless commit — tree equal to the
+source tree, the same OID `position:path` already resolves to, fixed
+inert fields, empty message — hung off the chain's FIRST commit as a
+second parent, contributing exactly itself, its tree, and its blobs;
+nothing else is reachable from it. Both objects are transport, never
+authority. What this document depends on explicitly, rather than by
+inheriting it silently, is [ADR-0007's Alt
+1](0007-atom-version-integrity-system.md): the carrier's structural
+shape — parent pointers, tree entries, commit chains — carries zero
+security weight, distinguished sharply from a proposal (rejected,
+unmodified) where the carrier's own structure would be part of what a
+verifier reasons about. This is the property the design strengthens,
+not the one it revises.
 
-What changes is how a consumer trusts the object. [ADR-0007
-§7.4](0007-atom-version-integrity-system.md)'s closure — a two-leaf
-`eml` tree materialized at publish time, embedding a content commitment
-alongside a snapshot of the anchor log's own historical root — has no
-place in this design and is not carried forward by citation: this
-document's publish verification instead proves inclusion of the
-publish record directly against the spine's own, current root,
-following its `claim`/`anchor`/charter chain to fold governance. There
-is no closure object distinct from that proof; a publish's
-authorization state is a property of (record, spine), computed on
-demand, never a fixed artifact frozen at the moment of publication.
-`[k-derivation-signed-only]` — the rule pinning §7.4's embedded
-snapshot index — has no referent to carry forward for the same reason:
-nothing embeds a snapshot to index. A record known only from its own
-carrier is self-declaration regardless of which of these two
-verification shapes is used; the inclusion proof against the spine is
-what keeps a publish from reducing to exactly that.
+What changes is the mechanism by which a consumer trusts the object.
+[ADR-0007 §7.4](0007-atom-version-integrity-system.md)'s closure — a
+two-leaf `eml` tree materialized at publish time, embedding a content
+commitment alongside a snapshot of the anchor log's own historical
+root — has no place in this design and is not carried forward by
+citation: this document's publish verification instead proves
+inclusion of the publish record directly against the spine's own,
+current root, following its `claim`/`anchor`/charter chain to fold
+governance. There is no closure object distinct from that proof; a
+publish's authorization state is a property of (record, spine),
+computed on demand, never a fixed artifact frozen at the moment of
+publication. `[k-derivation-signed-only]` — the rule pinning §7.4's
+embedded snapshot index — has no referent to carry forward for the
+same reason: nothing embeds a snapshot to index. A record known only
+from its own carrier is self-declaration regardless of which of these
+two verification shapes is used; the inclusion proof against the
+spine is what keeps a publish from reducing to exactly that.
+
+A depth-1 fetch is correct for the main log ref alone; a publish view
+ref must never be fetched at depth 1 — its chain is bounded by the
+records relevant to that publish, not by history depth, and the
+correct fetch is the whole chain, unconditionally. Applying the main
+log's depth-1 discipline to a publish ref would silently omit the
+content commit and hand a client a verified record with none of the
+bytes it just verified the hash of.
 
 ### 6. The store is a flat, content-addressed keyspace, with every index derived [acp-store]
 
@@ -324,7 +343,7 @@ destination). This is the full map.
 | §11–§12 (head, per-label freshness)                       | **split**                | Tier-2 gating superseded together with §16; the completeness role was already gone by §11's own text; recency attestation is the one genuinely open residue (Open Items) |
 | §13 (interface mandatory)                                 | **split**                | interface manifests are facts (Decision 10), superseding the package-atom mandatory-artifact clause; the stratum-aware half is unaddressed (Open Items) |
 | §14 (legacy/native boundary)                              | **split**                | "registries never ingest" survives; the ancestry predicate is superseded by a declared-plus-spine-monotone check |
-| §15 (content liveness)                                    | **survives**             | zero normative keywords; its point — liveness is structural, not bespoke — is preserved by the transport bundle (Decision 5) |
+| §15 (content liveness)                                    | **survives**             | zero normative keywords; its point — liveness is structural, not bespoke — is preserved by the second-parent content commit (Decision 5) |
 | §16 (degradation ladder)                                  | **split**                | completeness/recency separability survives; Tier 2's fail-closed default is superseded by a scoped freshness-refusal policy |
 | §17 (fork proofs)                                         | **survives**             | zero normative keywords; divergence-is-not-intent survives, given a second expression by the fact channel's equivocation detection (Decision 7) |
 | §18 (signed trusted mirrors)                              | **survives**             | inherited by citation, unaffected                                                                               |
