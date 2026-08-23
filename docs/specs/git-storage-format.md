@@ -376,7 +376,7 @@ NOT rehash, truncate, or transform them.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 depends: [atom-genesis-and-facts]
 ```
 
@@ -404,7 +404,7 @@ internal encoding.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 ```
 
 #### [snapshot-deterministic]
@@ -724,7 +724,7 @@ charter-descended revisions anchor to `czd(charter₀)` normally
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 depends: [fs-source-contract]
 ```
 
@@ -1001,7 +1001,7 @@ constraint makes the reliance explicit rather than implicit.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 because: [backend-store-immutable]
 ```
 
@@ -1021,7 +1021,7 @@ transfer to the intent store. (Discharges
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: review
 depends: [odb-immutable, ancestry-hash-committed]
 because: [backend-refs-sole-mutability]
 ```
@@ -1061,7 +1061,7 @@ minimal mode — it limits blobs, never ancestry.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 depends: [ancestry-hash-committed]
 ```
 
@@ -1198,7 +1198,7 @@ label. (Satisfies [atomid-per-source-unique](atom-transactions.md#atomid-per-sou
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 because: [atomid-per-source-unique]
 ```
 
@@ -1270,7 +1270,7 @@ nothing.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 depends: [charter-ref-by-czd, registry-ref-claim, registry-ref-version]
 ```
 
@@ -1855,7 +1855,7 @@ directly for a resolver auditing storage rather than constructing it.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 depends: [log-tree-opaque, claim-detached, claim-fact-chain]
 ```
 
@@ -1890,7 +1890,7 @@ than one, parentless commit is malformed storage and MUST be rejected
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 because: [atom-genesis-and-facts]
 ```
 
@@ -1913,7 +1913,7 @@ the same label, is the forbidden state this constraint names.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 because: [atom-genesis-and-facts]
 ```
 
@@ -1926,7 +1926,7 @@ without a corresponding claim commit reachable via
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 because: [no-unclaimed-publish]
 ```
 
@@ -1951,7 +1951,7 @@ claim refs for the same label would conflict.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 ```
 
 #### [anchor-oldest-root]
@@ -1978,7 +1978,7 @@ ingestion corruption.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 ```
 
 ### Behavioral Properties
@@ -2020,7 +2020,7 @@ MUST NOT be shallow-fetched — see
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 ```
 
 #### [publish-chain-fetched-whole]
@@ -2068,7 +2068,7 @@ enabling verification of the complete signing history.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 depends: [publish-fact-chain, record-is-log-leaf]
 ```
 
@@ -2095,7 +2095,7 @@ different publish.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: test
 depends: [publish-commit-format]
 because: [docs/architecture/atom-sad#8]
 ```
@@ -2143,7 +2143,7 @@ request all three refs in one connection.
 
 ```claim
 kind: constraint
-evaluator: none
+evaluator: property-test
 depends: [registry-ref-claim, registry-ref-version, charter-ref-by-czd]
 ```
 
