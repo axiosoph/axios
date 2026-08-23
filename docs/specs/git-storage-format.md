@@ -100,17 +100,25 @@ The git backend uses four categories of git objects:
    is the claim `czd`, fixed forever at first claim.
 
 3. **Atom commits** — parentless commits whose tree contains the atom's
-   content subtree and whose `src` extra header records the source
-   revision. These are the atom snapshots referenced by `dig` in
-   publish transactions. Their hash is reproducible given the same
-   (tree, src) pair.
+   content subtree and nothing else. These are the atom snapshots
+   referenced by `dig` in publish transactions. Their hash is
+   reproducible given the same tree alone: identity carries no source
+   binding, because that binding now lives one layer up, on the
+   publish commit that reaches this object (below) and in the signed
+   record itself — never inside the content object.
 
-4. **Publish tags** — annotated tag objects pointing at atom commits
-   (initial publish) or at a previous publish tag (updates). The tag's
-   `message` field contains the publish `CozMessage` (JSON). The
-   `claim` czd in the publish payload identifies the authorizing claim.
-   Update tags form a chain: new → old → ... → atom commit.
-   Git's tag-peeling resolves the chain to the underlying atom commit.
+4. **Publish commits** — the git encoding of a publish's materialized
+   view chain (§Ref Layout): an ordinary commit, not a tag. The
+   chain's first commit (the publish itself) carries the atom commit
+   as its git parent — the only path by which a consumer reaches a
+   package's content — and its `message` field contains the publish
+   `CozMessage` (JSON). A later commit in the same chain (a fact about
+   this publish — yank, advisory, deprecation, mode promotion, meta
+   revision) parents onto the commit before it instead, carrying a
+   `FactPayload` `CozMessage`. The ref `refs/atom/pub/{label}/{version}`
+   points to the chain's tip; there is no publish tag and no tag
+   chain, and a publish chain has no path to a source revision commit
+   at all.
 
 ### Filesystem Source Ingestion
 
@@ -137,7 +145,7 @@ Unsigned dev atoms are stored under `refs/atom/dev/{anchor}/{label}`
 TYPE  Anchor         = Vec<u8>                    -- opaque bytes: czd(charter₀), backend-agnostic
 TYPE  ClaimCommit    = ObjectId                   -- commit with CozMessage in message
 TYPE  AtomCommit     = ObjectId                   -- deterministic, parentless commit
-TYPE  PublishTag     = ObjectId                   -- annotated tag → AtomCommit or prev tag
+TYPE  PublishChainCommit = ObjectId               -- a commit in a publish's own materialized view chain
 TYPE  RefPath        = String                     -- e.g. "refs/atom/pub/mylib/0.1.0"
 
 TYPE  AtomSnapshot = {
@@ -146,12 +154,14 @@ TYPE  AtomSnapshot = {
         committer:     ATOM_AUTHOR,               -- constant: same as author
         timestamp:     0,                         -- Unix epoch zero, UTC
         message:       "",                        -- empty
-        extra_headers: { "src": ObjectId },       -- source revision commit hash
       }
-      -- The hash of this commit object is the `dig` in PublishPayload.
-      -- Including `src` cryptographically binds the atom to its source
-      -- revision, enabling a quick verification that the publish payload's
-      -- `src` field matches the atom commit's extra header.
+      -- The hash of this commit object is the `dig` in PublishPayload,
+      -- and is a pure function of `tree` alone: identical content
+      -- published from two different source revisions is ONE object,
+      -- not two. The source binding lives one layer up -- on the
+      -- publish commit that carries this object as its git parent
+      -- (`[publish-commit-format]`) -- and in the signed record itself,
+      -- never inside the content object.
 
 TYPE  CharterCommitFormat = {
         tree:          EMPTY_TREE,                  -- well-known empty tree hash
@@ -295,13 +305,19 @@ depends: [atom-genesis-and-facts]
 #### [snapshot-deterministic]
 
 An atom commit MUST be deterministic given
-the same inputs. Given the same content tree AND the same source revision
-(`src`), any party MUST produce an identical commit object (and therefore
-identical ObjectId). This is achieved by fixing: (1) author and committer
-to `ATOM_AUTHOR`, (2) timestamps to `ATOM_TIMESTAMP`, (3) commit message
-to `ATOM_MESSAGE`, (4) no parent commits, (5) exactly one extra header
-(`src`) containing the source revision ObjectId, (6) no GPG signatures.
-The commit hash is the `dig` field in the publish payload.
+the same inputs. Given the same content tree alone, any party MUST
+produce an identical commit object (and therefore identical
+ObjectId) — identity carries no source binding. This is achieved by
+fixing: (1) author and committer to `ATOM_AUTHOR`, (2) timestamps to
+`ATOM_TIMESTAMP`, (3) commit message to `ATOM_MESSAGE`, (4) no parent
+commits, (5) no GPG signatures. The commit hash is the `dig` field in
+the publish payload. A direct, real-world consequence: identical
+content published from two different source revisions produces ONE
+atom commit, not two — the atom commit alone cannot distinguish them,
+by design (`[snapshot-src-header]`, retired, carried this
+distinction; the source binding now lives on the publish commit that
+reaches this object — `[publish-commit-format]` — and in the signed
+record, never inside the content object itself).
 
 ```claim
 kind: constraint
@@ -312,8 +328,11 @@ evaluator: test
 
 An atom commit MUST have zero parents. Atoms
 are detached subtrees — they carry no history. Provenance is recorded
-in the `src` extra header and the publish payload, not in git's parent
-chain. (Satisfies [atom-detached](atom-transactions.md#atom-detached).)
+in the publish record and, at the git level, in the publish commit
+that carries this object as its own git parent
+(`[publish-commit-format]`) — never in the atom
+commit's own parent chain, which stays empty. (Satisfies
+[atom-detached](atom-transactions.md#atom-detached).)
 
 ```claim
 kind: constraint
@@ -321,27 +340,30 @@ evaluator: none
 because: [atom-detached]
 ```
 
-#### [snapshot-src-header]
+#### [snapshot-src-header] — RETIRED 2026-08-23
 
-An atom commit MUST contain exactly one extra
-header: `src`, whose value is the hex-encoded ObjectId of the source
-revision commit from which the atom's content was extracted, in the
-length-disambiguated encoding `[src-hash-kind-disambiguated]` defines.
-This header cryptographically binds the atom snapshot to its source
-revision.
-
-The `src` value in the atom commit MUST match the `src` field in the
-corresponding publish payload — semantically, as the same source
-revision identity; the payload's `src` field is raw bytes
-(atom-transactions.md `TYPE PublishPayload`) while the commit header is
-hex text, so "match" means the header's hex-decoded bytes equal the
-payload's raw bytes, not literal string equality. A consumer MAY
-verify this as a quick integrity check before performing full Coz
-signature verification.
+**Retired, not amended.** This constraint required an atom commit to
+carry exactly one extra header, `src`, binding the snapshot to its
+source revision at the git-object level, and required that header to
+match the publish payload's own `src` field as a quick pre-signature
+integrity check. The corpus's own record-anchored publishing
+amendment rules this out directly: identity MUST become a pure
+function of the content tree alone
+([snapshot-deterministic](#snapshot-deterministic)), because the
+publish ref no longer points at a detached content object a client
+could use without first reading the signed record — it points at the
+record itself, which already declares `src`, and the record
+checkpoint that anchors the record in the anchor's own history
+intrinsically binds the source revision one layer up. Asserting the
+same fact a second time, in a git header on the content object, would
+make that header load-bearing for a check nothing signed actually
+requires — git is storage, never a verification surface, in this
+design. No extra header survives on an atom commit; there is nothing
+left for this constraint to bind.
 
 ```claim
 kind: constraint
-evaluator: test
+evaluator: none
 ```
 
 #### [temporal-vector]
@@ -756,17 +778,18 @@ depends: [ancestry-hash-committed]
 The seam law's git instance
 ([backend-seam-typed](atom-backend-contract.md#backend-seam-typed)): `Czd` values and
 git `ObjectId`s are disjoint types. The only OID-typed protocol
-identities are the payload fields `dig` and `src` and the atom
-snapshot's `src` extra header; every other protocol identity (anchor,
-claim czd, publish czd) is a coz digest. Implementations MUST
-represent the two as distinct types such that any czd↔OID comparison
-is rejected at the type level. Ref paths are typed encodings, not free
-strings: the identity-bearing segments come in three families —
-czd-hex (`refs/atom/claims/d/{claim_czd}`, the `{anchor}` segment of
-dev refs), blake3-hex (`refs/atom/d/{blake3(publish_czd)}`), and
-oid-hex (`refs/atom/src/{oid}`) — each family renders exactly one
-sort, parsing MUST rehydrate the segment to that sort, and comparison
-of raw segments across families is ill-typed.
+identities are the payload fields `dig` and `src`; every other
+protocol identity (anchor, claim czd, publish czd) is a coz digest —
+the atom snapshot carries no OID-typed field of its own at all
+(`[snapshot-src-header]`, retired: the atom commit's identity is a
+pure function of its tree). Implementations MUST represent the two as
+distinct types such that any czd↔OID comparison is rejected at the
+type level. Ref paths are typed encodings, not free strings: the
+identity-bearing segments come in two families — czd-hex
+(`refs/atom/claims/d/{claim_czd}`, the `{anchor}` segment of dev
+refs) and blake3-hex (`refs/atom/d/{blake3(publish_czd)}`) — each
+family renders exactly one sort, parsing MUST rehydrate the segment to
+that sort, and comparison of raw segments across families is ill-typed.
 
 ```claim
 kind: constraint
@@ -801,43 +824,24 @@ depends: [anchor-hash-agile, content-hash-is-tree-digest]
 because: [backend-hash-strength]
 ```
 
-#### [src-hash-kind-disambiguated]
+#### [src-hash-kind-disambiguated] — RETIRED 2026-08-23
 
-The atom commit's `src` extra
-header (`[snapshot-src-header]`) is a hex-encoded git `ObjectId` whose
-byte length MUST be read as the sole, authoritative indicator of which
-hash algorithm produced it: 40 hex characters denotes SHA-1, 64
-denotes SHA-256. A reader MUST NOT assume a fixed algorithm (e.g.
-always SHA-1) regardless of length, and MUST NOT require any other
-marker — no algorithm prefix or tag is added to the header's value.
-This is a minimal fix, not a new mechanism: it makes an
-already-structural property (git `ObjectId` hex length is
-algorithm-determined; `gix` itself dispatches object decoding by OID
-length) an explicit, binding reading rule instead of an unstated
-assumption, consistent with [czd-oid-disjoint](#czd-oid-disjoint)'s "each family
-renders exactly one sort" precedent for identity-bearing ref-path
-segments applied here to a header value instead. No untagged
-ambiguity exists to migrate away from: every `src` header written
-under this project to date is 40 hex characters (git's SHA-1 default
-is this project's only backend hash kind in current use), so this
-constraint has no legacy population to reconcile — it binds future
-readers as of this amendment, not a transition.
-
-**Caution — do not confuse with `content_hash`.** BLAKE3 (the
-`content_hash` algorithm, atom-transactions.md
-`[content-hash-algorithm]`) also produces 32-byte digests that render
-as 64 hex characters, identical in length to a SHA-256 `src`. Length-
-based disambiguation under this constraint applies ONLY within the
-`src` header's own git-OID field family (`[czd-oid-disjoint]`'s
-oid-hex family); `content_hash` is a distinctly named field in a
-different structure (the `PublishPayload`, not a git commit header)
-and MUST NOT be inferred from, or cross-checked against, `src`'s
-length or position.
+**Retired, not amended.** This constraint disambiguated the hash
+algorithm of the atom commit's `src` extra header by its hex length
+(40 characters SHA-1, 64 SHA-256), since that header carried no
+algorithm marker of its own. The header itself is gone
+(`[snapshot-src-header]`, retired): the atom
+commit carries no OID-typed field to disambiguate. The underlying
+caution this constraint carried — a 64-hex-character SHA-256 OID and
+a 64-hex-character BLAKE3 `content_hash` digest are the same length
+and MUST NOT be inferred from one another — still applies wherever a
+git OID and a `content_hash` might otherwise be confused
+([oid-hash-inheritance](#oid-hash-inheritance)), but has no `src`
+header left to be a caution ABOUT.
 
 ```claim
 kind: constraint
 evaluator: none
-depends: [czd-oid-disjoint]
 ```
 
 #### [single-active-claim-registry]
@@ -1408,9 +1412,15 @@ be ingested into a git `AtomStore` without claims or publishes.
   [fs-source-contract](atom-transactions.md#fs-source-contract)). A git source that has no charter yet is
   identity-equivalent to a filesystem source: its dev atoms are
   local-class and carry the same sentinel anchor
-  ([dev-atom-unchartered-local](#dev-atom-unchartered-local)). Note: the dev atom's `dig` will inherently
-  differ from the published `dig` because published atoms include a
-  real `src` extra header — this is by design.
+  ([dev-atom-unchartered-local](#dev-atom-unchartered-local)). Note:
+  the dev atom's `dig` MAY equal a later published atom's `dig` for
+  identical content — content identity is a pure function of the tree
+  alone ([snapshot-deterministic](#snapshot-deterministic)), so a dev
+  atom that is later published for the same content becomes the SAME
+  underlying git object, not a distinct one. Provenance is carried
+  entirely by which refs point at the object (`refs/atom/dev/...`
+  vs. `refs/atom/pub/...` / `refs/atom/d/...`), never by the atom
+  commit's own hash — this is by design.
 
 ```claim
 kind: constraint
@@ -1685,9 +1695,9 @@ depends: [docs/models/publishing-stack-layers#2.3]
   ingest atoms from `FsSource` per `[fs-ingest-transition]`.
 
 - **Deterministic commit construction**: Use gix's commit creation API
-  with blank author/committer (`<> 0 +0000`), epoch timestamp, empty
-  message, and a single `src` extra header. The `dig` field in
-  PublishPayload is this commit's ObjectId.
+  with blank author/committer (`<> 0 +0000`), epoch timestamp, and
+  empty message — no extra headers. The `dig` field in PublishPayload
+  is this commit's ObjectId, a pure function of its tree.
 
 - **Claim commits**: Use gix to create commits with the well-known
   empty tree, no extra headers, ATOM_AUTHOR/ATOM_TIMESTAMP, and the
@@ -1813,8 +1823,8 @@ depends: [docs/models/publishing-stack-layers#2.3]
 
 ### Testing Strategy
 
-- **Unit tests**: snapshot determinism (same tree+src → same hash),
-  forbidden state validation, extra header round-trip
+- **Unit tests**: snapshot determinism (same tree → same hash, across
+  distinct source revisions), forbidden state validation
 - **Integration tests**: full lifecycle (claim → publish → ingest →
   verify), using `tempfile` for ephemeral git repos
 - **Cross-reference**: Phase 4 items in atom-transactions.md verification
