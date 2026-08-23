@@ -1322,8 +1322,10 @@ Each ingested claim MUST have a corresponding
 ref at `refs/atom/claims/d/{claim_czd}` pointing to the claim commit or
 — once any claim-owner fact exists — the tip of its fact chain
 (`[claim-fact-chain]`). The full fact chain (including every historical
-fact) SHOULD be fetched from the source — since claim and fact commits
-alike have empty trees, the chain is lightweight (only commit objects).
+fact) SHOULD be fetched from the source — claim and fact commits alike
+carry the record log's own tree, which stays small at this domain's
+real cardinality (ADR-0007 §7.2), so the chain remains lightweight
+even though its trees are no longer the well-known empty tree.
 This ref serves two purposes: (1) protecting the claim commit and its
 fact chain from garbage collection, and (2) enabling efficient claim
 retrieval by czd for local verification. The chain also makes the full
@@ -1394,8 +1396,9 @@ permanently — there is no successor to chain to, and no `prior` field
 to chain it with (`CharterPayload`, Type Declarations, above).
 Owner-set and key-rotation facts chain onto it via git parents instead
 (`[charter-fact-chain]`). Charter and charter-fact commits both carry
-the empty tree, so the whole fact chain is lightweight to enumerate and
-fetch (commit objects only), exactly as a claim's fact chain is.
+the record log's own tree — small at this domain's real cardinality
+(ADR-0007 §7.2) — so the whole fact chain remains lightweight to
+enumerate and fetch, exactly as a claim's fact chain is.
 
 ##### [charter-ref-by-czd]
 
@@ -1547,7 +1550,8 @@ another store) into a store.
   chain's first commit) — exists in the store, the claim commit (and
   its chain of previous claims) is fetched and referenced by
   `refs/atom/claims/d/{claim_czd}`. Claim chains are lightweight by
-  design (empty trees) and require no special filtering. Version refs
+  design (the record log's own tree stays small at this domain's real
+  cardinality, ADR-0007 §7.2) and require no special filtering. Version refs
   follow the store layout: `refs/atom/d/{blake3(publish_czd)}`. AtomId
   is preserved through ingestion. Refs MUST NOT be committed until all
   cryptographic verification ([verification-local](atom-transactions.md#verification-local)) passes — objects may exist
