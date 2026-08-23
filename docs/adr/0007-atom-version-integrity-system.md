@@ -367,13 +367,42 @@ over — once via `prior` (its position in the anchor's total order) and
 once via `under` (its authorization context) — both signed, both
 independently walkable, neither expressed through git ancestry (§7).
 
-Extension metadata: any record MAY carry an `ext` map of namespaced
-key/value entries, each tagged `critical` or `informational`. A
-verifier that does not recognize a `critical` entry renders UNKNOWN on
-whatever it could affect; an unrecognized `informational` entry is
-inert. Bounded by whatever admission-time record size cap a conforming
-implementation enforces — an implementation limit, not elaborated
-further in this ADR.
+**Extension metadata — retired 2026-08-23.** Kept below as decision
+history, not a live mechanism.
+`docs/specs/atom-transactions.md`'s `[publish-payload-extensible]` and
+`[claim-payload-extensible]` state the rule that stands instead: an
+extension nests inside a signed `meta` object, and nothing about it is
+tagged or changes a verifier's verdict.
+
+> Any record MAY carry an `ext` map of namespaced key/value entries,
+> each tagged `critical` or `informational`. A verifier that does not
+> recognize a `critical` entry renders UNKNOWN on whatever it could
+> affect; an unrecognized `informational` entry is inert. Bounded by
+> whatever admission-time record size cap a conforming implementation
+> enforces — an implementation limit, not elaborated further in this
+> ADR.
+
+**Reversed (2026-08-23), on the head's ruling.** nrd: *"facts have
+types with well known semantics so if something about the publish
+needs to be machine checked, facts are the proper route, adding
+another route in the publish object just conflates things even more
+than necessary."* The fact channel already carries typed,
+machine-checkable statements about a publish; a tagged extension map
+inside the payload would have been a second route to the same job —
+one mechanism, not two.
+
+A related option was raised and declined on the same ground: pinning a
+fact-like statement inside the publish payload itself, rather than as
+its own log leaf, since it is only one record type nested inside
+another. The discriminator is whether the thing can ever be
+superseded — yes makes it a fact, which belongs on the log; no makes
+it an immutable property of the publish, which belongs in a payload
+field. An embedded fact would carry a fact's type without a fact's
+behavior: it could not be hash-linked to its publish (the hash is not
+known until the payload is complete), and it would not be a log leaf,
+so a client would have to look in two places for what bears on a
+publish. A publish followed immediately by a fact serves the same
+need.
 
 ### 3. One record shape: genesis-once, facts-forever [atom-genesis-and-facts]
 
