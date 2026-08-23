@@ -557,28 +557,27 @@ independently-declared position per subject.
   git-tree-OID-derived hash would instead bind the model to one backend's
   hash function and its versioning.
 
-  **The closure-level content commitment is a distinct object one level up,
-  named separately so the two are never conflated: `content_commitment`
-  (leaf0 of the §7.4 closure tree) is an `eml` root over the *ordered list
-  of declared subjects*, leaf `i` = subject `i`'s own `content_hash`.** It
-  is never any single subject's `content_hash` — the two coincide only in
-  the common single-subject case, where this outer `eml` root at `n = 1` is
-  again literally that one subject's `content_hash`, so the closure costs
-  exactly what a flat hash would have. No new signed field:
-  `content_commitment` is *derived* from the existing subject list, the same
-  "derive, don't declare, when derivable" discipline the anchor-identity
-  rule (§4) already uses. The multi-subject case (§6) is where the extra
-  structure earns its keep:
-  per-subject inclusion proofs become available for free, letting a
-  consumer verify one declared subject's inclusion without touching any
-  other subject's content — a real capability, not merely a tidier data
-  model, and one a flat hash could never offer regardless of how it was
-  computed.
+  **There is no closure-level content commitment field.** The original
+  derivation's two-leaf closure structure — a `content_commitment` field
+  defined as an `eml` root folding every declared subject's `content_hash`
+  together — is deleted along with the closure commit that carried it
+  (§7.4): nothing signed was ever checked against that fold, so it
+  verified nothing beyond what each subject's own `content_hash` already
+  verifies on its own. Multi-subject verification does not need a
+  replacement aggregate: §6's sibling constraint already gives the whole
+  declared set one common tree, rooted at `P = dirname(main_subject.path)`,
+  and that tree is exactly what the content commit's own tree (§7.4)
+  equals. A verifier holding the content commit therefore checks each
+  declared subject the same way regardless of how many are declared — walk
+  the content commit's tree to `path`, recompute `content_hash` over what
+  is found there, compare to the signed value — with no separate fold step
+  and nothing left ambiguous about which subject a single tree slot
+  represents.
 - **`tree`** — the git tree OID that `position.tree/path` resolves to,
   stored as a checked cache, not independent information: it MUST equal
   the result of that lookup, and a mismatch is a verification failure
   exactly like any other false signed claim. This is the same object
-  that becomes the closure's own content tree (§7) — the same OID,
+  that becomes the content commit's own tree (§7.4) — the same OID,
   referenced a second time, at zero additional storage cost.
 
 **Hash agility and the SHA-1 residual (scoping note, not a normative
@@ -966,9 +965,12 @@ rests entirely and always on the signed payload (signature + `prior`/
 what git object it happens to resolve to. The self-certifying property
 of a czd-named ref (recompute the hash from fetched bytes, compare to
 the name) is a cheap bonus sanity check, never the load-bearing
-mechanism. This principle now also governs the choice of git object
-*type* at a ref's tip (§7.5's bare-commit-vs-tag discriminator) — the
-same rule, one level more general than the original draft stated it.
+mechanism. This principle extended, in the design this document
+originally shipped with, to whether a publish ref's tip was a bare
+commit or a tag — a discriminator this revision deletes rather than
+merely governs: every view chain (§7.5) is uniformly commits, so there
+is no longer a git object *type* choice at a ref's tip to make
+security-neutral in the first place.
 
 **The one carve-out, stated rather than glossed:** this document's broader
 "git structure carries zero security weight" (Context, §7.2) has exactly
@@ -994,7 +996,7 @@ denial-of-service, never the acceptance of a false ordering. So the principle is
 never bear on security; git *ancestry between signed `position` OIDs* bears
 on exactly one ordering check, fail-closed, and nowhere else.
 
-### 9. Ref format: one log, one ref per publish [atom-ref-format]
+### 9. Ref format: one log, one ref per materialized view [atom-ref-format]
 
 Applying §8's principle now that the record shape and git object model
 have both changed substantially from the original draft:
@@ -1005,12 +1007,27 @@ refs/atom/log                          -> the anchor's record-log tip
                                            on every append, walked backward
                                            via checkpoint-commit parents)
 
-refs/atom/pub/{label}/{version}        -> the closure commit, or — once
-                                           any fact exists for this
-                                           version — the tip of its
-                                           fact-tag chain (§7.4, §7.5).
-                                           One permanent ref per ever-
-                                           published version.
+refs/atom/charter                      -> the tip of the anchor's charter
+                                           view chain (§7.5). One per
+                                           anchor, since an anchor has
+                                           exactly one charter.
+
+refs/atom/claim/{label}                -> the tip of that label's claim
+                                           view chain (§7.5). One
+                                           permanent ref per ever-claimed
+                                           label.
+
+refs/atom/pub/{label}/{version}        -> the tip of that publish's own
+                                           view chain (§7.5) — never the
+                                           charter or claim chain, and
+                                           never a bare commit or tag
+                                           chain. One permanent ref per
+                                           ever-published version. The
+                                           content commit (§7.4) is
+                                           reached only by walking the
+                                           tip's own first commit's
+                                           second parent — it is never a
+                                           ref target itself.
 
 refs/atom/head                         -> the freshness heartbeat
                                            (§3, §11-§12), replace-
@@ -1023,17 +1040,17 @@ refs/atom/head                         -> the freshness heartbeat
                                            here at all.
 ```
 
-That is the entire registry-side ref surface — two ref families that
-always exist (the log, and one per published version), plus one
-optional ref (head) that exists only for projects opted into Tier 2.
-Cardinality no longer scales with fact count at all — every fact, at
-every scope, lives inside the one record log, discovered via inclusion
-proofs and (for published versions specifically) the fact-tag-chain
-fast path, never via a dedicated ref of its own. This is a strict
-reduction from the original draft's charter/claims/facts ref families,
-each with its own dedicated "tip" ref for write serialization (§19) —
-that whole write-gate apparatus collapses into "one branch, one CAS,"
-since a git ref update already *is* a compare-and-swap.
+That is the entire registry-side ref surface — four ref families that
+always exist (the log, the charter, one per claimed label, and one per
+published version), plus one optional ref (head) that exists only for
+projects opted into Tier 2. Cardinality still does not scale with fact
+count: a fact lands as one further commit on its own scope's existing
+view chain (§7.5), never as a ref of its own — the ref it extends
+already existed. This remains a strict reduction from the original
+draft's charter/claims/facts ref families, each with its own dedicated
+"tip" ref for write serialization (§19) — that whole write-gate
+apparatus collapses into "one branch, one CAS," since a git ref update
+already *is* a compare-and-swap.
 
 ### 10. Verification: inclusion and consistency proofs, plus the completeness scan [atom-verification]
 
