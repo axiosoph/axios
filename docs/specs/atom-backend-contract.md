@@ -281,8 +281,9 @@ authoritative store.
 
 The **authoritative store** MUST
 support atomic multi-ref transactions: a protocol transition that
-writes several names (claim ref + protective src ref; version ref +
-src ref; ingestion of many versions with claims) MUST be
+writes several names (the main log ref plus the affected scope's
+view-chain ref — charter, claim, or publish — advancing together as a
+fact lands; ingestion of many versions with claims) MUST be
 all-or-nothing per store — including on any *single* push target,
 individually (atomic push is a single-remote guarantee). Torn states
 are forbidden states of every transition that writes more than one
@@ -331,25 +332,40 @@ conversion). For any stored `CozMessage` `m`, `czd(m)` is computed by
 the coz layer over `m`'s payload bytes and MUST be independent of
 `oid(carrier(m))` — the backend object that happens to carry `m`.
 The OID-sorted surfaces are exactly: the `dig` and `src` fields of
-transaction payloads, the carrier-level `src` extra header of an atom
-snapshot, and the OID-rendering ref-path segment families below;
+transaction payloads, and any OID-rendering ref-path segment family
+the instantiation defines (git currently defines none — see below);
 `anchor`, `czd`, `publish_czd`, `claim`, `tmb`, `owner` are NEVER
-OID-sorted. Any comparison, assignment, or fabrication across the two
+OID-sorted. The atom snapshot's carrier-level `src` extra header,
+formerly a third OID-sorted surface, is gone: the record-anchored
+publishing redesign drops it, since the record checkpoint's second
+parent (`[backend-liveness-protection]` below) already binds the
+source revision intrinsically, and the signed payload's own `src`
+field states the fact once, in the coz layer — carrying it a second
+time in git structure would itself violate the standing rule that git
+carries no verification-load-bearing meaning of its own.
+
+Any comparison, assignment, or fabrication across the two
 sorts is ill-typed and MUST be rejected at the type level where the
 implementation language permits.
 
 **Ref paths are typed encodings.** Identity-bearing ref-path segments
 are renderings of sorted values, not strings: each segment family
-renders **exactly one sort** (git: `refs/atom/src/{oid}` renders OID;
-`refs/atom/claims/d/{claim_czd}` renders Czd;
-`refs/atom/d/{blake3(publish_czd)}` renders a Czd reduction), and
-parsing a segment MUST rehydrate it to that family's sort before any
-use. Comparing or transplanting raw segments across families is
-ill-typed exactly as field-level cross-sort comparison is — a
-prefix-naming convention over a bare `String` type does not discharge
-this clause. (The two landed identity-conflation defects were both
-violations of this law; see §Verification for what the existing models
-could and could not catch.)
+renders **exactly one sort** (git: `refs/atom/claims/d/{claim_czd}`
+renders Czd; `refs/atom/d/{blake3(publish_czd)}` renders a Czd
+reduction), and parsing a segment MUST rehydrate it to that family's
+sort before any use. Comparing or transplanting raw segments across
+families is ill-typed exactly as field-level cross-sort comparison is
+— a prefix-naming convention over a bare `String` type does not
+discharge this clause. No ref-path segment family in the current git
+instantiation renders OID: the sole such family,
+`refs/atom/src/{oid}`, is retired under the record-anchored publishing
+redesign (its GC-protection job is now done structurally — see
+`[backend-liveness-protection]`), leaving the ref-path namespace
+entirely Czd-sorted in practice. The disjoint-sorts law is stated
+sort-generally and still binds should a future instantiation add an
+OID-rendering ref family. (The two landed identity-conflation defects
+were both violations of this law; see §Verification for what the
+existing models could and could not catch.)
 
 ```claim
 kind: constraint
@@ -459,10 +475,27 @@ Because refs are the backend's only mutable state
 MUST be protected from the backend's garbage collection: an object the
 protocol can still name (a locked `publish_czd`'s chain, a claim
 referenced by surviving publishes, a `src` revision underpinning
-ancestry checks) MUST NOT be collected while so named. Where the
-backend's native GC cannot see protocol reachability, the
-instantiation MUST write protective names (git: `refs/atom/src/{oid}`,
-`[store-claim-ref]`'s GC-protection purpose).
+ancestry checks) MUST NOT be collected while so named. This is an
+obligation on the *outcome* — nothing protocol-reachable may vanish —
+never on a specific technique for producing it. Where the backend's
+native GC cannot already see protocol reachability, the instantiation
+MUST make it visible: by writing a protective name, by embedding the
+dependency structurally into an object the backend's GC already treats
+as reachable, or by any other means the backend's own reachability
+semantics honor.
+
+Git no longer discharges the `src`-revision case by protective naming.
+Under the record-anchored publishing redesign, the checkpoint commit
+that records a publish carries the source commit as a second git
+parent, so ordinary parent-reachability from `refs/atom/log` already
+protects it — transitively, for every publish ever made, from that one
+ref — with no per-revision ref to write or maintain. This is a
+strictly stronger discharge of the same obligation than the retired
+`refs/atom/src/{oid}` protective-ref family it replaces: a name can be
+forgotten to write; a hash-committed parent link cannot. Claim chains
+remain protected by naming (`[store-claim-ref]`'s GC-protection
+purpose); the two mechanisms coexist because they protect different
+objects, not because one technique is preferred over the other.
 
 ```claim
 kind: constraint
@@ -621,12 +654,12 @@ spec relies on today without stating — each is an amendment item
 | backend-refs-atomic-multi    | §Implementation Guidance, Atomicity: `gix::refs::Transaction`, atomic push (single-remote — discharges the per-store law) | **PARTIAL** — guidance, not a tagged constraint |
 | backend-replica-reads        | protocol layer: `[mirror-staleness-tolerance]`, `[atom-version-identity]`, `[czd-divergence-handling]` (atom-sourcing); `[chain-monotonicity]` (atom-transactions) | Discharged (protocol layer) |
 | backend-seam-typed           | `[anchor-hash-agile]` (anchor is not an ObjectId) is one instance                    | **GAP** — no general law; the landed bug class lived here |
-| backend-seam-typed (ref encodings) | `TYPE RefPath = String`; czd-hex, blake3-hex, and oid-hex segments distinguished only by prefix convention | **GAP** — typed-encoding statement absent |
+| backend-seam-typed (ref encodings) | `TYPE RefPath = String`; czd-hex and blake3-hex segments distinguished only by prefix convention — no oid-hex family remains (the sole instance, `refs/atom/src/{oid}`, is retired) | **GAP** — typed-encoding statement absent |
 | backend-carriage-bit-perfect | `[coz-bit-perfect]`                                                                  | Discharged |
 | backend-chain-append         | `[tag-chain-immutable]`, `[claim-detached]` chains, `[publish-update-transition]`    | Discharged for claim/publish chains; **GAP** for charter encoding (git spec Open Questions #6) |
 | backend-enumeration          | atom-sad §6.8 (object-free `ls-refs` discovery), `[ingestion-portable]`, `[anchor-resolvable]` (protocol) | Discharged except charter enumeration (Open Questions #6) |
 | backend-refs-sole-mutability | git object DB immutability + all protocol mutation via `refs/atom/*`                | **GAP (implicit)** — true of the design, stated nowhere |
-| backend-liveness-protection  | `refs/atom/src/{oid}` protective refs; `[store-claim-ref]` GC protection             | Discharged |
+| backend-liveness-protection  | second-parent embedding of the source commit on `refs/atom/log`'s publish checkpoints (transitive, one ref, record-anchored publishing redesign); `[store-claim-ref]` GC protection for claim chains | Discharged |
 | backend-hash-strength        | `[oid-hash-inheritance]` states the dig/src SHA-1 inheritance; the closure itself (`content_hash`) is protocol-level (atom-transactions.md), carried bit-perfectly per `[backend-carriage-bit-perfect]` with no git-specific handling | Discharged |
 | backend-substitutable        | `[snapshot-deterministic]` + canonical serialization make git a valid golden-trace subject | **PARTIAL** — the property is inherently cross-backend (interchangeability WITH another backend); git's own determinism is discharged, but nothing to compare against exists yet |
 | backend-verification-carried | git's object model: once fetched, all objects read from the local database with zero network — structural to distributed version control | Discharged (implicit) — no git-storage-format.md constraint states this as an obligation; it is true of the design, not stated |
