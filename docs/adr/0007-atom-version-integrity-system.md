@@ -672,7 +672,7 @@ depth for the intra-tree escape case only. Composition across multiple
 subjects at one position uses the composition model's own `⊕` law
 (disjoint union, conflict surfaces as an error, never silently resolved).
 
-### 7. The git object model: an append-only record log, checkpoints, closures, and fact-tags [atom-git-object-model]
+### 7. The git object model: an append-only record log, checkpoints, a content commit, and materialized view chains [atom-git-object-model]
 
 This section replaces the original derivation's blob-carrier clause with
 the full mechanism, following directly from the second reframing in
@@ -1782,15 +1782,15 @@ to one doesn't force a change to another.
   commits to the field being mandatory and stratum-aware; the concrete
   schema is spec-drafting work, not decided here.
 - **Store ref-keying, revisited.** The original draft's czd-direct
-  store-side addressing needs a fresh pass against the new closure/
-  fact-tag object shapes (§21) — not simply restated, since the object
-  graph it needs to address collision-safely across mutually-untrusted
-  registries has changed.
+  store-side addressing needs a fresh pass against the content-commit/
+  view-chain object shapes (§7.4, §7.5, §21) — not simply restated,
+  since the object graph it needs to address collision-safely across
+  mutually-untrusted registries has changed again.
 - **The adversarial review pass over the full 2026-07-16 revision** (the
   git-representation layer rework and the `eml` integration) **ran
   2026-07-22** — decorrelated rounds over §7 and over the whole document,
   outside §7 — and its fixes are folded into this freshen revision: the
-  §7.4 verification rewrite (B1/B2/B3) and §8 carve-out, the per-entry
+  closure-verification rewrite (B1/B2/B3) and §8 carve-out, the per-entry
   head-monotonicity MUST (§11), the EON re-scoping of static
   fork/freshness claims (§10, §16, Context), and the stale-residue purge.
   The two surety-layer findings it surfaced — the `B(a)` anchor-admission
@@ -1825,10 +1825,17 @@ to one doesn't force a change to another.
   earlier in this same revision's own reasoning — no longer open.
 - **Content_hash tier (OPTIONAL vs. SHOULD/MUST).** Unresolved from the
   original draft, unaffected by this revision.
-- **Protocol-v2 transport dependence.** Now load-bearing in two places
-  instead of one (§10's inclusion proofs and §20's Phase A/B fetch
-  split) — legacy dumb-HTTP remotes degrade further than the original
-  draft anticipated. Accepted as a residual, not solved.
+- **Protocol-v2 transport dependence, narrower than an earlier revision
+  of this section stated.** Load-bearing in exactly one place: §10's
+  lightweight single-leaf inclusion-proof path, which depends on
+  protocol-v2's want-list-based object negotiation and falls back to
+  fetching more than strictly necessary on a legacy dumb-HTTP remote.
+  §20's Phase A/Phase B fetch split no longer carries this dependency
+  at all (§20, §7.4) — the content commit is a minimal, ref-reachable
+  closure by construction, regardless of filtering support, so this
+  section's own earlier claim that filtered fetch was "load-bearing...
+  in two places" is corrected here rather than restated. Accepted as a
+  residual in the one place it remains, not solved.
 - **`eml`'s `Storage` trait, assessed (2026-07-16).** Read
   `polydigest/src/storage.rs`: the trait is genuinely defined at the
   `polydigest` (multi-algorithm combinator) layer, already parameterized
@@ -1872,26 +1879,35 @@ to one doesn't force a change to another.
 
 ### Alt 1: Commit or tag as the record carrier
 
-Rejected for the record's own content (§7.3, §7.4) — records are
-still, unconditionally, blobs, never embedded in commit messages or tag
+Rejected for the record's own content (§7.3) — records are still,
+unconditionally, blobs, never embedded in commit messages or tag
 messages. **This needs a sharper restatement than the original draft
-gave it, because this revision does use commits and tags extensively —
-just never as carriers.** The original rejection reasoning (ancestry-
-shaped baggage, unconstrained bytes, fetch/advertisement nonstandardness)
-was scored against commit/tag-*as-trust-boundary* — a proposal where the
-carrier's own structure would need to be part of what a verifier
-reasons about. That rejection stands, unmodified. What this revision
-adds is a proposal the original elimination pass never separately
-scored: commit/tag-*as-untrusted-DAG-scaffolding*, where the carrier's
-structure does real backend work (cheap ancestry walks, cheap discovery
-signaling) but is never part of the trust boundary, cross-checked
-against the signed payload at every hop. The elegance metric the
-original pass used (mirror invariants, normalization rules, unconstrained
-bytes, fetch/advertisement nonstandardness) was implicitly scored
-*assuming* the carrier had to be trusted; once that assumption is
-dropped, "unconstrained bytes" stops being a security concern and
-becomes purely a backend-hygiene one (documented explicitly, §7.3: fixed
-inert fields, git-native signing slots never checked).
+gave it, and a further correction this revision itself requires: this
+document used to use commits and tags extensively as backend
+scaffolding — just never as carriers — but this revision removes tags
+from that role entirely.** The materialized view chains that replace
+the original fact-tag-chain mechanism (§7.5) are uniformly commits;
+nothing in this design uses a git tag object anywhere, so the "tag as
+untrusted DAG scaffolding" half of this alternative's own rebuttal no
+longer has a live instance to point at — it is retired along with the
+mechanism it used to describe, not merely re-scored. The original
+rejection reasoning (ancestry-shaped baggage, unconstrained bytes,
+fetch/advertisement nonstandardness) was scored against
+commit/tag-*as-trust-boundary* — a proposal where the carrier's own
+structure would need to be part of what a verifier reasons about. That
+rejection stands, unmodified, for records specifically. What this
+document's git-object usage elsewhere demonstrates is a proposal the
+original elimination pass never separately scored: commit-*as-
+untrusted-DAG-scaffolding*, where the carrier's structure does real
+backend work (cheap ancestry walks, cheap discovery signaling) but is
+never part of the trust boundary, cross-checked against the signed
+payload at every hop. The elegance metric the original pass used
+(mirror invariants, normalization rules, unconstrained bytes,
+fetch/advertisement nonstandardness) was implicitly scored *assuming*
+the carrier had to be trusted; once that assumption is dropped,
+"unconstrained bytes" stops being a security concern and becomes purely
+a backend-hygiene one (documented explicitly, §7.3: fixed inert fields,
+git-native signing slots never checked).
 
 ### Alt 2: Tree-container refs for chain liveness, registry side and store side
 
