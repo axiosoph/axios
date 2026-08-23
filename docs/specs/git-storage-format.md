@@ -365,8 +365,8 @@ The anchor is a coz digest (`czd(charter₀)`),
 not a git ObjectId, so the anchor does not inherit the repository's
 object hash algorithm at all. Git hash agility (SHA-1 → SHA-256) is
 handled by the charter, not by the backend — and genesis-once
-(atom-transactions.md `[atom-genesis-and-facts]`) forecloses the
-mechanism this constraint used to name for it: there is no successor
+([atom-genesis-and-facts](atom-transactions.md#atom-genesis-and-facts))
+forecloses the mechanism this constraint used to name for it: there is no successor
 charter to chain continuity across a re-hash to. A re-hash rewrites
 history; the re-hashed repository is, unconditionally, a distinct
 atom-set (a genuine fork, its own new charter, its own new anchor) —
@@ -524,8 +524,9 @@ commit `message` is fixed and inert (`ATOM_MESSAGE`) —
 `CozMessage` (JSON, `typ: "atom/charter"`) is read as the log leaf
 this commit's `tree` carries, never from the commit's own message
 ([record-is-log-leaf](#record-is-log-leaf)). A charter commit MUST
-have **zero git parents** — genesis-once (atom-transactions.md
-`[atom-genesis-and-facts]`) means there is exactly one charter commit
+have **zero git parents** — genesis-once
+([atom-genesis-and-facts](atom-transactions.md#atom-genesis-and-facts))
+means there is exactly one charter commit
 per anchor, ever, and it is always parentless; "founding" and
 "successor" are not two cases, because there is no successor case. The
 charter's identity is its czd (`czd(charter)`), computed over the
@@ -1440,8 +1441,10 @@ backend by creating a parentless charter commit.
 
 - **PRE**: The repository MUST have at least one commit, and the
   charter's `src` MUST reference a revision that exists in it. This
-  registry MUST NOT already carry a charter commit — genesis-once means
-  a repository is chartered exactly once; `CharterPayload` carries no
+  registry MUST NOT already carry a charter commit — genesis-once
+  ([atom-genesis-and-facts](atom-transactions.md#atom-genesis-and-facts))
+  means a repository is chartered exactly once, enforced on read by
+  [no-second-charter-genesis](#no-second-charter-genesis); `CharterPayload` carries no
   `prior` field to resolve against a prior charter, because there is no
   prior charter to chain to (Type Declarations, above). The charter
   `CozMessage` MUST be valid
@@ -1860,7 +1863,10 @@ depends: [log-tree-opaque, claim-detached, claim-fact-chain]
 
 **Named carefully: a second charter commit
 is not itself a forbidden state — treating it as continuing the FIRST
-anchor's identity is.** Because `refs/atom/charter/d/{charter_czd}` is
+anchor's identity is.** This constraint is the git-level enforcement of
+genesis-once
+([atom-genesis-and-facts](atom-transactions.md#atom-genesis-and-facts))
+at the charter scope. Because `refs/atom/charter/d/{charter_czd}` is
 keyed by the charter's own czd, two different, validly-signed charter
 commits are, by construction, two different anchors
 (atom-transactions.md `[charter-fork-distinction]`: distinct czds are
@@ -1892,7 +1898,9 @@ because: [atom-genesis-and-facts]
 
 A second parentless claim commit for a
 label that already has one MUST be rejected as invalid — the concrete
-git-level form of the same genesis-once rule, at the claim scope. A
+git-level form of the same
+[atom-genesis-and-facts](atom-transactions.md#atom-genesis-and-facts)
+rule, at the claim scope. A
 resolver MUST reject a `refs/atom/claims/pub/{label}` (or
 `refs/atom/claims/d/{claim_czd}`) chain whose root is not the unique,
 already-verified parentless claim commit for that label; an ownership
