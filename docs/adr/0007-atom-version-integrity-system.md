@@ -1457,7 +1457,7 @@ a vibes call.
 A registry is a store, a label index, and a write gate. This is now a
 single mechanism, not two:
 
-- **Publish** additionally needs the closure ref itself
+- **Publish** additionally needs the publish ref itself
   (`refs/atom/pub/{label}/{version}`) to transition from non-existent to
   existing as its own CAS point — unchanged in substance from the
   original draft's publish-uniqueness rule, just now describing one ref
@@ -1468,43 +1468,59 @@ discipline as always — a verifier walks the real chain via `pay.prior`/
 `pay.under` and inclusion proofs (§10), never taking the tip's word for
 what is current.
 
-### 20. Store: two-phase fetch, verify-before-fetch [atom-store-two-phase]
+### 20. Store: two ref families, structurally distinct fetch disciplines, verify-before-fetch [atom-store-two-phase]
 
-Store ingestion is still two distinct fetch operations against different
-parts of the object graph, restated against the new mechanism:
+Store ingestion is still two distinct fetch operations against
+different parts of the object graph — but what keeps them separate has
+changed. It used to be an operational discipline (filter what would
+otherwise be eagerly pulled); it is now structural (fetch two refs
+whose object graphs simply do not overlap the same way).
 
-- **Phase A (records)** — fetch `refs/atom/log` and walk its checkpoint-
-  commit chain (or request specific inclusion proofs for targeted
-  lookups). Small, always fetched, pure verification; needs no content
-  at all — L1 validity is fully checkable from the record log alone.
-- **Phase B (content)** — for the specific closures actually being
+- **Phase A (records)** — fetch `refs/atom/log` at depth 1. This is
+  correct, not a performance compromise: the entire append-only record
+  lives in the tip's own tree (§7.2, §7.3), so a shallow fetch of the
+  commit is complete on the record. Small, always fetched, pure
+  verification; needs no content at all — L1 validity is fully
+  checkable from the record log alone.
+- **Phase B (content)** — for the specific publishes actually being
   materialized into a build, fetch the corresponding
-  `refs/atom/pub/{label}/{version}` commit's tree content. This is the
-  expensive step; it is what makes `content_hash` verification possible
-  and what hands real files to the build environment.
+  `refs/atom/pub/{label}/{version}` view chain (§7.5) *in full* — never
+  at depth 1. A publish chain is bounded by the records relevant to
+  that publish and grows by one commit per relevant fact; depth is not
+  a meaningful operation on it. Fetching it whole is what reaches the
+  content commit (§7.4, hanging off the chain's first commit as a
+  second parent) and hands real files to the build environment.
 
-**A new operational dependency, stated plainly rather than assumed
-free:** because content now hangs directly off the same object graph as
-the closure ref (§7.4), a naive unfiltered `git fetch` of a closure ref
-would eagerly pull its content along with everything else. Conforming
-clients MUST use protocol-v2 partial/filtered fetch (`--filter=blob:none`
-or equivalent) to defer content blobs until a specific closure's content
-is actually needed, preserving the Phase A/Phase B split as an
-operational discipline rather than a structural one. This is the same
-class of residual dependency §10's protocol-v2 reliance already accepts
-(Open Items), not a new category of risk — but it is now load-bearing
-for the fetch-cost story in a way it wasn't when content lived behind a
-dedicated, always-deferred ref family.
+**These two disciplines MUST NOT be collapsed into one stated rule.** A
+depth-1 fetch is the structurally correct read of `refs/atom/log`; the
+identical depth-1 discipline applied to a publish ref would silently
+omit the content commit, handing a client a verified record with none
+of the bytes it just verified the hash of. Conforming clients MUST
+fetch `refs/atom/log` at depth 1, MUST fetch a publish view chain whole
+and unconditionally, and MUST NOT apply either rule where the other
+belongs.
+
+The operational dependency the original draft's Phase A/B split
+carried — that conforming clients MUST use protocol-v2 partial/filtered
+fetch (`--filter=blob:none` or equivalent) to keep a closure ref's
+content from being eagerly pulled — no longer applies and is not
+restated here. It existed only because content used to hang off the
+same ref, at the same depth, as the record it was reached through; the
+content commit (§7.4) is already a minimal, ref-reachable object
+closure by construction, so fetching it pulls exactly itself, its
+tree, and its blobs regardless of filtering support. No git host
+capability beyond an ordinary fetch is required.
 
 **`[verify-before-fetch]`, a hard admission invariant, unchanged:** the
 store MUST NOT attempt Phase B for a subject until that subject's
-governing closure — and the chain of authority behind it (charter/claim
+governing publish — and the chain of authority behind it (charter/claim
 validity, resolved from Phase A) — has passed full signature and chain
 verification. Fetch success alone is not sufficient for admission
-either: once content is fetched, each declared subject's own
-`content_hash` must be recomputed and folded into the closure's
-`content_commitment` (§5), which MUST equal leaf0 of the closure tree;
-only a match admits the content into the store's served space.
+either: once the content commit is fetched, each declared subject's own
+`content_hash` (§5) must be recomputed against the content commit's own
+tree; only a match, for every declared subject, admits the content into
+the store's served space. There is no separate closure-level commitment
+to check on top of this — §5 explains why none is needed.
 
 ### 21. Store ref format and GC: ordinary git reachability, nothing bespoke [atom-store-refs-and-gc]
 
@@ -1515,29 +1531,40 @@ tracking) existed
 specifically because content used to be reachable only obliquely —
 through a signed field git's own reachability analysis cannot see —
 requiring a bespoke, hand-maintained liveness mechanism to compensate.
-Once content hangs directly off a structural ref (§7.4), that compensating
-mechanism is unnecessary in its entirety:
+Once content hangs directly off the first commit of a publish's own
+view chain (§7.4, §7.5), reachable only through that chain's own tip
+ref, that compensating mechanism is unnecessary in its entirety:
 
 Cleaning up every atom under a set is: walk `refs/atom/log`, filter for
 publish leaves, collect their `(label, version)` tuples, delete the
 corresponding `refs/atom/pub/{label}/{version}` refs, run ordinary
-`git gc`. Nothing else is needed. This is correct, not merely plausible,
-on one point worth stating precisely: the retained record log still
-*textually* mentions old content tree OIDs (as declared subject fields
-inside kept record blobs), but git's reachability walk only ever follows
-*structural* edges — a tree's entries, a commit's `tree`/`parent`, a
-tag's `object` — never blob content. So deleting a pub-ref genuinely
-severs the only structural path to that closure and its entire fact-tag
-chain (each tag only points backward, so the whole chain goes
-unreachable in one shot once the ref at its tip is gone), even though the
-kept record log still mentions the same hash as inert data. Content
+`git gc`. Nothing else is needed. This is correct, not merely
+plausible, on one point worth stating precisely: the retained record
+log still *textually* mentions old content tree OIDs (as declared
+subject fields inside kept record blobs), but git's reachability walk
+only ever follows *structural* edges — a tree's entries, a commit's
+`tree`/`parent` — never blob content. So deleting a pub-ref genuinely
+severs the only structural path to that publish's own view chain and,
+through its first commit's second parent, its content commit (each
+chain commit only points backward to the previous one, so the whole
+chain — and the content hanging off its first commit — goes
+unreachable in one step once the ref at its tip is gone), even though
+the kept record log still mentions the same hash as inert data. Content
 shared between two versions (an unchanged subtree reused across
 releases) survives correctly for the identical reason — reachable via
-whichever pub-ref still exists, reclaimed once none do. Manual
-operator GC-by-anchor needs no dedicated mechanism, exactly as the
-original draft already argued for a different reason (Alt 6) — the
-record log is already the source of truth and is already fetched to
-learn what exists.
+whichever pub-ref still exists, reclaimed once none do. Manual operator
+GC-by-anchor needs no dedicated mechanism, exactly as the original
+draft already argued for a different reason (Alt 6) — the record log
+is already the source of truth and is already fetched to learn what
+exists.
+
+Cleaning up a specific anchor's charter or claim history needs no
+independent mechanism either: `refs/atom/charter` and
+`refs/atom/claim/{label}` (§7.5, §9) point into the same record log an
+anchor's whole existence already depends on, and deleting an anchor
+means deleting its `refs/atom/log` along with every ref derived from
+it — there is no separate charter/claim liveness story to maintain on
+top of the publish-ref story above.
 
 ## Simplicity and Volatility Boundaries (Hickey/Lowy Audits)
 
