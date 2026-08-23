@@ -1491,25 +1491,24 @@ whose object graphs simply do not overlap the same way).
   content commit (§7.4, hanging off the chain's first commit as a
   second parent) and hands real files to the build environment.
 
-**These two disciplines MUST NOT be collapsed into one stated rule.** A
-depth-1 fetch is the structurally correct read of `refs/atom/log`; the
+These two disciplines do not collapse into one stated rule: a depth-1
+fetch is the structurally correct read of `refs/atom/log`, but the
 identical depth-1 discipline applied to a publish ref would silently
 omit the content commit, handing a client a verified record with none
 of the bytes it just verified the hash of. Conforming clients MUST
-fetch `refs/atom/log` at depth 1, MUST fetch a publish view chain whole
-and unconditionally, and MUST NOT apply either rule where the other
-belongs.
+fetch `refs/atom/log` at depth 1 and a publish view chain whole and
+unconditionally — never the other way around.
 
 The operational dependency the original draft's Phase A/B split
-carried — that conforming clients MUST use protocol-v2 partial/filtered
-fetch (`--filter=blob:none` or equivalent) to keep a closure ref's
-content from being eagerly pulled — no longer applies and is not
-restated here. It existed only because content used to hang off the
-same ref, at the same depth, as the record it was reached through; the
-content commit (§7.4) is already a minimal, ref-reachable object
-closure by construction, so fetching it pulls exactly itself, its
-tree, and its blobs regardless of filtering support. No git host
-capability beyond an ordinary fetch is required.
+carried — a required use of protocol-v2 partial/filtered fetch
+(`--filter=blob:none` or equivalent) to keep a closure ref's content
+from being eagerly pulled — no longer applies and is not restated
+here. It existed only because content used to hang off the same ref,
+at the same depth, as the record it was reached through; the content
+commit (§7.4) is already a minimal, ref-reachable object closure by
+construction, so fetching it pulls exactly itself, its tree, and its
+blobs regardless of filtering support. No git host capability beyond
+an ordinary fetch is required.
 
 **`[verify-before-fetch]`, a hard admission invariant, unchanged:** the
 store MUST NOT attempt Phase B for a subject until that subject's
