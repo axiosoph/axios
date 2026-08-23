@@ -70,6 +70,26 @@ A repository MAY serve as both a registry and a store simultaneously
 
 ### Git Object Architecture
 
+Every signed record this backend ever stores — the charter genesis,
+each label's claim genesis, every publish, and every fact at any scope
+— is first and foremost a **leaf in the anchor's record log**: one
+continuous, append-only Merkle structure per anchor, in true
+chronological signing order (ADR-0007 §7.1). This document does not
+define the log's own internal shape, its leaf-ordering algorithm, or
+`refs/atom/log`'s own checkpoint-commit chaining — ADR-0007 §7.1–§7.3
+governs those, and the log's internal git-tree layout is an explicit
+open item there, not invented here (`[log-tree-opaque]`, below). What
+this document DOES specify is how each of the four git object
+categories below relates to that log: each carries, as its own `tree`,
+the SAME git tree object the log's own checkpoint carries at the point
+its leaf was appended — never a synthesized subset, and never the
+well-known empty tree (ADR-0007 §7.5) — so a client already holding
+the object can always recompute the log's own root and detect a fact
+the object's own chain omitted. Every one of these objects' own commit
+fields (`author`, `committer`, `message`) stays fixed and inert; the
+signed record itself lives as a leaf inside the tree the commit
+carries, never as a second copy in the commit's own `message`.
+
 The git backend uses four categories of git objects:
 
 1. **Charter transactions** — the anchor is `czd(charter₀)`, the coz
@@ -89,15 +109,17 @@ The git backend uses four categories of git objects:
    (`[charter-commit-format]`, `[charter-fact-chain]`,
    `[charter-ref-by-czd]`).
 
-2. **Claim commits** — a commit with an empty tree whose `message`
-   field contains a claim `CozMessage` (JSON). A claim is genesis-once
+2. **Claim commits** — a commit whose `tree` is the record log's own
+   tree at the point the claim genesis leaf was appended, and whose
+   `message` is fixed and inert. A claim is genesis-once
    (atom-transactions.md `[atom-genesis-and-facts]`): written exactly
    once, at first claim, and parentless forever after — there is no
    "subsequent claim" and no key-rotation-by-replacement. Ownership
    change (key rotation, transfer, seizure) is layered on afterward as
    a claim-owner **fact** commit chained onto the claim
    (`[claim-fact-chain]`), never a second claim commit. Their identity
-   is the claim `czd`, fixed forever at first claim.
+   is the claim `czd` — computed over the signed claim payload's own
+   bytes, never over this git object — fixed forever at first claim.
 
 3. **Atom commits** — parentless commits whose tree contains the atom's
    content subtree and nothing else. These are the atom snapshots
@@ -105,20 +127,24 @@ The git backend uses four categories of git objects:
    reproducible given the same tree alone: identity carries no source
    binding, because that binding now lives one layer up, on the
    publish commit that reaches this object (below) and in the signed
-   record itself — never inside the content object.
+   record itself — never inside the content object. Unlike the other
+   three categories, an atom commit carries no log tie: content is not
+   itself a record and is never a log leaf.
 
 4. **Publish commits** — the git encoding of a publish's materialized
    view chain (§Ref Layout): an ordinary commit, not a tag. The
    chain's first commit (the publish itself) carries the atom commit
    as its git parent — the only path by which a consumer reaches a
-   package's content — and its `message` field contains the publish
-   `CozMessage` (JSON). A later commit in the same chain (a fact about
-   this publish — yank, advisory, deprecation, mode promotion, meta
-   revision) parents onto the commit before it instead, carrying a
-   `FactPayload` `CozMessage`. The ref `refs/atom/pub/{label}/{version}`
-   points to the chain's tip; there is no publish tag and no tag
-   chain, and a publish chain has no path to a source revision commit
-   at all.
+   package's content — and its `tree` is the record log's own tree at
+   the point the publish leaf was appended; its `message` is fixed and
+   inert, like every other log-anchored commit this backend writes. A
+   later commit in the same chain (a fact about this publish — yank,
+   advisory, deprecation, mode promotion, meta revision) parents onto
+   the commit before it instead, and likewise carries the log's own
+   tree at ITS append point rather than the atom commit. The ref
+   `refs/atom/pub/{label}/{version}` points to the chain's tip; there
+   is no publish tag and no tag chain, and a publish chain has no path
+   to a source revision commit at all.
 
 ### Filesystem Source Ingestion
 
@@ -143,7 +169,14 @@ Unsigned dev atoms are stored under `refs/atom/dev/{anchor}/{label}`
 
 ```
 TYPE  Anchor         = Vec<u8>                    -- opaque bytes: czd(charter₀), backend-agnostic
-TYPE  ClaimCommit    = ObjectId                   -- commit with CozMessage in message
+TYPE  LogTree        = TreeId                     -- the anchor's record-log tree (ADR-0007
+                                                    -- §7.1-§7.3) at some point in its append
+                                                    -- history -- the same tree object a
+                                                    -- checkpoint commit on refs/atom/log
+                                                    -- carries at that point. Its internal
+                                                    -- layout is not specified here
+                                                    -- ([log-tree-opaque]).
+TYPE  ClaimCommit    = ObjectId                   -- commit whose tree is a LogTree
 TYPE  AtomCommit     = ObjectId                   -- deterministic, parentless commit
 TYPE  PublishChainCommit = ObjectId               -- a commit in a publish's own materialized view chain
 TYPE  RefPath        = String                     -- e.g. "refs/atom/pub/mylib/0.1.0"
@@ -164,15 +197,22 @@ TYPE  AtomSnapshot = {
       -- never inside the content object.
 
 TYPE  CharterCommitFormat = {
-        tree:          EMPTY_TREE,                  -- well-known empty tree hash
+        tree:          LogTree,                     -- the record log's own tree, at the
+                                                       -- point the charter genesis leaf was
+                                                       -- appended (ADR-0007 §7.1, §7.5) --
+                                                       -- never the well-known empty tree
         parent:        ∅,                           -- ALWAYS parentless: genesis-once, one ever
         author:        ATOM_AUTHOR,                 -- constant: blank identity
         committer:     ATOM_AUTHOR,                 -- constant: same as author
         timestamp:     ATOM_TIMESTAMP,              -- epoch zero
-        message:       CozMessage(CharterPayload),  -- the signed charter, JSON (typ: atom/charter)
+        message:       ATOM_MESSAGE,                -- fixed, inert -- the charter payload is
+                                                       -- read as the log leaf this commit's
+                                                       -- tree carries, never a second copy here
       }
-      -- Identity is the charter czd (czd(charter)); this single, permanent
-      -- charter commit's czd IS the atom-set Anchor. Genesis-once
+      -- Identity is the charter czd (czd(charter)) -- computed over the signed charter
+      -- payload's own bytes, the log leaf this commit's tree carries, never over any
+      -- property of this git object itself. This single, permanent charter commit's czd
+      -- IS the atom-set Anchor. Genesis-once
       -- (atom-transactions.md [atom-genesis-and-facts]): exactly one
       -- charter commit per anchor, ever — no successor, no `prior` field
       -- on CharterPayload (atom-transactions.md's Type Declarations
@@ -182,12 +222,17 @@ TYPE  CharterCommitFormat = {
       -- second charter commit.
 
 TYPE  ClaimCommitFormat = {
-        tree:          EMPTY_TREE,                  -- well-known empty tree hash
+        tree:          LogTree,                     -- the record log's own tree, at the
+                                                       -- point the claim genesis leaf was
+                                                       -- appended (ADR-0007 §7.1, §7.5) --
+                                                       -- never the well-known empty tree
         parent:        ∅,                           -- ALWAYS parentless: genesis-once, one ever
         author:        ATOM_AUTHOR,                 -- constant: blank identity
         committer:     ATOM_AUTHOR,                 -- constant: same as author
         timestamp:     ATOM_TIMESTAMP,              -- epoch zero
-        message:       CozMessage(ClaimPayload),    -- the signed claim, JSON
+        message:       ATOM_MESSAGE,                -- fixed, inert -- the claim payload is
+                                                       -- read as the log leaf this commit's
+                                                       -- tree carries, never a second copy here
       }
       -- Genesis-once (atom-transactions.md [atom-genesis-and-facts]):
       -- exactly one claim commit per label, ever, parentless forever —
@@ -197,11 +242,16 @@ TYPE  ClaimCommitFormat = {
       -- as a claim-owner fact commit chained onto THIS commit
       -- ([claim-fact-chain], FactCommitFormat below), never a second
       -- claim commit. The `src` field in the signed ClaimPayload ties
-      -- the claim to its source revision at both the cryptographic AND
-      -- object hash level.
+      -- the claim to its source revision cryptographically (the czd
+      -- covers it); the git object's OWN hash carries no such binding
+      -- (`[log-tree-opaque]`) -- git is storage, never a verification
+      -- surface, in this design.
 
 TYPE  FactCommitFormat = {
-        tree:          EMPTY_TREE,                   -- well-known empty tree hash
+        tree:          LogTree,                      -- the record log's own tree, at the
+                                                        -- point this fact leaf was appended
+                                                        -- (ADR-0007 §7.1, §7.5) -- never the
+                                                        -- well-known empty tree
         parent:        CharterCommit | ClaimCommit
                        | FactCommit,                  -- the scope's genesis commit (first
                                                         -- fact in this scope) or the previous
@@ -210,15 +260,17 @@ TYPE  FactCommitFormat = {
         author:        ATOM_AUTHOR,
         committer:     ATOM_AUTHOR,
         timestamp:     ATOM_TIMESTAMP,
-        message:       CozMessage(FactPayload),        -- the signed fact, JSON
+        message:       ATOM_MESSAGE,                   -- fixed, inert -- the fact payload is
+                                                         -- read as the log leaf this commit's
+                                                         -- tree carries, never a second copy
       }
       -- The git-level container for a fact extending a charter's or a
       -- claim's own scope (atom-transactions.md [charter-owner-fact],
       -- [claim-owner-fact]) — never a new genesis, always chained onto
       -- the permanent genesis commit or an earlier fact in the SAME
       -- scope's own chain, never across scopes. Reuses the shape the
-      -- (now-retired) claim-replacement mechanism used — empty tree,
-      -- CozMessage-in-message, git-parent chaining for a cheap, walkable
+      -- (now-retired) claim-replacement mechanism used — log-tree
+      -- carrying, git-parent chaining for a cheap, walkable
       -- audit trail — for a different purpose: the chain no longer
       -- replaces an identity, it layers status on a fixed one, exactly
       -- as [publish-fact-chain](#publish-fact-chain) already layers
@@ -234,7 +286,10 @@ TYPE  FactCommitFormat = {
       -- Questions #6).
 
 TYPE  PublishChainCommitFormat = {
-        tree:          EMPTY_TREE,                -- well-known empty tree hash
+        tree:          LogTree,                   -- the record log's own tree, at the
+                                                     -- point this publish's or fact's leaf
+                                                     -- was appended (ADR-0007 §7.1, §7.5) --
+                                                     -- never the well-known empty tree
         parent:        AtomCommit                 -- the content commit (chain's
                        | PublishChainCommit,        -- first commit only) or the
                                                       -- previous commit in THIS
@@ -243,8 +298,9 @@ TYPE  PublishChainCommitFormat = {
         author:        <real author>,             -- the publisher, or fact signer
         committer:     <real committer>,
         timestamp:     <real timestamp>,          -- time of publish or fact
-        message:       CozMessage(PublishPayload
-                        | FactPayload),            -- the signed record, JSON
+        message:       ATOM_MESSAGE,              -- fixed, inert -- the signed record is
+                                                     -- read as the log leaf this commit's
+                                                     -- tree carries, never a second copy here
       }
       -- The chain's first commit (the publish itself, before any facts
       -- extend it) carries the content commit as its ONLY git parent —
@@ -261,7 +317,8 @@ TYPE  PublishChainCommitFormat = {
       -- FactCommitFormat already does for the charter and claim scopes.
       -- The `claim` czd in the root's PublishPayload provides the
       -- cryptographic binding to the authorizing claim; no extra git
-      -- header is needed, the signed payload is the sole binding.
+      -- header is needed, the signed payload — read from the leaf this
+      -- commit's tree carries — is the sole binding.
       -- Publish and fact payloads alike MAY include additional
       -- user-defined fields beyond the required set — a property of
       -- the Coz message format and the protocol's payload structure,
@@ -318,6 +375,33 @@ NOT rehash, truncate, or transform them.
 kind: constraint
 evaluator: none
 depends: [atom-genesis-and-facts]
+```
+
+#### [log-tree-opaque]
+
+The anchor's record log's own git-tree
+internal layout — leaf storage keys, internal node encoding, anything
+about HOW a specific leaf is located inside a `LogTree` — is NOT
+specified by this document. ADR-0007 §7.1–§7.3 governs the log's
+abstract shape (one continuous, append-only, `eml`-computed Merkle
+structure per anchor) and explicitly leaves its git-side storage
+layout an open item there; a conforming implementation MAY choose any
+internal layout the log's own storage interface accepts. Every
+constraint in this document that names `LogTree` depends only on the
+external property that the resulting git tree OBJECT is shared,
+byte-identically, between the log's own checkpoint commit and every
+materialized-view commit recording the same point in the log's
+history — never on any detail of what is inside it. This is why a
+CharterCommitFormat, ClaimCommitFormat, FactCommitFormat, or
+PublishChainCommitFormat commit's `tree` field can be stated
+normatively ([charter-commit-format], [claim-detached],
+[charter-fact-chain], [claim-fact-chain], [publish-commit-format],
+[publish-fact-chain]) without this document inventing the log's own
+internal encoding.
+
+```claim
+kind: constraint
+evaluator: none
 ```
 
 #### [snapshot-deterministic]
