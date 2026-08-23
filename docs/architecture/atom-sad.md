@@ -122,7 +122,7 @@ graph TB
 
 | Boundary      | Inside Atom                                                                             | Outside Atom                                                                    |
 | :------------ | :-------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------ |
-| **Identity**  | The claim record's czd (§6.1); `AtomId = (anchor, label)` is its pre-signature preimage; the anchor is named and verified by `czd(charter₀)`, the founding charter's coz digest | Key material, signature primitives (Coz/Cyphr)                                  |
+| **Identity**  | The claim record's czd (§6.1); `AtomId` is a digest over an unclaimed atom's pre-signature preimage `(anchor, label)`; the anchor is named and verified by `czd(charter₀)`, the founding charter's coz digest | Key material, signature primitives (Coz/Cyphr)                                  |
 | **Ownership** | claim/publish protocol; claim/publish chains; the owner→identity binding                | Owner identity _systems_ (Coz `tmb`, Cyphr `PR`) — `Owner` is opaque            |
 | **Storage**   | git-object encoding; registry + store ref layout; ingest                                | Build execution, artifact store (L3)                                            |
 | **Discovery** | object-free ref advertisement; set→mirrors indirection                                  | Version _semantics_ (`VersionScheme` is a trait; its per-ecosystem dialects are internal plugins above L1, §1.1) |
@@ -179,8 +179,8 @@ graph TB
 
 ### 2.1 AtomRegistry
 
-The append-only, name-keyed publishing surface. `claim()` stakes ownership of an
-`(anchor, label)`; `publish()` records a new signed publish tag at
+The append-only, name-keyed publishing surface. `claim()` stakes ownership of a
+`label` within an `anchor`; `publish()` records a new signed publish tag at
 `refs/atom/pub/{label}/{version}`. Implements `AtomSource` for object-free discovery.
 Within a single registry, `label` is unique (`[registry-ref-label-unique]`).
 
@@ -248,9 +248,11 @@ Defines the four traits and their algebraic relationships (`atom-core/src/lib.rs
 
 ### 3.2 atom-id — Identity Primitives
 
-`Anchor`, `Label`, and `AtomId = (anchor, label)` — the algorithm-free pair
-that is the pre-signature preimage of an unclaimed development atom. `AtomId`
-is **not** the atom's identity; identity is the claim record's czd (see §6.1).
+`Anchor`, `Label`, and `AtomId` — the algorithm-free pre-signature preimage of
+an unclaimed development atom is the pair `(anchor, label)`; `AtomId` is the
+deterministic digest computed over that preimage (atom-transactions.md
+`[identity-content-addressed]`), never the pair itself. `AtomId` is **not**
+the atom's identity; identity is the claim record's czd (see §6.1).
 
 ### 3.3 atom-uri — URI Parsing
 
@@ -443,19 +445,19 @@ specs** and are consolidated here:
 ### 6.5 The Lock Contribution (2-value)
 
 The atom-required lock entry (`[lock-entry-sufficient]`, `[lock-capture]`)
-currently uses `AtomId = (set, label)` as its map key and carries exactly two
+currently nests its map key by `set` then `label` and carries exactly two
 values: the resolved `version` and the **bare** `publish_czd` (original
 algorithm — the lock represents the _actual_ cryptographic security the
-signature covers). That map key is a lock-schema implementation choice, not a
+signature covers). That nesting is a lock-schema implementation choice, not a
 claim about the atom's identity or its resolution path: `set` resolves to
 mirrors via a shared `[sets] → mirrors` table, and `label` is what a claim is
 actually found by within that set's log — never a fused pair (§6.1; glossary,
 _Atom identity_, _Deprecated and repudiated formulations_).
 
-- **No hashed `id`** — the lock's map key, `(set, label)`, is sufficient on
-  its own for a unique entry, so no separate hashed identifier is needed. This
-  is the same implementation-choice caveat as above, not a claim that the pair
-  is the atom's identity (§6.1) or its lookup path.
+- **No hashed `id`** — the lock's nested `set`/`label` map key is sufficient
+  on its own for a unique entry, so no separate hashed identifier is needed.
+  This is the same implementation-choice caveat as above, not a claim that the
+  pair is the atom's identity (§6.1) or its lookup path.
 - **No `rev`** — the atom commit is peelable from the `publish_czd`'s tag chain.
 - **`dig` is not stored** — it lives in the signed publish payload (the czd-pinned
   source of truth); on acquisition the peeled content-addressed sha **MUST equal**
@@ -575,13 +577,13 @@ Out of scope for the atom layer:
 | Composite      | The genus an atom reifies as intent: a package, environment, or system with its determined closure (atom-model §2) |
 | Mode           | The publish-carried reproducibility declaration, `reproducible` \| `witnessed` (atom-model §6)                     |
 | Anchor         | The founding charter's linking role (not a digest); named and verified by `czd(charter₀)`, the founding charter's coz digest; immutable atom-set identity |
-| AtomId         | The abstract pair `(anchor, label)` — the pre-signature preimage of an unclaimed development atom, not the atom's identity (§6.1); the lock's current map key (§6.5) |
+| AtomId         | The deterministic digest of an unclaimed development atom's pre-signature preimage `(anchor, label)`, not the atom's identity (§6.1); the lock nests its map key by `set` then `label` (§6.5) |
 | Atom-set       | Atoms sharing a common anchor                                                    |
 | Label          | Human-readable atom name (UAX #31)                                               |
 | OwnerRef       | `{kind, value}` — a `kind`-tagged opaque identity digest (Coz `tmb`, Cyphr `PR`); `kind` names the identity framework (`single-key` implemented; `hierarchical`/`rooted-identity` reserved), `value` stays opaque to the protocol regardless of `kind` |
 | Owner (claim)  | `ClaimPayload.owner` — a single `OwnerRef`: the one identity accountable for a label |
 | Owner (charter) | `CharterPayload.owner` — a non-empty SET of `OwnerRef`s: the team recognized under this anchor, flat and equally authoritative |
-| Claim          | Signed `CozMessage` binding an `OwnerRef` → `(anchor, label)`                    |
+| Claim          | Signed `CozMessage` binding an `OwnerRef` → a `label` within an `anchor`         |
 | Publish        | Signed `CozMessage` recording a version; references a claim `czd`                |
 | czd            | Coz message digest (multihash); `publish_czd`, `claim_czd`                       |
 | dig            | Hash of the reproducible atom snapshot (in the publish payload)                  |

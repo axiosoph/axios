@@ -151,12 +151,12 @@ A backend MUST:
    czd` alone already identifies the claimed atom
    (`[identity-content-addressed]`); pairing it with `AtomId` would be
    redundant, since a claim's own `czd` IS its `AtomId`.
-5. Reject a second claim for an already-claimed `(anchor, label)` slot
-   as void, independent of who signs it — genesis-once
+5. Reject a second claim for an already-claimed `label` within its
+   `anchor` as void, independent of who signs it — genesis-once
    (`[atom-genesis-and-facts]`, `[publish-claim-coherence]`). _(Re-scoped
    2026-08-05: this item previously required a backend to **support**
-   multiple claims for one `(anchor, label)` slot as distinct
-   identities — the retired `[claim-replacement-authority]` design's
+   multiple claims for one already-claimed label within an anchor as
+   distinct identities — the retired `[claim-replacement-authority]` design's
    governance-seizure path. There is exactly one claim per label, ever;
    a label's current owner changes via `[claim-owner-fact]`, never via
    a second claim record.)_
@@ -335,14 +335,15 @@ This principle means:
    but by the cryptographic chain back to its source.
 2. A consumer can verify trust without trusting intermediate stores.
 3. _(Re-scoped 2026-08-05 — genesis-once: this item previously described
-   two claims contesting the SAME `(anchor, label)` slot as forks; that
-   was residue from the retired `[claim-replacement-authority]` design
-   — see `[publish-claim-coherence]`.)_ Forked sources each charter
+   two claims contesting the same already-claimed label within an anchor
+   as forks; that was residue from the retired
+   `[claim-replacement-authority]` design — see
+   `[publish-claim-coherence]`.)_ Forked sources each charter
    independently (`[charter-fork-distinction]`), so a fork's claims
    live under a *different* anchor by construction, never the same
-   `(anchor, label)` slot as the source it forked from — two forks MAY
+   already-claimed label within the anchor it forked from — two forks MAY
    publish under the identical human-facing label with no collision,
-   since label uniqueness is scoped to `(anchor, label)`, never global
+   since label uniqueness is scoped to a single anchor, never global
    (`docs/glossary.md` "Label"). Each fork's claims therefore carry
    their own distinct `AtomId` trivially, as a consequence of the
    distinct anchor, not because of any contest over one slot; the
@@ -887,8 +888,8 @@ fork was never anything other than "a different signed charter," and
 genesis-once makes that the only way any two anchors can ever relate.
 Forks are therefore explicit by construction: a second charter cannot
 retroactively become "the same anchor" as an existing one — there is
-no succession mechanism through which it could — and cross-fork
-`(anchor, label)` collision is structurally impossible.
+no succession mechanism through which it could — and a cross-fork collision on the same label within the same anchor is
+structurally impossible.
 
 ```claim
 kind: constraint
@@ -1138,7 +1139,7 @@ evaluator: none
 payload** (`[amendment-field-classification]` class 1 — the first tag
 in an update chain, the one targeting the atom commit) MUST carry raw
 `anchor` and `label` fields. A consumer holding either payload MUST be
-able to verify its `(anchor, label)` fields independently — without
+able to verify its `anchor` and `label` fields independently — without
 needing the other payload present — and cross-check them for
 consistency once both are available (verification step 13). This is
 a coherence check between two payloads, never an identity
@@ -1176,8 +1177,8 @@ evaluator: type
 
 The `claim` field in a publish's **base
 payload** (`[amendment-field-classification]` class 1) MUST contain
-the `czd` of a valid claim for the same `(anchor, label)`. This
-creates the cryptographic chain from publish back to claim. A non-base
+the `czd` of a valid claim for the same `label` within the same
+`anchor`. This creates the cryptographic chain from publish back to claim. A non-base
 amendment payload carries no `claim` field — `claim` is
 identity-class, structurally absent from every tag but the base
 (`[amendment-field-classification]`) — so an amendment's membership in
@@ -1733,11 +1734,11 @@ evaluator: model-check
 #### [publish-claim-coherence]
 
 _(re-scoped 2026-08-05 — genesis-once)_: A publish's `claim` field MUST
-reference the `czd` of the valid claim for the publish's `(anchor,
-label)` — there is at most one, ever: claim is genesis-once
-(`[atom-genesis-and-facts]`), so a given `(anchor, label)` has exactly
-one valid claim once claimed, none before. A second claim record
-naming an already-claimed `(anchor, label)` is **void**, independent of
+reference the `czd` of the valid claim for the publish's `label` within
+its `anchor` — there is at most one, ever: claim is genesis-once
+(`[atom-genesis-and-facts]`), so a given label within its anchor has
+exactly one valid claim once claimed, none before. A second claim record
+naming an already-claimed label within that anchor is **void**, independent of
 who signed it or under what authority, and MUST be rejected by every
 conforming verifier — the genesis-once verification rule ADR-0007 §10
 states generally, applied here: "the *canonical* genesis is the first
@@ -1911,7 +1912,7 @@ transition]` section below it, with no heading of their own —
 corrected in place, not new content.)_
 
 - **PRE**: `claim` MUST be the `czd` of a valid, non-revoked claim
-  for this `(anchor, label)`. `version` MUST be a non-empty string.
+  for this `label` within this `anchor`. `version` MUST be a non-empty string.
   `dig` MUST be the hash of the reproducible atom snapshot. `src`
   MUST be the hash of the source revision. `path` MUST be the
   subdir path. `now` MUST be greater than `claim.now`. The signing
@@ -2302,7 +2303,7 @@ genesis) MUST be able to perform all of the following locally:
 | 10   | Claim signer authorized          | `claim.tmb` authorized by the charter's current owner-fold (step 3) |
 | 11   | Publish signer authorized        | `publish.tmb` (already bound to the signing key by step 6) authorized by `claim.owner` as amended by any `[claim-owner-fact]` since genesis (single-valued at every point, per its `kind`) |
 | 12   | Claim-owner fact fold (if any)   | per `[claim-owner-fact]`; owner-fact vs. governance-fact distinguished; a divergent governance fact fails this step closed |
-| 13   | Symmetric-payload consistency    | BASE-`publish.(anchor, label)` == `claim.(anchor, label)` (`[symmetric-payloads]`; `anchor`/`label` are identity-class, present only on the base tag, `[amendment-field-classification]`) |
+| 13   | Symmetric-payload consistency    | BASE-`publish.anchor` == `claim.anchor` and `publish.label` == `claim.label` (`[symmetric-payloads]`; `anchor`/`label` are identity-class, present only on the base tag, `[amendment-field-classification]`) |
 
 This pipeline verifies a single base transaction set (the charter and
 its owner-fact history, one claim, one publish's base tag). Verifying

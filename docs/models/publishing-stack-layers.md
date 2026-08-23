@@ -207,8 +207,8 @@ substrate objects.
 has_label) = has_identity` commutes. Unlike the retired
    `computed_from`-based diagram, `genesis_claim` is not a pure function
    of its inputs' bytes — it is a lookup into an append-only,
-   genesis-once claim log (ADR-0007 §3, §10): the same `(anchor, label)`
-   coordinates always resolve to the same claim, and therefore the same
+   genesis-once claim log (ADR-0007 §3, §10): the same `label`, within the
+   same `anchor`, always resolves to the same claim, and therefore the same
    identity, because a claim is written exactly once per label-scope and
    is never reissued or replaced — not because a pair is hashed.
    Publishing a new version advances `pins`, `described_by`, `derives`,
@@ -430,10 +430,9 @@ Convention: `!T` = send, `?T` = receive, `⊕` = internal choice
 !ClaimReq . ?Result<Czd> . !PublishReq . ?Result<()> . end
 ```
 
-`AtomId` — the `(anchor, label)` pair — is a lookup input here, not
-identity: it is what `ClaimReq` carries to name the label being
-claimed, nothing more (atom-model.md §2; atom-sad §6.1, "Identity: the
-Claim czd, Not the Pair"). Identity is the claim's czd, which this
+A `ClaimReq` carries an `anchor` and a `label` to name the label being
+claimed, nothing more — not identity (atom-model.md §2; atom-sad §6.1,
+"Identity: the Claim czd, Not the Pair"). Identity is the claim's czd, which this
 session produces and every step after depends on: ClaimReq carries
 (anchor, label, owner, key); on success, it returns the claim's czd.
 PublishReq carries (anchor, label, claim_czd, dig, src, path,

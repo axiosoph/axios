@@ -113,13 +113,14 @@ TYPE SchedulingTable = {
 }
 
 -- Profile store: persistent per-atom historical observations with in-memory hot cache.
--- Profiles are keyed by AtomId — the atom's `(set, label)` pair itself (atom-sad §6.1,
--- `[identity-content-addressed]`), not a hash of it. Since every DAG node is now an atom
--- (eos-sad §1.1), this key IS the version-stable identity that was previously only a
--- secondary cross-version index (ADR-0004 §1); there is no separate plan-name tier.
+-- Profiles are keyed by AtomId — a digest of the atom's `set` and `label`
+-- (atom-sad §6.1, `[identity-content-addressed]`), never those fields themselves. Since
+-- every DAG node is now an atom (eos-sad §1.1), this key IS the version-stable identity
+-- that was previously only a secondary cross-version index (ADR-0004 §1); there is no
+-- separate plan-name tier.
 -- See ADR-0004 §1 for the full schema and prediction resolution order.
 
-TYPE AtomId = { set: Text, label: Text }                -- atom-sad §6.1 identity pair itself, not a hash
+TYPE AtomId = Bytes                                     -- digest of the atom's set and label, atom-sad §6.1
 
 TYPE ProfileRecord = {
     build_duration:  ExponentialMovingAverage,
@@ -186,7 +187,7 @@ across mock schedules.
 
 #### [eos-scheduler-profile-store]
 
-The scheduler MUST maintain a persistent profile store of historical build observations keyed by `AtomId` (the atom's `(set, label)` pair, not a hash of it). The persistent store is the authoritative source of truth; the in-memory hot cache holds profiles for atoms in the current active G∪ and is written through to the persistent store on every EP completion. When no historical observation exists for an atom, the scheduler MUST fall back to developer-provided scheduling metadata (`atom_metadata`), then to system defaults. See [docs/adr/0004-learning-augmented-scheduling.md](../adr/0004-learning-augmented-scheduling.md) §1 for the full prediction resolution order.
+The scheduler MUST maintain a persistent profile store of historical build observations keyed by `AtomId` (a digest of the atom's `set` and `label`, never those fields themselves). The persistent store is the authoritative source of truth; the in-memory hot cache holds profiles for atoms in the current active G∪ and is written through to the persistent store on every EP completion. When no historical observation exists for an atom, the scheduler MUST fall back to developer-provided scheduling metadata (`atom_metadata`), then to system defaults. See [docs/adr/0004-learning-augmented-scheduling.md](../adr/0004-learning-augmented-scheduling.md) §1 for the full prediction resolution order.
 
 ```claim
 kind: constraint

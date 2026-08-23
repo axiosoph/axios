@@ -73,7 +73,7 @@ construction rather than by patching.
   distro-grade interface extraction (rpm `elfdeps`, `dpkg-shlibdeps`,
   `libabigail`). Nobody has composed them into one package substrate.
 - **Axios's own lock is already the composition primitive, one layer up.**
-  The keystone lock decided 2026-06-28 — `(set, label) → {version,
+  The keystone lock decided 2026-06-28 — nested `set` → `label` → `{version,
 publish_czd}`, name-anchored, never remotely resolved, store-keyed by
   `blake3(publish_czd)` — is structurally identical to the runtime
   composition object this ADR introduces: a name → signed-content-pointer
@@ -92,9 +92,9 @@ publish_czd}`, name-anchored, never remotely resolved, store-keyed by
   the evaluation scheduler and any MVP dependency on `snix-eval`/the Nix
   language outright. ADR-0004's atom-id-as-prediction-oracle
   argument states `atom-id = digest(anchor, label)` — current doctrine
-  makes identity the claim record's czd instead, with `AtomId` as the
-  abstract pair `(anchor, label)` surviving only as the pre-signature
-  preimage for an unclaimed development atom (`docs/models/atom-model.md`
+  makes identity the claim record's czd instead, with `AtomId` surviving
+  only as the digest of the pre-signature preimage `(anchor, label)` for
+  an unclaimed development atom (`docs/models/atom-model.md`
   §2). `layer-boundaries.md` has no slot for compositions, manifests, or
   build records to be owned by — its own ownership rule demands
   this be resolved before implementation, which is what the layer

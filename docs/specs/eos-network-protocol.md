@@ -296,7 +296,7 @@ struct ActionParams {
 # the scheduler gates them through confidence weighting and they never
 # alter correctness guarantees (Theorem 3 decay applies, ADR-0004 §2).
 struct AtomDagNode {
-  atomId @0 :AtomId;                 # publish_czd / (set, label) reference — see below
+  atomId @0 :AtomId;                 # publish_czd, or an unclaimed atom's digest of its set+label — see below
   predictedDurationMs @1 :UInt64;    # Predicted build duration (0 = unknown)
   predictedMemPeakKb @2 :UInt64;     # Predicted peak memory in KiB (0 = unknown)
   predictedOutputKb @3 :UInt64;      # Predicted output size in KiB (0 = unknown)

@@ -652,7 +652,7 @@ an independent GPL-3 service — is recorded in ADR-0005 §10.
 
 ### 6.9 The Lock↔Composition Isomorphism
 
-The atom lock (`(set, label) → {version, publish_czd}`, atom-sad §6.5)
+The atom lock (nested `set` → `label` → `{version, publish_czd}`, atom-sad §6.5)
 and the composition object (`name → content digest`, §2.1) share the
 identical algebra one layer apart: a name→signed-content-pointer map,
 itself content-addressed. This SAD does not restate atom-sad §6.5/§6.7's
