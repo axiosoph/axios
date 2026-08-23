@@ -144,8 +144,10 @@ only the first was ever actually rejected.
   (e.g. `"quill"`). A `claim` record binds a label exclusively to one
   anchor — exclusively *within that anchor's own claim*, not globally:
   labels are deliberately not a global namespace, and two unrelated
-  anchors MAY both use the label `"quill"` — a feature, not a
-  collision. The label's real identity, once claimed, is the czd of
+  anchors can both use the label `"quill"` with no collision — a
+  feature, not a defect, formalized as
+  [charter-fork-distinction](../specs/atom-transactions.md#charter-fork-distinction).
+  The label's real identity, once claimed, is the czd of
   that specific claim record — the same discipline as anchor, below.
   Within a verified anchor's own record log, a claim is found by its
   label alone (genesis-once, §10, makes that lookup unambiguous) — the
@@ -267,9 +269,11 @@ this document elaborates, not a metaphor:
    artifact).
    [Execution Model §9.10](../models/execution-model.md) already
    ratified (2026-07-12, independently of this exploration) that every
-   stratum MAY publish uniformly as a signed atom — this document's
-   derivation reached the identical conclusion by a wholly separate
-   route (a strong convergence signal, not a coincidence to paper over).
+   stratum can publish uniformly as a signed atom, recorded normatively
+   in [Atom Model §7](../models/atom-model.md#7-kinds-strata-and-the-recorded-ratifications) —
+   this document's derivation reached the identical conclusion by a
+   wholly separate route (a strong convergence signal, not a
+   coincidence to paper over).
 
 A record is the quantum — an individual signed statement, complete and
 meaningful on its own; an atom is the composed, stable unit those quanta
@@ -423,7 +427,7 @@ record starts or extends that scope's history differs, and only that
 difference is what genesis-once (§10) exists to resolve.
 
 **Multi-signature governance thresholds are a `fact_type`, not a new
-mechanism.** The charter MAY declare a signing threshold for
+mechanism.** The charter can declare a signing threshold for
 owner-authoritative actions — say, requiring 2 of 3 current owners to
 agree before an owner-rotation fact takes effect. Coz has no native
 multisig primitive, and none is needed: every additional required
@@ -457,12 +461,16 @@ review, 2026-07-16).
 
 No new record kind, no aggregation object: threshold enforcement is one
 more `fact_type` on the mechanism everything else here already uses.
+Formalized as
+[charter-owner-threshold](../specs/atom-transactions.md#charter-owner-threshold).
 
-**An owner-fold MAY also declare a lower-privilege `publish-delegate`
+**An owner-fold can also declare a lower-privilege `publish-delegate`
 role**, the same declared-role discipline `attesters`/`witnesses`/
 `freshness-delegate` already use, authorizing a distinct key to sign
 routine `publish` records without holding full owner-governance
-authority. Optional, not required: a project with no declared
+authority — formalized as
+[publish-delegate-role](../specs/atom-transactions.md#publish-delegate-role).
+Optional, not required: a project with no declared
 publish-delegate simply authorizes publish through the ordinary
 owner-fold, exactly as before. Declaring one is the same trade the
 freshness-delegate role already makes for head rotation (§11) — routine,
@@ -489,9 +497,11 @@ deliberately *not* a field:
   which is the linking role the charter fills (see `docs/glossary.md`).
   Not a declared field anywhere — not even on the charter genesis leaf
   itself, which cannot self-reference the value in question. Discovered,
-  never carried: walk `pay.prior` back to the log's first leaf, which MUST
-  be a `charter` genesis — a log whose first leaf is anything else is
-  invalid and names no anchor. This costs nothing extra in practice, because
+  never carried: walk `pay.prior` back to the log's first leaf — a log
+  whose first leaf is anything other than a `charter` genesis is
+  invalid and names no anchor, formalized as
+  [spine-genesis-first](../models/atom-model.md#spine-genesis-first).
+  This costs nothing extra in practice, because
   the whole record log is fetched as one unit (§9) and the genesis leaf
   is always present in it. A root commit is often near-empty and carries
   no ownership claim; the charter's own hash is high-entropy by
@@ -574,14 +584,21 @@ independently-declared position per subject.
   and nothing left ambiguous about which subject a single tree slot
   represents.
 - **`tree`** — the git tree OID that `position.tree/path` resolves to,
-  stored as a checked cache, not independent information: it MUST equal
+  stored as a checked cache, not independent information: it equals
   the result of that lookup, and a mismatch is a verification failure
-  exactly like any other false signed claim. This is the same object
+  exactly like any other false signed claim — the backend-agnostic
+  form of this check is already stated as the Provenance Verification
+  pipeline's steps 16–18 in
+  [atom-transactions.md](../specs/atom-transactions.md#provenance-verification-minimal-network).
+  This is the same object
   that becomes the content commit's own tree (§7.4) — the same OID,
   referenced a second time, at zero additional storage cost.
 
 **Hash agility and the SHA-1 residual (scoping note, not a normative
-MUST).** Because `content_hash` is our own Merkle root over loaded content
+requirement).** Already stated as
+[oid-hash-inheritance](../specs/git-storage-format.md#oid-hash-inheritance)
+and [content-hash-obligation](../specs/atom-transactions.md#content-hash-obligation)'s
+"Known limit." Because `content_hash` is our own Merkle root over loaded content
 (above), **content integrity is fully decoupled from git's object hash**:
 a SHA-1 collision in the underlying repository cannot forge a subject's
 content, since the served bytes are checked against a signed hash computed
@@ -932,12 +949,17 @@ holding the full log (because a chain's own tree, above, is never a
 subset) can always detect. A wrong materialization can therefore only
 be slow or broken, never deceptive — the same trust property that
 already lets checkpoint commits (§7.3) exist unsigned and untrusted,
-carried one level up to the chains built from them. A registry MUST
-advance each view ref to the latest relevant record as facts land; the
-worst a buggy or malicious registry can do by failing this is let a
-view ref fall behind, which is checkable, at the cost of a full fetch
-of `refs/atom/log`, by any client willing to pay it — discoverable, not
-hidden, in either failure mode.
+carried one level up to the chains built from them. A registry was
+expected to advance each view ref to the latest relevant record as
+facts land; the worst a buggy or malicious registry could do by
+failing this was let a view ref fall behind, which was checkable, at
+the cost of a full fetch of `refs/atom/log`, by any client willing to
+pay it — discoverable, not hidden, in either failure mode. **This
+whole fact-tag/view-chain-advancement mechanism is superseded**:
+[ADR-0009 §7](0009-atom-composition-plane.md) moves facts to the
+cloud (a history-independent, pull-based, union-merged set with no
+write gate), so there is no view ref left for a registry to advance
+as facts land.
 
 A client does not merge or replay these three chains against each
 other. Because every chain commit points at the complete log tree
@@ -1085,9 +1107,11 @@ original draft's two-request scheme). Instead:
   such leaf encountered in the anchor's `prior`-chain order from anchor
   genesis forward. Any later leaf declaring the same genesis scope — a
   second `claim` for an already-claimed label, a second `publish` for an
-  already-published (label, version) — is void and MUST be rejected by
-  every conforming verifier, independent of any registry's own ref
-  state. This verification rule is a fail-safe, not the primary
+  already-published (label, version) — is void and rejected by every
+  conforming verifier, independent of any registry's own ref state,
+  formalized as
+  [atom-genesis-and-facts](../specs/atom-transactions.md#atom-genesis-and-facts).
+  This verification rule is a fail-safe, not the primary
   discipline: an honest client is expected to check its own
   already-fetched log and simply never construct a second genesis for
   a scope in the first place, the same way it never constructs an
@@ -1169,19 +1193,19 @@ delegate key or a coerced mirror could replay an older, validly-signed,
 still-technically-within-its-original-TTL head record to hide a
 recently-landed yank, deprecation, or owner-rotation fact from a Tier-2
 consumer — defeating the one property Tier 2 exists to provide. This
-is promoted here from a background formal-verification item (Open
+was promoted here from a background formal-verification item (Open
 Items previously listed "head monotonicity" as future Lean work) to a
-protocol rule every conforming verifier MUST already enforce: **reject
+protocol rule every conforming verifier was to enforce: **reject
 any head record whose freshness ordinal (timestamp or explicit counter)
 is not strictly greater than the last head this consumer has itself
-observed for this registry.** This does not require a proof to hold
-today — it requires every Tier-2 implementation to check it before Tier
-2 is meaningfully deployed at all (caught by adversarial review,
-2026-07-16).
+observed for this registry.** This did not require a proof to hold
+at the time — it required every Tier-2 implementation to check it
+before Tier 2 was meaningfully deployed at all (caught by adversarial
+review, 2026-07-16).
 
-**The global ordinal is necessary but not sufficient — a second,
-per-entry MUST closes a per-label rollback (added 2026-07-22).** Because a
-head bundles many per-label entries (§12) under one ordinal, the
+**The global ordinal was necessary but not sufficient — a second,
+per-entry check was added to close a per-label rollback (2026-07-22).**
+Because a head bundles many per-label entries (§12) under one ordinal, the
 strictly-greater check above blocks only whole-head replay; it does not
 stop a compromised freshness-delegate from signing a *genuinely fresh*
 head (ordinal T+1, not the blocked replay case) whose entry for a victim
@@ -1190,15 +1214,24 @@ consumer last saw — silently hiding a recent publish, yank, deprecation,
 or owner-rotation, the exact threat this section exists to defeat. The
 completeness scan (§10) does not save it: a hostile mirror can serve a
 truncated-but-internally-consistent prefix. Therefore, on every head a
-consumer accepts, **for each label entry, alongside the global-ordinal
-check: the `latest_publish` it names MUST be at or after (in the anchor
+consumer accepted, **for each label entry, alongside the global-ordinal
+check: the `latest_publish` it names was to be at or after (in the anchor
 log's own `prior` order) the last `latest_publish` this consumer observed
-for that label, and `fact_commitment` MUST NOT regress below the last
+for that label, and `fact_commitment` was never to regress below the last
 fact-tip observed for that label's `latest_publish`.** A head that
-regresses any per-label entry is rejected exactly as a stale-ordinal head
-is; the monotonicity is enforced per label, not merely on the bundle's one
+regressed any per-label entry was rejected exactly as a stale-ordinal head
+was; the monotonicity was enforced per label, not merely on the bundle's one
 freshness ordinal (soundness/security convergence, adversarial review
 2026-07-22).
+
+**This entire Tier-2 head-gating mechanism is superseded.**
+[ADR-0009 §§11–12, Open Items](0009-atom-composition-plane.md) retires
+the fail-closed TTL/head-monotonicity default together with §16's
+degradation ladder — recency is genuinely new design under the spine/
+cloud split (head's replace-at-a-mutable-ref shape has no room in the
+assertion-plus-withdrawal, czd-keyed store), and ADR-0009 explicitly
+does not settle what attests recency; that residue is tracked there,
+not restated as a live requirement here.
 
 ### 12. Head set-scoped, one ref per registry [atom-head-scope]
 
@@ -1220,10 +1253,10 @@ commit OID at the tip of its publish view chain (the view chain, §7.5,
 is an untrusted discovery accelerator; the czd names the signed
 record-log leaf, keeping this field czd-typed and backend-agnostic like
 every other identity here), and not an aggregate over every version's
-fact history. Both fields are governed by §11's per-entry
-monotonicity MUST: neither may regress for a label across the heads a
-consumer accepts, independent of the bundle's global freshness ordinal.
-Tier 2 freshness therefore covers the
+fact history. Both fields were governed by §11's per-entry
+monotonicity rule (now superseded, see §11): neither was to regress for
+a label across the heads a consumer accepted, independent of the
+bundle's global freshness ordinal. Tier 2 freshness therefore covered the
 actively published version specifically; a consumer resolving an older,
 non-latest version gets Tier 0/1 guarantees for recency about that
 specific version (though, per §16, unconditional completeness
@@ -1234,17 +1267,27 @@ recency purposes.
 
 ### 13. Interface mandatory in publish, stratum-aware [atom-interface-mandatory]
 
-Every publish record MUST carry the completeness artifact appropriate to
-its stratum
+Every publish record was to carry the completeness artifact
+appropriate to its stratum
 ([Execution Model §1.5](../models/execution-model.md#15-the-two-strata-of-intent),
 [Composition Model §4-5](../models/composition-model.md#4-interfaces-the-typing-of-compositions)),
 checked at admission — never modeled as an optional fact, because a fact
 may legitimately be omitted and this data structurally may not be.
+**The package-atom half is superseded:**
+[ADR-0009 §10](0009-atom-composition-plane.md#10-interface-manifests-are-facts-not-mandatory-publish-content-acp-interface-manifests-are-facts)
+reclassifies the interface manifest as a fact (derived, signed by its
+deriving analyzer or executor), not mandatory publish content, per
+[Atom Model §4](../models/atom-model.md#4-the-metadata-partition-law)
+and [§5](../models/atom-model.md#5-the-signature-anchoring-law). **The
+environment/system half is an open item, not resolved here or since:**
+ADR-0009's own Open Items records that whether a coherence certificate
+remains publish-mandatory for algebraic intent "is not addressed by
+anything in the design this document draws on."
 
-- **Package atoms (executable intent):** the mandatory artifact is the
+- **Package atoms (executable intent):** the mandatory artifact was the
   built interface/output descriptor, producible only by actually
-  executing a build ("verifiable only by building" — no registry can
-  refuse a package that won't build without building it).
+  executing a build ("verifiable only by building" — no registry could
+  refuse a package that would not build without building it).
 - **Environment/system atoms (algebraic intent):** the mandatory
   artifact is the coherence certificate, producible by pure
   recomputation of the formation fixpoint — requiring no execution at
@@ -1289,12 +1332,17 @@ Foreign-`src` multi-subject composition (§6) is rejected for the same
 reason: it would reintroduce a live, uncontrolled cross-project URI
 dependency the trusted-mirror system (§18) exists specifically to avoid.
 
-**Legacy vs. native, checkable, and content-identical either way.** A
-publish MAY use the legacy (payload-embedded manifest/lock, rather than
-in-tree) mechanism **if and only if the charter's own `position` is not
-an ancestor of the publish's `position`** — checkable via ordinary git
-ancestry (`is-ancestor(charter.position, publish.position)`). This
-governs the manifest/lock **declaration** only — whether dependency
+**Legacy vs. native, checkable, and content-identical either way
+(superseded, see below).** A publish could use the legacy
+(payload-embedded manifest/lock, rather than in-tree) mechanism **if
+and only if the charter's own `position` is not an ancestor of the
+publish's `position`** — checkable via ordinary git ancestry
+(`is-ancestor(charter.position, publish.position)`). **This ancestry
+predicate is superseded:**
+[ADR-0009 §14](0009-atom-composition-plane.md) replaces it with "a
+declared-plus-spine-monotone check," named but not yet designed there;
+"registries never ingest" (above) survives unaffected. This governed
+the manifest/lock **declaration** only — whether dependency
 metadata is embedded in the signed payload or read from an in-tree file.
 It has no bearing on subject content: native and legacy publishes
 resolve their content tree identically (§5, §7.4), and dependencies are
@@ -1495,9 +1543,10 @@ These two disciplines do not collapse into one stated rule: a depth-1
 fetch is the structurally correct read of `refs/atom/log`, but the
 identical depth-1 discipline applied to a publish ref would silently
 omit the content commit, handing a client a verified record with none
-of the bytes it just verified the hash of. Conforming clients MUST
-fetch `refs/atom/log` at depth 1 and a publish view chain whole and
-unconditionally — never the other way around.
+of the bytes it just verified the hash of. Conforming clients fetch
+`refs/atom/log` at depth 1 and a publish view chain whole and
+unconditionally — never the other way around — formalized as
+[publish-chain-fetched-whole](../specs/git-storage-format.md#publish-chain-fetched-whole).
 
 The operational dependency the original draft's Phase A/B split
 carried — a required use of protocol-v2 partial/filtered fetch
@@ -1510,11 +1559,16 @@ construction, so fetching it pulls exactly itself, its tree, and its
 blobs regardless of filtering support. No git host capability beyond
 an ordinary fetch is required.
 
-**`[verify-before-fetch]`, a hard admission invariant, unchanged:** the
-store MUST NOT attempt Phase B for a subject until that subject's
-governing publish — and the chain of authority behind it (charter/claim
-validity, resolved from Phase A) — has passed full signature and chain
-verification. Fetch success alone is not sufficient for admission
+**`[verify-before-fetch]`, a hard admission invariant, unchanged and
+already stated:** the store does not attempt Phase B for a subject
+until that subject's governing publish — and the chain of authority
+behind it (charter/claim validity, resolved from Phase A) — has passed
+full signature and chain verification, per
+[atom-store-format.md](../specs/atom-store-format.md#the-published-object)'s
+requirement that a consumer read and verify the record carried by the
+publish chain before content is reachable at all, and
+[publish-inclusion-required](../specs/atom-store-format.md#publish-inclusion-required).
+Fetch success alone is not sufficient for admission
 either: once the content commit is fetched, each declared subject's own
 `content_hash` (§5) must be recomputed against the content commit's own
 tree; only a match, for every declared subject, admits the content into
@@ -1744,7 +1798,10 @@ to one doesn't force a change to another.
 
   How often this actually triggers is substantially reduced by keeping
   "owner" deliberately abstract rather than binding it to one specific
-  key-management scheme (§3): an owner MAY be backed by a richer
+  key-management scheme (§3, formalized as
+  [owner-abstract](../specs/atom-transactions.md#owner-abstract)'s
+  `OwnerKind` — `"single-key"`, `"hierarchical"`, `"rooted-identity"`):
+  an owner can be backed by a richer
   identity system — [Cyphr](https://github.com/Cyphrme/Cyphr), notably,
   since it already composes with this design trivially via the same
   embedding mechanism central to §7.1's record log (a Cyphr principal's
@@ -1790,8 +1847,9 @@ to one doesn't force a change to another.
   2026-07-22** — decorrelated rounds over §7 and over the whole document,
   outside §7 — and its fixes are folded into this freshen revision: the
   closure-verification rewrite (B1/B2/B3) and §8 carve-out, the per-entry
-  head-monotonicity MUST (§11), the EON re-scoping of static
-  fork/freshness claims (§10, §16, Context), and the stale-residue purge.
+  head-monotonicity rule (§11, since superseded — see §11), the EON
+  re-scoping of static fork/freshness claims (§10, §16, Context), and
+  the stale-residue purge.
   The two surety-layer findings it surfaced — the `B(a)` anchor-admission
   enumeration overclaim and the Alloy `srcEstablished` anchoring gap —
   are deferred to the surety mechanization, not this ADR.
@@ -1822,8 +1880,12 @@ to one doesn't force a change to another.
   so the classical CVE-2012-2459 duplicate-leaf attack does not apply
   structurally, independent of prefixing. This closes a concern raised
   earlier in this same revision's own reasoning — no longer open.
-- **Content_hash tier (OPTIONAL vs. SHOULD/MUST).** Unresolved from the
-  original draft, unaffected by this revision.
+- **Content_hash tier — resolved since this revision, not by it.**
+  Unresolved from the original draft as of this text; subsequently
+  settled as a three-tier obligation (schema-optional,
+  consumer-verify-when-present, publisher-recommended-when-weak),
+  formalized as
+  [content-hash-obligation](../specs/atom-transactions.md#content-hash-obligation).
 - **Protocol-v2 transport dependence, narrower than an earlier revision
   of this section stated.** Load-bearing in exactly one place: §10's
   lightweight single-leaf inclusion-proof path, which depends on
