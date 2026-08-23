@@ -557,28 +557,27 @@ independently-declared position per subject.
   git-tree-OID-derived hash would instead bind the model to one backend's
   hash function and its versioning.
 
-  **The closure-level content commitment is a distinct object one level up,
-  named separately so the two are never conflated: `content_commitment`
-  (leaf0 of the §7.4 closure tree) is an `eml` root over the *ordered list
-  of declared subjects*, leaf `i` = subject `i`'s own `content_hash`.** It
-  is never any single subject's `content_hash` — the two coincide only in
-  the common single-subject case, where this outer `eml` root at `n = 1` is
-  again literally that one subject's `content_hash`, so the closure costs
-  exactly what a flat hash would have. No new signed field:
-  `content_commitment` is *derived* from the existing subject list, the same
-  "derive, don't declare, when derivable" discipline the anchor-identity
-  rule (§4) already uses. The multi-subject case (§6) is where the extra
-  structure earns its keep:
-  per-subject inclusion proofs become available for free, letting a
-  consumer verify one declared subject's inclusion without touching any
-  other subject's content — a real capability, not merely a tidier data
-  model, and one a flat hash could never offer regardless of how it was
-  computed.
+  **There is no closure-level content commitment field.** The original
+  derivation's two-leaf closure structure — a `content_commitment` field
+  defined as an `eml` root folding every declared subject's `content_hash`
+  together — is deleted along with the closure commit that carried it
+  (§7.4): nothing signed was ever checked against that fold, so it
+  verified nothing beyond what each subject's own `content_hash` already
+  verifies on its own. Multi-subject verification does not need a
+  replacement aggregate: §6's sibling constraint already gives the whole
+  declared set one common tree, rooted at `P = dirname(main_subject.path)`,
+  and that tree is exactly what the content commit's own tree (§7.4)
+  equals. A verifier holding the content commit therefore checks each
+  declared subject the same way regardless of how many are declared — walk
+  the content commit's tree to `path`, recompute `content_hash` over what
+  is found there, compare to the signed value — with no separate fold step
+  and nothing left ambiguous about which subject a single tree slot
+  represents.
 - **`tree`** — the git tree OID that `position.tree/path` resolves to,
   stored as a checked cache, not independent information: it MUST equal
   the result of that lookup, and a mismatch is a verification failure
   exactly like any other false signed claim. This is the same object
-  that becomes the closure's own content tree (§7) — the same OID,
+  that becomes the content commit's own tree (§7.4) — the same OID,
   referenced a second time, at zero additional storage cost.
 
 **Hash agility and the SHA-1 residual (scoping note, not a normative
@@ -673,7 +672,7 @@ depth for the intra-tree escape case only. Composition across multiple
 subjects at one position uses the composition model's own `⊕` law
 (disjoint union, conflict surfaces as an error, never silently resolved).
 
-### 7. The git object model: an append-only record log, checkpoints, closures, and fact-tags [atom-git-object-model]
+### 7. The git object model: an append-only record log, checkpoints, a content commit, and materialized view chains [atom-git-object-model]
 
 This section replaces the original derivation's blob-carrier clause with
 the full mechanism, following directly from the second reframing in
@@ -823,6 +822,139 @@ CAS-updated on every append — git's own ref-update compare-and-swap is
 the entire write-gate mechanism for the log (§19 has no separate
 mechanism to add).
 
+**A checkpoint that records a publish carries a second parent.** Every
+other checkpoint — anchor genesis, claim genesis, and every fact append
+at any scope — has exactly one parent, the previous checkpoint. A
+checkpoint recording a *publish* additionally takes the source commit
+the publish was built from (`position`, §4) as a second parent. This one
+edge does two jobs at once: it protects that source commit, and
+everything it makes reachable, from garbage collection for as long as
+`refs/atom/log` exists — intrinsically, transitively, for every publish
+ever made from this anchor — and it means a full verification fetch of
+the log tip is already complete, with no second, bespoke mechanism
+needed to keep a referenced source commit alive. The original
+derivation's dedicated GC-protection ref namespace, `refs/atom/src/{oid}`
+(§15), is unnecessary for this reason and carries no protective role
+here or anywhere else in this design. Like the first-parent chain, this
+edge carries no trust weight of its own — nothing signed claims it, so
+nothing cross-checks it; the source binding a verifier actually trusts
+remains the publish record's own signed `position` field (§4),
+unchanged by its existence.
+
+**7.4. The content commit: a demoted, minimal fetch handle for one
+publish's content.** A publish's content — the same tree
+`position:path` already resolves to for each declared subject (§5) —
+is also the tree of one further git commit, kept deliberately inert:
+parentless, fixed fields (blank author/committer, a zero timestamp, an
+empty message, no signature, no extra headers beyond Coz's own), tree
+equal to that content. Its identity is a pure function of the tree
+alone — nothing about how, when, or from what source revision it was
+published is encoded in the object, so two honest parties publishing
+bit-identical content produce the identical commit, even from two
+different source revisions.
+
+The reason this object exists is narrower and more concrete than "git
+needs a commit for a ref to point at": the git library this system's
+client is built on supports shallow fetch but not partial or filtered
+fetch — there is no way to ask a git host for "this directory only" out
+of a larger repository. A parentless commit whose tree is exactly the
+content needed is a ref-reachable, minimal object closure by
+construction: fetching it pulls the commit, its tree, and its blobs,
+and nothing else is reachable from it at any depth — no filter, no
+partial-clone support, and no git host capability beyond an ordinary
+fetch is required to get exactly the bytes and nothing more. This
+commit is reached only by walking a publish view chain's own second
+parent (§7.5) — it is never itself a ref target, and it carries no
+parent of its own back toward its source; that binding lives entirely
+on the main log's own checkpoint (above), never here.
+
+**7.5. Three materialized view chains — charter, claim, publish — each
+starting at its own target, with no shared prefix.** Rather than one
+chain per publish interleaving every fact at every enclosing scope, each
+scope gets its own chain: a charter chain (one per anchor), a claim
+chain (one per label), and a publish chain (one per published version).
+Each chain starts at its own scope's genesis commit and is extended by
+one further commit for every later fact that lands on that scope — the
+claim chain never carries the charter's own facts, and the publish
+chain never carries the claim's or the charter's; a publish is
+logically "under" both, but its own chain does not begin with either.
+This is a deliberate rejection of the interleaved alternative, not an
+oversight: an interleaved chain per publish materializes a *query* — a
+join across three scopes' facts — which has to be re-maintained, at
+every one of potentially thousands of publish chains, on every single
+write to any of its inputs. Three separate chains materialize the
+*structure* that already exists: `pay.under` (§2) already names, per
+scope, independently, "the enclosing scope's most recent leaf at
+signing time." Materializing structure costs one commit and one ref
+update per fact, always, regardless of how many publishes descend from
+the scope the fact lands on; materializing a query costs write
+amplification proportional to fan-out — a single charter-level fact
+would otherwise require appending to and re-pointing every publish
+chain ever descended from that anchor.
+
+Each chain commit's own tree is the *same* full record-log tree the
+originating checkpoint (§7.3) carries — never a synthesized subset
+containing only the records relevant to that chain. For the record
+portion of a chain this is a traversal accelerator, never a fetch
+reducer: it saves nothing in bytes moved, because the whole record log
+is small at this domain's real cardinality, and it exists so a client
+walking a view chain can always recompute the full log's own root and
+detect a relevant fact the chain's own edges omitted — a subset tree
+could never be checked against anything, since there would be nothing
+left to recompute it from. This property is scoped to records only and
+does not extend to content: a chain commit's tree choice buys nothing
+for content by itself, and must never be described with the same
+sentence as the content commit (§7.4), which is what actually keeps
+content out of the ordinary fetch path, structurally, regardless of
+which choice is made for record trees.
+
+**Content hangs off the publish chain's first commit, specifically, as
+a second parent — and this is the only path by which a consumer ever
+obtains a package's content.** "The publish commit" is, unambiguously,
+the first commit of the publish chain (never a commit shared with the
+charter or claim chains, since the chains do not share a prefix); the
+content commit (§7.4) is that commit's second parent, contributing
+exactly itself, its tree, and its blobs. A publish view chain
+consequently has **no path to a source commit at all** — the tie back
+to the repository's real history is the second parent on the *main
+log's own checkpoint* (above), and that edge lives only there, never on
+a publish chain. This makes over-fetching the monorepo when resolving a
+publish structurally impossible rather than a discipline a client has
+to remember: there is nothing in a publish chain's object graph that
+reaches the monorepo, regardless of how a client fetches it.
+
+**A materialized chain is a convenience index, never itself trusted.**
+The signed `under` pointers (§2) are the ground truth a client checks
+against directly; a chain a registry built incorrectly — omitting a
+link, ordering it wrong, injecting a spurious commit — produces a chain
+that simply disagrees with those signed pointers, which a client
+holding the full log (because a chain's own tree, above, is never a
+subset) can always detect. A wrong materialization can therefore only
+be slow or broken, never deceptive — the same trust property that
+already lets checkpoint commits (§7.3) exist unsigned and untrusted,
+carried one level up to the chains built from them. A registry MUST
+advance each view ref to the latest relevant record as facts land; the
+worst a buggy or malicious registry can do by failing this is let a
+view ref fall behind, which is checkable, at the cost of a full fetch
+of `refs/atom/log`, by any client willing to pay it — discoverable, not
+hidden, in either failure mode.
+
+A client does not merge or replay these three chains against each
+other. Because every chain commit points at the complete log tree
+(above), there is no partial view to reconcile — the three refs are
+freshness bookmarks saying where each scope's latest relevant record
+sits, not three separate data sources. What a client does instead is
+evaluate a state (which facts bear on this publish, is the signing key
+still trusted, has anything been withdrawn) directly against the log it
+already holds; reconstructing log order client-side by replaying the
+chains would put the log's own shape into client logic, which this
+design does not need and does not want. All three ref names are fully
+derivable from `(label, version)` alone, with no discovery round trip:
+one charter per repository, the claim ref named by label (labels are
+unique within an anchor's own claim, §2), the publish ref named by
+label plus version — a resolver holding a lock entry can request all
+three in one connection.
+
 ### 8. The ref-leaf discriminator principle [atom-ref-leaf-principle]
 
 **Governing law, applying to every ref-format decision in this
@@ -833,9 +965,12 @@ rests entirely and always on the signed payload (signature + `prior`/
 what git object it happens to resolve to. The self-certifying property
 of a czd-named ref (recompute the hash from fetched bytes, compare to
 the name) is a cheap bonus sanity check, never the load-bearing
-mechanism. This principle now also governs the choice of git object
-*type* at a ref's tip (§7.5's bare-commit-vs-tag discriminator) — the
-same rule, one level more general than the original draft stated it.
+mechanism. This principle extended, in the design this document
+originally shipped with, to whether a publish ref's tip was a bare
+commit or a tag — a discriminator this revision deletes rather than
+merely governs: every view chain (§7.5) is uniformly commits, so there
+is no longer a git object *type* choice at a ref's tip to make
+security-neutral in the first place.
 
 **The one carve-out, stated rather than glossed:** this document's broader
 "git structure carries zero security weight" (Context, §7.2) has exactly
@@ -861,7 +996,7 @@ denial-of-service, never the acceptance of a false ordering. So the principle is
 never bear on security; git *ancestry between signed `position` OIDs* bears
 on exactly one ordering check, fail-closed, and nowhere else.
 
-### 9. Ref format: one log, one ref per publish [atom-ref-format]
+### 9. Ref format: one log, one ref per materialized view [atom-ref-format]
 
 Applying §8's principle now that the record shape and git object model
 have both changed substantially from the original draft:
@@ -872,12 +1007,27 @@ refs/atom/log                          -> the anchor's record-log tip
                                            on every append, walked backward
                                            via checkpoint-commit parents)
 
-refs/atom/pub/{label}/{version}        -> the closure commit, or — once
-                                           any fact exists for this
-                                           version — the tip of its
-                                           fact-tag chain (§7.4, §7.5).
-                                           One permanent ref per ever-
-                                           published version.
+refs/atom/charter                      -> the tip of the anchor's charter
+                                           view chain (§7.5). One per
+                                           anchor, since an anchor has
+                                           exactly one charter.
+
+refs/atom/claim/{label}                -> the tip of that label's claim
+                                           view chain (§7.5). One
+                                           permanent ref per ever-claimed
+                                           label.
+
+refs/atom/pub/{label}/{version}        -> the tip of that publish's own
+                                           view chain (§7.5) — never the
+                                           charter or claim chain, and
+                                           never a bare commit or tag
+                                           chain. One permanent ref per
+                                           ever-published version. The
+                                           content commit (§7.4) is
+                                           reached only by walking the
+                                           tip's own first commit's
+                                           second parent — it is never a
+                                           ref target itself.
 
 refs/atom/head                         -> the freshness heartbeat
                                            (§3, §11-§12), replace-
@@ -890,17 +1040,17 @@ refs/atom/head                         -> the freshness heartbeat
                                            here at all.
 ```
 
-That is the entire registry-side ref surface — two ref families that
-always exist (the log, and one per published version), plus one
-optional ref (head) that exists only for projects opted into Tier 2.
-Cardinality no longer scales with fact count at all — every fact, at
-every scope, lives inside the one record log, discovered via inclusion
-proofs and (for published versions specifically) the fact-tag-chain
-fast path, never via a dedicated ref of its own. This is a strict
-reduction from the original draft's charter/claims/facts ref families,
-each with its own dedicated "tip" ref for write serialization (§19) —
-that whole write-gate apparatus collapses into "one branch, one CAS,"
-since a git ref update already *is* a compare-and-swap.
+That is the entire registry-side ref surface — four ref families that
+always exist (the log, the charter, one per claimed label, and one per
+published version), plus one optional ref (head) that exists only for
+projects opted into Tier 2. Cardinality still does not scale with fact
+count: a fact lands as one further commit on its own scope's existing
+view chain (§7.5), never as a ref of its own — the ref it extends
+already existed. This remains a strict reduction from the original
+draft's charter/claims/facts ref families, each with its own dedicated
+"tip" ref for write serialization (§19) — that whole write-gate
+apparatus collapses into "one branch, one CAS," since a git ref update
+already *is* a compare-and-swap.
 
 ### 10. Verification: inclusion and consistency proofs, plus the completeness scan [atom-verification]
 
@@ -1038,7 +1188,7 @@ head (ordinal T+1, not the blocked replay case) whose entry for a victim
 label names an *older* `latest_publish` or `fact_commitment` than the
 consumer last saw — silently hiding a recent publish, yank, deprecation,
 or owner-rotation, the exact threat this section exists to defeat. The
-completeness scan (§7.5) does not save it: a hostile mirror can serve a
+completeness scan (§10) does not save it: a hostile mirror can serve a
 truncated-but-internally-consistent prefix. Therefore, on every head a
 consumer accepts, **for each label entry, alongside the global-ordinal
 check: the `latest_publish` it names MUST be at or after (in the anchor
@@ -1066,10 +1216,11 @@ how many labels an anchor publishes.
 history.** A label's per-entry shape is `{latest_publish: czd,
 fact_commitment: czd}`, where `fact_commitment` is the czd of the latest
 signed fact leaf on *`latest_publish`'s own* fact stream — not the git
-tag OID at the tip of its fact-tag chain (the tag chain, §7.5, is an
-untrusted discovery accelerator; the czd names the signed record-log leaf,
-keeping this field czd-typed and backend-agnostic like every other
-identity here), and not an aggregate over every version's fact history. Both fields are governed by §11's per-entry
+commit OID at the tip of its publish view chain (the view chain, §7.5,
+is an untrusted discovery accelerator; the czd names the signed
+record-log leaf, keeping this field czd-typed and backend-agnostic like
+every other identity here), and not an aggregate over every version's
+fact history. Both fields are governed by §11's per-entry
 monotonicity MUST: neither may regress for a label across the heads a
 consumer accepts, independent of the bundle's global freshness ordinal.
 Tier 2 freshness therefore covers the
@@ -1153,38 +1304,57 @@ rule: it falls out of the ancestry check automatically, since `position`
 determines the actual content verified and real project history only
 advances forward from the charter once it exists.
 
-### 15. Liveness of published content: structural, not a bespoke obligation [atom-content-liveness]
+### 15. Liveness of published content and its source: two structural mechanisms, neither bespoke [atom-content-liveness]
 
 The original draft's liveness-pin mechanism (`refs/atom/src/{position}`,
 unconditionally pinning every position value a signed record carries)
 existed to protect a *referenced* commit — one the registry does not
 control the branch hygiene of — from being lost to ordinary project
 housekeeping, since a signed field alone gives git's own garbage
-collector no reason to consider that commit reachable.
+collector no reason to consider that commit reachable. This section now
+separates two liveness questions the original mechanism conflated into
+one pin: keeping a published version's *content* alive, and keeping the
+*source commit* it was built from alive. Both are now structural
+consequences of other mechanisms this document already specifies, and
+neither needs a dedicated ref namespace.
 
-**This is no longer needed for content.** Once a version's actual
-content tree hangs directly off the closure commit (§7.4) — the same
-tree OID `position:path` resolved to, referenced a second time — that
-tree is kept alive by ordinary git reachability from
-`refs/atom/pub/{label}/{version}` for as long as that ref exists,
-regardless of what happens to the original `position` commit or the
-branch it lived on. The thing that needed protecting (the tree) is
-protected automatically, as a structural consequence of §7.4's design,
-not as a separately-engineered obligation.
+**Content liveness.** A publish's content commit (§7.4) is reached only
+by walking the second parent of its own publish view chain's first
+commit (§7.5). For as long as `refs/atom/pub/{label}/{version}` exists —
+pointing at that chain's tip, or any later commit the chain has grown
+to — ordinary git reachability keeps the content commit, its tree, and
+its blobs alive, regardless of what happens to the original `position`
+commit or the branch it lived on. The thing that needed protecting (the
+content) is protected automatically, as a structural consequence of
+§7.4/§7.5's design, not as a separately-engineered obligation.
 
-**`position` itself is now a provenance claim, not a liveness
-guarantee.** The signed payload still records which commit and path a
-subject's content came from — a meaningful, checkable fact for anyone
-who wants to independently confirm it against the original project
-history, when that history happens to still be reachable — but no part
-of ongoing verification requires the original `position` commit object
-to remain fetchable anywhere. Content verification (recomputing each
-subject's own `content_hash` and folding them into the closure's
-`content_commitment`, §5, against the closure's own tree) never
-re-derives from `position` after publish time. This is a real narrowing of what the registry is obligated
-to uphold, made explicitly here rather than left implicit, since it is a
-new call this revision is making, not a restatement of the original
-draft's own liveness-pins section.
+**Source liveness.** Every checkpoint on the main log (`refs/atom/log`,
+§7.3) that records a publish carries the source `position` commit as
+its own second parent. This protects that commit, and everything it
+makes reachable, transitively and for as long as `refs/atom/log`
+exists — for every publish this anchor has ever made, at once. This
+reverses this document's own earlier narrowing (below): `position` is
+protected again, but through an intrinsic edge on the main log rather
+than a dedicated ref an operator has to remember to write and maintain
+per source commit. The dedicated `refs/atom/src/{oid}` namespace this
+section describes above stays superseded — it is not the mechanism that
+does this job, now or previously — but the property it existed to
+provide (source-commit GC protection) is restored, structurally, by
+§7.3's second parent.
+
+**`position` remains a provenance claim first.** The signed payload
+still records which commit and path a subject's content came from — a
+meaningful, checkable fact for anyone who wants to independently confirm
+it against the original project history — and content verification
+(recomputing each subject's own `content_hash`, §5, against the content
+commit's own tree, §7.4) never re-derives from `position` after publish
+time; §7.3's second parent changes only whether that commit stays
+fetchable, never whether verification depends on fetching it. This is a
+narrower claim than an earlier revision of this document made — that
+revision described the registry as having no obligation to keep
+`position` fetchable at all, which this amendment reverses for the
+reason stated above, not because the earlier claim's own reasoning about
+what verification itself needs was wrong.
 
 ### 16. The degradation ladder: completeness and recency are separable [atom-degradation-ladder]
 
@@ -1207,7 +1377,7 @@ default:
 every tier, and this is a genuine strengthening over what the original
 draft claimed.** The original framing treated "did I see everything" as
 bundled into the same recency guarantee head/TTL provides, available
-only at Tier 2. §7.5's mandatory delta-scan separates these: *recency*
+only at Tier 2. §10's consistency-proof mechanism separates these: *recency*
 ("how current is my view, right now") genuinely does require Tier 2's
 signed, TTL-bounded heartbeat — nothing else can prove freshness as of a
 specific moment. But *completeness* ("given whatever view I already
@@ -1287,7 +1457,7 @@ a vibes call.
 A registry is a store, a label index, and a write gate. This is now a
 single mechanism, not two:
 
-- **Publish** additionally needs the closure ref itself
+- **Publish** additionally needs the publish ref itself
   (`refs/atom/pub/{label}/{version}`) to transition from non-existent to
   existing as its own CAS point — unchanged in substance from the
   original draft's publish-uniqueness rule, just now describing one ref
@@ -1298,43 +1468,58 @@ discipline as always — a verifier walks the real chain via `pay.prior`/
 `pay.under` and inclusion proofs (§10), never taking the tip's word for
 what is current.
 
-### 20. Store: two-phase fetch, verify-before-fetch [atom-store-two-phase]
+### 20. Store: two ref families, structurally distinct fetch disciplines, verify-before-fetch [atom-store-two-phase]
 
-Store ingestion is still two distinct fetch operations against different
-parts of the object graph, restated against the new mechanism:
+Store ingestion is still two distinct fetch operations against
+different parts of the object graph — but what keeps them separate has
+changed. It used to be an operational discipline (filter what would
+otherwise be eagerly pulled); it is now structural (fetch two refs
+whose object graphs simply do not overlap the same way).
 
-- **Phase A (records)** — fetch `refs/atom/log` and walk its checkpoint-
-  commit chain (or request specific inclusion proofs for targeted
-  lookups). Small, always fetched, pure verification; needs no content
-  at all — L1 validity is fully checkable from the record log alone.
-- **Phase B (content)** — for the specific closures actually being
+- **Phase A (records)** — fetch `refs/atom/log` at depth 1. This is
+  correct, not a performance compromise: the entire append-only record
+  lives in the tip's own tree (§7.2, §7.3), so a shallow fetch of the
+  commit is complete on the record. Small, always fetched, pure
+  verification; needs no content at all — L1 validity is fully
+  checkable from the record log alone.
+- **Phase B (content)** — for the specific publishes actually being
   materialized into a build, fetch the corresponding
-  `refs/atom/pub/{label}/{version}` commit's tree content. This is the
-  expensive step; it is what makes `content_hash` verification possible
-  and what hands real files to the build environment.
+  `refs/atom/pub/{label}/{version}` view chain (§7.5) *in full* — never
+  at depth 1. A publish chain is bounded by the records relevant to
+  that publish and grows by one commit per relevant fact; depth is not
+  a meaningful operation on it. Fetching it whole is what reaches the
+  content commit (§7.4, hanging off the chain's first commit as a
+  second parent) and hands real files to the build environment.
 
-**A new operational dependency, stated plainly rather than assumed
-free:** because content now hangs directly off the same object graph as
-the closure ref (§7.4), a naive unfiltered `git fetch` of a closure ref
-would eagerly pull its content along with everything else. Conforming
-clients MUST use protocol-v2 partial/filtered fetch (`--filter=blob:none`
-or equivalent) to defer content blobs until a specific closure's content
-is actually needed, preserving the Phase A/Phase B split as an
-operational discipline rather than a structural one. This is the same
-class of residual dependency §10's protocol-v2 reliance already accepts
-(Open Items), not a new category of risk — but it is now load-bearing
-for the fetch-cost story in a way it wasn't when content lived behind a
-dedicated, always-deferred ref family.
+These two disciplines do not collapse into one stated rule: a depth-1
+fetch is the structurally correct read of `refs/atom/log`, but the
+identical depth-1 discipline applied to a publish ref would silently
+omit the content commit, handing a client a verified record with none
+of the bytes it just verified the hash of. Conforming clients MUST
+fetch `refs/atom/log` at depth 1 and a publish view chain whole and
+unconditionally — never the other way around.
+
+The operational dependency the original draft's Phase A/B split
+carried — a required use of protocol-v2 partial/filtered fetch
+(`--filter=blob:none` or equivalent) to keep a closure ref's content
+from being eagerly pulled — no longer applies and is not restated
+here. It existed only because content used to hang off the same ref,
+at the same depth, as the record it was reached through; the content
+commit (§7.4) is already a minimal, ref-reachable object closure by
+construction, so fetching it pulls exactly itself, its tree, and its
+blobs regardless of filtering support. No git host capability beyond
+an ordinary fetch is required.
 
 **`[verify-before-fetch]`, a hard admission invariant, unchanged:** the
 store MUST NOT attempt Phase B for a subject until that subject's
-governing closure — and the chain of authority behind it (charter/claim
+governing publish — and the chain of authority behind it (charter/claim
 validity, resolved from Phase A) — has passed full signature and chain
 verification. Fetch success alone is not sufficient for admission
-either: once content is fetched, each declared subject's own
-`content_hash` must be recomputed and folded into the closure's
-`content_commitment` (§5), which MUST equal leaf0 of the closure tree;
-only a match admits the content into the store's served space.
+either: once the content commit is fetched, each declared subject's own
+`content_hash` (§5) must be recomputed against the content commit's own
+tree; only a match, for every declared subject, admits the content into
+the store's served space. There is no separate closure-level commitment
+to check on top of this — §5 explains why none is needed.
 
 ### 21. Store ref format and GC: ordinary git reachability, nothing bespoke [atom-store-refs-and-gc]
 
@@ -1345,29 +1530,40 @@ tracking) existed
 specifically because content used to be reachable only obliquely —
 through a signed field git's own reachability analysis cannot see —
 requiring a bespoke, hand-maintained liveness mechanism to compensate.
-Once content hangs directly off a structural ref (§7.4), that compensating
-mechanism is unnecessary in its entirety:
+Once content hangs directly off the first commit of a publish's own
+view chain (§7.4, §7.5), reachable only through that chain's own tip
+ref, that compensating mechanism is unnecessary in its entirety:
 
 Cleaning up every atom under a set is: walk `refs/atom/log`, filter for
 publish leaves, collect their `(label, version)` tuples, delete the
 corresponding `refs/atom/pub/{label}/{version}` refs, run ordinary
-`git gc`. Nothing else is needed. This is correct, not merely plausible,
-on one point worth stating precisely: the retained record log still
-*textually* mentions old content tree OIDs (as declared subject fields
-inside kept record blobs), but git's reachability walk only ever follows
-*structural* edges — a tree's entries, a commit's `tree`/`parent`, a
-tag's `object` — never blob content. So deleting a pub-ref genuinely
-severs the only structural path to that closure and its entire fact-tag
-chain (each tag only points backward, so the whole chain goes
-unreachable in one shot once the ref at its tip is gone), even though the
-kept record log still mentions the same hash as inert data. Content
+`git gc`. Nothing else is needed. This is correct, not merely
+plausible, on one point worth stating precisely: the retained record
+log still *textually* mentions old content tree OIDs (as declared
+subject fields inside kept record blobs), but git's reachability walk
+only ever follows *structural* edges — a tree's entries, a commit's
+`tree`/`parent` — never blob content. So deleting a pub-ref genuinely
+severs the only structural path to that publish's own view chain and,
+through its first commit's second parent, its content commit (each
+chain commit only points backward to the previous one, so the whole
+chain — and the content hanging off its first commit — goes
+unreachable in one step once the ref at its tip is gone), even though
+the kept record log still mentions the same hash as inert data. Content
 shared between two versions (an unchanged subtree reused across
 releases) survives correctly for the identical reason — reachable via
-whichever pub-ref still exists, reclaimed once none do. Manual
-operator GC-by-anchor needs no dedicated mechanism, exactly as the
-original draft already argued for a different reason (Alt 6) — the
-record log is already the source of truth and is already fetched to
-learn what exists.
+whichever pub-ref still exists, reclaimed once none do. Manual operator
+GC-by-anchor needs no dedicated mechanism, exactly as the original
+draft already argued for a different reason (Alt 6) — the record log
+is already the source of truth and is already fetched to learn what
+exists.
+
+Cleaning up a specific anchor's charter or claim history needs no
+independent mechanism either: `refs/atom/charter` and
+`refs/atom/claim/{label}` (§7.5, §9) point into the same record log an
+anchor's whole existence already depends on, and deleting an anchor
+means deleting its `refs/atom/log` along with every ref derived from
+it — there is no separate charter/claim liveness story to maintain on
+top of the publish-ref story above.
 
 ## Simplicity and Volatility Boundaries (Hickey/Lowy Audits)
 
@@ -1388,11 +1584,15 @@ to one doesn't force a change to another.
      genesis and amendment — rather than five independently-justified
      record kinds each with their own succession or chaining story.
    - **Git objects carry exactly the roles they are structurally suited
-     for and no others.** Blobs hold signed content, unconditionally
-     (§7.3, §7.4). Commits provide cheap, walkable, git-native ancestry
-     for backend bookkeeping only, never trust (§7.3, §7.4). Tags
-     provide cheap, discoverable, git-native "something is attached
-     here" signaling, also never trust (§7.5). Trees are used only where
+     for and no others.** Blobs hold signed record content,
+     unconditionally (§7.3). Commits provide cheap, walkable, git-native
+     ancestry for backend bookkeeping — the record log's checkpoints
+     (§7.3), the content commit (§7.4), and the three view chains
+     (§7.5) — never trust, with exactly one stated exception (§8's
+     carve-out on signed `position` ancestry). No tag object is used
+     anywhere in this design; the discovery role a tag chain once played
+     is served entirely by the view chains, which need no separate
+     object type to be cheap and discoverable. Trees are used only where
      they represent genuine filesystem-shaped content — published
      subject trees (§5, §7.4) — nowhere else. The record log's own Merkle
      structure is **`eml`'s, computed by `eml` over data persisted through
@@ -1401,16 +1601,25 @@ to one doesn't force a change to another.
      opaque storage, not the Merkle structure itself. (An earlier draft had
      git trees *be* the record-log Merkle structure — superseded by §7.2.)
    - **Decomplecting identity from transport.** czd is the only identity
-     a record has; git OIDs, ref names, commit ancestry, and tag chains
-     are all pure, interchangeable transport/query conveniences that
-     never bear on security (§8's ref-leaf-discriminator principle, now
-     explicitly extended to git object type as well).
+     a record has; git OIDs, ref names, and commit ancestry are all
+     pure, interchangeable transport/query conveniences that never bear
+     on security (§8's ref-leaf-discriminator principle — this revision
+     retires the git-object-*type* half of that principle entirely,
+     rather than extending it, since no type choice remains once tags
+     are gone).
 2. **Temporal Volatility (Lowy Audit):**
    - **The record log changes because new events happen; a closure
      changes never, once written.** These are genuinely different
-     volatility profiles and this revision is what makes them live in
-     genuinely different places (§7.3 vs. §7.4) — the original draft's
-     "record closure includes bearing facts" conflated them.
+     volatility profiles, and they still live in genuinely different
+     places: the record log accrues on `refs/atom/log` (§7.3); a
+     closure's own genesis pieces are written once and never reissued
+     (§3), and its content commit's identity is a pure function of its
+     tree, fixed forever once computed (§7.4). A publish's own *view
+     chain* (§7.5) sits in between the two — it moves, but only because
+     new facts about an already-immutable closure keep landing on it,
+     never because the closure itself changes. The original draft's
+     "record closure includes bearing facts" conflated all of this into
+     one volatility profile.
    - **Recency and completeness vary for different reasons and are now
      kept in different places.** Recency depends on active, ongoing
      publisher cooperation (the head rotation job, §11-§12); completeness
@@ -1481,10 +1690,15 @@ to one doesn't force a change to another.
   between atom's own protocol fields and `eml`'s leaves — real,
   load-bearing work, but a materially smaller and better-bounded surface
   than reimplementing canonical Merkle-tree verification from scratch.
-- Partial/filtered git fetch (protocol-v2) is now load-bearing for the
-  Phase A/Phase B fetch-cost split (§20), not merely a nice-to-have —
-  conforming clients that fetch closures without filtering will eagerly
-  pull content they didn't need.
+- The two-refs fetch discipline (§20) is now load-bearing in a
+  different, sharper way than a filtering requirement: applying
+  `refs/atom/log`'s correct depth-1 fetch to a publish view chain is
+  silently wrong, not merely suboptimal — it omits the content commit
+  and hands a client a verified record with none of the bytes it just
+  verified the hash of (§7.4-§7.5). This replaces the original draft's
+  own dependency on protocol-v2 partial/filtered fetch support (§20),
+  which this revision removes entirely rather than making load-bearing
+  in a new way.
 - `[verify-before-fetch]` and stratum-aware `[atom-interface-mandatory]`
   remain real, load-bearing implementation obligations on the store and
   publish tooling respectively.
@@ -1533,9 +1747,9 @@ to one doesn't force a change to another.
   key-management scheme (§3): an owner MAY be backed by a richer
   identity system — [Cyphr](https://github.com/Cyphrme/Cyphr), notably,
   since it already composes with this design trivially via the same
-  embedding mechanism central to §7.4 (a Cyphr principal's own root can
-  sit as a leaf inside an anchor's data, or the reverse, with no new
-  machinery) — in which case ordinary key rotation and device changes
+  embedding mechanism central to §7.1's record log (a Cyphr principal's
+  own root can sit as a leaf inside an anchor's data, or the reverse,
+  with no new machinery) — in which case ordinary key rotation and device changes
   are absorbed entirely inside that system and never touch the anchor's
   own owner-fold at all. GPG's web-of-trust offers a looser version of
   the same idea, without Cyphr's rigor. This mitigates the common case;
@@ -1567,15 +1781,15 @@ to one doesn't force a change to another.
   commits to the field being mandatory and stratum-aware; the concrete
   schema is spec-drafting work, not decided here.
 - **Store ref-keying, revisited.** The original draft's czd-direct
-  store-side addressing needs a fresh pass against the new closure/
-  fact-tag object shapes (§21) — not simply restated, since the object
-  graph it needs to address collision-safely across mutually-untrusted
-  registries has changed.
+  store-side addressing needs a fresh pass against the content-commit/
+  view-chain object shapes (§7.4, §7.5, §21) — not simply restated,
+  since the object graph it needs to address collision-safely across
+  mutually-untrusted registries has changed again.
 - **The adversarial review pass over the full 2026-07-16 revision** (the
   git-representation layer rework and the `eml` integration) **ran
   2026-07-22** — decorrelated rounds over §7 and over the whole document,
   outside §7 — and its fixes are folded into this freshen revision: the
-  §7.4 verification rewrite (B1/B2/B3) and §8 carve-out, the per-entry
+  closure-verification rewrite (B1/B2/B3) and §8 carve-out, the per-entry
   head-monotonicity MUST (§11), the EON re-scoping of static
   fork/freshness claims (§10, §16, Context), and the stale-residue purge.
   The two surety-layer findings it surfaced — the `B(a)` anchor-admission
@@ -1610,10 +1824,17 @@ to one doesn't force a change to another.
   earlier in this same revision's own reasoning — no longer open.
 - **Content_hash tier (OPTIONAL vs. SHOULD/MUST).** Unresolved from the
   original draft, unaffected by this revision.
-- **Protocol-v2 transport dependence.** Now load-bearing in two places
-  instead of one (§10's inclusion proofs and §20's Phase A/B fetch
-  split) — legacy dumb-HTTP remotes degrade further than the original
-  draft anticipated. Accepted as a residual, not solved.
+- **Protocol-v2 transport dependence, narrower than an earlier revision
+  of this section stated.** Load-bearing in exactly one place: §10's
+  lightweight single-leaf inclusion-proof path, which depends on
+  protocol-v2's want-list-based object negotiation and falls back to
+  fetching more than strictly necessary on a legacy dumb-HTTP remote.
+  §20's Phase A/Phase B fetch split no longer carries this dependency
+  at all (§20, §7.4) — the content commit is a minimal, ref-reachable
+  closure by construction, regardless of filtering support, so this
+  section's own earlier claim that filtered fetch was "load-bearing...
+  in two places" is corrected here rather than restated. Accepted as a
+  residual in the one place it remains, not solved.
 - **`eml`'s `Storage` trait, assessed (2026-07-16).** Read
   `polydigest/src/storage.rs`: the trait is genuinely defined at the
   `polydigest` (multi-algorithm combinator) layer, already parameterized
@@ -1657,26 +1878,35 @@ to one doesn't force a change to another.
 
 ### Alt 1: Commit or tag as the record carrier
 
-Rejected for the record's own content (§7.3, §7.4) — records are
-still, unconditionally, blobs, never embedded in commit messages or tag
+Rejected for the record's own content (§7.3) — records are still,
+unconditionally, blobs, never embedded in commit messages or tag
 messages. **This needs a sharper restatement than the original draft
-gave it, because this revision does use commits and tags extensively —
-just never as carriers.** The original rejection reasoning (ancestry-
-shaped baggage, unconstrained bytes, fetch/advertisement nonstandardness)
-was scored against commit/tag-*as-trust-boundary* — a proposal where the
-carrier's own structure would need to be part of what a verifier
-reasons about. That rejection stands, unmodified. What this revision
-adds is a proposal the original elimination pass never separately
-scored: commit/tag-*as-untrusted-DAG-scaffolding*, where the carrier's
-structure does real backend work (cheap ancestry walks, cheap discovery
-signaling) but is never part of the trust boundary, cross-checked
-against the signed payload at every hop. The elegance metric the
-original pass used (mirror invariants, normalization rules, unconstrained
-bytes, fetch/advertisement nonstandardness) was implicitly scored
-*assuming* the carrier had to be trusted; once that assumption is
-dropped, "unconstrained bytes" stops being a security concern and
-becomes purely a backend-hygiene one (documented explicitly, §7.3: fixed
-inert fields, git-native signing slots never checked).
+gave it, and a further correction this revision itself requires: this
+document used to use commits and tags extensively as backend
+scaffolding — just never as carriers — but this revision removes tags
+from that role entirely.** The materialized view chains that replace
+the original fact-tag-chain mechanism (§7.5) are uniformly commits;
+nothing in this design uses a git tag object anywhere, so the "tag as
+untrusted DAG scaffolding" half of this alternative's own rebuttal no
+longer has a live instance to point at — it is retired along with the
+mechanism it used to describe, not merely re-scored. The original
+rejection reasoning (ancestry-shaped baggage, unconstrained bytes,
+fetch/advertisement nonstandardness) was scored against
+commit/tag-*as-trust-boundary* — a proposal where the carrier's own
+structure would need to be part of what a verifier reasons about. That
+rejection stands, unmodified, for records specifically. What this
+document's git-object usage elsewhere demonstrates is a proposal the
+original elimination pass never separately scored: commit-*as-
+untrusted-DAG-scaffolding*, where the carrier's structure does real
+backend work (cheap ancestry walks, cheap discovery signaling) but is
+never part of the trust boundary, cross-checked against the signed
+payload at every hop. The elegance metric the original pass used
+(mirror invariants, normalization rules, unconstrained bytes,
+fetch/advertisement nonstandardness) was implicitly scored *assuming*
+the carrier had to be trusted; once that assumption is dropped,
+"unconstrained bytes" stops being a security concern and becomes purely
+a backend-hygiene one (documented explicitly, §7.3: fixed inert fields,
+git-native signing slots never checked).
 
 ### Alt 2: Tree-container refs for chain liveness, registry side and store side
 
@@ -1822,8 +2052,8 @@ from mattering, which is the opposite of what this system needs.
   drafting pass.
 - [`eml`](https://github.com/Cyphrme/eml) — the formally verified,
   canonical, multi-hash-algorithm Merkle library (`polydigest(cml)@k=2`)
-  this ADR's record-log, closure, and content-commitment structures
-  (§5, §7) are built on, not a hand-rolled construction; see §7.2 for
+  this ADR's record-log structure (§5, §7) is built on, not a
+  hand-rolled construction; see §7.2 for
   the canonicalization argument and the no-prefix design rationale. Not
   yet vendored/pinned as a dependency — implementation work, not
   decided here.
