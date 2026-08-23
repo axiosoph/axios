@@ -321,7 +321,8 @@ resolved here (Open Items).
 ## What changes, and what does not
 
 Every subsection of [ADR-0007](0007-atom-version-integrity-system.md)
-§§1–21 retains content: none is wholly deleted. Four dispositions
+§§1–21 retained content as of this document: none was wholly deleted
+(§6's later exception is noted below the table). Four dispositions
 apply: **survives** (inherited by citation into this document),
 **moves to spec** (normative mechanism content, out of an ADR's genre,
 relocated by a separate pass), **split** (part survives or moves, part
@@ -335,7 +336,7 @@ destination). This is the full map.
 | §3 (genesis-once, facts-forever)                          | **split**                | taxonomy superseded (Decision 2); genesis-once reasoning survives, inherited by citation                        |
 | §4 (anchor vs. position)                                  | **survives**             | inherited by citation; its `[temporal-vector]` ordering rationale is flagged for a later restatement not performed here (Open Items) |
 | §5 (subject shape)                                        | **moves to spec**        | normative field shape, outside this ADR's genre                                                                 |
-| §6 (multi-tree subjects)                                  | **moves to spec**        | same as §5                                                                                                       |
+| §6 (multi-tree subjects)                                  | **moves to spec** as of this document; **superseded and deleted, 2026-08-23** | same as §5, as this document originally had it; the relocation never executed, and is now moot — [ADR-0007 §6](0007-atom-version-integrity-system.md) itself retires multi-tree subjects on the head's ruling (single content tree), so there is no longer any content to move to spec |
 | §7 (record log, checkpoints, closure, fact-tags)          | **split, three ways**    | the record-log/checkpoint structure moves to spec as the spine's own mechanism; fact-tags are superseded (facts move to the cloud, Decision 7); the closure artifact (§7.4) is deleted with no destination (Decision 5) |
 | §8 (ref-leaf discriminator)                               | **moves to spec**        | a governing rule, not a rationale                                                                               |
 | §9 (ref format)                                           | **moves to spec**        | `refs/atom/pub/{label}/{version}` retained; one log survives as the spine (Decision 8)                          |
@@ -352,9 +353,14 @@ destination). This is the full map.
 | §21 (store ref format & GC)                               | **split**                | the ref-format half is superseded by the store's flat `czd → object` keying (Decision 6); GC by ordinary reachability survives and moves to spec |
 
 Ten of twenty-one split rather than surviving or moving wholesale — a
-binary retire-or-keep would have mis-typed roughly half this table.
-Zero are wholly deleted: every one retains something that survives,
-moves, or is inherited.
+binary retire-or-keep would have mis-typed roughly half this table. As
+of this document, zero were wholly deleted: every one retained something
+that survived, moved, or was inherited. **That changed 2026-08-23:**
+§6's "moves to spec" disposition never executed, and [ADR-0007
+§6](0007-atom-version-integrity-system.md)
+itself retires multi-tree subjects outright, on the head's ruling. §6
+is now the one row of twenty-one that is wholly deleted rather than
+split, moved, or surviving.
 
 This document inherits by citation only §§1, 2, 4, 18, and §3's
 reasoning (Decisions 1–4 above), and carries §19's refutation in

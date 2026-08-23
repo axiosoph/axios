@@ -252,11 +252,9 @@ this document elaborates, not a metaphor:
    "bearing facts" — the two are genuinely different things and are
    verified by different mechanisms (§7, §9).
 2. **The verified content tree** — once the record closure verifies,
-   subjects materialize (composed via the composition model's `⊕`
-   disjointness law where more than one subject is declared), each
-   identified unambiguously by its own `content_hash` (that subject's
-   content-tree digest, §5) regardless of which physical object store
-   holds the bytes.
+   the publish's one subject materializes, identified unambiguously by
+   its own `content_hash` (that subject's content-tree digest, §5)
+   regardless of which physical object store holds the bytes.
 3. **The built artifact / runtime closure** — what HTC's execution layer
    composes from the verified tree, per the record closure's
    description. Layer 3 itself has (at least) three representations,
@@ -537,10 +535,10 @@ deliberately *not* a field:
 ### 5. Subject shape [atom-subject-shape]
 
 A subject is `{path, content_hash, tree}` — **not** its own `position`.
-Every subject in a publish is verified against that publish's own
-top-level `position` field (§4) — there is exactly one position per
-publish, shared by every subject it declares (§6), never a second,
-independently-declared position per subject.
+A publish declares exactly one subject, verified against that publish's
+own top-level `position` field (§4) — never a second, independently-
+declared position, and never a second subject (§6 records why a publish
+once could declare more than one, and why that is retired).
 
 - **`path`, `content_hash`** — verification and placement.
   `position.tree/path` is a deterministic function of two immutable
@@ -570,19 +568,17 @@ independently-declared position per subject.
   **There is no closure-level content commitment field.** The original
   derivation's two-leaf closure structure — a `content_commitment` field
   defined as an `eml` root folding every declared subject's `content_hash`
-  together — is deleted along with the closure commit that carried it
-  (§7.4): nothing signed was ever checked against that fold, so it
-  verified nothing beyond what each subject's own `content_hash` already
-  verifies on its own. Multi-subject verification does not need a
-  replacement aggregate: §6's sibling constraint already gives the whole
-  declared set one common tree, rooted at `P = dirname(main_subject.path)`,
-  and that tree is exactly what the content commit's own tree (§7.4)
-  equals. A verifier holding the content commit therefore checks each
-  declared subject the same way regardless of how many are declared — walk
-  the content commit's tree to `path`, recompute `content_hash` over what
-  is found there, compare to the signed value — with no separate fold step
-  and nothing left ambiguous about which subject a single tree slot
-  represents.
+  together (from the since-retired multi-subject design, §6) — is
+  deleted along with the closure commit that carried it (§7.4): nothing
+  signed was ever checked against that fold, so it verified nothing
+  beyond what the subject's own `content_hash` already verifies on its
+  own. With exactly one subject per publish, no replacement aggregate is
+  needed either: the content commit's own tree (§7.4) *is* the subject's
+  tree at `path`. A verifier holding the content commit checks the
+  publish the same way regardless — walk the content commit's tree to
+  `path`, recompute `content_hash` over what is found there, compare to
+  the signed value — with no fold step and nothing ambiguous about what
+  the tree represents.
 - **`tree`** — the git tree OID that `position.tree/path` resolves to,
   stored as a checked cache, not independent information: it equals
   the result of that lookup, and a mismatch is a verification failure
@@ -641,7 +637,19 @@ corroboration and the anchor's own record log gives the authoritative
 ordering. Recorded as an option the design leaves open, not a requirement;
 the normative `position` definition (§4) is unchanged.
 
-### 6. Multi-tree subjects, scoped and bounded to a sibling neighborhood [atom-multi-tree]
+### 6. Multi-tree subjects, scoped and bounded to a sibling neighborhood — RETIRED 2026-08-23 [atom-multi-tree]
+
+**Retired, not amended: an atom is a single content tree.** A publish
+declares exactly one subject (§5); everything below this note is kept as
+decision history — what was adopted, why, and why it no longer holds —
+not a live mechanism. `docs/specs/atom-transactions.md`'s own definition
+already states the current rule directly: "An atom carries no source
+history — it is a single content tree."
+
+What follows through the rest of this section is the original
+derivation, unmodified except where noted, describing the multi-tree
+design as it stood from its 2026-07-16 sibling-constraint refinement
+until today's reversal:
 
 A publish MAY declare more than one subject tree — every subject verified
 against the same single `position` field the publish record itself
@@ -688,6 +696,64 @@ a check; a materialization-time containment check remains as defense in
 depth for the intra-tree escape case only. Composition across multiple
 subjects at one position uses the composition model's own `⊕` law
 (disjoint union, conflict surfaces as an error, never silently resolved).
+
+**Reversed (2026-08-23), on the head's ruling.** The primary ground is
+coherence with what an atom is for, not implementation cost. Multi-tree
+subjects are a second packaging mechanism operating inside the packaging
+system: a way to bundle files from a separate directory into a publish
+without going through the atom boundary. By this design's own logic
+(§1), files another package needs from a different directory *are*
+another atom, and the relationship between the two is a dependency — a
+relationship the system already models and already has a mechanism for.
+Multi-tree let that relationship be smuggled in as a subtree declaration
+instead of expressed as a dependency. Paraphrasing the head: having more
+than one tree undermines the atom's purpose; if a package needs files
+from another directory, that should rightly be another atom, and
+building an alternate pseudo-package system inside the main one is not
+wanted. The secondary ground is the cost asymmetry the sibling
+constraint above was already straining against: a packager whose files
+span directories can move them under one directory at zero protocol
+cost; the containment, ordering, and disjointness machinery this section
+built to make that same thing safe for verifiers was borne entirely on
+our side, indefinitely, for every publish and every consumer.
+
+**What is cut, in full:** the multi-tree subject declaration itself (a
+publish now carries exactly one `path`/`content_hash`/`tree`, per §5);
+the sibling constraint and its path-segment containment check
+(normalize-then-component-boundary-compare against `P`); `.`/`..`
+normalization and repo-root-escape rejection as a subject-declaration
+concern (content-hash computation still normalizes paths for its own
+unrelated reasons, unaffected); "declaration order settles the main
+subject" and the "main subject" / "additional subject" vocabulary
+entirely; the composition model's `⊕` disjointness law as applied at the
+subject-composition scale (§1 above; `⊕` itself is unaffected elsewhere
+in the composition model); per-subject `content_hash` verification
+against a shared `position` (§5, now stated for the one subject only);
+and the one-tree-slot-many-subjects handling in the store's admission
+check (§20).
+
+**What this costs.** Two cases motivated multi-tree, and the reversal
+does not treat them symmetrically. The packager-disorganization case is
+addressed directly by the ruling: move the files under one directory,
+a one-time, packager-side fix. The load-bearing symlink case is
+different in kind, and — per the same reasoning that grounds this
+reversal — is not actually a lost capability: a symlink reaching outside
+the atom's directory names a dependency on content that, by this
+design's own logic, belongs to another atom; multi-tree let that
+dependency be expressed in the wrong register (a smuggled subtree)
+rather than the right one (a declared dependency). The narrower,
+mechanical question this left — whether such a symlink is rejected at
+publish time or preserved as-is — is decided, not merely absorbed by
+that reasoning: rejecting it would itself assume an atom is a
+standalone artifact, which the composition model this system is built
+against contradicts (a symlink escaping its own atom's tree is often
+*correct*, resolved only once a consuming composition supplies its
+target). It is detected and reported at publish time, never rejected on
+that basis alone, specified as
+[`[symlink-escape-reported]`](../specs/atom-transactions.md#symlink-escape-reported)
+in `docs/specs/atom-transactions.md`, alongside
+`[content-hash-algorithm]`'s own symlink leaf-digest rule, where
+publish-time content validation belongs.
 
 ### 7. The git object model: an append-only record log, checkpoints, a content commit, and materialized view chains [atom-git-object-model]
 
@@ -860,7 +926,7 @@ unchanged by its existence.
 
 **7.4. The content commit: a demoted, minimal fetch handle for one
 publish's content.** A publish's content — the same tree
-`position:path` already resolves to for each declared subject (§5) —
+`position:path` already resolves to for its one subject (§5) —
 is also the tree of one further git commit, kept deliberately inert:
 parentless, fixed fields (blank author/committer, a zero timestamp, an
 empty message, no signature, no extra headers beyond Coz's own), tree
@@ -1328,9 +1394,11 @@ already has write access (the ordinary case: the maintainers themselves
 are publishing their own project). A repository copy is needed only as a
 fallback, when a third party wants to bootstrap atoms for a project whose
 own maintainers have not and who lacks push access to the original.
-Foreign-`src` multi-subject composition (§6) is rejected for the same
-reason: it would reintroduce a live, uncontrolled cross-project URI
-dependency the trusted-mirror system (§18) exists specifically to avoid.
+Foreign-`src` multi-subject composition (Alt 3, below; the same-repository
+in-repo variant this cites for contrast was §6, since retired) is
+rejected for the same reason: it would reintroduce a live, uncontrolled
+cross-project URI dependency the trusted-mirror system (§18) exists
+specifically to avoid.
 
 **Legacy vs. native, checkable, and content-identical either way
 (superseded, see below).** A publish could use the legacy
@@ -1569,11 +1637,13 @@ requirement that a consumer read and verify the record carried by the
 publish chain before content is reachable at all, and
 [publish-inclusion-required](../specs/atom-store-format.md#publish-inclusion-required).
 Fetch success alone is not sufficient for admission
-either: once the content commit is fetched, each declared subject's own
+either: once the content commit is fetched, the publish's one subject's
 `content_hash` (§5) must be recomputed against the content commit's own
-tree; only a match, for every declared subject, admits the content into
-the store's served space. There is no separate closure-level commitment
-to check on top of this — §5 explains why none is needed.
+tree; only a match admits the content into the store's served space.
+There is no separate closure-level commitment to check on top of this —
+§5 explains why none is needed. (A store admission check once had to
+repeat this per declared subject when a publish could declare more than
+one — §6, since retired.)
 
 ### 21. Store ref format and GC: ordinary git reachability, nothing bespoke [atom-store-refs-and-gc]
 
@@ -1830,10 +1900,11 @@ to one doesn't force a change to another.
   explicit next step after this draft is reviewed: read
   `docs/models/atom-model.md`, `docs/architecture/atom-sad.md`, and the
   atom specs, and enumerate exactly what changes, clause by clause.
-- **Nested subject-path disjointness.** Whether nested declared paths
-  under the sibling constraint (§6) are permitted or forbidden under the
-  existing `⊕` disjointness law needs a direct restatement in the spec
-  pass; unresolved from the original draft, unaffected by this revision.
+- **Nested subject-path disjointness — moot, not resolved.** This item
+  concerned nested declared paths under the sibling constraint (§6);
+  §6 is retired (2026-08-23), a publish now declares exactly one
+  subject, and there is no sibling constraint left for a path to nest
+  under. Retired along with §6, not answered.
 - **Precise interface-descriptor field shape, per stratum.** §13
   commits to the field being mandatory and stratum-aware; the concrete
   schema is spec-drafting work, not decided here.
@@ -1995,9 +2066,15 @@ bought cardinality economy that was never actually needed.
 
 ### Alt 3: Foreign-`src` multi-subject composition (cross-repository atoms)
 
-Rejected (§6, §14), unaffected by this revision. Kept live, it would
+Rejected (§14), unaffected by this revision. Kept live, it would
 reintroduce a hardcoded, uncontrolled cross-project URI dependency
 directly undermining the mirror/canon decentralization system (§18).
+This alternative was originally contrasted against §6's same-repository
+in-repo multi-tree mechanism; §6 is since retired (2026-08-23), on
+different grounds (coherence with the atom boundary, not cross-project
+URI risk), and its retirement does not reopen this one — a foreign `src`
+is rejected on its own terms regardless of what the same-repository case
+does.
 
 ### Alt 4: Per-label head, rather than set-scoped
 
@@ -2119,10 +2196,11 @@ from mattering, which is the opposite of what this system needs.
   the canonicalization argument and the no-prefix design rationale. Not
   yet vendored/pinned as a dependency — implementation work, not
   decided here.
-- [Composition Model](../models/composition-model.md) — the `⊕`
-  disjointness law this ADR reuses at the subject-composition scale
-  (§6), and the package/environment/system trichotomy Layer 3 (§1)
-  instantiates.
+- [Composition Model](../models/composition-model.md) — the
+  package/environment/system trichotomy Layer 3 (§1) instantiates; this
+  ADR no longer reuses the model's `⊕` disjointness law at a
+  subject-composition scale, since §6, the section that did so, is
+  retired.
 - [Execution Model](../models/execution-model.md) — the executable/
   algebraic intent stratification `[atom-interface-mandatory]` (§13) is
   stated against, and §9.10's independent ratification of uniform
