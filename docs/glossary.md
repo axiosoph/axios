@@ -268,13 +268,14 @@ output; the **temporal closure** is the same closure with every fact
 appended since. Keeping them distinct is what lets the permanent
 record stay meaningful forever, no matter what facts later accrue:
 "what is it" and "should I currently trust it" never collapse into
-each other. In the git object model the permanent closure is realized
-as the 2-leaf `eml` closure artifact — leaf 0 the content commitment,
-itself an eml root over the declared subjects (leaf _i_ = subject
-_i_'s own content-tree digest: Merkle, never a flat hash), leaf 1 the
-set's authorization snapshot at publish; the temporal closure is
-computed by layering the fact chain on top. (FAQ entries 1, 8;
-ADR-0007 §1, §5, §7.4.)
+each other. In the git object model both closures are computed
+directly against the anchor's one append-only Merkle log — never a
+separate closure object — by inclusion and consistency proofs over
+that log: the permanent closure folds the log's state as of the
+publish leaf's own position (charter, claim, and publish, verified
+through their signed `under` chain), the temporal closure the log's
+current state with every later fact folded in. (FAQ entries 1, 8;
+ADR-0007 §1, §3, §7.1–§7.2, §10.)
 
 ### Composite
 
