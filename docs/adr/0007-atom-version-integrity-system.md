@@ -1585,11 +1585,15 @@ to one doesn't force a change to another.
      genesis and amendment — rather than five independently-justified
      record kinds each with their own succession or chaining story.
    - **Git objects carry exactly the roles they are structurally suited
-     for and no others.** Blobs hold signed content, unconditionally
-     (§7.3, §7.4). Commits provide cheap, walkable, git-native ancestry
-     for backend bookkeeping only, never trust (§7.3, §7.4). Tags
-     provide cheap, discoverable, git-native "something is attached
-     here" signaling, also never trust (§7.5). Trees are used only where
+     for and no others.** Blobs hold signed record content,
+     unconditionally (§7.3). Commits provide cheap, walkable, git-native
+     ancestry for backend bookkeeping — the record log's checkpoints
+     (§7.3), the content commit (§7.4), and the three view chains
+     (§7.5) — never trust, with exactly one stated exception (§8's
+     carve-out on signed `position` ancestry). No tag object is used
+     anywhere in this design; the discovery role a tag chain once played
+     is served entirely by the view chains, which need no separate
+     object type to be cheap and discoverable. Trees are used only where
      they represent genuine filesystem-shaped content — published
      subject trees (§5, §7.4) — nowhere else. The record log's own Merkle
      structure is **`eml`'s, computed by `eml` over data persisted through
@@ -1598,16 +1602,25 @@ to one doesn't force a change to another.
      opaque storage, not the Merkle structure itself. (An earlier draft had
      git trees *be* the record-log Merkle structure — superseded by §7.2.)
    - **Decomplecting identity from transport.** czd is the only identity
-     a record has; git OIDs, ref names, commit ancestry, and tag chains
-     are all pure, interchangeable transport/query conveniences that
-     never bear on security (§8's ref-leaf-discriminator principle, now
-     explicitly extended to git object type as well).
+     a record has; git OIDs, ref names, and commit ancestry are all
+     pure, interchangeable transport/query conveniences that never bear
+     on security (§8's ref-leaf-discriminator principle — this revision
+     retires the git-object-*type* half of that principle entirely,
+     rather than extending it, since no type choice remains once tags
+     are gone).
 2. **Temporal Volatility (Lowy Audit):**
    - **The record log changes because new events happen; a closure
      changes never, once written.** These are genuinely different
-     volatility profiles and this revision is what makes them live in
-     genuinely different places (§7.3 vs. §7.4) — the original draft's
-     "record closure includes bearing facts" conflated them.
+     volatility profiles, and they still live in genuinely different
+     places: the record log accrues on `refs/atom/log` (§7.3); a
+     closure's own genesis pieces are written once and never reissued
+     (§3), and its content commit's identity is a pure function of its
+     tree, fixed forever once computed (§7.4). A publish's own *view
+     chain* (§7.5) sits in between the two — it moves, but only because
+     new facts about an already-immutable closure keep landing on it,
+     never because the closure itself changes. The original draft's
+     "record closure includes bearing facts" conflated all of this into
+     one volatility profile.
    - **Recency and completeness vary for different reasons and are now
      kept in different places.** Recency depends on active, ongoing
      publisher cooperation (the head rotation job, §11-§12); completeness
@@ -1678,10 +1691,15 @@ to one doesn't force a change to another.
   between atom's own protocol fields and `eml`'s leaves — real,
   load-bearing work, but a materially smaller and better-bounded surface
   than reimplementing canonical Merkle-tree verification from scratch.
-- Partial/filtered git fetch (protocol-v2) is now load-bearing for the
-  Phase A/Phase B fetch-cost split (§20), not merely a nice-to-have —
-  conforming clients that fetch closures without filtering will eagerly
-  pull content they didn't need.
+- The two-refs fetch discipline (§20) is now load-bearing in a
+  different, sharper way than a filtering requirement: applying
+  `refs/atom/log`'s correct depth-1 fetch to a publish view chain is
+  silently wrong, not merely suboptimal — it omits the content commit
+  and hands a client a verified record with none of the bytes it just
+  verified the hash of (§7.4-§7.5). This replaces the original draft's
+  own dependency on protocol-v2 partial/filtered fetch support (§20),
+  which this revision removes entirely rather than making load-bearing
+  in a new way.
 - `[verify-before-fetch]` and stratum-aware `[atom-interface-mandatory]`
   remain real, load-bearing implementation obligations on the store and
   publish tooling respectively.
@@ -1730,9 +1748,9 @@ to one doesn't force a change to another.
   key-management scheme (§3): an owner MAY be backed by a richer
   identity system — [Cyphr](https://github.com/Cyphrme/Cyphr), notably,
   since it already composes with this design trivially via the same
-  embedding mechanism central to §7.4 (a Cyphr principal's own root can
-  sit as a leaf inside an anchor's data, or the reverse, with no new
-  machinery) — in which case ordinary key rotation and device changes
+  embedding mechanism central to §7.1's record log (a Cyphr principal's
+  own root can sit as a leaf inside an anchor's data, or the reverse,
+  with no new machinery) — in which case ordinary key rotation and device changes
   are absorbed entirely inside that system and never touch the anchor's
   own owner-fold at all. GPG's web-of-trust offers a looser version of
   the same idea, without Cyphr's rigor. This mitigates the common case;
