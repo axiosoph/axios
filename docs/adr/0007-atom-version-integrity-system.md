@@ -1188,7 +1188,7 @@ head (ordinal T+1, not the blocked replay case) whose entry for a victim
 label names an *older* `latest_publish` or `fact_commitment` than the
 consumer last saw — silently hiding a recent publish, yank, deprecation,
 or owner-rotation, the exact threat this section exists to defeat. The
-completeness scan (§7.5) does not save it: a hostile mirror can serve a
+completeness scan (§10) does not save it: a hostile mirror can serve a
 truncated-but-internally-consistent prefix. Therefore, on every head a
 consumer accepts, **for each label entry, alongside the global-ordinal
 check: the `latest_publish` it names MUST be at or after (in the anchor
@@ -1216,10 +1216,11 @@ how many labels an anchor publishes.
 history.** A label's per-entry shape is `{latest_publish: czd,
 fact_commitment: czd}`, where `fact_commitment` is the czd of the latest
 signed fact leaf on *`latest_publish`'s own* fact stream — not the git
-tag OID at the tip of its fact-tag chain (the tag chain, §7.5, is an
-untrusted discovery accelerator; the czd names the signed record-log leaf,
-keeping this field czd-typed and backend-agnostic like every other
-identity here), and not an aggregate over every version's fact history. Both fields are governed by §11's per-entry
+commit OID at the tip of its publish view chain (the view chain, §7.5,
+is an untrusted discovery accelerator; the czd names the signed
+record-log leaf, keeping this field czd-typed and backend-agnostic like
+every other identity here), and not an aggregate over every version's
+fact history. Both fields are governed by §11's per-entry
 monotonicity MUST: neither may regress for a label across the heads a
 consumer accepts, independent of the bundle's global freshness ordinal.
 Tier 2 freshness therefore covers the
@@ -1303,38 +1304,57 @@ rule: it falls out of the ancestry check automatically, since `position`
 determines the actual content verified and real project history only
 advances forward from the charter once it exists.
 
-### 15. Liveness of published content: structural, not a bespoke obligation [atom-content-liveness]
+### 15. Liveness of published content and its source: two structural mechanisms, neither bespoke [atom-content-liveness]
 
 The original draft's liveness-pin mechanism (`refs/atom/src/{position}`,
 unconditionally pinning every position value a signed record carries)
 existed to protect a *referenced* commit — one the registry does not
 control the branch hygiene of — from being lost to ordinary project
 housekeeping, since a signed field alone gives git's own garbage
-collector no reason to consider that commit reachable.
+collector no reason to consider that commit reachable. This section now
+separates two liveness questions the original mechanism conflated into
+one pin: keeping a published version's *content* alive, and keeping the
+*source commit* it was built from alive. Both are now structural
+consequences of other mechanisms this document already specifies, and
+neither needs a dedicated ref namespace.
 
-**This is no longer needed for content.** Once a version's actual
-content tree hangs directly off the closure commit (§7.4) — the same
-tree OID `position:path` resolved to, referenced a second time — that
-tree is kept alive by ordinary git reachability from
-`refs/atom/pub/{label}/{version}` for as long as that ref exists,
-regardless of what happens to the original `position` commit or the
-branch it lived on. The thing that needed protecting (the tree) is
-protected automatically, as a structural consequence of §7.4's design,
-not as a separately-engineered obligation.
+**Content liveness.** A publish's content commit (§7.4) is reached only
+by walking the second parent of its own publish view chain's first
+commit (§7.5). For as long as `refs/atom/pub/{label}/{version}` exists —
+pointing at that chain's tip, or any later commit the chain has grown
+to — ordinary git reachability keeps the content commit, its tree, and
+its blobs alive, regardless of what happens to the original `position`
+commit or the branch it lived on. The thing that needed protecting (the
+content) is protected automatically, as a structural consequence of
+§7.4/§7.5's design, not as a separately-engineered obligation.
 
-**`position` itself is now a provenance claim, not a liveness
-guarantee.** The signed payload still records which commit and path a
-subject's content came from — a meaningful, checkable fact for anyone
-who wants to independently confirm it against the original project
-history, when that history happens to still be reachable — but no part
-of ongoing verification requires the original `position` commit object
-to remain fetchable anywhere. Content verification (recomputing each
-subject's own `content_hash` and folding them into the closure's
-`content_commitment`, §5, against the closure's own tree) never
-re-derives from `position` after publish time. This is a real narrowing of what the registry is obligated
-to uphold, made explicitly here rather than left implicit, since it is a
-new call this revision is making, not a restatement of the original
-draft's own liveness-pins section.
+**Source liveness.** Every checkpoint on the main log (`refs/atom/log`,
+§7.3) that records a publish carries the source `position` commit as
+its own second parent. This protects that commit, and everything it
+makes reachable, transitively and for as long as `refs/atom/log`
+exists — for every publish this anchor has ever made, at once. This
+reverses this document's own earlier narrowing (below): `position` is
+protected again, but through an intrinsic edge on the main log rather
+than a dedicated ref an operator has to remember to write and maintain
+per source commit. The dedicated `refs/atom/src/{oid}` namespace this
+section describes above stays superseded — it is not the mechanism that
+does this job, now or previously — but the property it existed to
+provide (source-commit GC protection) is restored, structurally, by
+§7.3's second parent.
+
+**`position` remains a provenance claim first.** The signed payload
+still records which commit and path a subject's content came from — a
+meaningful, checkable fact for anyone who wants to independently confirm
+it against the original project history — and content verification
+(recomputing each subject's own `content_hash`, §5, against the content
+commit's own tree, §7.4) never re-derives from `position` after publish
+time; §7.3's second parent changes only whether that commit stays
+fetchable, never whether verification depends on fetching it. This is a
+narrower claim than an earlier revision of this document made — that
+revision described the registry as having no obligation to keep
+`position` fetchable at all, which this amendment reverses for the
+reason stated above, not because the earlier claim's own reasoning about
+what verification itself needs was wrong.
 
 ### 16. The degradation ladder: completeness and recency are separable [atom-degradation-ladder]
 
@@ -1357,7 +1377,7 @@ default:
 every tier, and this is a genuine strengthening over what the original
 draft claimed.** The original framing treated "did I see everything" as
 bundled into the same recency guarantee head/TTL provides, available
-only at Tier 2. §7.5's mandatory delta-scan separates these: *recency*
+only at Tier 2. §10's consistency-proof mechanism separates these: *recency*
 ("how current is my view, right now") genuinely does require Tier 2's
 signed, TTL-bounded heartbeat — nothing else can prove freshness as of a
 specific moment. But *completeness* ("given whatever view I already
