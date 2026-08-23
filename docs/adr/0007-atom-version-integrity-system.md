@@ -680,51 +680,51 @@ derivation, unmodified except where noted, describing the multi-tree
 design as it stood from its 2026-07-16 sibling-constraint refinement
 until today's reversal:
 
-A publish MAY declare more than one subject tree — every subject verified
-against the same single `position` field the publish record itself
-carries (§5; same-repository only). Justified by two independent, real
-cases: a native atom whose logical unit spans multiple directories in
-one repo, and load-bearing symlink resolution — a cross-tree symlink is
-resolved not by dynamically following it but by declaring its target as
-its own independently-verified subject.
-
-**Sibling constraint (2026-07-16 addition):** let `P =
-dirname(main_subject.path)`, where the main subject is whichever is
-declared first. Every additional declared subject's `path` MUST lie
-under `P` — a direct sibling of the main tree, or nested arbitrarily
-deep beneath one — and MUST NOT reach above `P`. This is a
-**path-segment containment** check, not a raw string-prefix one: normalize
-both `P` and each subject `path` first (resolve `.`/`..`, reject any that
-escapes the repo root), then require each subject path to equal `P` or lie
-under it *at a component boundary* — `P = foo` contains `foo/bar` but not
-`foobar`, the string-prefix footgun a naive check leaves open. No new
-field is needed, and no separate "primary subject" flag is needed either,
-since declaration order settles it.
-
-This closes a real gap the unconstrained version left open: composing
-subjects from arbitrary, unrelated repository locations either drags in
-enough of the source tree's real skeleton to keep relative references
-(imports, symlinks, includes) meaningful, or silently breaks them. The
-sibling constraint matches the symlink-resolution motivating case almost
-exactly as-is — a symlink using one `../` naturally lands on a sibling of
-its own containing directory — while forbidding reach into unrelated,
-distant parts of a monorepo. That line is deliberate, not an accidental
-limitation: it keeps the protocol's own reasoning bounded to one
-relationship (sibling-or-descendant) rather than an open-ended "how far
-can a subject reach," and it pushes the cost of needing to reach further
-onto a one-time, deliberate maintainer choice — position the atom's
-manifest such that what it needs is a sibling — rather than onto every
-downstream verifier and composition tool indefinitely. It also makes
-materialization a guarantee rather than best-effort: reproduce `P`'s own
-layout, pruned to the declared subset, and relative references keep
-working because relative positions are preserved exactly.
-
-An undeclared symlink target is inert (nothing outside the union of
-declared, verified subjects is ever materialized), not merely blocked by
-a check; a materialization-time containment check remains as defense in
-depth for the intra-tree escape case only. Composition across multiple
-subjects at one position uses the composition model's own `⊕` law
-(disjoint union, conflict surfaces as an error, never silently resolved).
+> A publish MAY declare more than one subject tree — every subject verified
+> against the same single `position` field the publish record itself
+> carries (§5; same-repository only). Justified by two independent, real
+> cases: a native atom whose logical unit spans multiple directories in
+> one repo, and load-bearing symlink resolution — a cross-tree symlink is
+> resolved not by dynamically following it but by declaring its target as
+> its own independently-verified subject.
+>
+> **Sibling constraint (2026-07-16 addition):** let `P =
+> dirname(main_subject.path)`, where the main subject is whichever is
+> declared first. Every additional declared subject's `path` MUST lie
+> under `P` — a direct sibling of the main tree, or nested arbitrarily
+> deep beneath one — and MUST NOT reach above `P`. This is a
+> **path-segment containment** check, not a raw string-prefix one: normalize
+> both `P` and each subject `path` first (resolve `.`/`..`, reject any that
+> escapes the repo root), then require each subject path to equal `P` or lie
+> under it *at a component boundary* — `P = foo` contains `foo/bar` but not
+> `foobar`, the string-prefix footgun a naive check leaves open. No new
+> field is needed, and no separate "primary subject" flag is needed either,
+> since declaration order settles it.
+>
+> This closes a real gap the unconstrained version left open: composing
+> subjects from arbitrary, unrelated repository locations either drags in
+> enough of the source tree's real skeleton to keep relative references
+> (imports, symlinks, includes) meaningful, or silently breaks them. The
+> sibling constraint matches the symlink-resolution motivating case almost
+> exactly as-is — a symlink using one `../` naturally lands on a sibling of
+> its own containing directory — while forbidding reach into unrelated,
+> distant parts of a monorepo. That line is deliberate, not an accidental
+> limitation: it keeps the protocol's own reasoning bounded to one
+> relationship (sibling-or-descendant) rather than an open-ended "how far
+> can a subject reach," and it pushes the cost of needing to reach further
+> onto a one-time, deliberate maintainer choice — position the atom's
+> manifest such that what it needs is a sibling — rather than onto every
+> downstream verifier and composition tool indefinitely. It also makes
+> materialization a guarantee rather than best-effort: reproduce `P`'s own
+> layout, pruned to the declared subset, and relative references keep
+> working because relative positions are preserved exactly.
+>
+> An undeclared symlink target is inert (nothing outside the union of
+> declared, verified subjects is ever materialized), not merely blocked by
+> a check; a materialization-time containment check remains as defense in
+> depth for the intra-tree escape case only. Composition across multiple
+> subjects at one position uses the composition model's own `⊕` law
+> (disjoint union, conflict surfaces as an error, never silently resolved).
 
 **Reversed (2026-08-23), on the head's ruling.** The primary ground is
 coherence with what an atom is for, not implementation cost. Multi-tree
