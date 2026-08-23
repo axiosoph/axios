@@ -512,19 +512,26 @@ depends: [charter-ancestry, backend-ancestry-sound, backend-ancestry-queryable, 
 #### [charter-commit-format]
 
 A charter transaction MUST be stored as a
-**charter commit**: a commit whose `tree` is the well-known empty tree
-(`EMPTY_TREE`), whose author and committer are `ATOM_AUTHOR` at
-`ATOM_TIMESTAMP`, and whose commit `message` is the charter `CozMessage`
-(JSON, `typ: "atom/charter"`). A charter commit MUST have **zero git
-parents** — genesis-once (atom-transactions.md
+**charter commit**: a commit whose `tree` is the anchor's record-log
+tree at the point the charter genesis leaf was appended
+(`LogTree`, Type Declarations, above — `[log-tree-opaque]`), whose
+author and committer are `ATOM_AUTHOR` at `ATOM_TIMESTAMP`, and whose
+commit `message` is fixed and inert (`ATOM_MESSAGE`) —
+[log-anchored-message-fixed](#log-anchored-message-fixed). The charter
+`CozMessage` (JSON, `typ: "atom/charter"`) is read as the log leaf
+this commit's `tree` carries, never from the commit's own message
+([record-is-log-leaf](#record-is-log-leaf)). A charter commit MUST
+have **zero git parents** — genesis-once (atom-transactions.md
 `[atom-genesis-and-facts]`) means there is exactly one charter commit
 per anchor, ever, and it is always parentless; "founding" and
 "successor" are not two cases, because there is no successor case. The
-charter's identity is its czd (`czd(charter)`), and this single
-commit's czd is the atom-set `Anchor` (`[charter-anchor]`), permanently.
+charter's identity is its czd (`czd(charter)`), computed over the
+signed charter payload's own bytes — never over this git object — and
+this single commit's czd is the atom-set `Anchor` (`[charter-anchor]`),
+permanently.
 
-This adopts the claim commit's *object shape* (empty tree, CozMessage in
-the message, lightweight object) for the same reason: cheap to fetch,
+This adopts the claim commit's *object shape* (log-tree-carrying,
+lightweight object) for the same reason: cheap to fetch,
 isolated from the main branch DAG, protected from GC by its own ref
 ([charter-ref-by-czd](#charter-ref-by-czd)). Unlike the (retired)
 successor-chaining design this constraint used to specify, there is no
@@ -542,19 +549,74 @@ evaluator: test
 depends: [charter-ref-by-czd, atom-genesis-and-facts]
 ```
 
-#### [charter-message-is-coz]
+#### [charter-message-is-coz] — RETIRED 2026-08-23
 
-The commit message of a charter commit
-MUST be a valid, complete `CozMessage` JSON object whose payload has
-`typ: "atom/charter"`. The message MUST be parseable as JSON and MUST
-pass Coz verification. No additional text, headers, or formatting
-SHOULD be present outside the CozMessage JSON. (The charter analogue of
-[claim-message-is-coz](#claim-message-is-coz).)
+**Retired, not amended.** This constraint required a charter commit's
+own `message` field to carry a valid, complete charter `CozMessage`
+directly, and to pass Coz verification as read from that field. The
+record-anchored publishing design supersedes this for every
+log-anchored commit this backend writes: the signed record is a leaf
+inside the record log, carried in the commit's `tree`
+([charter-commit-format](#charter-commit-format)), never a second copy
+in the commit's own `message`. `[log-anchored-message-fixed]` and
+`[record-is-log-leaf]`, below, restate the identical Coz-verification
+obligation against the log leaf instead of the message field — the
+requirement that a charter's signed payload MUST parse and MUST pass
+Coz verification is unchanged; only where a verifier reads the bytes
+from has changed.
+
+```claim
+kind: constraint
+evaluator: none
+```
+
+#### [log-anchored-message-fixed]
+
+Every log-anchored commit this backend
+writes — a charter commit, a claim commit, a charter or claim fact
+commit, or any commit in a publish's materialized view chain
+(`CharterCommitFormat`, `ClaimCommitFormat`, `FactCommitFormat`,
+`PublishChainCommitFormat`, Type Declarations, above) — MUST have a
+`message` field equal to `ATOM_MESSAGE` (fixed, empty) and MUST NOT
+carry a `CozMessage`, or any other signed or unsigned content, in its
+own `message`. This is the git-encoding half of
+[log-tree-opaque](#log-tree-opaque)'s doctrine: the record lives once,
+as a log leaf inside the commit's `tree`; a second copy in `message`
+would be an unchecked duplicate with nothing to keep it in agreement
+with the leaf ([record-is-log-leaf](#record-is-log-leaf) states the
+positive half — where the record IS read from).
 
 ```claim
 kind: constraint
 evaluator: test
-because: [claim-message-is-coz]
+depends: [log-tree-opaque]
+```
+
+#### [record-is-log-leaf]
+
+For any log-anchored commit this backend
+writes, the signed record it represents (a `CharterPayload`,
+`ClaimPayload`, `FactPayload`, `PublishPayload`, or amendment payload)
+MUST be read as the corresponding leaf inside the record log — the
+`LogTree` the commit's own `tree` field carries
+([log-tree-opaque](#log-tree-opaque)) — and MUST NOT be read from, or
+expected to be present in, the commit's own `message`
+([log-anchored-message-fixed](#log-anchored-message-fixed)). A record
+so read MUST be parseable as a valid, complete `CozMessage` JSON
+object whose payload's `typ` matches the scope this commit records
+(`atom/charter`, `atom/claim`, a fact `typ`, or `atom/publish`), and
+MUST pass Coz verification. This is the log-anchored replacement for
+every one of this document's retired per-scope message-validation
+constraints (`[charter-message-is-coz]`,
+`[claim-message-is-coz]`,
+`[publish-message-is-coz]`): the verification
+obligation these named is unchanged, only where the bytes are read
+from.
+
+```claim
+kind: constraint
+evaluator: test
+depends: [log-tree-opaque, log-anchored-message-fixed]
 ```
 
 #### [charter-succession-via-prior] — RETIRED 2026-08-05
@@ -595,8 +657,8 @@ evaluator: none
 
 Owner-set membership change and key rotation
 (atom-transactions.md `[charter-owner-fact]`) are stored as a **charter
-fact commit** (`FactCommitFormat`, Type Declarations, above): an
-empty-tree commit whose `parent` is the charter commit itself (first
+fact commit** (`FactCommitFormat`, Type Declarations, above): a
+log-tree-carrying commit whose `parent` is the charter commit itself (first
 fact) or the previous charter fact commit (subsequent facts), forming a
 chain rooted at, but never replacing, the permanent charter commit. The
 ref `refs/atom/charter/d/{charter_czd}` (unchanged — the segment is
@@ -621,7 +683,9 @@ A resolver MUST be able to obtain the
 charter's `src` for the `[temporal-vector]` ancestry check by resolving
 the charter commit (walking `[charter-fact-chain]`'s tip back to its
 root, if any facts have landed) and reading the `src` field of its
-signed `CharterPayload` — one object read once the root is reached.
+signed `CharterPayload` — the log leaf the root commit's own `tree`
+carries ([record-is-log-leaf](#record-is-log-leaf)) — one further read
+once the root is reached.
 Locating the charter for a known anchor costs exactly one ref lookup
 (`refs/atom/charter/d/{charter_czd}`, keyed by the anchor's own czd —
 `[charter-ref-by-czd]`) plus the fact chain's own walk to its root,
@@ -662,36 +726,43 @@ depends: [fs-source-contract]
 
 #### [claim-detached]
 
-A claim commit MUST have the well-known empty
-tree as its `tree` and no extra headers, and MUST be parentless —
-genesis-once (`[atom-genesis-and-facts]`): there is exactly one claim
-commit per label, ever; a claim commit with a parent is malformed
-(there is no "subsequent claim"). Ownership change (key rotation,
-transfer, seizure) is a claim-owner **fact** commit chained onto the
-claim afterward (`[claim-fact-chain]`), not a second claim commit — see
-that constraint for the chain's own shape and the resolver's walk. The
-claim's `src` is carried in the signed `ClaimPayload` (the commit
-message), which contributes to the commit hash. This design ensures
-claims are lightweight (empty tree = no blob download), the full
-ownership history is structurally auditable by walking the fact chain,
-and claim objects are isolated from the main branch DAG.
+A claim commit MUST have the anchor's
+record-log tree at the point the claim genesis leaf was appended as
+its `tree` (`LogTree`, `[log-tree-opaque]`) and no extra headers, and
+MUST be parentless — genesis-once (`[atom-genesis-and-facts]`): there
+is exactly one claim commit per label, ever; a claim commit with a
+parent is malformed (there is no "subsequent claim"). Ownership change
+(key rotation, transfer, seizure) is a claim-owner **fact** commit
+chained onto the claim afterward (`[claim-fact-chain]`), not a second
+claim commit — see that constraint for the chain's own shape and the
+resolver's walk. The claim's `src` is carried in the signed
+`ClaimPayload`, read as the log leaf this commit's `tree` carries
+([record-is-log-leaf](#record-is-log-leaf)) — the czd computed over
+those payload bytes is what ties the claim to its source revision
+cryptographically; the git object's own hash carries no such binding
+(`[log-anchored-message-fixed]`). This design ensures claims are
+lightweight, the full ownership history is structurally auditable by
+walking the fact chain, and claim objects are isolated from the main
+branch DAG.
 
 ```claim
 kind: constraint
 evaluator: test
 ```
 
-#### [claim-message-is-coz]
+#### [claim-message-is-coz] — RETIRED 2026-08-23
 
-The commit message of a claim commit MUST
-be a valid, complete `CozMessage` JSON object whose payload has
-`typ: "atom/claim"`. The message MUST be parseable as JSON and MUST
-pass Coz verification. No additional text, headers, or formatting
-SHOULD be present outside the CozMessage JSON.
+**Retired, not amended.** This constraint required a claim commit's
+own `message` field to carry a valid, complete claim `CozMessage`
+directly. Superseded for the same reason as
+`[charter-message-is-coz]`:
+[record-is-log-leaf](#record-is-log-leaf) restates the identical
+Coz-verification obligation against the log leaf the commit's `tree`
+carries instead of the message field.
 
 ```claim
 kind: constraint
-evaluator: test
+evaluator: none
 ```
 
 #### [claim-fact-chain]
@@ -700,7 +771,7 @@ Ownership change on a label (key rotation,
 transfer, or a charter-fold seizure — atom-transactions.md
 `[claim-owner-fact]`'s owner-fact/governance-fact split) is stored as a
 **claim fact commit** (`FactCommitFormat`, Type Declarations, above):
-an empty-tree commit whose `parent` is the claim commit itself (first
+a log-tree-carrying commit whose `parent` is the claim commit itself (first
 fact) or the previous claim fact commit (subsequent facts), forming a
 chain rooted at, but never replacing, the permanent claim commit. The
 ref `refs/atom/claims/pub/{label}` (registry) MUST point to the
@@ -741,12 +812,15 @@ evaluator: none
 #### [publish-commit-format]
 
 The chain's first commit — the
-publish itself — MUST have the well-known empty tree
-(`EMPTY_TREE`) and MUST target the atom (content) commit
+publish itself — MUST have the anchor's record-log tree at the point
+the publish leaf was appended as its `tree` (`LogTree`,
+`[log-tree-opaque]`) — never the well-known empty tree — and MUST
+target the atom (content) commit
 ([snapshot-parentless](#snapshot-parentless)) as its sole git parent; it MUST NOT target
 any other object, and MUST NOT be itself parentless. Every later
 commit in the SAME publish's chain (a fact about this publish) MUST
-target the immediately preceding commit in that chain instead, and
+likewise carry the log's own tree at ITS append point, MUST target the
+immediately preceding commit in that chain instead, and
 MUST NOT target the content commit directly — only the chain's first
 commit reaches it. A commit in a publish chain MUST NOT target a
 regular commit, tree, or blob outside these two cases
@@ -778,11 +852,12 @@ evaluator: none
 #### [publish-claim-binding]
 
 The publish chain's first commit's
-CozMessage payload MUST contain a `claim` field whose value is the
-czd of the authorizing claim. The claim commit is looked up via
-`refs/atom/claims/d/{czd}` (or `refs/atom/claims/pub/{label}` in the
-originating registry). No extra git header is needed — the signed
-payload is the sole binding.
+CozMessage payload — read as the log leaf the commit's `tree` carries
+([record-is-log-leaf](#record-is-log-leaf)) — MUST contain a `claim`
+field whose value is the czd of the authorizing claim. The claim
+commit is looked up via `refs/atom/claims/d/{czd}` (or
+`refs/atom/claims/pub/{label}` in the originating registry). No extra
+git header is needed — the signed payload is the sole binding.
 
 ```claim
 kind: constraint
@@ -801,20 +876,22 @@ kind: constraint
 evaluator: none
 ```
 
-#### [publish-message-is-coz]
+#### [publish-message-is-coz] — RETIRED 2026-08-23
 
-The message of a publish chain's
-first commit MUST be a valid, complete `CozMessage` JSON object whose
-payload has `typ: "atom/publish"`. The message MUST be parseable as
-JSON and MUST pass Coz verification. No additional text or formatting
-SHOULD be present outside the CozMessage JSON. (The publish analogue
-of [charter-message-is-coz](#charter-message-is-coz) and
-[claim-message-is-coz](#claim-message-is-coz).)
+**Retired, not amended.** This constraint required a publish chain's
+first commit to carry a valid, complete publish `CozMessage` directly
+in its own `message` field. Superseded for the same reason as
+`[charter-message-is-coz]` and
+`[claim-message-is-coz]`:
+[record-is-log-leaf](#record-is-log-leaf) restates the identical
+Coz-verification obligation against the log leaf the commit's `tree`
+carries instead of the message field — the requirement that a
+publish's signed payload MUST parse and MUST pass Coz verification is
+unchanged; only where a verifier reads the bytes from has changed.
 
 ```claim
 kind: constraint
-evaluator: test
-because: [claim-message-is-coz]
+evaluator: none
 ```
 
 #### [tag-chain-immutable] — RETIRED 2026-08-23
@@ -860,18 +937,27 @@ first commit; every earlier fact and the first commit itself remain
 in the repository's history, walkable from the tip, since nothing in
 this design deletes a chain commit
 ([odb-immutable](#odb-immutable)). Every commit in this chain — the
-first as much as any fact — carries the well-known empty tree, never
-a copy of the anchor's own record-log tree: the "traversal accelerator,
-never a fetch reducer" tree-choice the record log's own checkpoints
-face does not bear on this encoding at all, since no commit here ever
-carries such a copy in the first place — the signed payload lives in
-the commit message, and the tree stays empty regardless of which way
-that choice is made elsewhere.
+first as much as any fact — carries the anchor's own record-log tree
+at the point ITS leaf was appended, never the well-known empty tree
+([log-tree-opaque](#log-tree-opaque)). This is not a performance nicety: a client
+already holding a chain commit can recompute the log's own root from
+the tree it carries and detect a relevant fact the chain's own edges
+omitted, exactly the "traversal accelerator, never a fetch reducer"
+property ADR-0007 §7.5 states for the record portion of every
+materialized view — publish included. An earlier revision of this
+constraint claimed the opposite (that this chain's commits carry the
+well-known empty tree because the signed payload lives in the message
+instead) — that was wrong, not merely imprecise: the signed payload
+was never load-bearing in the commit's own `message`
+([log-anchored-message-fixed](#log-anchored-message-fixed),
+[record-is-log-leaf](#record-is-log-leaf)), and a synthesized empty
+tree would have left a client holding a publish chain with no way to
+check it against the log it is drawn from.
 
 ```claim
 kind: constraint
 evaluator: test
-depends: [publish-commit-format, odb-immutable]
+depends: [publish-commit-format, odb-immutable, log-tree-opaque, log-anchored-message-fixed, record-is-log-leaf]
 ```
 
 #### [coz-bit-perfect]
@@ -1347,13 +1433,13 @@ backend by creating a parentless charter commit.
   `prior` field to resolve against a prior charter, because there is no
   prior charter to chain to (Type Declarations, above). The charter
   `CozMessage` MUST be valid
-  ([charter-message-is-coz](#charter-message-is-coz)). Authorization
+  ([record-is-log-leaf](#record-is-log-leaf)). Authorization
   of a charter over a source that already carries pre-charter claims is
   governed protocol-side by atom-transactions.md
   `[charter-transition]` (the bootstrap gate); the backend enforces
   storage, not that authorization decision.
-- **POST**: A parentless charter commit exists with the well-known empty
-  tree and the charter `CozMessage` as its message
+- **POST**: A parentless charter commit exists with the anchor's
+  record-log tree and a fixed, inert message
   ([charter-commit-format](#charter-commit-format)), referenced by
   `refs/atom/charter/d/{charter_czd}` ([charter-ref-by-czd](#charter-ref-by-czd)). The
   charter's czd is thereby the atom-set `Anchor`, permanently. The charter is
@@ -1365,7 +1451,7 @@ backend by creating a parentless charter commit.
 ```claim
 kind: constraint
 evaluator: test
-depends: [atom-genesis-and-facts, no-second-charter-genesis, charter-message-is-coz, charter-transition, charter-commit-format, charter-ref-by-czd, refs-atomic-multi]
+depends: [atom-genesis-and-facts, no-second-charter-genesis, record-is-log-leaf, charter-transition, charter-commit-format, charter-ref-by-czd, refs-atomic-multi]
 ```
 
 #### [claim-transition-git]
@@ -1382,9 +1468,11 @@ detached claim commit.
   never by a second claim commit. The claim `CozMessage` MUST be valid
   and include a `key` field. A source revision (`src`) for the claim
   point MUST be provided.
-- **POST**: A claim commit exists, parentless, with the well-known
-  empty tree and the CozMessage (containing `src`) as the commit
-  message. The ref `refs/atom/claims/pub/{label}` points to it. No
+- **POST**: A claim commit exists, parentless, with the anchor's
+  record-log tree (carrying the CozMessage, containing `src`, as a log
+  leaf — never in the commit's own message) and a fixed, inert message
+  ([claim-detached](#claim-detached)). The ref
+  `refs/atom/claims/pub/{label}` points to it. No
   protective ref is written for the claim's source revision — GC
   protection for it is the anchor's record log's job, not this
   transition's (see the Registry Refs prose above).
