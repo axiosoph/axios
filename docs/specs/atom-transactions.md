@@ -1513,6 +1513,40 @@ kind: constraint
 evaluator: test
 ```
 
+#### [symlink-escape-reported]
+
+A symlink in a publish's content whose target — resolved relative to its
+own location in the content tree — does not resolve to a path within the
+content root MUST be detected at publish time and MUST be reported to
+the publisher. Detection MUST NOT, on its own, cause the publish to be
+rejected.
+
+This is not a relaxed version of a rejection rule; it is the correct
+behavior given what an atom is. Atoms are composed
+([Composition Model](../models/composition-model.md)), materialized by
+HTC into an FHS view alongside other atoms in the same composition, and
+a symlink escaping its own atom's tree is frequently *correct*: its
+target may be an FHS location, or a path a sibling atom in the same
+composition materializes — resolvable only once composition supplies
+it. Rejecting such a publish would encode the assumption that an atom is
+a standalone artifact, which contradicts the composition model this
+specification is built against. (This replaces the mechanism [ADR-0007
+§6](../adr/0007-atom-version-integrity-system.md) once used for the same
+case — declaring the symlink's target as its own independently-verified
+subject; that mechanism is retired, and an atom is a single content tree,
+above.)
+
+The report MUST state a fact, never a verdict: that the link does not
+resolve within the atom's own content tree, and will resolve only if the
+consuming composition supplies its target. It MUST NOT characterize this
+as an error or a defect — whether it is one is knowable only to the
+publisher.
+
+```claim
+kind: constraint
+evaluator: test
+```
+
 #### [amendment-field-classification]
 
 Every `PublishPayload` field is
