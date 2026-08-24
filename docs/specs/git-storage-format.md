@@ -356,7 +356,8 @@ charter's `src` commits to its entire ancestry.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [anchor-hash-agile]
@@ -376,7 +377,8 @@ NOT rehash, truncate, or transform them.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [atom-genesis-and-facts]
 ```
 
@@ -404,7 +406,8 @@ internal encoding.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [snapshot-deterministic]
@@ -426,7 +429,8 @@ record, never inside the content object itself).
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [snapshot-parentless]
@@ -441,7 +445,8 @@ commit's own parent chain, which stays empty. (Satisfies
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 because: [atom-detached]
 ```
 
@@ -468,7 +473,8 @@ left for this constraint to bind.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [temporal-vector]
@@ -508,7 +514,8 @@ and no other.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [charter-ancestry, backend-ancestry-sound, backend-ancestry-queryable, ancestry-hash-committed]
 ```
 
@@ -549,7 +556,8 @@ identity.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [charter-ref-by-czd, atom-genesis-and-facts]
 ```
 
@@ -571,7 +579,8 @@ from has changed.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [log-anchored-message-fixed]
@@ -592,7 +601,8 @@ positive half — where the record IS read from).
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [log-tree-opaque]
 ```
 
@@ -619,7 +629,8 @@ from.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [log-tree-opaque, log-anchored-message-fixed]
 ```
 
@@ -654,7 +665,8 @@ States, below, covers it directly.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [charter-fact-chain]
@@ -677,7 +689,8 @@ at the root, status layered on top by appending, never replacing.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [charter-commit-format, no-second-charter-genesis]
 ```
 
@@ -702,7 +715,8 @@ commit ancestry.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [no-second-charter-genesis]
 ```
 
@@ -724,7 +738,8 @@ charter-descended revisions anchor to `czd(charter₀)` normally
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [fs-source-contract]
 ```
 
@@ -751,7 +766,8 @@ branch DAG.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [claim-message-is-coz] — RETIRED 2026-08-23
@@ -766,7 +782,8 @@ carries instead of the message field.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [claim-fact-chain]
@@ -793,7 +810,8 @@ unified fact mechanism serves every scope."
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [claim-detached, no-second-claim-genesis]
 ```
 
@@ -810,7 +828,8 @@ targeting rule for the chain's own commits.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [publish-commit-format]
@@ -834,7 +853,8 @@ chain has no path at all to a source revision commit.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [snapshot-parentless]
 ```
 
@@ -850,7 +870,8 @@ commit.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [publish-claim-binding]
@@ -865,7 +886,8 @@ git header is needed — the signed payload is the sole binding.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [publish-tag-message-is-coz] — RETIRED 2026-08-23
@@ -877,7 +899,8 @@ for the publish chain's first commit.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [publish-message-is-coz] — RETIRED 2026-08-23
@@ -895,7 +918,8 @@ unchanged; only where a verifier reads the bytes from has changed.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [tag-chain-immutable] — RETIRED 2026-08-23
@@ -915,7 +939,8 @@ constraint's audit-trail argument now falls out of directly.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [publish-fact-chain]
@@ -960,7 +985,8 @@ check it against the log it is drawn from.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [publish-commit-format, odb-immutable, log-tree-opaque, log-anchored-message-fixed, record-is-log-leaf]
 ```
 
@@ -979,7 +1005,8 @@ discharges [backend-carriage-bit-perfect](atom-backend-contract.md#backend-carri
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [record-is-log-leaf]
 because: [backend-bit-perfect, backend-carriage-bit-perfect]
 ```
@@ -1001,7 +1028,8 @@ constraint makes the reliance explicit rather than implicit.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 because: [backend-store-immutable]
 ```
 
@@ -1040,7 +1068,8 @@ answer. (Discharges
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 because: [backend-ancestry-sound]
 ```
 
@@ -1061,7 +1090,8 @@ minimal mode — it limits blobs, never ancestry.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [ancestry-hash-committed]
 ```
 
@@ -1085,7 +1115,8 @@ that sort, and comparison of raw segments across families is ill-typed.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [backend-seam-typed]
 ```
 
@@ -1111,7 +1142,8 @@ for the git instantiation.)
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [anchor-hash-agile, content-hash-is-tree-digest]
 because: [backend-hash-strength]
 ```
@@ -1133,7 +1165,8 @@ header left to be a caution ABOUT.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [single-active-claim-registry]
@@ -1151,7 +1184,8 @@ commit.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [store-claim-disambiguation]
@@ -1165,7 +1199,8 @@ the publish czd, without coordination.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 ### Ref Layout
@@ -1198,7 +1233,8 @@ label. (Satisfies [atomid-per-source-unique](atom-transactions.md#atomid-per-sou
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 because: [atomid-per-source-unique]
 ```
 
@@ -1219,7 +1255,8 @@ from the scope's own key (`label`, here) with no discovery round trip.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 ##### [registry-ref-version]
@@ -1241,7 +1278,8 @@ payload.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [publish-commit-format, publish-fact-chain]
 ```
 
@@ -1270,7 +1308,8 @@ nothing.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [charter-ref-by-czd, registry-ref-claim, registry-ref-version]
 ```
 
@@ -1316,7 +1355,8 @@ commit's ref persists.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [publish-update-transition]
 ```
 
@@ -1339,7 +1379,8 @@ object store, this MUST be treated as an error.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 ##### [store-ownership-migration] — RETIRED 2026-08-05
@@ -1366,7 +1407,8 @@ needed beyond what `[claim-fact-chain]` already provides.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ##### [store-claim-cleanup]
@@ -1383,7 +1425,8 @@ cleanup is the backend's responsibility.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### Charter Refs (source and store)
@@ -1428,7 +1471,8 @@ same family.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [czd-oid-disjoint, anchor-resolvable, charter-transition]
 ```
 
@@ -1465,7 +1509,8 @@ backend by creating a parentless charter commit.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [atom-genesis-and-facts, no-second-charter-genesis, record-is-log-leaf, charter-transition, charter-commit-format, charter-ref-by-czd, refs-atomic-multi]
 ```
 
@@ -1494,7 +1539,8 @@ detached claim commit.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [claim-chains-charter, no-second-claim-genesis]
 ```
 
@@ -1536,7 +1582,8 @@ targets it as its sole git parent.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [temporal-vector, snapshot-deterministic, publish-commit-format, publish-claim-binding]
 because: [backend-refs-linearizable]
 ```
@@ -1567,7 +1614,8 @@ another store) into a store.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [verification-local, publish-chain-fetched-whole]
 because: [ingest-preserves-identity]
 ```
@@ -1587,7 +1635,8 @@ detectable event — over the fact mechanism instead.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [claim-owner-fact-storage]
@@ -1620,7 +1669,8 @@ label's current owner — a marked seizure event).
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [claim-fact-chain, claim-detached, temporal-vector]
 ```
 
@@ -1717,7 +1767,8 @@ its materialized view chain.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [sig-over-pay, claim-owner-single, owner-authorization-delegated, publish-transition, fact-kind-table, trust-role-authorization, fact-claim-owner-gated, trust-signer-relative, publish-fact-chain, amendment-field-classification, publish-typ, publish-mode]
 ```
 
@@ -1733,7 +1784,8 @@ than as a separate claim about tag semantics specifically.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [refs-atomic-multi]
@@ -1752,7 +1804,8 @@ tagged constraint; discharges the per-store half of
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 because: [backend-refs-atomic-multi]
 ```
 
@@ -1787,7 +1840,8 @@ be ingested into a git `AtomStore` without claims or publishes.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [fs-source-contract, dev-atom-unchartered-local]
 ```
 
@@ -1813,7 +1867,8 @@ matching what downstream consumers would see.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [ingest-transition]
 ```
 
@@ -1839,7 +1894,8 @@ parent-shape rules changes here.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [claim-tree-is-log]
@@ -1855,7 +1911,8 @@ directly for a resolver auditing storage rather than constructing it.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [log-tree-opaque, claim-detached, claim-fact-chain]
 ```
 
@@ -1890,7 +1947,8 @@ than one, parentless commit is malformed storage and MUST be rejected
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 because: [atom-genesis-and-facts]
 ```
 
@@ -1913,7 +1971,8 @@ the same label, is the forbidden state this constraint names.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 because: [atom-genesis-and-facts]
 ```
 
@@ -1926,7 +1985,8 @@ without a corresponding claim commit reachable via
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 because: [no-unclaimed-publish]
 ```
 
@@ -1939,7 +1999,8 @@ enforcement mechanism for [temporal-vector](#temporal-vector).
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 because: [temporal-vector]
 ```
 
@@ -1951,7 +2012,8 @@ claim refs for the same label would conflict.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [anchor-oldest-root]
@@ -1965,7 +2027,8 @@ disambiguate; the constraint is retired along with
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [no-missing-store-claim]
@@ -1978,7 +2041,8 @@ ingestion corruption.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 ### Behavioral Properties
@@ -2001,7 +2065,8 @@ a "vector of authenticity": charter src → claim src → publish src.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [charter-anchor, claim-charter-authorization, charter-ancestry, record-is-log-leaf]
 ```
 
@@ -2020,7 +2085,8 @@ MUST NOT be shallow-fetched — see
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [publish-chain-fetched-whole]
@@ -2049,7 +2115,8 @@ silent data-loss bug.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [publish-commit-format]
 ```
 
@@ -2068,7 +2135,8 @@ enabling verification of the complete signing history.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [publish-fact-chain, record-is-log-leaf]
 ```
 
@@ -2095,7 +2163,8 @@ different publish.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [publish-commit-format]
 because: [docs/architecture/atom-sad#8]
 ```
@@ -2110,7 +2179,8 @@ ingested atom. (Model §2.3, ⊇ condition.)
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [docs/models/publishing-stack-layers#2.3]
 ```
 
@@ -2143,7 +2213,8 @@ request all three refs in one connection.
 
 ```claim
 kind: constraint
-evaluator: property-test
+verification:
+  implementation: property-test
 depends: [registry-ref-claim, registry-ref-version, charter-ref-by-czd]
 ```
 

@@ -135,7 +135,8 @@ section is OPTIONAL and defaults to empty (no dependencies).
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [package-identity-required]
@@ -148,7 +149,8 @@ OPTIONAL.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [set-declaration-completeness]
@@ -160,7 +162,8 @@ be rejected during validation.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [set-mirror-minimum]
@@ -170,7 +173,8 @@ contain at least one mirror (either a URL or the local sentinel `::`).
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [composer-set-reference]
@@ -181,7 +185,8 @@ The referenced atom MUST be resolvable from that set.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [version-constraint-syntax]
@@ -196,7 +201,8 @@ implementation is semver. Examples: `"^1.0.0"`, `">=2.0,<3.0"`,
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [version-total-order]
 ```
 
@@ -208,7 +214,8 @@ silent misconfiguration from typos or deprecated fields.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [label-version-uniqueness]
@@ -222,7 +229,8 @@ existing (label, version) pair is forbidden.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [atom-version-identity]
 ```
 
@@ -238,7 +246,8 @@ by ion core.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [plugin-lock-contract]
@@ -259,7 +268,8 @@ it in the lock and passes it through.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [plugin-extension-point]
 ```
 
@@ -274,7 +284,8 @@ verification strategy without understanding ion's plugin mechanism.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [plugin-extension-point]
 ```
 
@@ -290,7 +301,8 @@ updates.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [plugin-extension-point]
 ```
 
@@ -304,7 +316,8 @@ output: type tag, name, URL, and hash.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [plugin-extension-point]
 ```
 
@@ -335,7 +348,8 @@ any resolution or publish operation.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [manifest-required-sections, set-declaration-completeness, composer-set-reference, deny-unknown-fields]
 ```
 
@@ -357,7 +371,8 @@ only parses and validates a manifest already on disk.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [manifest-parse]
 ```
 
@@ -379,7 +394,8 @@ the codebase.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [set-anchor-bijection]
 ```
 
@@ -402,7 +418,8 @@ dedicated positive test.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [no-undeclared-set-reference]
@@ -413,7 +430,8 @@ NOT reference a set not declared in `[package.sets]`. Corollary of
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [set-declaration-completeness]
 ```
 
@@ -425,7 +443,8 @@ and reject self-referential dependencies.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ### Behavioral Properties
@@ -442,7 +461,8 @@ identical.
 
 ```claim
 kind: constraint
-evaluator: property-test
+verification:
+  implementation: property-test
 ```
 
 #### [manifest-validation-total]
@@ -456,7 +476,8 @@ repeated parse-fix-parse cycles.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [plugin-isolation]
@@ -471,7 +492,8 @@ corresponding lock entries.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [plugin-extension-point]
 ```
 

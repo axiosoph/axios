@@ -74,7 +74,8 @@ the trichotomy, both on purpose:
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ## 1. The language-free purity thesis
@@ -172,7 +173,8 @@ exactly what breaks with it.
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ## 2. The composition domain
@@ -205,7 +207,8 @@ adds one value of its own:
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ## 3. Composition merge is a partial commutative monoid
@@ -246,7 +249,8 @@ denotational conflicts — the graft case is in P1's scope explicitly._
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ## 4. Interfaces: the typing of compositions
@@ -404,7 +408,8 @@ ordering.
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ## 5. The two strata of intent
@@ -500,7 +505,8 @@ environments are the general one.
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ## 6. The fact-set: the substrate's only state
@@ -551,7 +557,8 @@ party already consumed (they pinned their snapshot).
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ### The cloud: a snapshot name for the fact-set
@@ -577,7 +584,8 @@ root.
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ## 7. The override algebra: generators live inside the model
@@ -692,7 +700,8 @@ transitions compiled to the operator algebra.
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ## 8. Materialization, installation, and transactional update
@@ -825,5 +834,6 @@ determinism and totality — the arrow from intent into requests).
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 ```

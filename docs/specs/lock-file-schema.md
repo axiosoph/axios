@@ -78,7 +78,8 @@ implemented."
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [lock-recomputability]
@@ -94,7 +95,8 @@ explicit `unimplemented!()` stub, and no resolver exists.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [lock-set-snapshot, lock-canonical-form]
 ```
 
@@ -113,7 +115,8 @@ resolver (`ion-resolve/src/lib.rs`).
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 because: [docs/models/composition-model#6]
 ```
 
@@ -131,7 +134,8 @@ range being stuffed into the version `String` field.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [lock-closure-completeness]
@@ -146,7 +150,8 @@ closure and know which entries are direct; no such pipeline exists.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [lock-action-totality]
@@ -174,7 +179,8 @@ atom-core or eos.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [docs/models/execution-model#2.4, lock-closure-completeness]
 because: [docs/models/execution-model#8]
 ```
@@ -197,7 +203,8 @@ Cross-action leakage prevention depends on the same unimplemented
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 because: [lock-no-plan-digest]
 ```
 
@@ -218,7 +225,8 @@ exists.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [lock-tool-owned]
@@ -234,7 +242,8 @@ discipline, not machine-checkable by this repo's tooling.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ## `[sets]` — set anchors and discovery snapshots
@@ -271,7 +280,8 @@ from charter machinery yet.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [charter-anchor]
 because: [charter-ancestry]
 ```
@@ -308,7 +318,8 @@ chain-monotonicity machinery, which is Phase 1 unimplemented
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [lock-set-snapshot]
@@ -327,7 +338,8 @@ resolver.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [lock-set-mirrors]
@@ -344,7 +356,8 @@ or the `"::"` sentinel exists.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [lock-set-referenced]
@@ -355,7 +368,8 @@ referenced by at least one dep entry.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 ## `[sets]` under the spine/cloud split (ADR-0009)
@@ -385,7 +399,8 @@ A `[sets]` entry carries `anchor`, `spine_head`, `mirrors`. Nothing else.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [lock-pins-gating-facts]
@@ -396,7 +411,8 @@ and irreproducible.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 The manifest side of this same reconciliation: test and check parameters
@@ -414,7 +430,8 @@ than a scheduler courtesy.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ## `[deps.<set>.<label>]` — the ground pins
@@ -440,7 +457,8 @@ implemented (`ion-resolve/src/lib.rs`).
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 because: [docs/models/composition-model#4]
 ```
 
@@ -457,7 +475,8 @@ byte-verbatim-as-published are untested and unenforced
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [lock-dep-publish]
@@ -473,7 +492,8 @@ transaction's digest.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [lock-annotation-consistency]
@@ -489,7 +509,8 @@ signed publish `CozMessage` during lock validation, not implemented.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [lock-dep-requires]
@@ -507,7 +528,8 @@ concern tied to the unimplemented `to_canonical` encoder.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [lock-requires-resolvable]
@@ -517,7 +539,8 @@ that exists in this lock. Dangling edges are a hard validation error.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [lock-requires-acyclic]
@@ -528,7 +551,8 @@ unrealizable.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [lock-dep-liveness]
@@ -545,7 +569,8 @@ on the same unimplemented resolution pipeline as
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [lock-closure-completeness]
 ```
 
@@ -562,7 +587,8 @@ Serialization ordering is part of the canonical encoder, an explicit
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ## `[fetch.<name>]` — promoted fetch pins
@@ -586,7 +612,8 @@ any consumer (no fetch/verify path exists yet).
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [lock-fetch-naming]
@@ -604,7 +631,8 @@ flag).
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [lock-fetch-liveness]
@@ -620,7 +648,8 @@ parse/validate-only.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [lock-fetch-adopted-absent]
@@ -636,7 +665,8 @@ anywhere.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ## Canonical form and write discipline
@@ -662,7 +692,8 @@ design").
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [lock-atomic-write]
@@ -682,7 +713,8 @@ or promotion-merge path).
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 because: [docs/models/execution-model#8]
 ```
 
@@ -698,7 +730,8 @@ composer selection, or evaluator arguments of any kind (ADR-0006 §3).
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [lock-no-params]
@@ -709,7 +742,8 @@ They are declared in the manifest, which ships inside the atom snapshot
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [lock-no-toolchain-section]
@@ -722,7 +756,8 @@ propagation is computed per [lock-action-totality](#lock-action-totality), never
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 because: [lock-action-totality]
 ```
 
@@ -734,7 +769,8 @@ beside build records.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [lock-no-override-state]
@@ -745,7 +781,8 @@ records their ground _results_; the pin-diff is the audit trail.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [lock-no-foreign-metadata]
@@ -757,7 +794,8 @@ identity, not a timestamp.)
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 ## Whole-lock hashing is not an identity
@@ -775,7 +813,8 @@ the v1-era `plan_digest` and the job-identity scheme built on it.)
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 because: [docs/models/execution-model#2.4]
 ```
 

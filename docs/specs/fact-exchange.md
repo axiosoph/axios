@@ -58,7 +58,8 @@ invoke.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 Facts are **advertised** under a gating policy, distinct from being
@@ -73,7 +74,8 @@ over the **advertised** set, not the held set.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 because: [fact-exchange-subject-scoped]
 ```
 
@@ -94,6 +96,7 @@ store.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 because: [fact-exchange-subject-scoped]
 ```

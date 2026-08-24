@@ -104,7 +104,8 @@ precedence.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 because: [version-total-order]
 ```
 
@@ -122,7 +123,8 @@ table MUST contain the set's `tag` (for human readability) and its
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 because: [lock-entry-sufficient]
 ```
 
@@ -142,7 +144,8 @@ for mirror resolution.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 because: [lock-entry-sufficient]
 ```
 
@@ -156,7 +159,8 @@ when a transitive dependency changes.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [lock-direct-flag]
@@ -169,7 +173,8 @@ the field MAY be omitted for direct deps. Transitive deps MUST set
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [lock-compose-capture]
@@ -182,7 +187,8 @@ pipeline as regular dependencies.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [lock-plugin-entries]
@@ -195,7 +201,8 @@ complete dependency graph.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 because: [plugin-lock-contract]
 ```
 
@@ -209,7 +216,8 @@ MUST NOT fail for solvable instances. (Completeness.)
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [resolution-deterministic]
@@ -224,7 +232,8 @@ footgun and is forbidden (SAD §6.1, §6.7).
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 because: [docs/architecture/atom-sad#6.1, docs/architecture/atom-sad#6.7]
 ```
 
@@ -238,7 +247,8 @@ in the dependency graph.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [resolution-unsolvable-diagnostic]
@@ -250,7 +260,8 @@ identify the conflicting constraints and the atoms involved. A bare
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [resolution-transitive]
@@ -262,7 +273,8 @@ the root manifest does not mention it.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ### Transitions
@@ -286,7 +298,8 @@ are planned but not yet implemented."
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [lock-freeze]
@@ -305,7 +318,8 @@ This depends on the same unimplemented reconciliation pipeline as
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [reconcile]
 ```
 
@@ -326,7 +340,8 @@ and others missing is invalid.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [no-stale-lock-entry]
@@ -337,7 +352,8 @@ the manifest (directly or transitively). Stale entries MUST be purged.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 > **Note (2026-07-05, P4 flag):** A literal reading purges
@@ -359,7 +375,8 @@ lock is invalid.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ### Behavioral Properties
@@ -379,7 +396,8 @@ in the lock (atom-sad §6.5).
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 because: [resolution-reproducible]
 ```
 
@@ -393,7 +411,8 @@ reconcile operation is idempotent.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [plugin-dep-sanitization]
@@ -408,7 +427,8 @@ in the manifest MUST be purged from the lock.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 > **Note (2026-07-05, P4 flag):** Same tension as `[no-stale-lock-
@@ -430,7 +450,8 @@ is NOT REQUIRED — it depends on the specific atom storage backend.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ## Lock File Schema (Informative)

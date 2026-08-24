@@ -294,7 +294,8 @@ Composite sources MUST preserve the accumulation guarantee: after resolving an a
 
 ```claim
 kind: constraint
-evaluator: type
+verification:
+  implementation: type
 ```
 
 #### [composite-source-concurrent]
@@ -505,7 +506,8 @@ TYPE  VersionScheme = trait {                                      (atom-id)
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [atom-genesis-and-facts]
@@ -531,7 +533,8 @@ buggy client, a dishonest one, or a compromised key.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [charter-fork-distinction]
 ```
 
@@ -542,7 +545,8 @@ A charter transaction's payload MUST carry
 
 ```claim
 kind: constraint
-evaluator: type
+verification:
+  implementation: type
 ```
 
 #### [charter-anchor]
@@ -592,7 +596,8 @@ abstraction's identity frameworks, not through protocol exceptions.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [claim-replacement-authority] — RETIRED 2026-08-05
@@ -717,7 +722,8 @@ the fact-based claim-owner-change rule anywhere in this repository.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [charter-ancestry]
@@ -738,7 +744,8 @@ value, never a value that shifts with succession.)
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [charter-succession] and [charter-succession-linear] — RETIRED 2026-08-05
@@ -799,7 +806,8 @@ own, so it cannot add a key without a membership change (a new
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [charter-owner-fact-linear]
@@ -879,7 +887,8 @@ consistency, not this restatement's correctness.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [charter-owner-threshold]
@@ -911,7 +920,8 @@ extension, not a present obligation on every charter.
 
 ```claim
 kind: constraint
-evaluator: property-test
+verification:
+  implementation: property-test
 depends: [charter-owner-fact]
 ```
 
@@ -935,7 +945,8 @@ obligation.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [claim-charter-authorization]
 ```
 
@@ -957,7 +968,8 @@ facts (`[claim-owner-fact]`) have landed since genesis.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [charter-fork-distinction]
@@ -1053,7 +1065,8 @@ not a smaller version of the old one.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [owner-abstract]
@@ -1101,7 +1114,8 @@ upgrades, and delegation — only the authorization semantics of
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [owner-kind-required]
@@ -1118,7 +1132,8 @@ the `OwnerRef` as unauthorizable) rather than attempt to interpret
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [claim-owner-single]
@@ -1132,7 +1147,8 @@ shape, not its cardinality.
 
 ```claim
 kind: constraint
-evaluator: type
+verification:
+  implementation: type
 ```
 
 #### [charter-owner-set]
@@ -1151,7 +1167,8 @@ makes rejecting it explicit.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [charter-owner-set-non-empty]
@@ -1166,7 +1183,8 @@ otherwise reach silently at implementation time.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [owner-authorization-delegated]
@@ -1197,7 +1215,8 @@ composition step.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [owner-compatibility]
@@ -1214,7 +1233,8 @@ replacement — there is only ever the one claim, the one `czd`
 
 ```claim
 kind: constraint
-evaluator: type
+verification:
+  implementation: type
 ```
 
 #### [symmetric-payloads]
@@ -1254,7 +1274,8 @@ design — the base/amendment Rust type split
 
 ```claim
 kind: constraint
-evaluator: type
+verification:
+  implementation: type
 ```
 
 #### [publish-chains-claim]
@@ -1286,7 +1307,8 @@ literal string `"atom/claim"`. The protocol is the authority.
 
 ```claim
 kind: constraint
-evaluator: type
+verification:
+  implementation: type
 ```
 
 #### [publish-typ]
@@ -1296,7 +1318,8 @@ literal string `"atom/publish"`.
 
 ```claim
 kind: constraint
-evaluator: type
+verification:
+  implementation: type
 ```
 
 #### [sig-over-pay]
@@ -1308,7 +1331,8 @@ exactly as constructed.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [dig-is-atom-snapshot]
@@ -1321,7 +1345,8 @@ authorship) to ensure reproducibility across backends.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [src-is-source-revision]
@@ -1332,7 +1357,8 @@ which the atom was extracted.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [path-is-subdir]
@@ -1344,7 +1370,8 @@ navigate from the source revision's root to the atom's subtree.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [publish-mode]
@@ -1367,7 +1394,8 @@ weakened to permit it — the chain append is the lawful path.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [content-hash-is-tree-digest]
@@ -1387,7 +1415,8 @@ algorithm is `[content-hash-algorithm]`; the exact obligation level is
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [content-hash-algorithm]
@@ -1466,7 +1495,8 @@ above supplies that order.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [content-hash-obligation]
@@ -1510,7 +1540,8 @@ attempt it and no such mechanism should be inferred from
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [symlink-escape-reported]
@@ -1544,7 +1575,8 @@ publisher.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [amendment-field-classification]
@@ -1610,7 +1642,8 @@ there is nothing to compare.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [fact-kind-table]
@@ -1677,7 +1710,8 @@ chain.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 Verification will round-trip fact entries and confirm the kind name
@@ -1722,7 +1756,8 @@ consumer).
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [rawversion-opaque]
@@ -1733,7 +1768,8 @@ deferred to a `VersionScheme` implementor.
 
 ```claim
 kind: constraint
-evaluator: type
+verification:
+  implementation: type
 ```
 
 Verification will confirm `RawVersion` is a newtype with no
@@ -1748,7 +1784,8 @@ discovery.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 Verification is tested in the claim roundtrip.
@@ -1762,7 +1799,8 @@ MAY be omitted when the same key signed both claim and publish.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [anchor-immutable]
@@ -1776,7 +1814,8 @@ scope, which never touch the charter record itself
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [anchor-content-addressed]
@@ -1803,7 +1842,8 @@ derivable from source content alone.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [manifest-minimal]
@@ -1814,7 +1854,8 @@ and MUST NOT be required by the protocol.
 
 ```claim
 kind: constraint
-evaluator: type
+verification:
+  implementation: type
 ```
 
 #### [backend-bit-perfect]
@@ -1825,7 +1866,8 @@ blobs (cf. Coz bit-perfect preservation).
 
 ```claim
 kind: constraint
-evaluator: property-test
+verification:
+  implementation: property-test
 ```
 
 #### [atomid-per-source-unique]
@@ -1846,7 +1888,8 @@ references within a source.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [publish-claim-coherence]
@@ -1887,7 +1930,8 @@ in the publish payload (`src`, `path`) and verified separately.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [uri-not-metadata]
@@ -1899,7 +1943,8 @@ convenience — all persistent references MUST use canonical forms.
 
 ```claim
 kind: constraint
-evaluator: type
+verification:
+  implementation: type
 ```
 
 Verification will audit the payload structs and confirm no URI type
@@ -1926,7 +1971,8 @@ on cryptographic libraries — all crypto MUST flow through atom-id.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 Verification will audit atom-core's `Cargo.toml` and confirm it has
@@ -1941,7 +1987,8 @@ derivation.
 
 ```claim
 kind: constraint
-evaluator: type
+verification:
+  implementation: type
 ```
 
 Verification confirms atom-id's `Cargo.toml` depends on `coz-rs`.
@@ -1993,7 +2040,8 @@ requirement has no atom-git charter storage implementation either.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [claim-transition]
@@ -2015,7 +2063,8 @@ a `CozMessage` that includes the public key.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 Verification is `verify_claim_roundtrip`: sign, then verify.
@@ -2040,7 +2089,8 @@ corrected in place, not new content.)_
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 Verification is `verify_publish_roundtrip`: sign, then verify.
@@ -2110,7 +2160,8 @@ through atom-id via Coz.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [no-backdated-publish]
@@ -2147,7 +2198,8 @@ only local computation — zero network round-trips.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [verification-provenance]
@@ -2164,7 +2216,8 @@ complete source history.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [atom-snapshot-reproducible]
@@ -2179,7 +2232,8 @@ hash.
 
 ```claim
 kind: constraint
-evaluator: property-test
+verification:
+  implementation: property-test
 ```
 
 #### [ingest-preserves-identity]
@@ -2232,7 +2286,8 @@ version introduces new required fields.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [claim-payload-extensible]
@@ -2267,7 +2322,8 @@ landed type, let alone verified.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [fs-source-contract]
@@ -2313,7 +2369,8 @@ vocabulary those principles govern.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [format-version-discriminator]
@@ -2361,7 +2418,8 @@ is measured against, it does not resolve it.)
 
 ```claim
 kind: constraint
-evaluator: property-test
+verification:
+  implementation: property-test
 ```
 
 #### [format-reserved-names]

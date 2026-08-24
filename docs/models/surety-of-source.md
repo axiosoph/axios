@@ -109,7 +109,8 @@ verifier is ultimately asking, and why it cannot ask it directly.
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 ```
 
 > **Definition (classification).** `classify : Artifact → Bucket` is a
@@ -689,7 +690,8 @@ the machine-checked model (§10).
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ## 9. The ceiling theorems

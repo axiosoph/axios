@@ -110,7 +110,8 @@ the subject axis.
 
 ```claim
 kind: requirement
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ## 2. Container View
@@ -182,7 +183,8 @@ declare, resolve, form, materialize, do, publish, inspect.
 
 ```claim
 kind: requirement
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ## 3. Component View
@@ -406,7 +408,8 @@ intent.
 
 ```claim
 kind: requirement
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ### 6.11 Blast Radius Preview (ADR-0009)
@@ -428,7 +431,8 @@ its blast radius: closure size, how much substitutes, how much builds.
 
 ```claim
 kind: requirement
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ### 6.12 Closure Fault Loop (ADR-0009)
@@ -449,7 +453,8 @@ refine), never a bare error.
 
 ```claim
 kind: requirement
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ## 7. The Lock Schema

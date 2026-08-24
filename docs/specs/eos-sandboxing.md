@@ -128,7 +128,8 @@ write into any part of the mounted closure.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 Verification will confirm a composed rootfs (not per-input dirs) is
@@ -159,7 +160,8 @@ derivation-level flag.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 because: [htc-fetch-set-lock-plugin]
 ```
 
@@ -185,7 +187,8 @@ redefine the `BuildRecord` schema itself.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [htc-declared-closure-enforced]
 ```
 
@@ -207,7 +210,8 @@ given executor achieves isolation (eos-sad.md §6.2).
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 Verification will audit that the Eos daemon and scheduler perform no
@@ -231,7 +235,8 @@ verifies).
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [eos-sandbox-fhs-materialization, htc-declared-closure-enforced]
 ```
 
@@ -260,7 +265,8 @@ restated here.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [htc-materialization-tiers]
 ```
 
@@ -280,7 +286,8 @@ connection, logged.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 Verification will issue unrecorded requests in replay mode and
@@ -296,7 +303,8 @@ not by post-hoc audit of the read-set log.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [eos-build-sandbox-network-containment]
 ```
 
@@ -311,7 +319,8 @@ mounted closure is read-only; there is no writable path inside it.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 Verification will attempt writes to the read-only mounted closure

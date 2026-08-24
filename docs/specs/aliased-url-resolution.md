@@ -152,7 +152,8 @@ modification.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [host-position-only]
 ```
 
@@ -176,7 +177,8 @@ a username) MUST NOT be treated as an alias sigil.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [alias-name-validated]
@@ -189,7 +191,8 @@ fallback to raw.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [separator-opaque-suffix]
@@ -204,7 +207,8 @@ transport semantics (e.g., `:` for SCP, `/` for URL-style).
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [structure-preserving]
@@ -221,7 +225,8 @@ is performed. The output is:
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [host-position-only, separator-opaque-suffix]
 ```
 
@@ -234,7 +239,8 @@ validate, normalize, or interpret it. The suffix MAY be empty.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [separator-opaque-suffix]
 ```
 
@@ -246,7 +252,8 @@ Alias resolution MUST be a pure function of its inputs.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [resolution-terminates]
@@ -261,7 +268,8 @@ defense-in-depth but is not required.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [recursive-transparent]
@@ -275,7 +283,8 @@ this repeated re-resolution that
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [resolution-terminates]
 ```
 
@@ -288,7 +297,8 @@ exact input string with no modifications.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [sigil-required]
 ```
 
@@ -303,7 +313,8 @@ referencing what the user typed.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [recursive-transparent]
 ```
 
@@ -344,7 +355,8 @@ alias is present, per [sigil-required](#sigil-required).
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [sigil-required, host-position-only]
 ```
 
@@ -366,7 +378,8 @@ Given an alias input and an `AliasMap`,
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [structure-preserving, recursive-transparent]
 ```
 
@@ -383,7 +396,8 @@ error, not a suggestion.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [host-position-only]
 ```
 
@@ -396,7 +410,8 @@ resolution MUST complete fully or fail entirely.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 because: [recursive-transparent]
 ```
 
@@ -411,7 +426,8 @@ inference is the consumer's responsibility.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 because: [structure-preserving]
 ```
 
@@ -457,7 +473,8 @@ the full chain of alias names that formed the cycle.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 ## Verification Pipeline

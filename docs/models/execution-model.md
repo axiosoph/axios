@@ -248,7 +248,8 @@ type-level facts:
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ### 2.2 The semantics
@@ -309,7 +310,8 @@ attested, not proven.
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ### 2.3 The stratification: actions and trials
@@ -362,7 +364,8 @@ only requests that discharge the world and requests that do not:
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ### 2.4 Identity discipline (three identities, never conflated)
@@ -408,7 +411,8 @@ and this model adds the axis their taxonomy lacks: observation policy.)
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ## 3. Facts, witnesses, and promotion
@@ -446,7 +450,8 @@ trial, never mandatory for builds.
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ### 3.2 Publication gating
@@ -463,7 +468,8 @@ configuration on the fact channel, not scheduler structure.
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ### 3.3 Promotion: attestation → intent (the cargo-update law)
@@ -506,7 +512,8 @@ pinning the channel.
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ### 3.4 Whose facts are facts: signer trust
@@ -531,7 +538,8 @@ and are deliberately left to the trust-model spec, not fixed here.
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ### 3.5 Promotion is reified bind (the IFD answer)
@@ -580,7 +588,8 @@ hidden bind — recognizable and refusable on sight.
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ## 4. The two closures
@@ -607,7 +616,8 @@ matters.
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ### 4.2 The certified interval
@@ -660,7 +670,8 @@ There is a **third justification kind, and it is not evidence**:
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ### 4.3 The justified closure
@@ -684,7 +695,8 @@ is "every path whose hash appears in the output bytes," unexplainable).
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ### 4.4 Graceful degradation and the refinement loop
@@ -726,7 +738,8 @@ none.)
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ## 5. Compositional structure
@@ -775,7 +788,8 @@ DAG carry everything.)
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ### 5.2 Tests are not build nodes; trials deposit but never bind
@@ -815,7 +829,8 @@ stands alone; the trial's failure gates advertisement (§3.2), and its fix
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ### 5.3 The override algebra: generators live inside the model
@@ -860,7 +875,8 @@ digest). The existing `BuildEngine` bisimulation (publishing-stack-layers
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ### 6.2 The session type
@@ -890,7 +906,8 @@ ExecuteSession (client → Executor):
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ### 6.3 Enforcement obligations (the per-channel audit)
@@ -935,7 +952,8 @@ instrument with its own privilege/coverage trade.
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ### 6.4 Materialization, installation, and transactional update
@@ -1001,7 +1019,8 @@ future reader and reviewer of this document:
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ## 8. Proof obligations — and deliberate non-obligations
@@ -1067,7 +1086,8 @@ Deliberately NOT proof targets, with reasons:
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ## 9. Open questions for nrd

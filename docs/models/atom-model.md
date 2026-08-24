@@ -160,7 +160,8 @@ unit is the identity-bearing object, at every granularity stratum.
 
 ```claim
 kind: invariant
-evaluator: test
+verification:
+  implementation: test
 ```
 
 ## 3. What the plane owns per stratum
@@ -370,7 +371,8 @@ however its dependencies were configured.
 
 ```claim
 kind: invariant
-evaluator: property-test
+verification:
+  implementation: property-test
 ```
 
 The mode mechanism, its violation/adjudication semantics, and the
@@ -586,7 +588,8 @@ evidence.
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ## 11. The spine and the cloud: the atom plane's own store
@@ -612,7 +615,8 @@ omission is **unconstructible**, not merely detectable.
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 ```
 
 Authorization is computed by folding the spine's amendment chain
@@ -631,7 +635,8 @@ offline-verifiable.
 
 ```claim
 kind: invariant
-evaluator: type
+verification:
+  implementation: type
 depends: [spine-chain-complete]
 ```
 
@@ -653,7 +658,8 @@ an anchor from such a spine.
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 depends: [spine-chain-complete]
 ```
 
@@ -678,7 +684,8 @@ stateful.
 
 ```claim
 kind: invariant
-evaluator: test
+verification:
+  implementation: test
 ```
 
 **The store is sufficient.** A store holding an atom's closure — spine
@@ -698,7 +705,8 @@ suffices for every operation except discovery.
 
 ```claim
 kind: invariant
-evaluator: test
+verification:
+  implementation: test
 depends: [spine-chain-complete, withdrawal-terminal]
 ```
 
@@ -711,6 +719,7 @@ Every operation is offline-correct over what it already holds.
 
 ```claim
 kind: invariant
-evaluator: test
+verification:
+  implementation: test
 because: [store-sufficiency]
 ```
