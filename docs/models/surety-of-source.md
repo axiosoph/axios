@@ -233,6 +233,7 @@ invariant the machine-checked model asserts for every atom in scope
 kind: invariant
 verification:
   design: model-check
+  implementation: none
 ```
 
 ## 3. The trust surface and the assumption basis
@@ -384,6 +385,7 @@ machine-checked classification (§10).
 kind: invariant
 verification:
   design: model-check
+  implementation: none
 ```
 
 ### 5.2 Why a vouch is required at all
@@ -466,6 +468,7 @@ signed a permanent, czd-addressed record of that judgment.
 kind: invariant
 verification:
   design: proof
+  implementation: none
 ```
 
 ## 6. The reproducibility mode is empirically grounded
@@ -959,6 +962,7 @@ implementation must expose $B(a)$ so that check is possible.
 kind: invariant
 verification:
   design: proof
+  implementation: none
 ```
 
 > **Theorem 3b (attributability forcing — economic argument, not a

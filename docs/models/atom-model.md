@@ -259,6 +259,7 @@ design work this model now governs rather than defers:
 kind: invariant
 verification:
   design: review
+  implementation: none
 ```
 
 ## 5. The signature-anchoring law
