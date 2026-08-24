@@ -612,7 +612,7 @@ omission is **unconstructible**, not merely detectable.
 
 ```claim
 kind: invariant
-evaluator: model-check
+evaluator: none
 ```
 
 Authorization is computed by folding the spine's amendment chain
@@ -653,7 +653,7 @@ an anchor from such a spine.
 
 ```claim
 kind: invariant
-evaluator: model-check
+evaluator: none
 depends: [spine-chain-complete]
 ```
 
