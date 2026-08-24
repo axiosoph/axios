@@ -326,7 +326,8 @@ validation MAY use `unicode-ident` as the sole permitted dependency.
 
 ```claim
 kind: constraint
-evaluator: review
+verification:
+  implementation: review
 ```
 
 #### [no-io]
@@ -337,7 +338,8 @@ environment variables). All external state is provided through the
 
 ```claim
 kind: constraint
-evaluator: review
+verification:
+  implementation: review
 ```
 
 ### Transitions
@@ -442,7 +444,8 @@ by separating `AliasedUrl::Expanded.url` as the resolved artifact.)
 
 ```claim
 kind: constraint
-evaluator: review
+verification:
+  implementation: review
 ```
 
 ### Behavioral Properties
@@ -459,7 +462,8 @@ where d is the chain depth, bounded by the alias configuration size.
 
 ```claim
 kind: constraint
-evaluator: review
+verification:
+  implementation: review
 ```
 
 #### [error-diagnostic]

@@ -221,7 +221,8 @@ transitively pins the genesis."
 
 ```claim
 kind: constraint
-evaluator: model-check
+verification:
+  design: model-check
 ```
 
 #### [backend-ancestry-queryable]
@@ -475,7 +476,8 @@ leans on.
 
 ```claim
 kind: constraint
-evaluator: review
+verification:
+  design: review
 depends: [backend-store-immutable, backend-ancestry-sound]
 ```
 

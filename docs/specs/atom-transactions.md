@@ -558,7 +558,9 @@ anchor's one and only genesis record — written once, never reissued
 
 ```claim
 kind: constraint
-evaluator: model-check
+verification:
+  design: model-check
+  implementation: none
 ```
 
 #### [claim-chains-charter]
@@ -575,7 +577,9 @@ legally hold. This is the claim-level analogue of
 
 ```claim
 kind: constraint
-evaluator: model-check
+verification:
+  design: model-check
+  implementation: none
 ```
 
 #### [claim-charter-authorization]
@@ -989,7 +993,8 @@ structurally impossible.
 
 ```claim
 kind: constraint
-evaluator: model-check
+verification:
+  design: model-check
 ```
 
 **Alloy assertion consolidated, not dropped (2026-08-05).**
@@ -1029,7 +1034,9 @@ never a hash or wrapping of the pair.
 
 ```claim
 kind: constraint
-evaluator: model-check
+verification:
+  design: model-check
+  implementation: none
 ```
 
 #### [identity-stability]
@@ -1297,7 +1304,9 @@ publish tag chain exists yet.
 
 ```claim
 kind: constraint
-evaluator: model-check
+verification:
+  design: model-check
+  implementation: none
 ```
 
 #### [claim-typ]
@@ -1827,7 +1836,9 @@ metadata (the pre-charter genesis-hash derivation is retired).
 
 ```claim
 kind: constraint
-evaluator: model-check
+verification:
+  design: model-check
+  implementation: none
 ```
 
 #### [anchor-resolvable]
@@ -1919,7 +1930,9 @@ referencing a void second claim is itself invalid.
 
 ```claim
 kind: constraint
-evaluator: model-check
+verification:
+  design: model-check
+  implementation: none
 ```
 
 #### [atom-detached]
@@ -1959,7 +1972,8 @@ types on the traits.
 
 ```claim
 kind: constraint
-evaluator: review
+verification:
+  implementation: review
 ```
 
 #### [crypto-layer-separation]
@@ -2009,7 +2023,8 @@ storage crate exists.
 
 ```claim
 kind: constraint
-evaluator: review
+verification:
+  implementation: review
 ```
 
 #### [charter-transition]
@@ -2125,7 +2140,9 @@ obtained from a completed claim; (b) temporal ordering —
 
 ```claim
 kind: constraint
-evaluator: model-check
+verification:
+  design: model-check
+  implementation: none
 ```
 
 #### [no-unclaimed-publish]
@@ -2137,7 +2154,8 @@ invalid.
 
 ```claim
 kind: constraint
-evaluator: model-check
+verification:
+  design: model-check
 ```
 
 #### [no-duplicate-version]
@@ -2149,7 +2167,9 @@ immutability — once published, a version is sealed.
 
 ```claim
 kind: constraint
-evaluator: model-check
+verification:
+  design: model-check
+  implementation: none
 ```
 
 #### [no-cross-layer-crypto]
@@ -2183,7 +2203,9 @@ the publish event.
 
 ```claim
 kind: constraint
-evaluator: model-check
+verification:
+  design: model-check
+  implementation: none
 ```
 
 #### [verification-local]
@@ -2246,7 +2268,8 @@ When an atom is ingested from one
 
 ```claim
 kind: constraint
-evaluator: model-check
+verification:
+  design: model-check
 ```
 
 #### [backend-agnostic-protocol]
@@ -2260,7 +2283,8 @@ associated types on traits.
 
 ```claim
 kind: constraint
-evaluator: review
+verification:
+  implementation: review
 ```
 
 #### [publish-payload-extensible]
@@ -2395,7 +2419,8 @@ are noted here for the record, not addressed by this document.)
 
 ```claim
 kind: constraint
-evaluator: review
+verification:
+  design: review
 ```
 
 #### [format-unknown-field-tolerance]
@@ -2452,7 +2477,8 @@ submission process governs it.
 
 ```claim
 kind: constraint
-evaluator: review
+verification:
+  design: review
 ```
 
 ## Verification Pipeline

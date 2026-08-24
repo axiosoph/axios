@@ -1049,7 +1049,8 @@ transfer to the intent store. (Discharges
 
 ```claim
 kind: constraint
-evaluator: review
+verification:
+  implementation: review
 depends: [odb-immutable, ancestry-hash-committed]
 because: [backend-refs-sole-mutability]
 ```

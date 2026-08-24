@@ -207,7 +207,9 @@ The number of concurrently RUNNING jobs assigned to any worker node MUST NOT exc
 
 ```claim
 kind: constraint
-evaluator: model-check
+verification:
+  design: model-check
+  implementation: none
 ```
 
 #### [eos-scheduler-state-isolation]
@@ -270,7 +272,9 @@ health demotion and lease revocation.
 
 ```claim
 kind: constraint
-evaluator: model-check
+verification:
+  design: model-check
+  implementation: none
 because: [fail-job]
 ```
 
@@ -286,7 +290,9 @@ The bounded window is what makes PEFT's OCT look-ahead actionable; strict work c
 
 ```claim
 kind: constraint
-evaluator: model-check
+verification:
+  design: model-check
+  implementation: none
 ```
 
 #### [eos-scheduler-bounded-fair-dispatch]
@@ -295,7 +301,9 @@ evaluator: model-check
 
 ```claim
 kind: constraint
-evaluator: model-check
+verification:
+  design: model-check
+  implementation: none
 ```
 
 #### [eos-scheduler-cache-filter-seam]
@@ -341,7 +349,9 @@ Dispatch a ready EP to an available worker.
 
 ```claim
 kind: constraint
-evaluator: model-check
+verification:
+  design: model-check
+  implementation: none
 depends: [eos-scheduler-bounded-window, eos-scheduler-placement, eos-scheduler-frozen-stability]
 because: [eos-scheduler-concurrency-limits]
 ```
@@ -370,7 +380,9 @@ Mark execution as successfully finished.
 
 ```claim
 kind: constraint
-evaluator: model-check
+verification:
+  design: model-check
+  implementation: none
 ```
 
 #### [fail-job]
@@ -383,7 +395,9 @@ Handle task failures.
 
 ```claim
 kind: constraint
-evaluator: model-check
+verification:
+  design: model-check
+  implementation: none
 depends: [eos-scheduler-placement]
 ```
 
@@ -423,7 +437,9 @@ A `DISPATCHED` EP's coverage scope and worker assignment MUST NOT be modified by
 
 ```claim
 kind: constraint
-evaluator: model-check
+verification:
+  design: model-check
+  implementation: none
 because: [fail-job, eos-scheduler-frozen-stability]
 ```
 
@@ -439,7 +455,9 @@ Every `QUEUED` job MUST eventually transition to either `COMPLETED` or `FAILED` 
 
 ```claim
 kind: constraint
-evaluator: model-check
+verification:
+  design: model-check
+  implementation: none
 ```
 
 #### [parallel-scheduling-non-interference]
@@ -464,7 +482,9 @@ Verification will audit parallel-vs-sequential schedule output.
 
 ```claim
 kind: constraint
-evaluator: model-check
+verification:
+  design: model-check
+  implementation: none
 ```
 
 #### [bounded-window-dispatch]
@@ -475,7 +495,9 @@ evaluator: model-check
 
 ```claim
 kind: constraint
-evaluator: model-check
+verification:
+  design: model-check
+  implementation: none
 because: [eos-scheduler-bounded-window]
 ```
 

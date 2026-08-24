@@ -258,7 +258,8 @@ Eos MUST fetch plugin dependencies and verify their hashes against the locked ha
 
 ```claim
 kind: constraint
-evaluator: review
+verification:
+  implementation: review
 ```
 
 #### [eos-no-unverified-execution]
@@ -336,7 +337,8 @@ If the output corresponding to a given `BuildEngine::Plan` already exists in the
 
 ```claim
 kind: constraint
-evaluator: review
+verification:
+  implementation: review
 ```
 
 Verification will run property-based tests against the build cache.
@@ -360,7 +362,8 @@ Atoms that have been successfully processed (fetched, verified, evaluated, or bu
 
 ```claim
 kind: constraint
-evaluator: review
+verification:
+  implementation: review
 ```
 
 ---
@@ -376,7 +379,8 @@ Determine an atom action's build status.
 
 ```claim
 kind: constraint
-evaluator: review
+verification:
+  implementation: review
 ```
 
 Verification will run unit tests over plan transitions via the
