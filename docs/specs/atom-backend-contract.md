@@ -168,7 +168,8 @@ object persists" rests on it.)
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 Verification will round-trip a store→get and confirm mutation
@@ -187,7 +188,8 @@ artifact store's P10.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 Verification will audit canonical serialization against a fixture
@@ -241,7 +243,8 @@ depth-limited fetch MUST NOT serve as the basis for any
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [backend-refs-linearizable]
@@ -271,7 +274,8 @@ acceptance-policy spec (Execution Model §9.7).
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 Verification will run a concurrent CAS battery against one ref on the
@@ -297,7 +301,8 @@ Atomicity — promoted here from guidance to law.)
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 Verification will inject a crash/interrupt mid multi-ref transaction
@@ -407,7 +412,8 @@ the contract level: it binds every backend, not the git encoding.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 because: [backend-bit-perfect]
 ```
 
@@ -428,7 +434,8 @@ the structural cost").
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 because: [docs/models/atom-model#6]
 ```
 
@@ -446,7 +453,8 @@ carriage and enumeration, never trust.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [anchor-resolvable]
 ```
 
@@ -499,7 +507,8 @@ objects, not because one technique is preferred over the other.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [backend-refs-sole-mutability]
 ```
 
@@ -541,7 +550,8 @@ construction ([anchor-hash-agile](git-storage-format.md#anchor-hash-agile)).
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [backend-carriage-bit-perfect, content-hash-obligation, content-hash-is-tree-digest, content-hash-algorithm, anchor-hash-agile]
 ```
 
@@ -567,7 +577,8 @@ the tested trace set, never the universally-quantified claim itself.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [docs/models/publishing-stack-layers#2.1, docs/models/execution-model#6.1]
 ```
 
@@ -584,7 +595,8 @@ zero writes and zero further network round-trips once state is local.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 ## Proof Obligations

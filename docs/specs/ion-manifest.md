@@ -135,7 +135,8 @@ section is OPTIONAL and defaults to empty (no dependencies).
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [package-identity-required]
@@ -160,7 +161,8 @@ be rejected during validation.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [set-mirror-minimum]
@@ -170,7 +172,8 @@ contain at least one mirror (either a URL or the local sentinel `::`).
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [composer-set-reference]
@@ -208,7 +211,8 @@ silent misconfiguration from typos or deprecated fields.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [label-version-uniqueness]
@@ -335,7 +339,8 @@ any resolution or publish operation.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [manifest-required-sections, set-declaration-completeness, composer-set-reference, deny-unknown-fields]
 ```
 
@@ -413,7 +418,8 @@ NOT reference a set not declared in `[package.sets]`. Corollary of
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [set-declaration-completeness]
 ```
 
@@ -442,7 +448,8 @@ identical.
 
 ```claim
 kind: constraint
-evaluator: property-test
+verification:
+  implementation: property-test
 ```
 
 #### [manifest-validation-total]

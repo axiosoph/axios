@@ -706,7 +706,8 @@ this read-only invariant.
 
 ```claim
 kind: constraint
-evaluator: type
+verification:
+  implementation: type
 ```
 
 Verification will audit the `AtomDiscovery` API surface for mutation

@@ -179,7 +179,8 @@ The scheduler MUST assign each ready EP to the worker minimizing predicted local
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 Verification will audit EFT+OCT minimization and LRH cache hit rates

@@ -355,7 +355,8 @@ referenced by at least one dep entry.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 ## `[sets]` under the spine/cloud split (ADR-0009)
@@ -517,7 +518,8 @@ that exists in this lock. Dangling edges are a hard validation error.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [lock-requires-acyclic]
@@ -528,7 +530,8 @@ unrealizable.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [lock-dep-liveness]
@@ -698,7 +701,8 @@ composer selection, or evaluator arguments of any kind (ADR-0006 §3).
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [lock-no-params]
@@ -709,7 +713,8 @@ They are declared in the manifest, which ships inside the atom snapshot
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [lock-no-toolchain-section]
@@ -722,7 +727,8 @@ propagation is computed per [lock-action-totality](#lock-action-totality), never
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 because: [lock-action-totality]
 ```
 
@@ -734,7 +740,8 @@ beside build records.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [lock-no-override-state]
@@ -745,7 +752,8 @@ records their ground _results_; the pin-diff is the audit trail.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 #### [lock-no-foreign-metadata]
@@ -757,7 +765,8 @@ identity, not a timestamp.)
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 ## Whole-lock hashing is not an identity
@@ -775,7 +784,8 @@ the v1-era `plan_digest` and the job-identity scheme built on it.)
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 because: [docs/models/execution-model#2.4]
 ```
 

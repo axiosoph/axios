@@ -104,7 +104,8 @@ precedence.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 because: [version-total-order]
 ```
 

@@ -72,7 +72,8 @@ transport, never authority.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 ```
 
 A record known only from its own carrier is self-declaration: under the
@@ -92,7 +93,8 @@ seed rule, classifies as a **seed**.
 
 ```claim
 kind: constraint
-evaluator: test
+verification:
+  implementation: test
 depends: [spine-chain-complete]
 ```
 
@@ -111,7 +113,8 @@ publish's closure.
 
 ```claim
 kind: constraint
-evaluator: type
+verification:
+  implementation: type
 depends: [discover-one-question]
 ```
 
@@ -131,7 +134,8 @@ compound key.
 
 ```claim
 kind: constraint
-evaluator: type
+verification:
+  implementation: type
 ```
 
 #### [fact-keyed-by-own-czd]
@@ -142,6 +146,7 @@ in; the subject index is derived, local, and never fetched or trusted.
 
 ```claim
 kind: constraint
-evaluator: type
+verification:
+  implementation: type
 because: [store-keyed-by-czd]
 ```
