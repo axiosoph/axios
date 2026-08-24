@@ -242,9 +242,9 @@ normalization): HTC SAD §4.
 The composition substrate ships with no interpreted composition/expression
 language and no dependency on `nixpkgs` as a package corpus. ~~A
 passthrough-snix executor (linking `snix-eval` to run legacy Nix
-expressions) MAY exist as an **optional legacy escape hatch**~~ — withdrawn
-per the supersession note above; no evaluator exists in this design at any
-tier.
+expressions) was considered as an **optional legacy escape hatch**~~ —
+withdrawn per the supersession note above; no evaluator exists in this
+design at any tier.
 
 ### 9. Layer designation: L2, "Hermetic Transactional Composition" (HTC) [htc-layer-designation]
 

@@ -116,9 +116,11 @@ laundering container._
 
 ### 2. The anchoring requirement [sos-vouch-anchoring]
 
-**A source-class-vouch MUST be anchored; an unanchored signed vouch
-carries no verdict.** This instantiates the signature-anchoring law
-([Atom Model](../models/atom-model.md) §5) rather than adding to it:
+**A source-class-vouch is anchored, or it carries no verdict.** This is
+not a new rule: it is
+[trust-anchored-input](../specs/trust-model.md#trust-anchored-input)
+applied to one more fact class, itself an instance of the
+signature-anchoring law ([Atom Model](../models/atom-model.md) §5) —
 an unanchored signed value is `local` and carries no protocol trust,
 whatever its cryptographic validity.
 
@@ -141,11 +143,14 @@ admission is whether the verdict credits it — a vouch can be validly
 anchored yet admitted by no consumer, and neither substitutes for the
 other.
 
-Verifiers evaluating establishment MUST consume only anchored,
-unretracted vouches, however transported. The transport surface for
-out-of-log vouches — how a consumer discovers vouches anchored on
-chains other than the target's — is deliberately deferred design work
-(see Open item below); the anchoring requirement itself is not open.
+Establishment therefore only ever reads anchored vouches
+([trust-anchored-input](../specs/trust-model.md#trust-anchored-input))
+that stand unretracted
+([trust-excludes-retracted](../specs/trust-model.md#trust-excludes-retracted)),
+however transported. The transport surface for out-of-log vouches —
+how a consumer discovers vouches anchored on chains other than the
+target's — is deliberately deferred design work (see Open item below);
+the anchoring requirement itself is not open.
 
 ### 3. The totality and trust-surface model [sos-trust-surface]
 
@@ -182,10 +187,14 @@ plane:
   (`[trust-threshold-rule]`). Declared-but-uncorroborated members are
   `AttestationResidue`. The declaration keeps its existing policy role
   (`[trust-mode-rule]`) — it gates refusal, not bucket membership.
-- **Conforming implementations expose the accounting.** A verifier
-  implementing this model MUST make `T(a)` and `B(a)` available to
-  policy, so that admission decisions and revocation impact are
-  computable from the enumeration rather than re-derived ad hoc.
+- **Conforming implementations expose the accounting.** `T(a)` and
+  `B(a)` are this model's names for the residue and assumption basis
+  that
+  [verdict-carries-basis](../specs/trust-model.md#verdict-carries-basis)
+  already requires every verdict to carry — the same obligation,
+  under the notation this ADR's classification model uses, so that
+  admission decisions and revocation impact are computable from the
+  enumeration rather than re-derived ad hoc.
 
 ### 4. The source-class gate [sos-source-class-gate]
 

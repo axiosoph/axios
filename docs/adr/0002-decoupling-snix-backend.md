@@ -59,16 +59,18 @@ The evaluator is intentionally not a network service. It is a language interpret
 
 We integrate with snix primarily through its gRPC service interfaces rather than linking its runtime code. The integration is organized into four tiers, each with a distinct rationale and coupling budget.
 
-(Note: Following
-[ADR-0005](0005-hermetic-transactional-composition.md), Tiers 1, 2, and 4
-below are **not** superseded — they hold, re-scoped as the spec for the
-optional passthrough-snix executor, and ADR-0005's wire-first GPL-seam
-decision widens rather than reverses the seam they establish here. Tier 3
-is superseded wholesale; see the note at its heading.)
+(Note: [ADR-0005](0005-hermetic-transactional-composition.md) superseded
+only Tier 3 wholesale; Tiers 1, 2, and 4 survived that pass, re-scoped as
+the spec for the optional passthrough-snix executor. That executor is
+itself removed by [ADR-0006](0006-execution-as-the-primitive.md) §3,
+which takes Tiers 1, 2, and 4 down with it — their referent no longer
+exists, so the header's "superseded wholesale" now covers the entire
+tier structure below, not only Tier 3. Kept as decision history, not a
+live mechanism.)
 
 ### Tier 1: Store Access via gRPC
 
-The three store services (`BlobService`, `DirectoryService`, `PathInfoService`) SHALL be accessed as remote gRPC services. The eos daemon connects to one or more snix store daemons via gRPC URIs (e.g., `grpc+http://[::1]:8301`).
+The three store services (`BlobService`, `DirectoryService`, `PathInfoService`) were specified to be accessed as remote gRPC services, with the eos daemon connecting to one or more snix store daemons via gRPC URIs (e.g., `grpc+http://[::1]:8301`).
 
 **Current state:** `eos-daemon/src/main.rs` calls `snix_store::utils::construct_services()` to create in-process store instances.
 
@@ -80,7 +82,7 @@ The three store services (`BlobService`, `DirectoryService`, `PathInfoService`) 
 
 ### Tier 2: Build Dispatch via gRPC with Cap'n Proto Shim
 
-Build execution SHALL be dispatched to snix builder instances via the `snix.build.v1.BuildService` gRPC protocol, wrapped in a thin Cap'n Proto shim that adds scheduling-layer concerns.
+Build execution was specified to dispatch to snix builder instances via the `snix.build.v1.BuildService` gRPC protocol, wrapped in a thin Cap'n Proto shim that adds scheduling-layer concerns.
 
 The snix build protocol is unary (`DoBuild(BuildRequest) → Build`) and lacks progress streaming, job cancellation, and lease tracking. These are Eos scheduling concerns. A thin **build worker shim** bridges the protocols:
 
@@ -108,10 +110,11 @@ The shim:
 [ADR-0005](0005-hermetic-transactional-composition.md) §Supersede ADR-0002
 §Tier 3 — the MVP has no evaluation stage to schedule workers for; this
 entire tier, including its Cap'n Proto `EvalWorker` interface and worker
-pool, is dead scope. Tiers 1, 2, and 4 below are unaffected and survive
-scoped to the optional passthrough-snix executor.)
+pool, is dead scope. Tiers 1, 2, and 4 below survived that pass scoped to
+the optional passthrough-snix executor, but ADR-0006 §3 later removed
+that executor too — see the note at the top of this Decision section.)
 
-Evaluation SHALL be schedulable across a pool of remote eval workers, enabled by atom encapsulation. This is the key architectural differentiator from the Nix ecosystem.
+Evaluation was specified to be schedulable across a pool of remote eval workers, enabled by atom encapsulation — the key architectural differentiator this design drew from the Nix ecosystem.
 
 An eval worker:
 
@@ -154,7 +157,7 @@ The gRPC transport between worker shims and their downstream backends (snix stor
 
 The only universal contract is the Cap'n Proto `EvalWorker` and `BuildWorker` interfaces that face the scheduler. How a shim communicates with its backend is an implementation detail of that shim. Alternative backends have different transport characteristics:
 
-- **Legacy Nix**: The Nix daemon protocol is designed for local Unix domain socket communication and is prohibitively inefficient over the network. A Nix build worker shim SHOULD be co-located on the same host as its Nix daemon, communicating via `/nix/var/nix/daemon-socket/socket` or direct process invocation. A Nix eval worker shim would similarly invoke `nix-instantiate` (or link `libnixexpr`) as a local process.
+- **Legacy Nix**: The Nix daemon protocol is designed for local Unix domain socket communication and is prohibitively inefficient over the network. A Nix build worker shim was specified to be co-located on the same host as its Nix daemon, communicating via `/nix/var/nix/daemon-socket/socket` or direct process invocation. A Nix eval worker shim would similarly have invoked `nix-instantiate` (or linked `libnixexpr`) as a local process.
 - **Guix**: A Guix shim would translate ATerm derivations to Guix's S-expression format and dispatch builds to a co-located Guix daemon.
 - **Future backends**: Any system that can accept a build specification and produce content-addressed outputs can be wrapped in a shim. The shim's internal transport (gRPC, Unix socket, pipe, FFI) is unconstrained.
 
@@ -164,7 +167,7 @@ Operators deploying non-snix backends should expect shim and backend to run as a
 
 `nix-compat` provides protocol-level data structures (`Derivation`, `StorePath`, `NixHash`, `nixbase32`). These are compile-time type definitions, not runtime service dependencies. They are analogous to protobuf-generated types — necessary for serialization but not coupling to a runtime.
 
-`nix-compat` is an acceptable dependency in `eos-snix` and in the build worker shim (for `Derivation → BuildRequest` conversion). It SHALL NOT appear in `eos-core`, `eos`, or `eos-daemon`.
+`nix-compat` was an acceptable dependency in `eos-snix` and in the build worker shim (for `Derivation → BuildRequest` conversion), scoped to never appear in `eos-core`, `eos`, or `eos-daemon`.
 
 ### Architecture Diagram
 

@@ -237,26 +237,19 @@ evaluation codepath, or build pipeline.
 
 ### Invariants
 
-**[deployment-no-codepath-divergence]**: All deployment modes
-MUST use the same trait interfaces, the same scheduling
-algorithms, and the same evaluation/build pipelines. The
-difference between modes is which implementation of
-`Arc<dyn BlobService>` (gRPC client vs. redb) and which
-transport backing for Cap'n Proto (socket vs. memory pipe)
-is injected at construction time. No business logic may be
-conditionally compiled based on deployment mode.
-
-**[deployment-composable-monolith]**: Each component boundary
+Codepath identity and output equivalence across deployment modes are
+now normative constraints of
+[layer-boundaries.md §4.5](../specs/layer-boundaries.md#45--deployment-mode-consistency) —
+[deployment-no-codepath-divergence](../specs/layer-boundaries.md#deployment-no-codepath-divergence)
+and
+[deployment-mode-bisimilarity](../specs/layer-boundaries.md#deployment-mode-bisimilarity).
+This ADR keeps the decision they follow from: each component boundary
 (store, eval worker, build worker, scheduler) is independently
-wireable as in-process or remote. A deployment can mix modes:
-e.g., in-process store with remote build workers. The
-composition is a deployment configuration choice, not a
-compilation choice.
-
-**[deployment-mode-bisimilarity]**: All three deployment modes
-MUST produce identical outputs given identical inputs. This
-is validated by the formal model's bisimulation property:
-deployment mode is an observation-preserving morphism.
+wireable as in-process or remote. A deployment can mix modes — e.g.,
+in-process store with remote build workers. The composition is a
+deployment configuration choice, not a compilation choice, and the two
+constraints exist to keep it that way: nothing about which wiring is
+chosen may change what the system computes.
 
 ### Simplicity and Volatility Boundaries (Hickey/Lowy Audits)
 

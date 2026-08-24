@@ -253,6 +253,28 @@ verification:
 depends: [docs/models/atom-model#5]
 ```
 
+#### [trust-excludes-retracted]
+
+A retracted fact carries no verdict: a verifier MUST NOT
+consume a fact that a later, anchored `retracts` fact from the same
+signer has superseded (the `retracts` field itself, and its
+never-delete discipline, are the record model's, not this policy's —
+this claim binds only the acceptance-side consequence). Establishment
+is evaluated net of retractions at the consumer's own evidence
+snapshot — the same anchoring and signer-authority rules that admit
+the fact in the first place govern whether its retraction is itself
+honored. This is independent of
+[trust-anchored-input](#trust-anchored-input): an anchored fact can
+still be excluded from evaluation because a later fact retracted it,
+which anchoring alone does not decide.
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+depends: [trust-anchored-input]
+```
+
 #### [trust-signer-relative]
 
 Verdicts are per-consumer. An

@@ -583,6 +583,51 @@ verification:
 because: [boundary-contract-only]
 ```
 
+### §4.5 — Deployment Mode Consistency
+
+[ADR-0003](../adr/0003-composable-deployment-modes.md) decided that
+eos ships as one codebase wired three ways (monolithic-ion,
+monolithic-eos, distributed-eos, [Eos SAD §1.5](../architecture/eos-sad.md#15-deployment-modes)),
+never as three implementations. The two constraints that decision
+depends on are structural ownership rules of the same kind this
+document already governs elsewhere, so they are stated here rather
+than left as ADR prose nothing checks.
+
+#### [deployment-no-codepath-divergence]
+
+All deployment modes MUST use the
+same trait interfaces, the same scheduling algorithms, and the same
+evaluation/build pipelines. The difference between modes is which
+implementation of `Arc<dyn BlobService>` (gRPC client vs. redb) and
+which transport backing for Cap'n Proto (socket vs. memory pipe) is
+injected at construction time — a deployment configuration choice,
+never a compilation choice. No business logic is conditionally
+compiled based on deployment mode.
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+#### [deployment-mode-bisimilarity]
+
+All deployment modes MUST produce
+identical outputs given identical inputs. This is a behavioral
+property, not a structural one — it is
+[deployment-no-codepath-divergence](#deployment-no-codepath-divergence)'s
+consequence, formalized as a bisimulation over the layer model's
+coalgebraic semantics: deployment mode is an observation-preserving
+morphism ([Layer Model](../models/publishing-stack-layers.md), embedded/
+daemon/remote engine equivalence).
+
+```claim
+kind: constraint
+verification:
+  design: review
+  implementation: none
+```
+
 ---
 
 ## §5 — Enforcement
