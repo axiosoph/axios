@@ -124,7 +124,8 @@ layer Lₘ where m > n.
 
 ```claim
 kind: constraint
-evaluator: review
+verification:
+  implementation: review
 ```
 
 ```
@@ -217,7 +218,8 @@ a contract crate of the _consuming_ layer.
 
 ```claim
 kind: constraint
-evaluator: review
+verification:
+  implementation: review
 ```
 
 **Rationale:** The consuming layer defines its input contract. The
@@ -276,7 +278,8 @@ or any other contract crate.
 
 ```claim
 kind: constraint
-evaluator: review
+verification:
+  implementation: review
 ```
 
 ```
@@ -452,7 +455,8 @@ an inter-layer contract type.
 
 ```claim
 kind: constraint
-evaluator: review
+verification:
+  implementation: review
 ```
 
 **Rationale — the cargo-atom test:**
@@ -519,7 +523,8 @@ layers. They MUST:
 
 ```claim
 kind: constraint
-evaluator: review
+verification:
+  implementation: review
 ```
 
 `ion-eos` is the canonical bridge crate. It resides in `ion/`,

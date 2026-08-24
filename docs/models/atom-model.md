@@ -257,7 +257,9 @@ design work this model now governs rather than defers:
 
 ```claim
 kind: invariant
-evaluator: review
+verification:
+  design: review
+  implementation: none
 ```
 
 ## 5. The signature-anchoring law
@@ -314,7 +316,8 @@ policy is for (Execution Model §3.4).
 
 ```claim
 kind: invariant
-evaluator: review
+verification:
+  design: review
 ```
 
 ## 6. The reproducibility contract

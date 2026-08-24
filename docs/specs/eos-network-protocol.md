@@ -643,7 +643,8 @@ invocation on the `BuildJob` capability.
 
 ```claim
 kind: constraint
-evaluator: review
+verification:
+  implementation: review
 ```
 
 Verification will drop a `BuildJob` capability and confirm the build
@@ -659,7 +660,8 @@ that callback's resources without disturbing other attached clients.
 
 ```claim
 kind: constraint
-evaluator: review
+verification:
+  implementation: review
 depends: [attach-progress]
 ```
 
@@ -785,7 +787,8 @@ Submit a build request and receive a job capability.
 
 ```claim
 kind: constraint
-evaluator: review
+verification:
+  implementation: review
 ```
 
 Verification will submit identical plans and confirm deduplication.
@@ -803,7 +806,8 @@ Attach a progress callback to a running build.
 
 ```claim
 kind: constraint
-evaluator: review
+verification:
+  implementation: review
 ```
 
 Verification will attach a callback and confirm `BuildStatus`
@@ -822,7 +826,8 @@ build.
 
 ```claim
 kind: constraint
-evaluator: review
+verification:
+  implementation: review
 depends: [attach-progress]
 ```
 
@@ -843,7 +848,8 @@ Cancel a running build.
 
 ```claim
 kind: constraint
-evaluator: review
+verification:
+  implementation: review
 depends: [submit-build]
 ```
 
@@ -886,7 +892,8 @@ Graceful or abrupt session termination.
 
 ```claim
 kind: constraint
-evaluator: review
+verification:
+  implementation: review
 because: [eos-capability-lifecycle]
 ```
 
@@ -971,7 +978,8 @@ invocation MAY terminate a build.
 
 ```claim
 kind: constraint
-evaluator: review
+verification:
+  implementation: review
 because: [eos-capability-lifecycle]
 ```
 
@@ -1051,7 +1059,8 @@ MAY persist after the Cap'n Proto runtime processes the disconnection.
 
 ```claim
 kind: constraint
-evaluator: review
+verification:
+  implementation: review
 depends: [client-disconnect]
 ```
 

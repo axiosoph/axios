@@ -231,7 +231,9 @@ invariant the machine-checked model asserts for every atom in scope
 
 ```claim
 kind: invariant
-evaluator: model-check
+verification:
+  design: model-check
+  implementation: none
 ```
 
 ## 3. The trust surface and the assumption basis
@@ -381,7 +383,9 @@ machine-checked classification (§10).
 
 ```claim
 kind: invariant
-evaluator: model-check
+verification:
+  design: model-check
+  implementation: none
 ```
 
 ### 5.2 Why a vouch is required at all
@@ -462,7 +466,9 @@ signed a permanent, czd-addressed record of that judgment.
 
 ```claim
 kind: invariant
-evaluator: proof
+verification:
+  design: proof
+  implementation: none
 ```
 
 ## 6. The reproducibility mode is empirically grounded
@@ -546,7 +552,8 @@ minimal, and the entire remainder is machine-derived with the residue
 
 ```claim
 kind: invariant
-evaluator: model-check
+verification:
+  design: model-check
 ```
 
 ## 8. The forced generator and degeneracy
@@ -616,7 +623,8 @@ and no claim below is about the historical origin of any factoring.
 
 ```claim
 kind: invariant
-evaluator: proof
+verification:
+  design: proof
 ```
 
 ### 8.2 Why degeneracy is a valid undecidability target
@@ -642,7 +650,8 @@ well-definedness argument).
 
 ```claim
 kind: invariant
-evaluator: proof
+verification:
+  design: proof
 ```
 
 ### 8.3 The witness (non-vacuity)
@@ -780,7 +789,8 @@ $\Sigma_1$-certifiability itself is foreclosed.
 
 ```claim
 kind: invariant
-evaluator: proof
+verification:
+  design: proof
 ```
 
 ### 9.2 Theorem 2 — maximal sound decidable rejection (conditional)
@@ -922,7 +932,8 @@ merely preferred.
 
 ```claim
 kind: invariant
-evaluator: proof
+verification:
+  design: proof
 ```
 
 ### 9.3 Theorem 3 — forced attributability (two registers)
@@ -949,7 +960,9 @@ implementation must expose $B(a)$ so that check is possible.
 
 ```claim
 kind: invariant
-evaluator: proof
+verification:
+  design: proof
+  implementation: none
 ```
 
 > **Theorem 3b (attributability forcing — economic argument, not a
@@ -1085,7 +1098,8 @@ the model does not decide the undecidable.
 
 ```claim
 kind: invariant
-evaluator: model-check
+verification:
+  design: model-check
 ```
 
 ## 11. The Lean mechanization
@@ -1185,7 +1199,8 @@ generator-free, `Bool`-valued function to depend on.
 
 ```claim
 kind: invariant
-evaluator: proof
+verification:
+  design: proof
 ```
 
 ### 11.2 Proven here vs. cited: Theorem 1 is not mechanized
@@ -1226,7 +1241,8 @@ not merely absent within Alloy's bound.
 
 ```claim
 kind: invariant
-evaluator: proof
+verification:
+  design: proof
 ```
 
 ### 11.3 The assumption base
