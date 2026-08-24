@@ -369,7 +369,7 @@ existing models could and could not catch.)
 
 ```claim
 kind: constraint
-evaluator: model-check
+evaluator: none
 ```
 
 #### [czd-oid-phantom-typed]
