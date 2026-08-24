@@ -173,7 +173,7 @@ reliable.
 ### Developer Metadata (Cold-Start Signal)
 
 For atoms the scheduler has never encountered, developers
-MAY provide scheduling hints via atom metadata tags:
+can provide scheduling hints via atom metadata tags:
 
 ```toml
 [atom.metadata.scheduling]
