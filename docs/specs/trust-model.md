@@ -202,7 +202,8 @@ and quorum is the minimal shape that covers both._
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 because: [docs/models/execution-model#3.4, docs/models/atom-model#4]
 ```
 
@@ -222,7 +223,8 @@ defuse.)
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [backend-seam-typed]
 ```
 
@@ -246,7 +248,8 @@ definition, outside this policy language entirely.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [docs/models/atom-model#5]
 ```
 
@@ -261,7 +264,8 @@ be; signer trust governs what it _is, to you_.)
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 because: [docs/models/execution-model#3.4]
 ```
 
@@ -289,7 +293,8 @@ kind per the classification table of
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [docs/models/atom-model#5]
 because: [docs/architecture/htc-sad#6.10]
 ```
@@ -329,7 +334,8 @@ rotation by hand._
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [claim-owner-single, owner-authorization-delegated]
 because: [charter-owner-set, claim-charter-authorization]
 ```
@@ -363,7 +369,8 @@ parties to agree on.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [docs/models/atom-model#6, docs/models/execution-model#3.1]
 ```
 
@@ -380,7 +387,8 @@ the floor is the ceiling.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [trust-rule-determinism]
@@ -399,7 +407,8 @@ order and would demand a tie-break rule of its own._
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [trust-mode-rule]
@@ -418,7 +427,8 @@ corroboration of individual records.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [publish-mode, docs/models/atom-model#6]
 ```
 
@@ -455,7 +465,8 @@ a per-consumer investigation trigger rather than a global verdict
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [docs/models/atom-model#6]
 ```
 
@@ -474,7 +485,8 @@ third-party feed to detect or resolve findings.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [backend-enumeration, backend-chain-append]
 ```
 
@@ -493,7 +505,8 @@ auditable against the configuration that produced it.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 because: [docs/models/execution-model#2.2]
 ```
 
@@ -523,7 +536,8 @@ snapshot it rests on. No `Into<bool>`.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 because: [docs/models/execution-model#4.2]
 ```
 
@@ -543,7 +557,8 @@ only stops work.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 because: [docs/adr/0007-atom-version-integrity-system#16]
 ```
 
@@ -609,7 +624,8 @@ context, not as verdict subjects).
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [trust-anchored-input, trust-owner-selector, trust-role-authorization, trust-rule-determinism, trust-mode-rule, trust-contested-refusal, trust-threshold-rule]
 ```
 
@@ -629,7 +645,8 @@ part-fact; no policy state makes the procedure abstain.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [trust-acceptance-procedure]
 ```
 
@@ -648,7 +665,8 @@ record's cryptographic validity.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [trust-acceptance-procedure]
 ```
 

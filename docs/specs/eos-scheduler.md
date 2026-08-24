@@ -157,7 +157,8 @@ A worker node MUST NOT fetch the source snapshot for an atom or any transitive i
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 Verification will inspect worker network logs during a build.
@@ -168,7 +169,8 @@ For any unique `JobId`, there MUST exist at most one active (QUEUED or RUNNING) 
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 Verification will test concurrent submissions of the same build.
@@ -192,7 +194,8 @@ The scheduler MUST maintain a persistent profile store of historical build obser
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 Verification will confirm profile write-through, hot-cache eviction,
@@ -213,7 +216,8 @@ The scheduler's internal scheduling queue and state transitions MUST NOT depend 
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 Verification will check module boundaries and confirm no lock
@@ -225,7 +229,8 @@ The scheduler MUST receive the atom DAG at build submission as a structured `eos
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 because: [eos-scheduler-state-isolation]
 ```
 
@@ -238,7 +243,8 @@ Every job in the `RUNNING` state MUST be covered by a valid `Lease`. If a lease 
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 Verification will withhold lease renewal and confirm the job returns
@@ -250,7 +256,8 @@ Every registered worker MUST send periodic heartbeat signals to the scheduler. I
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [eos-scheduler-lease-expiry]
 ```
 
@@ -297,7 +304,8 @@ The scheduler MUST query artifact existence ONLY through the `eos-core` `Artifac
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 because: [eos-scheduler-state-isolation]
 ```
 
@@ -317,7 +325,8 @@ Add a new build task to the queue.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 because: [eos-scheduler-dag-intake]
 ```
 
@@ -346,7 +355,8 @@ Extend the lease on a running job.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 Verification will test lease extension and the expiry boundary.
@@ -387,7 +397,8 @@ A job MUST NOT remain in the `RUNNING` state if its `assigned_worker` is disconn
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [eos-scheduler-lease-expiry, eos-scheduler-heartbeat-liveness]
 ```
 
@@ -400,7 +411,8 @@ No two workers MUST be concurrently executing jobs with the same `JobId`.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 Verification will audit multi-worker execution logs.
@@ -438,7 +450,8 @@ Scheduling independent jobs concurrently MUST yield a state equivalent to schedu
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 Verification will audit parallel-vs-sequential schedule output.

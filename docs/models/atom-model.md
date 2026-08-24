@@ -588,7 +588,8 @@ evidence.
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ## 11. The spine and the cloud: the atom plane's own store
@@ -614,7 +615,8 @@ omission is **unconstructible**, not merely detectable.
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 ```
 
 Authorization is computed by folding the spine's amendment chain
@@ -656,7 +658,8 @@ an anchor from such a spine.
 
 ```claim
 kind: invariant
-evaluator: none
+verification:
+  implementation: none
 depends: [spine-chain-complete]
 ```
 

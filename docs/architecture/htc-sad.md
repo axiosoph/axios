@@ -76,7 +76,8 @@ view_ that turns out to be missing something it needs.
 
 ```claim
 kind: requirement
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ### 1.2 External Actors

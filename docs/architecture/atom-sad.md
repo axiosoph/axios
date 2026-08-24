@@ -87,7 +87,8 @@ consumes them.
 
 ```claim
 kind: requirement
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ### 1.2 External Actors
@@ -540,7 +541,8 @@ independently of ion or any other frontend.
 
 ```claim
 kind: requirement
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ## 7. Wire and Storage Formats

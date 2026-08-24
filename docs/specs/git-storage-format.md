@@ -356,7 +356,8 @@ charter's `src` commits to its entire ancestry.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [anchor-hash-agile]
@@ -444,7 +445,8 @@ commit's own parent chain, which stays empty. (Satisfies
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 because: [atom-detached]
 ```
 
@@ -471,7 +473,8 @@ left for this constraint to bind.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [temporal-vector]
@@ -576,7 +579,8 @@ from has changed.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [log-anchored-message-fixed]
@@ -661,7 +665,8 @@ States, below, covers it directly.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [charter-fact-chain]
@@ -777,7 +782,8 @@ carries instead of the message field.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [claim-fact-chain]
@@ -822,7 +828,8 @@ targeting rule for the chain's own commits.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [publish-commit-format]
@@ -863,7 +870,8 @@ commit.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [publish-claim-binding]
@@ -891,7 +899,8 @@ for the publish chain's first commit.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [publish-message-is-coz] — RETIRED 2026-08-23
@@ -909,7 +918,8 @@ unchanged; only where a verifier reads the bytes from has changed.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [tag-chain-immutable] — RETIRED 2026-08-23
@@ -929,7 +939,8 @@ constraint's audit-trail argument now falls out of directly.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [publish-fact-chain]
@@ -1131,7 +1142,8 @@ for the git instantiation.)
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [anchor-hash-agile, content-hash-is-tree-digest]
 because: [backend-hash-strength]
 ```
@@ -1153,7 +1165,8 @@ header left to be a caution ABOUT.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [single-active-claim-registry]
@@ -1394,7 +1407,8 @@ needed beyond what `[claim-fact-chain]` already provides.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ##### [store-claim-cleanup]
@@ -1621,7 +1635,8 @@ detectable event — over the fact mechanism instead.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [claim-owner-fact-storage]
@@ -1769,7 +1784,8 @@ than as a separate claim about tag semantics specifically.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [refs-atomic-multi]
@@ -1851,7 +1867,8 @@ matching what downstream consumers would see.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [ingest-transition]
 ```
 
@@ -1877,7 +1894,8 @@ parent-shape rules changes here.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [claim-tree-is-log]
@@ -2009,7 +2027,8 @@ disambiguate; the constraint is retired along with
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [no-missing-store-claim]

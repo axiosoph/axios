@@ -533,7 +533,8 @@ buggy client, a dishonest one, or a compromised key.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [charter-fork-distinction]
 ```
 
@@ -595,7 +596,8 @@ abstraction's identity frameworks, not through protocol exceptions.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [claim-replacement-authority] — RETIRED 2026-08-05
@@ -720,7 +722,8 @@ the fact-based claim-owner-change rule anywhere in this repository.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [charter-ancestry]
@@ -741,7 +744,8 @@ value, never a value that shifts with succession.)
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [charter-succession] and [charter-succession-linear] — RETIRED 2026-08-05
@@ -802,7 +806,8 @@ own, so it cannot add a key without a membership change (a new
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [charter-owner-fact-linear]
@@ -882,7 +887,8 @@ consistency, not this restatement's correctness.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [charter-owner-threshold]
@@ -962,7 +968,8 @@ facts (`[claim-owner-fact]`) have landed since genesis.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [charter-fork-distinction]
@@ -1058,7 +1065,8 @@ not a smaller version of the old one.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [owner-abstract]
@@ -1106,7 +1114,8 @@ upgrades, and delegation — only the authorization semantics of
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [owner-kind-required]
@@ -1805,7 +1814,8 @@ scope, which never touch the charter record itself
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [anchor-content-addressed]
@@ -1878,7 +1888,8 @@ references within a source.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [publish-claim-coherence]

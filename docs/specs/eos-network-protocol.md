@@ -555,7 +555,8 @@ or scheme.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 Verification will exercise challenge-response authentication against
@@ -571,7 +572,8 @@ content-address verification.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 Verification will inject a corrupted artifact into the cache and
@@ -586,7 +588,8 @@ attestation MUST include a timestamp for freshness verification.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 Verification will check `OriginAttestation` signature validation
@@ -602,7 +605,8 @@ are incompatible, the connection MUST be terminated with a rejection reason.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 Verification will exercise the handshake and confirm a capability
@@ -620,7 +624,8 @@ Nonces MUST NOT be reused within the freshness window to prevent replay.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [eos-network-sovereign-auth, eos-origin-attestation]
 ```
 
@@ -671,7 +676,8 @@ resolved before the Cap'n Proto `TwoPartyVatNetwork` is instantiated.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 Verification will run the identical test suite over both UDS and TCP
@@ -688,7 +694,8 @@ deployment-configurable.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [eos-origin-attestation]
 ```
 
@@ -732,7 +739,8 @@ connections.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 Verification will confirm socket creation and readiness signaling.
@@ -753,7 +761,8 @@ the daemon.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [eos-network-sovereign-auth, eos-protocol-capability-matching]
 ```
 
@@ -856,7 +865,8 @@ Query remote caches for pre-built artifacts.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [eos-trustless-substitution, eos-origin-attestation, eos-wot-substitution-threshold]
 ```
 
@@ -893,7 +903,8 @@ Graceful daemon termination.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 Verification will send SIGTERM and confirm graceful drain and socket
@@ -912,7 +923,8 @@ policy is enabled. Artifacts without attestations meeting the configured
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [eos-wot-substitution-threshold, eos-origin-attestation]
 ```
 
@@ -926,7 +938,8 @@ establishment.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 Verification will run static analysis for credential exposure in
@@ -941,7 +954,8 @@ validate against the declared `NodeIdentity`, the sovereign principal
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [eos-network-sovereign-auth]
 ```
 
@@ -973,7 +987,8 @@ handshake. Unauthenticated transports MUST NOT expose any RPC surface.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [client-connect]
 ```
 
@@ -996,7 +1011,8 @@ delay.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [request-substitute]
 ```
 
@@ -1016,7 +1032,8 @@ _M_-of-_N_ agreement threshold.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 Verification will dual-build with injected non-determinism and

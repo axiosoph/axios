@@ -325,7 +325,8 @@ divergence in content is tamper evidence, not a race
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [backend-chain-append, mirror-staleness-tolerance, chain-monotonicity, atom-version-identity, no-conflicting-digest, czd-divergence-handling]
 ```
 
@@ -374,7 +375,8 @@ existing models could and could not catch.)
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [czd-oid-phantom-typed]
@@ -386,7 +388,8 @@ constraint form of the `Czd ∩ OID = ∅` law
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [backend-seam-typed]
 ```
 

@@ -149,7 +149,8 @@ OPTIONAL.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [set-declaration-completeness]
@@ -184,7 +185,8 @@ The referenced atom MUST be resolvable from that set.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [version-constraint-syntax]
@@ -199,7 +201,8 @@ implementation is semver. Examples: `"^1.0.0"`, `">=2.0,<3.0"`,
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [version-total-order]
 ```
 
@@ -226,7 +229,8 @@ existing (label, version) pair is forbidden.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [atom-version-identity]
 ```
 
@@ -242,7 +246,8 @@ by ion core.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [plugin-lock-contract]
@@ -263,7 +268,8 @@ it in the lock and passes it through.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [plugin-extension-point]
 ```
 
@@ -278,7 +284,8 @@ verification strategy without understanding ion's plugin mechanism.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [plugin-extension-point]
 ```
 
@@ -294,7 +301,8 @@ updates.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [plugin-extension-point]
 ```
 
@@ -308,7 +316,8 @@ output: type tag, name, URL, and hash.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [plugin-extension-point]
 ```
 
@@ -362,7 +371,8 @@ only parses and validates a manifest already on disk.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [manifest-parse]
 ```
 
@@ -384,7 +394,8 @@ the codebase.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [set-anchor-bijection]
 ```
 
@@ -407,7 +418,8 @@ dedicated positive test.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [no-undeclared-set-reference]
@@ -431,7 +443,8 @@ and reject self-referential dependencies.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ### Behavioral Properties
@@ -463,7 +476,8 @@ repeated parse-fix-parse cycles.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [plugin-isolation]
@@ -478,7 +492,8 @@ corresponding lock entries.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [plugin-extension-point]
 ```
 

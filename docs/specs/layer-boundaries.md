@@ -147,7 +147,8 @@ workspace W₂.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ```
@@ -168,7 +169,8 @@ depended upon by any crate outside their own workspace.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 because: [boundary-contract-only]
 ```
 
@@ -190,7 +192,8 @@ other as needed.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ```
@@ -252,7 +255,8 @@ have no dependency budget.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 **Rationale:** Contract crates define the API surface that every
@@ -569,7 +573,8 @@ required interface pattern for cache-skip scans (see
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 because: [boundary-contract-only]
 ```
 
@@ -598,7 +603,8 @@ a standalone Rust/shell script in `tools/`.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [boundary-downward-only, boundary-contract-only, boundary-contract-dep-budget]
 ```
 
@@ -625,7 +631,8 @@ by naming convention:
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ### §5.3 — Violation Budgeting
@@ -645,7 +652,8 @@ The exception count SHOULD trend toward zero.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ---

@@ -238,7 +238,8 @@ Eos MUST fetch atom snapshots and verify their content digests before applying a
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [eos-verify-ownership]
@@ -247,7 +248,8 @@ Eos MUST verify that the publish transaction is validly signed and authorized ac
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [eos-verify-plugin-deps]
@@ -267,7 +269,8 @@ Eos MUST NOT execute or reference any unverified snapshot or plugin dependency i
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 because: [eos-verification-obligation, eos-verify-plugin-deps]
 ```
 
@@ -277,7 +280,8 @@ Build execution MUST be executed in a restricted sandboxed environment. The sand
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [eos-sandbox-host-isolation]
@@ -286,7 +290,8 @@ The sandbox MUST NOT have write access to any part of the host filesystem outsid
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [eos-sandbox-reproducibility]
@@ -295,7 +300,8 @@ The sandbox MUST NOT leak host environment variables, system times, CPU/hardware
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 Verification will double-build and compare output hashes for
@@ -307,7 +313,8 @@ Two Eos engine implementations MUST be behaviorally equivalent (bisimilar) under
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 Verification will run parity checks between a mock and a concrete
@@ -319,7 +326,8 @@ Once a build output is registered in the `ArtifactStore` at a `StorePath`, it MU
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [eos-cache-determinism]
@@ -339,7 +347,8 @@ The store path of any build output MUST be transitively self-contained. All depe
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 Verification will trace store-scanner references to validate the
@@ -382,7 +391,8 @@ Execute a build plan to produce store outputs.
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 depends: [engine-plan]
 ```
 
@@ -399,7 +409,8 @@ A build execution MUST NOT reference or import any host environment variables or
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 Verification will audit environment-variable whitelist enforcement.
@@ -410,7 +421,8 @@ Eos MUST NOT commit outputs to the store for builds that fail post-evaluation ve
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 #### [no-dirty-store-paths]
@@ -419,7 +431,8 @@ Eos MUST NOT register a store path in the `ArtifactStore` unless its contents ha
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 ```
 
 ---
@@ -434,7 +447,8 @@ Multiple concurrent action-cache lookups for the same `action_id` (htc-sad §6.5
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 because: [engine-plan]
 ```
 
@@ -446,7 +460,8 @@ If an [engine-apply](#engine-apply) fails or aborts, all temporary sandbox resou
 
 ```claim
 kind: constraint
-evaluator: none
+verification:
+  implementation: none
 because: [engine-apply]
 ```
 
