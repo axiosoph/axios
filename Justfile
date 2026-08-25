@@ -3,10 +3,19 @@ default:
     @just --list
 
 # Build the documentation site and generate the search index
-doc:
+doc: claim-report
     python3 www/process_docs.py
     sukr -c www/site.toml
     pagefind --site www/public
+
+# Regenerate the claim verification page from the register itself, so the
+# published view of what is backed cannot drift from what docket measures.
+# Override DOCKET when the register binary is not the one on PATH.
+claim-report:
+    ${DOCKET:-docket} report --corpus . --frontmatter \
+      --title "Claim Verification Report" \
+      --description "Where every specified claim's evidence actually stands, weakest first." \
+      --weight 9 > www/content/reference/claim-verification.md
 
 # Run all unit and property tests across all workspaces
 test:
