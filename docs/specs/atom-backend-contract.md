@@ -377,8 +377,29 @@ existing models could and could not catch.)
 ```claim
 kind: constraint
 verification:
+  design: none
   implementation: none
 ```
+
+**Not machine-verified, checked directly (model-repair pass, 2026-08-24).**
+`docs/specs/alloy/atom_backend_seam.als` exists and its `run_alloy_checks.sh`
+gate is green, but neither speaks to this claim. `oid_disjoint_from_
+protocol_sorts` and `carrier_czd_seam` both reduce to `Czd ∩ OID = ∅`
+between distinct top-level Alloy sigs with no `extends`/`in` relation —
+disjoint by declaration, before any fact in the file is consulted. Confirmed
+directly, not inferred: `run { some c: Czd, o: OID | c = o } for 4` against
+that file (every other fact intact) reports "No instance found" — the
+negation is structurally unreachable, so no mutation to the model's facts
+could ever make either `check` fail. See the two assertions' own comments in
+`atom_backend_seam.als` for the full argument. The ref-path/`RefName` clause
+has a second, independent gap: no such sort exists in the model at all, and
+the git instantiation currently defines no OID-rendering ref-path family for
+one to check against (the sole historical instance, `refs/atom/src/{oid}`,
+is retired — see this claim's own text above). The model supplies genuine
+coverage for `[backend-ancestry-sound]`/P15 only (`ancestry_soundness`,
+gated by the real `hash_commitment` fact) — `design: none` above states that
+honestly rather than omitting the key, since this claim plainly has a
+design-level target, just no check yet able to close it.
 
 #### [czd-oid-phantom-typed]
 
@@ -628,29 +649,30 @@ P12–P14 in [atom-model](../models/atom-model.md) §10):
 
 ## Verification
 
-**The owed evaluator, named precisely.** The seam law's machine check
-is an Alloy model (planned home: `docs/specs/alloy/atom_backend_seam.als`)
-carrying a **unified `OID` sort disjoint from `Czd`**, modeling: czd
-computation independent of carrier OID, the OID-typing of exactly the
-payload/carrier/ref-encoding surfaces named in `[backend-seam-typed]`,
-and ancestry as reachability over hash-committed parent links (P15's
-abstract row). This model is REQUIRED work, not optional hardening,
-and the precise deficiency it fills is this: `atom_structure.als`
-already declares `Czd`, `Dig`, and `Src` as disjoint top-level sorts —
-a direct czd-versus-dig comparison is analyzer-rejected today — but
-those sorts are **ancestry-free field atoms**: there is no unified OID
-sort carrying hash-committed `parents` (so P15's "asserting false
-ancestry requires a collision" is inexpressible), and no carrier
-objects at all (so the czd/carrier seam — czd computed over payload
-bytes, independent of `oid(carrier(m))` — has no surface on which to
-be checked). `AtomCharter.tla` likewise models ancestry as an
-abstract, trusted numeric order (`Descends(a,b) == a >= b` over
-naturals) — assumed sound, never derived from hash commitment. The
-landed defects were carrier-seam and fabrication bugs, which live
-exactly on the surfaces the existing models do not carry. Until the
-model lands, `[backend-seam-typed]`'s discharge is disjoint newtypes
-checked by rustc, an audit that no cross-construction occurs outside
-the named surfaces, and a ref-segment rehydration audit, plus review.
+**The seam model has landed; it discharges P15, not `[backend-seam-typed]`
+(corrected 2026-08-24 — the paragraph below described the model as owed
+after it had already been committed).** `docs/specs/alloy/atom_backend_seam.als`
+carries a unified `OID` sort disjoint from `Czd`, hash-committed `parents`,
+and carrier objects, exactly filling the deficiency `atom_structure.als` left
+(that file's `Czd`/`Dig`/`Src` are ancestry-free field atoms with no unified
+OID sort and no carrier objects — P15's ancestry law and the czd/carrier seam
+both had no surface to be checked on). `ancestry_soundness` genuinely
+machine-checks P15 / `[backend-ancestry-sound]`, gated by the real
+`hash_commitment` fact — that grade stands. It does NOT machine-check
+`[backend-seam-typed]`: `oid_disjoint_from_protocol_sorts` and
+`carrier_czd_seam` both reduce to disjointness between distinct top-level
+Alloy sigs, which is true by declaration before any fact in the file is
+consulted — confirmed directly (`run { some c: Czd, o: OID | c = o } for 4`
+against the file reports "No instance found" with every fact intact), not
+inferred. No mutation to this model's facts can make either check fail, so
+neither backs a `model-check` grade (see the two assertions' own comments in
+the file). The ref-path/`RefName` clause has no sort in the model at all,
+and the git instantiation currently defines no OID-rendering ref-path family
+to check it against. `[backend-seam-typed]`'s discharge remains disjoint
+newtypes checked by rustc, an audit that no cross-construction occurs
+outside the named surfaces, and a ref-segment rehydration audit, plus
+review — unchanged by the model landing, since the model does not reach this
+claim.
 
 ## Appendix A: The Git Instantiation
 
@@ -670,7 +692,7 @@ spec relies on today without stating — each is an amendment item
 | backend-refs-linearizable    | `[publish-transition-git]` POST: CAS on the claim ref (SHOULD, one site)             | **PARTIAL — present correctness defect**: SHOULD-grade CAS leaves a TOCTOU window between claim replacement and publish; priority amendment |
 | backend-refs-atomic-multi    | §Implementation Guidance, Atomicity: `gix::refs::Transaction`, atomic push (single-remote — discharges the per-store law) | **PARTIAL** — guidance, not a tagged constraint |
 | backend-replica-reads        | protocol layer: `[mirror-staleness-tolerance]`, `[atom-version-identity]`, `[czd-divergence-handling]` (atom-sourcing); `[chain-monotonicity]` (atom-transactions) | Discharged (protocol layer) |
-| backend-seam-typed           | `[anchor-hash-agile]` (anchor is not an ObjectId) is one instance                    | **GAP** — no general law; the landed bug class lived here |
+| backend-seam-typed           | `[anchor-hash-agile]` (anchor is not an ObjectId) is one instance; `atom_backend_seam.als` exists but its disjoint-sorts checks are vacuous by Alloy sig construction (§Verification, 2026-08-24) | **GAP** — no general law; the landed bug class lived here |
 | backend-seam-typed (ref encodings) | `TYPE RefPath = String`; czd-hex and blake3-hex segments distinguished only by prefix convention — no oid-hex family remains (the sole instance, `refs/atom/src/{oid}`, is retired) | **GAP** — typed-encoding statement absent |
 | backend-carriage-bit-perfect | `[coz-bit-perfect]`                                                                  | Discharged |
 | backend-chain-append         | `[tag-chain-immutable]`, `[claim-detached]` chains, `[publish-update-transition]`    | Discharged for claim/publish chains; **GAP** for charter encoding (git spec Open Questions #6) |
