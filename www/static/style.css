@@ -32,7 +32,14 @@
     --accent-hover-light: hsl(250, 78%, 45%);
     --accent-subtle-light: hsl(250, 100%, 96%);
     --code-bg-light: hsl(var(--h), 15%, 92%);
-    
+
+    /* Verification-tone palette (claim report cards): pine for
+       mechanically backed, amber for an honest gap or a vouch, alarm
+       for the one tier that reads as backed but is not. */
+    --pine-light: #0e6b5b;
+    --amber-light: #a25320;
+    --alarm-light: #8c3629;
+
     /* Dark Theme Palette */
     --bg-dark: hsl(var(--h), 22%, 9%); /* Deep Charcoal/Navy */
     --bg-sidebar-dark: hsl(var(--h), 20%, 6%);
@@ -43,7 +50,10 @@
     --accent-hover-dark: hsl(217, 85%, 52%);
     --accent-subtle-dark: hsl(217, 80%, 15%);
     --code-bg-dark: hsl(var(--h), 20%, 14%);
-    
+    --pine-dark: #57c3ab;
+    --amber-dark: #d9924f;
+    --alarm-dark: #e0776a;
+
     /* Default Colors (System preference fallback) */
     --bg: var(--bg-light);
     --bg-sidebar: var(--bg-sidebar-light);
@@ -54,7 +64,10 @@
     --accent-hover: var(--accent-hover-light);
     --accent-subtle: var(--accent-subtle-light);
     --code-bg: var(--code-bg-light);
-    
+    --pine: var(--pine-light);
+    --amber: var(--amber-light);
+    --alarm: var(--alarm-light);
+
     /* Native color-scheme adaptation */
     color-scheme: light dark;
     
@@ -75,6 +88,9 @@
       --accent-hover: var(--accent-hover-dark);
       --accent-subtle: var(--accent-subtle-dark);
       --code-bg: var(--code-bg-dark);
+      --pine: var(--pine-dark);
+      --amber: var(--amber-dark);
+      --alarm: var(--alarm-dark);
     }
   }
 
@@ -89,6 +105,9 @@
     --accent-hover: var(--accent-hover-light);
     --accent-subtle: var(--accent-subtle-light);
     --code-bg: var(--code-bg-light);
+    --pine: var(--pine-light);
+    --amber: var(--amber-light);
+    --alarm: var(--alarm-light);
   }
 
   /* Pinned Dark Mode Override */
@@ -102,6 +121,9 @@
     --accent-hover: var(--accent-hover-dark);
     --accent-subtle: var(--accent-subtle-dark);
     --code-bg: var(--code-bg-dark);
+    --pine: var(--pine-dark);
+    --amber: var(--amber-dark);
+    --alarm: var(--alarm-dark);
   }
 
   /* Modern light-dark() CSS variables if supported */
@@ -116,6 +138,9 @@
       --accent-hover: light-dark(var(--accent-hover-light), var(--accent-hover-dark));
       --accent-subtle: light-dark(var(--accent-subtle-light), var(--accent-subtle-dark));
       --code-bg: light-dark(var(--code-bg-light), var(--code-bg-dark));
+      --pine: light-dark(var(--pine-light), var(--pine-dark));
+      --amber: light-dark(var(--amber-light), var(--amber-dark));
+      --alarm: light-dark(var(--alarm-light), var(--alarm-dark));
     }
 
     :root[data-theme="light"] {
@@ -1450,6 +1475,223 @@
 
     .sidebar:has(.nav-toggle:checked) .sidebar-search {
       display: flex;
+    }
+  }
+
+  /* Claim verification report (docket report — report.rs's own module
+     docs on the "dk-" vocabulary). Docket emits only structure and
+     data-* state; every colour and layout decision lives here. */
+  .dk-report {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  /* Summary figures: large tabular numerals, small labels, weakest-first
+     — the same order the sections below walk. */
+  .dk-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1px;
+    background-color: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    overflow-x: auto;
+    margin-block-end: 1rem;
+  }
+
+  .dk-figure {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    padding: 1rem 1.25rem;
+    background-color: var(--bg-sidebar);
+  }
+
+  .dk-figure-value {
+    font-family: 'Outfit', sans-serif;
+    font-size: 2rem;
+    font-weight: 800;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    color: var(--fg);
+  }
+
+  .dk-figure[data-tone="alarm"] .dk-figure-value { color: var(--alarm); }
+  .dk-figure[data-tone="amber"] .dk-figure-value { color: var(--amber); }
+  .dk-figure[data-tone="pine"] .dk-figure-value { color: var(--pine); }
+
+  .dk-figure-label {
+    font-size: 0.75rem;
+    color: var(--fg-muted);
+    text-wrap: pretty;
+  }
+
+  /* Section header: a numbered marker (real sequence, weakest-first —
+     `data-tier` on the wrapper, never literal text inside the heading;
+     report.rs's module docs explain why) beside the heading, then the
+     explanation of what the tier means. */
+  .dk-section {
+    margin-block-start: 1.5rem;
+  }
+
+  .dk-section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+  }
+
+  .dk-section-head::before {
+    content: attr(data-tier);
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 1.75rem;
+    block-size: 1.75rem;
+    border-radius: 50%;
+    background-color: var(--code-bg);
+    border: 1px solid var(--border);
+    color: var(--fg-muted);
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.9rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .dk-section[data-class="misleading-gap"] .dk-section-head::before {
+    color: var(--alarm);
+    border-color: var(--alarm);
+  }
+  .dk-section[data-class="declares-none"] .dk-section-head::before,
+  .dk-section[data-class="review-only"] .dk-section-head::before {
+    color: var(--amber);
+    border-color: var(--amber);
+  }
+  .dk-section[data-class="backed-by-marker"] .dk-section-head::before {
+    color: var(--pine);
+    border-color: var(--pine);
+  }
+
+  .dk-section-head h2 {
+    margin-block-start: 0;
+  }
+
+  .dk-section-intro {
+    color: var(--fg-muted);
+    font-size: 0.95rem;
+    max-width: 76ch;
+  }
+
+  .dk-section-intro p {
+    margin-block-end: 0;
+  }
+
+  /* One claim, one card — the boundary that makes the survey scannable
+     instead of a run of paragraphs (the head's own framing). */
+  .dk-claim {
+    --tier-color: var(--fg-muted);
+    margin-block: 1.25rem;
+    padding: 1.25rem 1.5rem;
+    background-color: var(--bg-sidebar);
+    border: 1px solid var(--border);
+    border-inline-start: 4px solid var(--tier-color);
+    border-radius: 0 8px 8px 0;
+    overflow-x: auto;
+  }
+
+  .dk-claim[data-class="misleading-gap"] { --tier-color: var(--alarm); }
+  .dk-claim[data-class="declares-none"],
+  .dk-claim[data-class="review-only"] { --tier-color: var(--amber); }
+  .dk-claim[data-class="backed-by-marker"] { --tier-color: var(--pine); }
+
+  .dk-claim h3 {
+    margin-block-start: 0;
+    margin-block-end: 0.5rem;
+    font-size: 1.05rem;
+  }
+
+  .dk-claim h3 code {
+    font-size: 0.9em;
+  }
+
+  .dk-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.75rem;
+    margin-block-end: 0.6rem;
+    font-size: 0.85rem;
+  }
+
+  .dk-loc {
+    font-family: 'Fira Code', ui-monospace, SFMono-Regular, monospace;
+    color: var(--fg-muted);
+  }
+
+  .dk-kind {
+    color: var(--fg-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 0.75rem;
+  }
+
+  /* Axis pills: the name sits at reduced opacity beside its value, so
+     "design / model-check" reads as one token (the head's framing). */
+  .dk-axes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-block-end: 0.6rem;
+  }
+
+  .dk-axis {
+    --pill-color: var(--fg-muted);
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.35rem;
+    padding: 0.15rem 0.55rem;
+    border-radius: 4px;
+    border: 1px solid var(--pill-color);
+    background-color: color-mix(in srgb, var(--pill-color) 10%, transparent);
+    font-size: 0.8rem;
+  }
+
+  .dk-axis[data-state="backed"] { --pill-color: var(--pine); }
+  .dk-axis[data-state="gap"] { --pill-color: var(--amber); }
+  .dk-axis[data-state="misleading"] { --pill-color: var(--alarm); }
+  .dk-axis[data-state="empty"] { --pill-color: var(--fg-muted); opacity: 0.7; }
+
+  .dk-axis-name {
+    color: var(--fg-muted);
+    opacity: 0.75;
+  }
+
+  .dk-axis-value {
+    font-family: 'Fira Code', ui-monospace, SFMono-Regular, monospace;
+    color: var(--fg);
+    font-weight: 600;
+  }
+
+  .dk-cites {
+    font-family: 'Fira Code', ui-monospace, SFMono-Regular, monospace;
+    font-size: 0.8rem;
+    color: var(--fg-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .dk-claim blockquote {
+    margin-block-start: 0.75rem;
+  }
+
+  @media (max-width: 768px) {
+    .dk-summary {
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    }
+
+    .dk-claim {
+      padding: 1rem;
     }
   }
 }
