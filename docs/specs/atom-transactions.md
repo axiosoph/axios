@@ -534,6 +534,7 @@ buggy client, a dishonest one, or a compromised key.
 ```claim
 kind: constraint
 verification:
+  design: none
   implementation: none
 depends: [charter-fork-distinction]
 ```
@@ -601,6 +602,7 @@ abstraction's identity frameworks, not through protocol exceptions.
 ```claim
 kind: constraint
 verification:
+  design: none
   implementation: none
 ```
 
@@ -727,6 +729,7 @@ the fact-based claim-owner-change rule anywhere in this repository.
 ```claim
 kind: constraint
 verification:
+  design: none
   implementation: none
 ```
 
@@ -749,6 +752,7 @@ value, never a value that shifts with succession.)
 ```claim
 kind: constraint
 verification:
+  design: none
   implementation: none
 ```
 
@@ -811,6 +815,7 @@ own, so it cannot add a key without a membership change (a new
 ```claim
 kind: constraint
 verification:
+  design: none
   implementation: none
 ```
 
@@ -892,6 +897,7 @@ consistency, not this restatement's correctness.
 ```claim
 kind: constraint
 verification:
+  design: none
   implementation: none
 ```
 
@@ -973,6 +979,7 @@ facts (`[claim-owner-fact]`) have landed since genesis.
 ```claim
 kind: constraint
 verification:
+  design: none
   implementation: none
 ```
 
@@ -1073,6 +1080,7 @@ not a smaller version of the old one.
 ```claim
 kind: constraint
 verification:
+  design: none
   implementation: none
 ```
 
@@ -1122,6 +1130,7 @@ upgrades, and delegation — only the authorization semantics of
 ```claim
 kind: constraint
 verification:
+  design: none
   implementation: none
 ```
 
@@ -1824,6 +1833,7 @@ scope, which never touch the charter record itself
 ```claim
 kind: constraint
 verification:
+  design: none
   implementation: none
 ```
 
@@ -1900,6 +1910,7 @@ references within a source.
 ```claim
 kind: constraint
 verification:
+  design: none
   implementation: none
 ```
 
@@ -2799,6 +2810,78 @@ _The rows added or amended for the charter constraints are marked (amended)._
 > stands as the accurate historical record it is; the inference that
 > `[claim-replacement-authority]` therefore remains a live claim does
 > not.
+
+> [!NOTE]
+> **Model-repair pass (2026-08-24), following a 2026-08-23 audit that found
+> 14 of 27 atom-layer `model-check` grades unearned** — the grade declared
+> Alloy or TLC coverage none of the models actually provided, independent
+> of any redesign. Eleven of the fourteen live in this document. Every one
+> investigated here stays honestly ungraded on the design axis
+> (`verification.design: none`, newly stated explicitly rather than left as
+> an absent key — see below); none was restored, because none could be
+> demonstrated by a check able to go red. Per-claim verdict, citing where
+> the reason already lives in this document rather than repeating it:
+>
+> - `[claim-owner-fact]`, `[charter-owner-fact]`, `[charter-owner-fact-linear]`,
+>   `[claim-charter-authorization]`, `[owner-abstract]` — the owner-fact/
+>   fold mechanism ADR-0007 §3 requires has no model anywhere in this
+>   repository (their own claim-block paragraphs above, and the Pair-identity
+>   and Genesis-once retirement notes above, already say so). Not attempted
+>   here: `AtomTransactions.tla`'s own retired-invariant comments name the
+>   fix precisely — "a single-active-claim-per-(source,label) guard on
+>   `Claim`, or an atom-slot entity distinct from claims — both are new
+>   modeling scope, not a substitution, and are left to the architect's
+>   decision" — and a fact-fold rework of `AtomCharter.tla` is named in this
+>   file's own module header as "real, unscheduled work... not improvised
+>   here." A model-repair pass inventing either is exactly the unscheduled,
+>   undelegated modeling call those comments already declined to make.
+> - `[atom-genesis-and-facts]`, `[atomid-per-source-unique]`,
+>   `[identity-stability]` — share one gap, stated fully in the Pair-identity
+>   note above and in `AtomTransactions.tla`'s own comments: no module
+>   models genesis-once void-rejection (a second genesis record for an
+>   already-founded scope being structurally invalid), so none of the three
+>   can be checked without that same new modeling scope, architect-owned per
+>   the same comment cited above.
+> - `[chain-monotonicity]`, `[anchor-immutable]` — checked directly against
+>   `AtomCharter.tla`, not merely inherited-stale as the Owner-set-amendment
+>   note above already flagged. Restricting `Next` to the three genesis-only
+>   actions (`CharterFound`, `Claim`, `ConsumerObserve`) — the cheapest fix
+>   that looked available — does not recover either: with no
+>   `CharterSucceed`/`CharterAddMember`/`CharterRemoveMember` reachable,
+>   `Divergent` can never hold and `recordedHead` can never move to a second
+>   charter, so `MonotonicHead`/`ForkFailClosed` would hold with no reachable
+>   state anywhere near their rollback/fork content — vacuously, not
+>   because rollback is prevented. `AnchorImmutable` is vacuous independent
+>   of that restriction: every action in the file (`CharterFound`,
+>   `CharterSucceed`, `CharterAddMember`, `CharterRemoveMember`,
+>   `ClaimReplace`) copies `anchor` unchanged by direct construction: no
+>   guard rejects a mismatch because no reachable state could ever produce
+>   one to reject, the same vacuity this file's own `ReplacementAuthority`
+>   comment already names for a sibling invariant. Neither claim is
+>   recoverable by a config/next-relation change alone; both need the
+>   fact-log mechanism above.
+> - `[charter-ancestry]`, `[claim-charter-authorization]` (second half) —
+>   the full temporal floor (`charter.src ⟶ claim.src ⟶ publish.src`) spans
+>   two models: `AtomCharter.tla`'s `ClaimAncestry` covers charter→claim
+>   only, and is subject to the same stale-single-owner-model caveat as
+>   `[chain-monotonicity]`/`[anchor-immutable]` above; claim→publish has no
+>   model anywhere (`AtomTransactions.tla` carries no `src` ancestry at
+>   all). Extending either `atom_structure.als` or `atom_backend_seam.als`
+>   to carry the full chain would add `src` fields to sigs that do not have
+>   them today and decide which model owns cross-layer ancestry — a scope
+>   decision, not a property addition, left undecided here rather than
+>   guessed.
+>
+> **A distinct, unscoped finding surfaced investigating `[backend-seam-typed]`
+> in the sibling document (`atom-backend-contract.md` §Verification):** the
+> Alloy checks that looked like the cheapest possible restoration —
+> `atom_backend_seam.als`'s `oid_disjoint_from_protocol_sorts` and
+> `carrier_czd_seam` — are vacuous by Alloy's own sig-disjointness typing,
+> confirmed by a direct probe, independent of any fact in that model. Not
+> one of the fourteen claims audited here, but the same failure class: a
+> green check that cannot go red under any mutation. Recorded in
+> `atom_backend_seam.als` and `atom-backend-contract.md` directly, not
+> restated here.
 
 ## Implications
 

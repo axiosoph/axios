@@ -619,8 +619,20 @@ omission is **unconstructible**, not merely detectable.
 ```claim
 kind: invariant
 verification:
+  design: none
   implementation: none
 ```
+
+**Not machine-verified (model-repair pass, 2026-08-24).** No formal model in
+this repository represents the spine at all. `atom_structure.als`,
+`atom_backend_seam.als`, `AtomCharter.tla`, and `AtomTransactions.tla` each
+model the charter/claim/publish transaction layer this section's own text
+distinguishes FROM the spine ("Added 2026-07-30, landing ADR-0009... §4's
+metadata partition law generalizes") — none of them carries a `prior`-linked
+append-only leaf chain, a fold over it, or an unconstructibility property
+for a missing link. This is a different construct the existing models never
+touched, not a gap in how well they cover it — building one is new modeling
+scope, not an extension of any model that exists today.
 
 Authorization is computed by folding the spine's amendment chain
 (genesis establishes the initial fold; each amendment updates it). A fold
@@ -662,9 +674,14 @@ an anchor from such a spine.
 ```claim
 kind: invariant
 verification:
+  design: none
   implementation: none
 depends: [spine-chain-complete]
 ```
+
+**Not machine-verified, same reason as [spine-chain-complete](#spine-chain-complete)
+(model-repair pass, 2026-08-24):** no model in this repository represents
+the spine construct at all.
 
 **The cloud holds fact** — yank, deprecation, advisories, attestations,
 interface manifests, build records — as a history-independent
