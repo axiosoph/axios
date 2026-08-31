@@ -11,9 +11,10 @@
   Maintained as Architecture-as-Code. Diagrams are Mermaid.js, inline.
 
   Settled design inputs: ADR-0005 (layer designation L2/"HTC", the GPL-seam
-  wire-first posture, no-Nix-in-MVP); the atom keystone (AtomId = abstract
-  (anchor,label) pair; 2-value name-anchored lock; blake3(publish_czd)-keyed
-  store) which this layer's composition object generalizes one layer up.
+  wire-first posture, no-Nix-in-MVP); the atom keystone (identity is the
+  claim record's czd, not the (anchor,label) pair — atom-sad §6.1; 2-value
+  name-anchored lock; blake3(publish_czd)-keyed store) which this layer's
+  composition object generalizes one layer up.
 -->
 
 # HTC (Hermetic Transactional Composition) Software Architecture Document (SAD)
@@ -59,7 +60,9 @@ the scheduler itself); key management and signing primitives (Cyphr/Coz,
 below L1). HTC defines the build/composition contract those layers consume
 and is consumed by; it never resolves atoms or schedules itself.
 
-**[htc-declared-closure-enforced]**: the build sandbox is deny-by-default
+#### [htc-declared-closure-enforced]
+
+the build sandbox is deny-by-default
 — the only bytes a build process can read are those materialized from the
 declared atom closure and toolchain composition, plus whatever the fetch
 proxy explicitly permits through its own separate channel (§4.2). The
@@ -70,6 +73,12 @@ guarantee, carried forward unchanged from Nix's own sandbox model; §6.3
 names the mechanism that observes it for the _build/check-phase_ case,
 and §8.1 names the corresponding runtime-side failure mode for a _mounted
 view_ that turns out to be missing something it needs.
+
+```claim
+kind: requirement
+verification:
+  implementation: none
+```
 
 ### 1.2 External Actors
 
@@ -111,7 +120,7 @@ graph TB
 
 | Boundary      | Inside HTC                                                                           | Outside HTC                                                                                                                          |
 | :------------ | :----------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------- |
-| **Identity**  | Action identity (`action_id`, §6.5); composition/manifest/build-record digests       | Atom identity, the `(anchor, label)` pair (L1)                                                                                       |
+| **Identity**  | Action identity (`action_id`, §6.5); composition/manifest/build-record digests       | Atom identity, the claim record's czd (L1, atom-sad §6.1)                                                                            |
 | **Execution** | `build`, sandboxing, FHS-view materialization, upstream's own process                | Scheduling policy, worker placement, DAG traversal (L3, eos)                                                                         |
 | **Analysis**  | Interface manifest derivation (provides/requires), observation records, satisfaction | Manifest/lock authorship, resolution (L4, ion)                                                                                       |
 | **Fetch**     | The record/replay proxy's _execution_ of a fetch entry                               | Fetch entry _declaration_ — a `[[deps]]` entry with `type = "fetch"`, dispatched via ion's `[lock-dep-type-dispatch]`, is L4's (ion) |
@@ -644,7 +653,7 @@ an independent GPL-3 service — is recorded in ADR-0005 §10.
 
 ### 6.9 The Lock↔Composition Isomorphism
 
-The atom lock (`(set, label) → {version, publish_czd}`, atom-sad §6.5)
+The atom lock (nested `set` → `label` → `{version, publish_czd}`, atom-sad §6.5)
 and the composition object (`name → content digest`, §2.1) share the
 identical algebra one layer apart: a name→signed-content-pointer map,
 itself content-addressed. This SAD does not restate atom-sad §6.5/§6.7's

@@ -114,7 +114,9 @@ Pipeline) — not reproduced here.
 
 ### FHS-View Materialization
 
-**[eos-sandbox-fhs-materialization]**: The primary executor MUST mount the
+#### [eos-sandbox-fhs-materialization]
+
+The primary executor MUST mount the
 _composed_ atom closure and toolchain composition as a single FHS-view
 rootfs (htc-sad.md §2, §4.1) — a merged tree at conventional FHS paths, not
 a set of per-input directories addressed by an `inputs_dir` parameter (the
@@ -123,11 +125,21 @@ fork's build protocol).
 file and directory in the mounted view MUST be read-only and digest-verified
 by the CAS at materialization time — a build process MUST NOT be able to
 write into any part of the mounted closure.
-`VERIFIED: unverified`
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+Verification will confirm a composed rootfs (not per-input dirs) is
+mounted read-only for a build.
 
 ### Network Containment
 
-**[eos-build-sandbox-network-containment]**: Build execution MUST NOT have
+#### [eos-build-sandbox-network-containment]
+
+Build execution MUST NOT have
 access to the external network, unless the sandbox routes that access
 exclusively through HTC's content-addressing record/replay fetch proxy
 (`[htc-fetch-set-lock-plugin]`, ADR-0005 §7; htc-sad.md §4.2). The proxy has
@@ -145,27 +157,49 @@ This supersedes the prior fixed-output-derivation (FOD) exception model —
 there is no evaluator to produce a FOD marker; the recorded/replayed fetch
 set is itself the exception mechanism, keyed by content rather than by a
 derivation-level flag.
-`VERIFIED: unverified`
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+because: [htc-fetch-set-lock-plugin]
+```
+
+Verification will confirm non-proxy network access is refused and
+check record/replay mode behavior.
 
 ### Read-Set Capture
 
-**[eos-sandbox-read-set-capture]**: The castore FUSE daemon that
+#### [eos-sandbox-read-set-capture]
+
+The castore FUSE daemon that
 materializes the FHS view (§Sandbox Execution Model) MUST log `(path,
 digest)` for every read of the composed closure during a build or
 check-phase run — this daemon is the _only_ source of those bytes, making it
 an unbypassable observation point (htc-sad.md §6.3, the Trace Observer).
 The resulting observed read-set MUST be a subset of the declared closure
-(`[htc-declared-closure-enforced]`, htc-sad.md §1.1: reads ⊆ declared,
+([htc-declared-closure-enforced](../architecture/htc-sad.md#htc-declared-closure-enforced), htc-sad.md §1.1: reads ⊆ declared,
 enforced by the sandbox, never merely trusted from the build's own
 behavior). The read-set MUST be hashed and the digest MUST populate the
 `BuildRecord.observed_read_set_digest` field (htc-sad.md §2.3) — this
 document requires the executor capture and populate that field; it does not
 redefine the `BuildRecord` schema itself.
-`VERIFIED: unverified`
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+depends: [htc-declared-closure-enforced]
+```
+
+Verification will confirm every read during a build is logged and
+the digest lands in `BuildRecord`.
 
 ### Build Sandbox Delegation
 
-**[eos-build-sandbox-delegation]**: Sandboxing is wholly the executor
+#### [eos-build-sandbox-delegation]
+
+Sandboxing is wholly the executor
 implementation's responsibility, never the Eos daemon's or its scheduler's.
 The Eos scheduler dispatches build actions to executor workers via Cap'n
 Proto; the worker's executor-trait implementation (the primary FHS
@@ -173,25 +207,47 @@ executor) applies
 platform-appropriate sandboxing (OCI runtime or Bubblewrap, reusing
 `snix-build`, htc-sad.md §2, §3.5). The daemon holds no opinion on how a
 given executor achieves isolation (eos-sad.md §6.2).
-`VERIFIED: unverified`
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+Verification will audit that the Eos daemon and scheduler perform no
+sandboxing of their own -- all isolation is executor-side.
 
 ### Host Isolation
 
-**[eos-build-sandbox-host-isolation]**: Build execution MUST NOT write
+#### [eos-build-sandbox-host-isolation]
+
+Build execution MUST NOT write
 outside the temporary directory allocated for the build task. Inputs MUST
-be mounted read-only (§FHS-View Materialization). This invariant is
+be mounted read-only, per
+[eos-sandbox-fhs-materialization](#eos-sandbox-fhs-materialization). This invariant is
 strengthened by its declared-closure form: the build's _observed_ read set
 MUST be contained within its _declared_ closure —
-`[htc-declared-closure-enforced]` (htc-sad.md §1.1) — a containment property
+[htc-declared-closure-enforced](../architecture/htc-sad.md#htc-declared-closure-enforced) (htc-sad.md §1.1) — a containment property
 the sandbox enforces directly (by denying reads outside the materialized
 view), not one inferred after the fact from the read-set log
 (§Read-Set Capture is the log; this invariant is the enforcement it
 verifies).
-`VERIFIED: unverified`
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+depends: [eos-sandbox-fhs-materialization, htc-declared-closure-enforced]
+```
+
+Verification will attempt writes outside the scratch dir and reads
+outside the declared closure, and confirm both are denied.
 
 ### Materialization Tiers
 
-**[eos-sandbox-materialization-tiers]**: The composed view a build sandbox
+#### [eos-sandbox-materialization-tiers]
+
+The composed view a build sandbox
 mounts is one instance of three materialization tiers over the same
 composition object (`[htc-materialization-tiers]`, ADR-0005 §11; htc-sad.md
 §5):
@@ -206,45 +262,69 @@ The sandbox this document specifies operates exclusively at the Observe
 tier. Fast and Export tiers are runtime/deployment concerns outside build
 sandboxing's scope — see htc-sad.md §5.2–§5.3 for their mechanics, not
 restated here.
-`VERIFIED: unverified`
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+depends: [htc-materialization-tiers]
+```
+
+Verification will confirm builds and check-phase runs use the
+Observe tier exclusively, with no Fast/Export mount at build time.
 
 ---
 
 ## Forbidden States
 
-**[no-fetch-outside-recorded-set]**: In replay mode, a build process's
+#### [no-fetch-outside-recorded-set]
+
+In replay mode, a build process's
 network request MUST NOT be served unless it exactly matches an entry in
 the lock's recorded fetch set. Any other request MUST result in a refused
 connection, logged.
-`VERIFIED: unverified`
 
-**[no-read-outside-declared-closure]**: A build process MUST NOT be able to
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+Verification will issue unrecorded requests in replay mode and
+confirm refusal plus a log entry.
+
+#### [no-read-outside-declared-closure]
+
+A build process MUST NOT be able to
 read any byte not present in its materialized atom closure or toolchain
-composition, plus whatever the fetch proxy separately permits (§Network
-Containment). This is enforced by denying the read at the sandbox boundary,
+composition, plus whatever the fetch proxy separately permits under
+[eos-build-sandbox-network-containment](#eos-build-sandbox-network-containment). This is enforced by denying the read at the sandbox boundary,
 not by post-hoc audit of the read-set log.
-`VERIFIED: unverified`
 
-**[no-write-outside-build-scratch]**: A build process MUST NOT write to any
+```claim
+kind: constraint
+verification:
+  implementation: none
+depends: [eos-build-sandbox-network-containment]
+```
+
+Verification will attempt reads of undeclared paths and confirm
+denial at the mount boundary.
+
+#### [no-write-outside-build-scratch]
+
+A build process MUST NOT write to any
 path outside the scratch directory allocated for its build task. The
 mounted closure is read-only; there is no writable path inside it.
-`VERIFIED: unverified`
 
----
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
 
-## Verification
-
-| Constraint                              | Method                | Result     | Detail                                                                                      |
-| :-------------------------------------- | :-------------------- | :--------- | :------------------------------------------------------------------------------------------ |
-| `eos-sandbox-fhs-materialization`       | Sandbox mount test    | UNVERIFIED | Verify a composed rootfs (not per-input dirs) is mounted read-only for a build              |
-| `eos-build-sandbox-network-containment` | Build socket test     | UNVERIFIED | Verify non-proxy network access is refused; verify record/replay mode behavior              |
-| `eos-sandbox-read-set-capture`          | FUSE log inspection   | UNVERIFIED | Verify every read during a build is logged and the digest lands in `BuildRecord`            |
-| `eos-build-sandbox-delegation`          | Architecture audit    | UNVERIFIED | Verify Eos daemon/scheduler perform no sandboxing; all isolation is executor-side           |
-| `eos-build-sandbox-host-isolation`      | Filesystem probe test | UNVERIFIED | Attempt writes outside scratch dir and reads outside declared closure; verify denial        |
-| `eos-sandbox-materialization-tiers`     | Tier dispatch test    | UNVERIFIED | Verify builds/check-phases use Observe tier exclusively; no Fast/Export mount at build time |
-| `no-fetch-outside-recorded-set`         | Replay-mode fuzz test | UNVERIFIED | Issue unrecorded requests in replay mode, verify refusal + log entry                        |
-| `no-read-outside-declared-closure`      | Sandbox escape test   | UNVERIFIED | Attempt reads of undeclared paths, verify denial at the mount boundary                      |
-| `no-write-outside-build-scratch`        | Sandbox escape test   | UNVERIFIED | Attempt writes to the read-only mounted closure, verify denial                              |
+Verification will attempt writes to the read-only mounted closure
+and confirm denial.
 
 ---
 

@@ -1,7 +1,7 @@
 //! # Atom Identity
 //!
 //! Identity primitives for the Atom protocol: validated naming types and
-//! the protocol-level atom identity pair.
+//! the protocol-level `AtomId` coordinate.
 //!
 //! ## Naming Hierarchy
 //!
@@ -15,12 +15,13 @@
 //!
 //! All input is NFKC-normalized and capped at 128 bytes.
 //!
-//! ## Atom Identity
+//! ## `AtomId`
 //!
-//! An [`AtomId`] is the unique identity of an atom — the pair of an
-//! [`Anchor`] and a [`Label`]. Identity is determined solely by these
-//! two values: two atoms with the same anchor and label ARE the same
-//! atom, regardless of version, owner, or hash algorithm.
+//! An [`AtomId`] is the pair of an [`Anchor`] and a [`Label`] — the
+//! pre-signature preimage of an unclaimed development atom, the one
+//! place anchor and label combine as a unit. For a claimed atom,
+//! identity is the claim record's czd, not this pair; `AtomId` names
+//! the coordinate a claim binds, not the claim itself.
 //!
 //! The `AtomId` is algorithm-free and permanent. Compact hash
 //! representations for store indexing (`AtomDigest`) are a separate
@@ -28,9 +29,9 @@
 //!
 //! ## Anchor
 //!
-//! An [`Anchor`] is an opaque byte vector establishing atom-set identity.
-//! Its derivation is fixed by charter: `Anchor == czd(charter₀)`, the coz
-//! digest of the atom-set's founding charter (spec `[charter-anchor]`).
+//! An [`Anchor`] establishes atom-set identity as the founding charter's
+//! linking role, not a digest. It is named and verified by that
+//! charter's own coz digest, `czd(charter₀)` (spec `[charter-anchor]`).
 //!
 //! [Coz]: https://github.com/Cyphrme/Coz
 
@@ -105,11 +106,13 @@ pub const NAME_MAX: usize = 128;
 /// Transaction type for atom claims.
 ///
 /// Spec constraint: `[claim-typ]`.
+// @docket: claim-typ :: cargo check --manifest-path atom/Cargo.toml -p atom-id
 pub const TYP_CLAIM: &str = "atom/claim";
 
 /// Transaction type for atom version publishes.
 ///
 /// Spec constraint: `[publish-typ]`.
+// @docket: publish-typ :: cargo check --manifest-path atom/Cargo.toml -p atom-id
 pub const TYP_PUBLISH: &str = "atom/publish";
 
 /// Spec shorthand for [`Thumbprint`] (Coz key thumbprint).
@@ -119,13 +122,14 @@ pub type Tmb = Thumbprint;
 // Anchor
 // ============================================================================
 
-/// An opaque anchor establishing atom-set identity.
+/// The anchor establishing atom-set identity: a linking role, not a
+/// digest.
 ///
 /// The anchor pins an atom-set to an immutable reference point in the
-/// source's history. Its derivation is fixed by charter: `Anchor ==
-/// czd(charter₀)`, the coz digest of the atom-set's founding charter
-/// (spec `[charter-anchor]`) — backend-agnostic, since the charter is a
-/// coz object regardless of backend.
+/// source's history — the founding charter. It is named and verified by
+/// that charter's own coz digest, `czd(charter₀)` (spec
+/// `[charter-anchor]`) — backend-agnostic, since the charter is a coz
+/// object regardless of backend.
 ///
 /// Displayed and serialized as a base64url-unpadded string.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -196,12 +200,13 @@ impl<'de> Deserialize<'de> for Anchor {
 // AtomId
 // ============================================================================
 
-/// The unique protocol-level identity of an atom.
+/// The declared anchor+label coordinate an atom is built from.
 ///
-/// An `AtomId` is the pair of an [`Anchor`] and a [`Label`]. Identity is
-/// determined solely by these two values — two atoms with the same anchor
-/// and label ARE the same atom, regardless of version, owner, or hash
-/// algorithm.
+/// An `AtomId` is the pair of an [`Anchor`] and a [`Label`] — the
+/// pre-signature preimage of an unclaimed development atom, the one
+/// place anchor and label combine as a unit. It is not itself an
+/// atom's identity: for a claimed atom, identity is the claim
+/// record's czd, and `AtomId` names the coordinate the claim binds.
 ///
 /// The `AtomId` is algorithm-free and permanent. Compact hash
 /// representations for store indexing are a downstream concern.
@@ -402,6 +407,8 @@ where
 }
 
 #[cfg(test)]
+// @docket: owner-authorization-delegated :: cargo test --manifest-path atom/Cargo.toml -p atom-id --lib -- owner_tests::single_key_authorizes_matching_thumbprint owner_tests::single_key_rejects_mismatched_thumbprint owner_tests::hierarchical_and_rooted_identity_never_authorize owner_tests::owner_set_authorizes_is_a_disjunction owner_tests::owner_set_authorizes_rejects_empty_set
+// @docket: owner-kind-required :: cargo test --manifest-path atom/Cargo.toml -p atom-id --lib -- owner_tests::owner_kind_has_no_default_and_missing_kind_is_a_parse_error owner_tests::owner_kind_wire_names_match_spec owner_tests::owner_kind_rejects_unknown_variant owner_tests::hierarchical_and_rooted_identity_never_authorize
 mod owner_tests {
     use super::*;
 
@@ -507,6 +514,7 @@ mod owner_tests {
 /// `[owner-abstract]`, `[claim-replacement-authority]`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+// @docket: symmetric-payloads :: cargo check --manifest-path atom/Cargo.toml -p atom-id
 pub struct ClaimPayload {
     /// The signing algorithm.
     #[cfg_attr(feature = "serde", serde(with = "serde_alg"))]
@@ -528,6 +536,7 @@ pub struct ClaimPayload {
     /// label.
     ///
     /// Spec constraints: `[owner-abstract]`, `[claim-owner-single]`.
+    // @docket: claim-owner-single :: cargo check --manifest-path atom/Cargo.toml -p atom-id
     pub owner: OwnerRef,
     /// PURL type identifying the package ecosystem (e.g., "cargo").
     pub pkg: String,
@@ -556,9 +565,10 @@ impl ClaimPayload {
     /// Construct a new (non-replacement) claim payload.
     ///
     /// Takes an [`AtomId`] to ensure that the anchor and label come from
-    /// a validated identity pair. Sets `typ` to [`TYP_CLAIM`], `prior` to
-    /// `None`, and `governance` to `false` automatically. Use
-    /// [`ClaimPayload::new_replacement`] to construct a replacement claim.
+    /// a validated coordinate, not raw strings. Sets `typ` to
+    /// [`TYP_CLAIM`], `prior` to `None`, and `governance` to `false`
+    /// automatically. Use [`ClaimPayload::new_replacement`] to construct
+    /// a replacement claim.
     pub fn new(
         alg: Alg,
         id: AtomId,
@@ -651,6 +661,7 @@ pub enum Mode {
 /// `[publish-chains-claim]`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+// @docket: uri-not-metadata :: cargo check --manifest-path atom/Cargo.toml -p atom-id
 pub struct PublishPayload {
     /// The signing algorithm.
     #[cfg_attr(feature = "serde", serde(with = "serde_alg"))]
@@ -714,8 +725,9 @@ impl PublishPayload {
     /// Construct a new publish payload.
     ///
     /// Takes an [`AtomId`] to ensure that the anchor and label come from
-    /// a validated identity pair. Sets `typ` to [`TYP_PUBLISH`]
-    /// automatically, and leaves `mode`, `content_hash`, and `meta` unset
+    /// a validated coordinate, not raw strings. Sets `typ` to
+    /// [`TYP_PUBLISH`] automatically, and leaves `mode`, `content_hash`,
+    /// and `meta` unset
     /// — use [`PublishPayload::effective_mode`] to read the resolved
     /// mode, and set `meta`/`mode`/`content_hash` directly on the
     /// returned value if needed (before signing, for `content_hash` —
@@ -771,6 +783,7 @@ impl PublishPayload {
 /// through a [`VersionScheme`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+// @docket: rawversion-opaque :: cargo check --manifest-path atom/Cargo.toml -p atom-id
 pub struct RawVersion(String);
 
 impl RawVersion {
@@ -972,7 +985,7 @@ pub enum VerifyError {
     )]
     ReplacementNotAfterPrior,
     /// A claim-replacement's `(anchor, label)` differs from the replaced
-    /// claim's — a replacement never alters identity.
+    /// claim's — a replacement may not change the coordinate it binds.
     ///
     /// Spec constraint: `[claim-replacement-transition]` PRE.
     #[error(
@@ -1063,8 +1076,8 @@ pub fn verify_publish(
 /// `replacement.now` MUST strictly exceed `prior.now`
 /// ([`VerifyError::ReplacementNotAfterPrior`]), and `(replacement.anchor,
 /// replacement.label)` MUST equal `(prior.anchor, prior.label)`
-/// ([`VerifyError::ReplacementIdentityChanged`]) — a replacement never
-/// alters identity.
+/// ([`VerifyError::ReplacementIdentityChanged`]) — a replacement may not
+/// change the coordinate it binds.
 ///
 /// Spec constraints: `[claim-replacement-authority]`,
 /// `[claim-replacement-transition]`.

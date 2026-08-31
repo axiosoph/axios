@@ -31,12 +31,12 @@ AtomId → Version → Revision → Plan → Output
  (czd)   (semver)   (commit)  (drv) (artifact)
 ```
 
-(Note: **CONTRADICTS** the keystone identity decision (2026-06-28) and
-[ADR-0005](0005-hermetic-transactional-composition.md) — `AtomId` is the
-abstract pair `(anchor, label)`, not a digest (`czd`) of it, and there is
-no `AtomDigest` of identity (atom-sad §6.1, `[identity-content-
-addressed]`). This is the identical contradiction ADR-0004 struck for its
-own atom-id-as-digest claim; it was left standing here until this pass.)
+(Note: the 2026-06-28 keystone identity decision briefly read `AtomId`
+as the abstract pair `(anchor, label)`, but that reading was itself
+repudiated 2026-07-18 — identity is the claim record's czd, and the
+pair is only the pre-signature preimage for an unclaimed development
+atom (`docs/models/atom-model.md` §2). This diagram's `AtomId (czd)`
+labeling matches current doctrine; no contradiction stands.)
 
 "Plan" is the abstract term. For the snix engine, a plan is a derivation
 (`.drv`). `BuildEngine::Plan` is an associated type, so other engines can
@@ -84,11 +84,12 @@ and Eos, and the stack renumbers in full: Cyphr (L0) → Atom (L1) → HTC (L2)
 | `atom-core` | Traits: `AtomSource`, `AtomRegistry`, `AtomStore`, `Manifest`, `VersionScheme` | atom-id, atom-uri          |
 | `atom-git`  | Git backend: implements `AtomRegistry` + `AtomStore`                           | atom-core, `gix`, `snix-*` |
 
-(Note: **CONTRADICTS** the keystone identity decision and
-[ADR-0005](0005-hermetic-transactional-composition.md) — the `atom-id`
-row's `AtomDigest` above does not exist; there is no digest of identity.
-`AtomId` is the abstract pair `(anchor, label)` itself, per the
-chain-diagram note above.)
+(Note: identity is the claim record's czd, not the abstract pair
+`(anchor, label)` — the pair is only the pre-signature preimage for an
+unclaimed development atom (`docs/models/atom-model.md` §2; the
+intervening 2026-06-28 keystone-era pair reading was itself repudiated
+2026-07-18). `AtomDigest` is a real type in `atom-id`
+(`atom-id/src/digest.rs`), so this row's listing stands.)
 
 **Store traits** — three-layer model with a read super-trait:
 

@@ -87,6 +87,22 @@ as an abstract type and owns the dynamic primitive alone. P1 moves with
 the merge monoid; obligation numbering (P1–P11) is unique across the
 three models._
 
+_v0.11 (2026-08-04): the v0.10 uniqueness claim above was true only as
+stated and false as a reader applies it — it says nothing about
+[eos-scheduling.md](eos-scheduling.md), which carries its own,
+independently-numbered P1–P15 track of scheduler protocol properties
+that was never part of this chain. The two tracks collided at P11:
+this chain's P11 (the composition model's delta-monoid obligation,
+unproved) and eos-scheduling's P11 (Failure Isolation, discharged) name
+different obligations. The delta monoid is renumbered to **P18**
+([Composition Model §10](composition-model.md#10-proof-obligations));
+eos-scheduling's P11 is untouched. Scope, stated precisely: this
+chain's obligation numbers (P1–P10, P12–P18, continued in
+[atom-model.md](atom-model.md), [atom-backend-contract.md](../specs/atom-backend-contract.md),
+and [trust-model.md](../specs/trust-model.md)) are unique among
+themselves; they share no namespace with eos-scheduling.md's numbering,
+despite both using the letter `P` and overlapping digits._
+
 _Trigger: early substrate implementation work treated **build** as the
 primitive and bolted observation into its materialization layer (a FUSE
 read-set inside `BuildResult`). The substrate's founding analysis had
@@ -228,6 +244,14 @@ type-level facts:
   injectivity/completeness audit of the canonical request serialization —
   every field the executor consults appears in the digest preimage._
 
+#### [exec-request-well-formed]
+
+```claim
+kind: invariant
+verification:
+  implementation: none
+```
+
 ### 2.2 The semantics
 
 ```
@@ -282,6 +306,14 @@ Reproducibility (§2.3) is then precisely the empirical claim that
 `⟦req⟧` is observed to be a singleton — which is why it can only ever be
 attested, not proven.
 
+#### [exec-semantics-hermetic]
+
+```claim
+kind: invariant
+verification:
+  implementation: none
+```
+
 ### 2.3 The stratification: actions and trials
 
 ```
@@ -328,6 +360,14 @@ only requests that discharge the world and requests that do not:
   not. Cache correctness needs only hermeticity; _trust_ policies (who may
   substitute a binary) may demand reproducibility attestations on top.
 
+#### [exec-stratum-by-policy]
+
+```claim
+kind: invariant
+verification:
+  implementation: none
+```
+
 ### 2.4 Identity discipline (three identities, never conflated)
 
 ```
@@ -367,6 +407,14 @@ rebuilder of _Build Systems à la Carte_, obtained structurally. (À la carte
 decomposes build systems as scheduler × rebuilder; ours is eos × CAS-traces,
 and this model adds the axis their taxonomy lacks: observation policy.)
 
+#### [exec-identity-discipline]
+
+```claim
+kind: invariant
+verification:
+  implementation: none
+```
+
 ## 3. Facts, witnesses, and promotion
 
 ### 3.1 The record
@@ -398,6 +446,14 @@ is mis-homed under this model. Observation is an execution-policy output,
 attached to the record of whichever execution was traced — typically a
 trial, never mandatory for builds.
 
+#### [exec-record-core-equality]
+
+```claim
+kind: invariant
+verification:
+  implementation: none
+```
+
 ### 3.2 Publication gating
 
 A build fact is _advertised_ (published into the fact channel — appended
@@ -407,6 +463,14 @@ exists." The build's fact-hood is never conditional on the test — the cache
 entry exists the moment the action completes (nrd's requirement: a failed
 test never forces a rebuild) — only its _advertisement_ is gated. Gating is
 configuration on the fact channel, not scheduler structure.
+
+#### [exec-publication-gating]
+
+```claim
+kind: invariant
+verification:
+  implementation: none
+```
 
 ### 3.3 Promotion: attestation → intent (the cargo-update law)
 
@@ -444,6 +508,14 @@ interface. Record-mode → promotion remains the door for lockfile-less
 ecosystems; both doors end at the same place — signed, digested intent
 pinning the channel.
 
+#### [exec-promotion-cargo-update-law]
+
+```claim
+kind: invariant
+verification:
+  implementation: none
+```
+
 ### 3.4 Whose facts are facts: signer trust
 
 This is a _decentralized_ stack: records arrive signed by executors you do
@@ -461,6 +533,14 @@ substituter problem (Nix's binary-cache trust), placed where it belongs:
 trust governs what it _is, to you_.** The concrete anchor format and
 policy language ride on atom's existing signing machinery (Coz identities)
 and are deliberately left to the trust-model spec, not fixed here.
+
+#### [exec-signer-trust]
+
+```claim
+kind: invariant
+verification:
+  implementation: none
+```
 
 ### 3.5 Promotion is reified bind (the IFD answer)
 
@@ -504,6 +584,14 @@ overlap. And the frame yields a standing rejection rule: any future
 proposal that computes intent mid-elaboration without a signature is a
 hidden bind — recognizable and refusable on sight.
 
+#### [exec-promotion-reified-bind]
+
+```claim
+kind: invariant
+verification:
+  implementation: none
+```
+
 ## 4. The two closures
 
 ### 4.1 The true dependency set is not computable
@@ -523,6 +611,14 @@ Dep(a)   = ⋃_v Dep_v(a)        (the liberal union, over all views)
 Everything below is about maintaining _certified bounds_ — and the two
 bounds quantify over _different_ dependency sets, which is why the index
 matters.
+
+#### [exec-dep-uncomputable]
+
+```claim
+kind: invariant
+verification:
+  implementation: none
+```
 
 ### 4.2 The certified interval
 
@@ -570,6 +666,14 @@ There is a **third justification kind, and it is not evidence**:
   candidate set (containment is preserved); it is the runtime analogue of
   a lock entry, and it rides the same signed-intent discipline (§3.3).
 
+#### [exec-certified-interval]
+
+```claim
+kind: invariant
+verification:
+  implementation: none
+```
+
 ### 4.3 The justified closure
 
 The runtime composition is computed as the least fixpoint (htc-sad §6.4)
@@ -586,6 +690,14 @@ candidate set); refinement by new observations only grows `J` toward
 object** — a binding proof or an observation record — so the closure is not
 merely computed but _explainable_, entry by entry (contrast: Nix's closure
 is "every path whose hash appears in the output bytes," unexplainable).
+
+#### [exec-justified-closure-fixpoint]
+
+```claim
+kind: invariant
+verification:
+  implementation: none
+```
 
 ### 4.4 Graceful degradation and the refinement loop
 
@@ -621,6 +733,14 @@ not in their fixpoint mathematics. (v0 dressed this as an algebra/
 coalgebra μ/ν duality; the adversarial review correctly struck that — no
 coinduction is constructed anywhere, and the operational content needs
 none.)
+
+#### [exec-fail-closed-refinement]
+
+```claim
+kind: invariant
+verification:
+  implementation: none
+```
 
 ## 5. Compositional structure
 
@@ -664,6 +784,14 @@ monoidal laws without machinery this model neither invokes nor needs, and
 no result below used the categorical structure. The partial monoid and the
 DAG carry everything.)
 
+#### [exec-action-dag-merge]
+
+```claim
+kind: invariant
+verification:
+  implementation: none
+```
+
 ### 5.2 Tests are not build nodes; trials deposit but never bind
 
 Tests (of either stratum) do not appear in the _build_ DAG: no build
@@ -696,6 +824,14 @@ into one derivation makes the _pair_ the unit of caching, so a sandbox-
 induced test failure poisons a perfectly good build. Here the build fact
 stands alone; the trial's failure gates advertisement (§3.2), and its fix
 (test-flag edit, network policy change) re-runs _only the trial_.
+
+#### [exec-deposit-bind-law]
+
+```claim
+kind: invariant
+verification:
+  implementation: none
+```
 
 ### 5.3 The override algebra: generators live inside the model
 
@@ -735,6 +871,14 @@ the action stratum is directly testable (golden request → expected record
 digest). The existing `BuildEngine` bisimulation (publishing-stack-layers
 §2.4) is this criterion restricted to builds.
 
+#### [exec-executor-bisimulation]
+
+```claim
+kind: invariant
+verification:
+  implementation: none
+```
+
 ### 6.2 The session type
 
 ```
@@ -757,6 +901,14 @@ ExecuteSession (client → Executor):
   trial's view is assembled from the build's output ∪ build closure.
 - Progress/duality for `ExecuteSession` is _proof obligation P3_ (cheap,
   mechanical — same treatment BuildSession got).
+
+#### [exec-session-type]
+
+```claim
+kind: invariant
+verification:
+  implementation: none
+```
 
 ### 6.3 Enforcement obligations (the per-channel audit)
 
@@ -795,6 +947,14 @@ cost. Missed reads are survivable by construction — they surface later as
 fail-closed closure faults (§4.4) and refine `J` — but the coverage gap
 must be recorded with the observation, not assumed away. eBPF is a future
 instrument with its own privilege/coverage trade.
+
+#### [exec-channel-enforcement]
+
+```claim
+kind: invariant
+verification:
+  implementation: none
+```
 
 ### 6.4 Materialization, installation, and transactional update
 
@@ -855,6 +1015,14 @@ future reader and reviewer of this document:
 - **Human-facing concurrency (two people editing one atom) is VCS
   territory**, same as every lockfile ecosystem today — out of scope.
 
+#### [exec-boundary-non-ownership]
+
+```claim
+kind: invariant
+verification:
+  implementation: none
+```
+
 ## 8. Proof obligations — and deliberate non-obligations
 
 Worth proving (small, load-bearing, mechanical):
@@ -913,6 +1081,14 @@ Deliberately NOT proof targets, with reasons:
   structured around never needing it (certified interval + fail-closed
   refinement).
 - **The scheduler** — already proven; transfers unchanged.
+
+#### [exec-proof-obligations-scope]
+
+```claim
+kind: invariant
+verification:
+  implementation: none
+```
 
 ## 9. Open questions for nrd
 

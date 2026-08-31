@@ -92,107 +92,196 @@ TYPE  Lockfile = {
 
 ### Invariants
 
-**[version-semantics-semver]**: Ion MUST use [Semantic Versioning
+#### [version-semantics-semver]
+
+Ion MUST use [Semantic Versioning
 2.0.0](https://semver.org) for atom version ordering and constraint
 matching. This is ion's implementation of atom-sourcing.md's
-`[version-total-order]`. The version comparison semantics are those
+[version-total-order](atom-sourcing.md#version-total-order). The version comparison semantics are those
 of the `semver` crate: precedence is determined by major, minor,
 patch, then pre-release identifiers. Build metadata is ignored for
 precedence.
-`VERIFIED: unverified`
 
-**[lock-schema-version]**: The lock file MUST contain a `version`
-field. The current schema version is `0`. Implementations MUST reject
-lock files with unrecognized schema versions rather than silently
-misinterpreting them.
-`VERIFIED: unverified`
+```claim
+kind: constraint
+verification:
+  implementation: test
+because: [version-total-order]
+```
 
-**[lock-sets-capture]**: The lock file MUST capture the mapping from
+The lock's top-level `version` field is specified by
+[lock-file-schema.md](lock-file-schema.md) `[lock-schema-version]`.
+Resolution does not constrain it further.
+
+#### [lock-sets-capture]
+
+The lock file MUST capture the mapping from
 anchors to mirror sets. This is the set-level information required by
-atom-sourcing.md `[lock-entry-sufficient]`. Each entry in the `[sets]`
+atom-sourcing.md [lock-entry-sufficient](atom-sourcing.md#lock-entry-sufficient). Each entry in the `[sets]`
 table MUST contain the set's `tag` (for human readability) and its
 `mirrors` (for fetch targets).
-`VERIFIED: unverified`
 
-**[lock-atom-entry-fields]**: Each locked atom dependency MUST contain:
+```claim
+kind: constraint
+verification:
+  implementation: none
+because: [lock-entry-sufficient]
+```
+
+#### [lock-atom-entry-fields]
+
+Each locked atom dependency MUST contain:
 `set`, `label`, `version`, and `publish_czd` (publish transaction
 digest). The `publish_czd` is the digest of the publish `CozMessage` —
 from it, the claim czd, anchor, label, version, and provenance (src,
 path) are all derivable; `dig` lives in the signed payload and is
 verified by peel, not lock-stored (atom-sad §6.5). These are the
-REQUIRED fields from atom-sourcing.md's `[lock-entry-sufficient]`. Ion
+REQUIRED fields from atom-sourcing.md's [lock-entry-sufficient](atom-sourcing.md#lock-entry-sufficient). Ion
 extends these with `requires` (dep graph edges, as `publish_czd` values
 of direct atom deps) and `direct` (provenance flag). The `set` field
 (type: Anchor digest) is the lookup key into the lock's `[sets]` table
 for mirror resolution.
-`VERIFIED: unverified`
 
-**[lock-requires-graph]**: Each locked atom dependency SHOULD include
+```claim
+kind: constraint
+verification:
+  implementation: none
+because: [lock-entry-sufficient]
+```
+
+#### [lock-requires-graph]
+
+Each locked atom dependency SHOULD include
 a `requires` field listing the **`publish_czd`** values of its
 direct atom dependencies. This enables dependency graph reconstruction
 from the lock file without re-resolving and supports targeted updates
 when a transitive dependency changes.
-`VERIFIED: unverified`
 
-**[lock-direct-flag]**: Each locked atom dependency SHOULD include a
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+#### [lock-direct-flag]
+
+Each locked atom dependency SHOULD include a
 `direct` field indicating whether it is a direct dependency (from the
 root manifest) or transitive. Direct dependencies default to `true`;
 the field MAY be omitted for direct deps. Transitive deps MUST set
 `direct = false`.
-`VERIFIED: unverified`
 
-**[lock-compose-capture]**: The lock file MUST capture the resolved
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+#### [lock-compose-capture]
+
+The lock file MUST capture the resolved
 composer configuration. This includes the `publish_czd` and version
 of the composer atom (for `with` variant), or the evaluation
 mode (for `as` variants). The composer is resolved through the same
 pipeline as regular dependencies.
-`VERIFIED: unverified`
 
-**[lock-plugin-entries]**: Lock entries produced by direct dependency
-plugins (per ion-manifest.md `[plugin-lock-contract]`) MUST be
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+#### [lock-plugin-entries]
+
+Lock entries produced by direct dependency
+plugins (per ion-manifest.md [plugin-lock-contract](ion-manifest.md#plugin-lock-contract)) MUST be
 stored in the same `[[deps]]` array as atom entries, distinguished
 by their type tag. This ensures a single lock file contains the
 complete dependency graph.
-`VERIFIED: unverified`
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+because: [plugin-lock-contract]
+```
 
 ### Resolution Properties
 
-**[resolution-complete]**: If a valid assignment of versions to all
+#### [resolution-complete]
+
+If a valid assignment of versions to all
 declared dependencies exists, the resolver MUST find one. The resolver
 MUST NOT fail for solvable instances. (Completeness.)
-`VERIFIED: unverified`
 
-**[resolution-deterministic]**: Given the same manifest and the same
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+#### [resolution-deterministic]
+
+Given the same manifest and the same
 set of available atoms, the resolver MUST produce the same lock file.
 Non-deterministic resolution (e.g., random tie-breaking) is forbidden.
 ALL provider and discovery outputs (candidate enumeration, dependency
 lists, git-ref and map iteration) MUST be consumed in a stable,
 normalized order; ordering nondeterminism is the primary determinism
 footgun and is forbidden (SAD §6.1, §6.7).
-`VERIFIED: unverified`
 
-**[resolution-highest-match]**: When multiple versions of an atom
+```claim
+kind: constraint
+verification:
+  implementation: none
+because: [docs/architecture/atom-sad#6.1, docs/architecture/atom-sad#6.7]
+```
+
+#### [resolution-highest-match]
+
+When multiple versions of an atom
 satisfy a constraint, the resolver SHOULD prefer the highest
 compatible version. This is a SHOULD, not MUST — the resolver MAY
 select a lower version if it is necessary to satisfy other constraints
 in the dependency graph.
-`VERIFIED: unverified`
 
-**[resolution-unsolvable-diagnostic]**: If no valid assignment exists,
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+#### [resolution-unsolvable-diagnostic]
+
+If no valid assignment exists,
 the resolver MUST report the conflict clearly. The error SHOULD
 identify the conflicting constraints and the atoms involved. A bare
 "resolution failed" message is insufficient.
-`VERIFIED: unverified`
 
-**[resolution-transitive]**: The resolver MUST resolve the transitive
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+#### [resolution-transitive]
+
+The resolver MUST resolve the transitive
 closure of atom dependencies. If atom A depends on atom B, and atom B
 depends on atom C, then C MUST appear in the lock file even though
 the root manifest does not mention it.
-`VERIFIED: unverified`
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
 
 ### Transitions
 
-**[reconcile]**: Before any operation that reads the lock file, ion
+#### [reconcile]
+
+Before any operation that reads the lock file, ion
 MUST reconcile the lock with the current manifest.
 
 - **PRE**: A valid manifest and a lock file (possibly empty, stale,
@@ -202,10 +291,20 @@ MUST reconcile the lock with the current manifest.
   purged. New entries (deps added to manifest) are resolved and
   locked. Changed constraints are re-resolved. The lock file is
   written atomically.
-  `VERIFIED: unverified`
-  `RESIDUE: Phase 2 -- no reconciliation pipeline exists; ion-resolve/src/lib.rs's own docstring: "A full SAT-based resolver and lock file generator are planned but not yet implemented"`
 
-**[lock-freeze]**: After reconciliation, the lock file is frozen
+No reconciliation pipeline exists; `ion-resolve/src/lib.rs`'s own
+docstring states: "A full SAT-based resolver and lock file generator
+are planned but not yet implemented."
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+#### [lock-freeze]
+
+After reconciliation, the lock file is frozen
 for the current operation. Subsequent reads within the same operation
 (e.g., publish, build) MUST use the reconciled lock, not re-resolve.
 
@@ -213,31 +312,49 @@ for the current operation. Subsequent reads within the same operation
 - **POST**: The lock file is immutable for the duration of the
   operation. Any further manifest changes require a new reconciliation
   cycle.
-  `VERIFIED: unverified`
-  `RESIDUE: Phase 2 -- depends on the same unimplemented reconciliation pipeline as [reconcile]; no operation-scoped lock-freeze mechanism exists`
 
-**[lock-atomic-write]**: Lock file writes MUST be atomic. A crash or
-interruption during lock file writing MUST NOT corrupt the existing
-lock file. Implementations SHOULD use write-to-temporary-then-rename.
+This depends on the same unimplemented reconciliation pipeline as
+[reconcile](#reconcile); no operation-scoped lock-freeze mechanism exists.
 
-- **PRE**: A new lock file state has been computed.
-- **POST**: Either the old lock file is intact, or the new lock file
-  has completely replaced it. No intermediate state is observable.
-  `VERIFIED: unverified`
-  `RESIDUE: Phase 2 -- no lock-writing code exists at all; ion-lock is currently parse/validate-only (same gap as [lock-atomic-write] in lock-file-schema.md)`
+```claim
+kind: constraint
+verification:
+  implementation: none
+depends: [reconcile]
+```
+
+Lock write atomicity — including the crash-safety guarantee and the
+write-to-temporary-then-rename discipline — is specified by
+[lock-file-schema.md](lock-file-schema.md) `[lock-atomic-write]`.
+Resolution computes the new lock state; it does not specify how that
+state is written.
 
 ### Forbidden States
 
-**[no-partial-lock]**: A lock file MUST NOT contain a partial
+#### [no-partial-lock]
+
+A lock file MUST NOT contain a partial
 resolution. Either all dependencies are resolved and captured, or
 the lock file is not written. A lock file with some deps resolved
 and others missing is invalid.
-`VERIFIED: unverified`
 
-**[no-stale-lock-entry]**: After reconciliation, the lock file MUST
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+#### [no-stale-lock-entry]
+
+After reconciliation, the lock file MUST
 NOT contain entries for dependencies that are no longer declared in
 the manifest (directly or transitively). Stale entries MUST be purged.
-`VERIFIED: unverified`
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
 
 > **Note (2026-07-05, P4 flag):** A literal reading purges
 > tool-recorded fetch entries (the substrate's record-mode fetch proxy
@@ -249,41 +366,70 @@ the manifest (directly or transitively). Stale entries MUST be purged.
 > [ADR-0005](../adr/0005-hermetic-transactional-composition.md) §Open
 > Items. No semantic change to this invariant in this pass.
 
-**[no-constraint-violation]**: The lock file MUST NOT contain a
+#### [no-constraint-violation]
+
+The lock file MUST NOT contain a
 version that violates a declared constraint. If the manifest says
 `foo = "^1.0"` and the lock contains `foo` at version `2.0.0`, the
 lock is invalid.
-`VERIFIED: unverified`
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
 
 ### Behavioral Properties
 
-**[lock-reproducibility]**: Given the same lock file and the same
+#### [lock-reproducibility]
+
+Given the same lock file and the same
 mirror state, fetching all dependencies MUST produce the same set of
 artifacts. This is a consequence of atom-sourcing.md's
-`[resolution-reproducible]`, restated in ion's context. Content
+[resolution-reproducible](atom-sourcing.md#resolution-reproducible), restated in ion's context. Content
 binding flows through `publish_czd`: each locked entry's `publish_czd`
 pins the publish `CozMessage`; on fetch, the peeled content sha MUST
 equal `payload.dig`, which is verified by peel — `dig` is NOT stored
 in the lock (atom-sad §6.5).
 
 - **Type**: Safety
-  `VERIFIED: unverified`
 
-**[reconcile-idempotent]**: Reconciling an already-reconciled lock
+```claim
+kind: constraint
+verification:
+  implementation: none
+because: [resolution-reproducible]
+```
+
+#### [reconcile-idempotent]
+
+Reconciling an already-reconciled lock
 file against an unchanged manifest MUST produce no changes. The
 reconcile operation is idempotent.
 
 - **Type**: Safety
-  `VERIFIED: unverified`
 
-**[plugin-dep-sanitization]**: During reconciliation, plugin
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+#### [plugin-dep-sanitization]
+
+During reconciliation, plugin
 dependencies MUST be sanitized against the current manifest's
 `[deps.direct]` section, just as atom dependencies are sanitized
 against `[deps.from]`. Plugin entries whose names no longer appear
 in the manifest MUST be purged from the lock.
 
 - **Type**: Safety
-  `VERIFIED: unverified`
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
 
 > **Note (2026-07-05, P4 flag):** Same tension as `[no-stale-lock-
 entry]` above: this would purge tool-recorded fetch entries the
@@ -292,14 +438,21 @@ entry]` above: this would purge tool-recorded fetch entries the
 > [ADR-0005](../adr/0005-hermetic-transactional-composition.md) §Open
 > Items. No semantic change to this invariant in this pass.
 
-**[git-tag-version-inference]**: For direct dependencies referencing
+#### [git-tag-version-inference]
+
+For direct dependencies referencing
 git repositories (via plugins), implementations MAY infer version
 ordering from semver-compatible git tags. This is a convenience for
 backends whose storage format uses semver-tagged refs. This capability
 is NOT REQUIRED — it depends on the specific atom storage backend.
 
 - **Type**: Liveness (convenience)
-  `VERIFIED: unverified`
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
 
 ## Lock File Schema (Informative)
 
@@ -347,29 +500,6 @@ owner = "<publish-czd-of-owning-atom>"
 
 ## Verification
 
-| Constraint                       | Method      | Result | Detail                                                  |
-| :------------------------------- | :---------- | :----- | :------------------------------------------------------ |
-| version-semantics-semver         | agent-check | pass   | semver is well-defined; consistent with protocol        |
-| lock-schema-version              | agent-check | pass   | Prevents silent misinterpretation                       |
-| lock-sets-capture                | agent-check | pass   | Consistent with atom-sourcing lock-entry-sufficient     |
-| lock-atom-entry-fields           | agent-check | pass   | Contains all protocol LockEntry fields + ion extensions |
-| lock-requires-graph              | agent-check | pass   | SHOULD level; enables graph reconstruction              |
-| lock-direct-flag                 | agent-check | pass   | Informational; no safety implication                    |
-| lock-compose-capture             | agent-check | pass   | Composer is a dependency; lock captures it              |
-| lock-plugin-entries              | agent-check | pass   | Single array; type tag discriminates                    |
-| resolution-complete              | agent-check | pass   | Standard SAT property                                   |
-| resolution-deterministic         | agent-check | pass   | Required for reproducibility                            |
-| resolution-highest-match         | agent-check | pass   | SHOULD; allows flexibility for conflict resolution      |
-| resolution-unsolvable-diagnostic | agent-check | pass   | Usability requirement; no safety contradiction          |
-| resolution-transitive            | agent-check | pass   | Standard DAG closure                                    |
-| no-partial-lock                  | agent-check | pass   | All-or-nothing write prevents corruption                |
-| no-stale-lock-entry              | agent-check | pass   | Consistent with sanitize-then-sync lifecycle            |
-| no-constraint-violation          | agent-check | pass   | Fundamental correctness                                 |
-| lock-reproducibility             | agent-check | pass   | Restated from protocol; content-addressed               |
-| reconcile-idempotent             | agent-check | pass   | Follows from deterministic resolution                   |
-| plugin-dep-sanitization          | agent-check | pass   | Consistent with atom dep sanitization                   |
-| git-tag-version-inference        | agent-check | pass   | MAY; opt-in convenience                                 |
-
 All constraints are internally consistent. No contradictions with
 ion-manifest.md or atom-sourcing.md. Agent-level verification (Tier 1).
 
@@ -380,9 +510,10 @@ ion-manifest.md or atom-sourcing.md. Agent-level verification (Tier 1).
    complete SAT-based resolver with deterministic variable ordering.
    The PoC uses `resolvo`. The spec does not mandate a specific solver.
 
-2. **Lock migration**: The `[lock-schema-version]` field enables
-   future format evolution. Migration logic can detect the version and
-   transform older formats.
+2. **Lock migration**: The lock's `version` field
+   ([lock-file-schema.md](lock-file-schema.md) `[lock-schema-version]`)
+   enables format evolution once an MVP fixes the schema. At
+   `version = 0` no migration path is promised.
 
 3. **Plugin deps in lock**: Plugin lock entries share the `[[deps]]`
    array with atom entries, discriminated by type tag. This is exactly

@@ -86,14 +86,19 @@ lock↔composition isomorphism (htc-sad §6.9 — `name → signed content
 pointer`, one layer apart) is the same duality observed at the binding
 level: the two reifications carry the one algebra.
 
-**Identity names the composite, not a reification.** `AtomId = (anchor,
-label)` — the abstract pair, permanent across versions, owners, and
-keys (atom-sad §6.1, `[identity-content-addressed]`,
-`[identity-stability]`) — names the composite through time. One
-publish (one `publish_czd`) names one intent instance; one composition
-root names one artifact instance. The olog's identity-stability diagram
+**Identity names the composite, not a reification.** A composite's
+permanent, through-time identity is its **claim record's czd** — the
+label-scope genesis, stable across versions, owners, and keys (glossary,
+_Claim_ and _Atom identity_; ADR-0007 §3–§4). The older `AtomId =
+(anchor, label)` pair is **not** that identity: the fused pair has no
+role outside the pre-signature preimage of an unclaimed development atom,
+and naming it as identity is glossary-repudiated (2026-07-18). Identity
+stability holds regardless — it is now carried by the claim czd rather
+than the abstract pair. One publish (one `publish_czd`) names one intent
+instance; one composition root names one artifact instance. The olog's
+identity-stability diagram
 ([publishing-stack-layers](publishing-stack-layers.md) §1) commutes
-unchanged under this reading.
+unchanged under this reading — the stable node is the claim czd.
 
 **Closures are projections — one determined, one bounded.** The
 composite "includes the formal closure of all dependencies" in a
@@ -117,7 +122,7 @@ model's own (§4.2–§4.4):
   pure function of intent.
 
 Neither touches identity: closure roots feed `action_id` (Execution
-Model §2.4), never `AtomId`.
+Model §2.4), never the composite's identity (the claim czd).
 
 **Tripwire (what the determination claim rests on).** The build-closure
 leg: `[lock-sufficiency]`, `[lock-groundness]`,
@@ -150,6 +155,14 @@ reification (store paths and their unexplainable closures) and no
 first-class intent reification — the derivation is a build instruction,
 not a signed, human-meaningful declaration. Here the human-meaningful
 unit is the identity-bearing object, at every granularity stratum.
+
+#### [runtime-declare-required]
+
+```claim
+kind: invariant
+verification:
+  implementation: test
+```
 
 ## 3. What the plane owns per stratum
 
@@ -240,6 +253,15 @@ design work this model now governs rather than defers:
    some overwrite-class fields (e.g. `tmb`, `now`), so a
    presence-based trigger would fire on every tip move.
 
+#### [metadata-partition-law]
+
+```claim
+kind: invariant
+verification:
+  design: review
+  implementation: none
+```
+
 ## 5. The signature-anchoring law
 
 Signers differ across the stack — publishers sign intent, executors
@@ -290,6 +312,14 @@ unpublished composition passed peer-to-peer and bound by raw digest) is
 out-of-protocol by definition, and refusing it is exactly what a trust
 policy is for (Execution Model §3.4).
 
+#### [signature-anchoring-law]
+
+```claim
+kind: invariant
+verification:
+  design: review
+```
+
 ## 6. The reproducibility contract
 
 The execution model settles what reproducibility _is_ — an accumulating
@@ -321,6 +351,41 @@ mode ∈ { reproducible, witnessed }        (default: witnessed)
   and params combinations untested at declaration time — publishers
   declare accordingly (prudence, not protocol). Scoping the mode per
   toolchain role is a possible future refinement, not v1.
+
+**Correction (2026-07-30, [ADR-0009](../adr/0009-atom-composition-plane.md)
+Decision 9's residue): the equality above is keyed wrong.** Transitive
+configuration can vary independently of `action_id`'s intent-level
+closure root (an override at a consuming atom changes a dependency's
+actual inputs without changing its `action_id`), so two honest builders
+under different override contexts can share one `action_id` while their
+`record_core`s legitimately differ — `action_id`-keyed equality then
+raises a divergence finding against builds that never diverged. The
+declaration is a claim about **realized** identity, not intent: fixed
+`req_digest` (Execution Model §2.4) determines the actual inputs a
+request names, so equality MUST be stated over it.
+
+#### [reproducibility-req-keyed]
+
+Reproducibility is *fixed `req_digest` ⇒ equal `(exit_code, outputs)`*.
+This is what reproducibility has always meant — same inputs, same
+outputs — and supersedes the `action_id`-keyed phrasing above, which
+demands something stronger and false: that a build yield identical bytes
+however its dependencies were configured.
+
+```claim
+kind: invariant
+verification:
+  implementation: property-test
+```
+
+The mode mechanism, its violation/adjudication semantics, and the
+monotone-history cost below are otherwise unaffected — but the
+"Violation" paragraph immediately following still states the alarm over
+`action_id`, and so does trust-model.md's `[trust-mode-rule]` and
+`[trust-contested-refusal]`, both of which quote this section's
+now-superseded phrasing directly. Re-keying those to `req_digest` is a
+narrow, mechanical follow-up this correction obligates but does not
+perform; §8 registers it.
 
 **Violation is a defect finding, not a datum.** Under the declared
 mode, a `record_core`-divergent record from a _trusted_ signer at a
@@ -422,6 +487,12 @@ redesign concern, not a law of this plane.
 Recorded here so the reconciliation sweep has a manifest; none are
 performed by this document:
 
+- **trust-model.md** _(registered 2026-07-30, [reproducibility-req-keyed](#6-the-reproducibility-contract))_:
+  `[trust-mode-rule]` and `[trust-contested-refusal]` both quote §6's
+  pre-correction "fixed `action_id` ⇒ `record_core`-equal records"
+  phrasing directly and need the same `req_digest` re-key; a spurious
+  divergence finding under an override context is exactly the failure
+  the correction exists to prevent, and it stands until this lands.
 - **execution-model.md §9** _(landed 2026-07-12)_: item 10
   (environments-as-atoms) → RATIFIED yes, per §7; item 7 → note that
   the atom-side acceptance semantics (mode, violation, promotion) is
@@ -475,8 +546,10 @@ performed by this document:
 
 ## 10. Proof obligations
 
-Continuing the substrate-wide P-numbering (P1–P11 are homed in the
-three substrate models):
+Continuing the substrate-wide P-numbering (P1–P10 are homed in the
+three substrate models; P11 was renumbered to P18 — see
+[Execution Model v0.11](execution-model.md) — to resolve a collision
+with eos-scheduling.md's independent obligation numbering):
 
 - **P12 — metadata-partition well-formedness.** Every field of the
   publish payload, the chain-variable set, and every fact kind on the
@@ -513,3 +586,160 @@ closure's evidence fixpoint is P2's. This model only names what they
 jointly mean: the build closure is a determined projection of the
 composite, and the runtime closure is bounded by it and located by
 evidence.
+
+#### [proof-obligations-scope]
+
+```claim
+kind: invariant
+verification:
+  implementation: none
+```
+
+## 11. The spine and the cloud: the atom plane's own store
+
+_Added 2026-07-30, landing [ADR-0009](../adr/0009-atom-composition-plane.md).
+§4's metadata partition law (intent vs. fact) generalizes: intent splits
+further into two record classes, and the store holding all of it has its
+own laws. This section states the invariants; the on-disk contract they
+govern is [Atom Store Format](../specs/atom-store-format.md), the
+exchange protocol is [Fact Exchange](../specs/fact-exchange.md), and the
+split itself is ADR-0009's Decisions 1–2, cited rather than restated._
+
+**The spine holds intent** — charter (genesis), claim (genesis), publish
+(genesis), and amendment (owner rotation, threshold change, label
+transfer) — as an append-only, project-owned, single-write-gated log.
+Every leaf is `prior`-linked to its predecessor, so omitting one breaks
+the walk: omission is unconstructible, not merely detectable.
+
+#### [spine-chain-complete]
+
+Spine records are `prior`-linked, so omitting one breaks the walk:
+omission is **unconstructible**, not merely detectable.
+
+```claim
+kind: invariant
+verification:
+  design: none
+  implementation: none
+```
+
+**Not machine-verified (model-repair pass, 2026-08-24).** No formal model in
+this repository represents the spine at all. `atom_structure.als`,
+`atom_backend_seam.als`, `AtomCharter.tla`, and `AtomTransactions.tla` each
+model the charter/claim/publish transaction layer this section's own text
+distinguishes FROM the spine ("Added 2026-07-30, landing ADR-0009... §4's
+metadata partition law generalizes") — none of them carries a `prior`-linked
+append-only leaf chain, a fold over it, or an unconstructibility property
+for a missing link. This is a different construct the existing models never
+touched, not a gap in how well they cover it — building one is new modeling
+scope, not an extension of any model that exists today.
+
+Authorization is computed by folding the spine's amendment chain
+(genesis establishes the initial fold; each amendment updates it). A fold
+that admitted a non-spine input would be coverage-dependent — its result
+would depend on which facts happened to be visible to the folding party —
+and nothing built on it could be verified offline by a different party
+holding a different fact view.
+
+#### [fold-inputs-on-spine]
+
+Every input to an authorization fold is a
+[spine-chain-complete](#spine-chain-complete) spine record. Otherwise the
+fold is coverage-dependent and non-monotone, and nothing downstream is
+offline-verifiable.
+
+```claim
+kind: invariant
+verification:
+  implementation: type
+depends: [spine-chain-complete]
+```
+
+The anchor is not a declared field anywhere, not even on the charter
+genesis leaf itself, which cannot self-reference the value in
+question ([ADR-0007 §4](../adr/0007-atom-version-integrity-system.md)).
+It is discovered by walking a spine's `prior` chain back to its first
+leaf, never carried: a spine whose first leaf is anything other than
+a charter genesis record names no anchor at all.
+
+#### [spine-genesis-first]
+
+A spine's first leaf — reached by walking the
+`prior` links [spine-chain-complete](#spine-chain-complete) guarantees
+are unbroken, back to their root — MUST be a charter genesis record. A
+spine whose first leaf is a claim, a publish, or an amendment is
+invalid and names no anchor; there is no discovery path that produces
+an anchor from such a spine.
+
+```claim
+kind: invariant
+verification:
+  design: none
+  implementation: none
+depends: [spine-chain-complete]
+```
+
+**Not machine-verified, same reason as [spine-chain-complete](#spine-chain-complete)
+(model-repair pass, 2026-08-24):** no model in this repository represents
+the spine construct at all.
+
+**The cloud holds fact** — yank, deprecation, advisories, attestations,
+interface manifests, build records — as a history-independent
+authenticated set, writable by any anchored signer holding the role, with
+no write gate at all ([Atom Store Format §The published
+object](../specs/atom-store-format.md#the-published-object) covers
+verification; [Fact Exchange](../specs/fact-exchange.md) covers how facts
+propagate). A field once specified latest-wins (a version's `mode`, for
+instance) needs a total order the cloud's set-union algebra cannot
+supply; the repair is upstream of the ordering problem, re-expressing the
+field as **assertion plus withdrawal** using the existing `pay.retracts`
+field, so no order is ever consulted.
+
+#### [withdrawal-terminal]
+
+A withdrawn assertion is never revived; re-assertion is a new record with
+a new czd. Forced by content immutability, not imposed: a published
+version's content cannot change, so its properties are fixed rather than
+stateful.
+
+```claim
+kind: invariant
+verification:
+  implementation: test
+```
+
+**The store is sufficient.** A store holding an atom's closure — spine
+records, cloud facts, and content — suffices for every operation except
+one. Resolution is frozen in the lock; verification never queries beyond
+the closure ([verification-no-discover](../specs/atom-store-format.md#verification-no-discover));
+`form` is a pure fixpoint; build needs local bytes and an executor.
+Exactly one kind of question needs the network: *what exists now that I
+do not already know about* — a new version, a new fact, a yank that
+happened after the store was populated.
+
+#### [store-sufficiency]
+
+A store holding an atom's closure — [spine-chain-complete](#spine-chain-complete)
+records, [withdrawal-terminal](#withdrawal-terminal) facts, and content —
+suffices for every operation except discovery.
+
+```claim
+kind: invariant
+verification:
+  implementation: test
+depends: [spine-chain-complete, withdrawal-terminal]
+```
+
+#### [discover-one-question]
+
+Coordination is required for exactly one kind of question: what exists
+now that I do not already know about — the one bound
+[store-sufficiency](#store-sufficiency) names as the store's own limit.
+Every operation is offline-correct over what it already holds.
+
+```claim
+kind: invariant
+verification:
+  implementation: test
+because: [store-sufficiency]
+```

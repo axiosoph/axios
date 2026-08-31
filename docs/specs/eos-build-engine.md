@@ -232,112 +232,242 @@ See the Cap'n Proto projection of this trait as the `AtomDiscovery` capability i
 
 ### Invariants
 
-**[eos-verification-obligation]**: Eos MUST fetch atom snapshots and verify their content digests before applying any operations. Eos MUST NOT execute plans using unverified atom sources.
-`VERIFIED: unverified`
+#### [eos-verification-obligation]
 
-**[eos-verify-ownership]**: Eos MUST verify that the publish transaction is validly signed and authorized according to the claim chain before using the snapshot.
-`VERIFIED: unverified`
+Eos MUST fetch atom snapshots and verify their content digests before applying any operations. Eos MUST NOT execute plans using unverified atom sources.
 
-**[eos-verify-plugin-deps]**: Eos MUST fetch plugin dependencies and verify their hashes against the locked hashes using the specified algorithm (indicated by type tag).
-`VERIFIED: unverified`
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
 
-**[eos-no-unverified-execution]**: Eos MUST NOT execute or reference any unverified snapshot or plugin dependency in a build sandbox.
-`VERIFIED: unverified`
+#### [eos-verify-ownership]
 
-**[eos-sandbox-network-containment]**: Build execution MUST be executed in a restricted sandboxed environment. The sandbox MUST NOT have network access except through HTC's content-addressing record/replay proxy (htc-sad §4.2, ADR-0005 §7 `[htc-fetch-set-lock-plugin]`). Normative record/replay proxy semantics (record vs. replay mode, TLS CA injection, protocol-aware handlers) are specified in [eos-sandboxing.md](eos-sandboxing.md), not restated here. Platform-specific sandbox selection is wholly the executor implementation's concern (htc-sad §6.2, §6.4) — the FHS executor reuses `snix-build`'s OCI/bwrap sandbox.
-`VERIFIED: unverified`
+Eos MUST verify that the publish transaction is validly signed and authorized according to the claim chain before using the snapshot.
 
-**[eos-sandbox-host-isolation]**: The sandbox MUST NOT have write access to any part of the host filesystem outside the designated temporary sandbox build directory.
-`VERIFIED: unverified`
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
 
-**[eos-sandbox-reproducibility]**: The sandbox MUST NOT leak host environment variables, system times, CPU/hardware identifiers, or other sources of non-determinism into the build process. All inputs (environment variables, files, binaries) MUST be explicitly declared in the `BuildEngine::Plan`.
-`VERIFIED: unverified`
+#### [eos-verify-plugin-deps]
 
-**[eos-bisimulation-equivalence]**: Two Eos engine implementations MUST be behaviorally equivalent (bisimilar) under the same inputs: for any `AtomRef` and `ActionParams`, they MUST produce the same `BuildPlan` and equivalent outputs. This equivalence MUST hold across both local and daemon-served execution paths.
-`VERIFIED: unverified`
+Eos MUST fetch plugin dependencies and verify their hashes against the locked hashes using the specified algorithm (indicated by type tag).
 
-**[eos-immutable-store]**: Once a build output is registered in the `ArtifactStore` at a `StorePath`, it MUST be read-only and immutable. Eos MUST NOT permit modification, overwriting, or deletion of existing store paths during execution.
-`VERIFIED: unverified`
+```claim
+kind: constraint
+verification:
+  implementation: review
+```
 
-**[eos-cache-determinism]**: If the output corresponding to a given `BuildEngine::Plan` already exists in the `ArtifactStore` (build cache) or can be substituted, Eos MUST skip the build execution (`apply`) and return the cached `StorePath`.
-`VERIFIED: unverified`
+#### [eos-no-unverified-execution]
 
-**[eos-transitive-closure]**: The store path of any build output MUST be transitively self-contained. All dependencies of a store path MUST exist within the `ArtifactStore` and be immutable.
-`VERIFIED: unverified`
+Eos MUST NOT execute or reference any unverified snapshot or plugin dependency in a build sandbox: this closes the verification
+[eos-verification-obligation](#eos-verification-obligation) imposes on the snapshot and the hash check
+[eos-verify-plugin-deps](#eos-verify-plugin-deps) imposes on every plugin dependency.
 
-**[eos-atom-index-ingest]**: Atoms that have been successfully processed (fetched, verified, evaluated, or built) MUST be ingested into the `AtomIndex` via `ingest()`. The daemon MUST NOT silently discard atom metadata after processing. This invariant ensures that every eos instance progressively accumulates discoverable knowledge about the atoms it has encountered.
-`VERIFIED: unverified`
+```claim
+kind: constraint
+verification:
+  implementation: none
+because: [eos-verification-obligation, eos-verify-plugin-deps]
+```
+
+#### [eos-sandbox-network-containment]
+
+Build execution MUST be executed in a restricted sandboxed environment. The sandbox MUST NOT have network access except through HTC's content-addressing record/replay proxy (htc-sad §4.2, ADR-0005 §7 `[htc-fetch-set-lock-plugin]`). Normative record/replay proxy semantics (record vs. replay mode, TLS CA injection, protocol-aware handlers) are specified in [eos-sandboxing.md](eos-sandboxing.md), not restated here. Platform-specific sandbox selection is wholly the executor implementation's concern (htc-sad §6.2, §6.4) — the FHS executor reuses `snix-build`'s OCI/bwrap sandbox.
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+#### [eos-sandbox-host-isolation]
+
+The sandbox MUST NOT have write access to any part of the host filesystem outside the designated temporary sandbox build directory.
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+#### [eos-sandbox-reproducibility]
+
+The sandbox MUST NOT leak host environment variables, system times, CPU/hardware identifiers, or other sources of non-determinism into the build process. All inputs (environment variables, files, binaries) MUST be explicitly declared in the `BuildEngine::Plan`.
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+Verification will double-build and compare output hashes for
+equivalence.
+
+#### [eos-bisimulation-equivalence]
+
+Two Eos engine implementations MUST be behaviorally equivalent (bisimilar) under the same inputs: for any `AtomRef` and `ActionParams`, they MUST produce the same `BuildPlan` and equivalent outputs. This equivalence MUST hold across both local and daemon-served execution paths.
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+Verification will run parity checks between a mock and a concrete
+backend.
+
+#### [eos-immutable-store]
+
+Once a build output is registered in the `ArtifactStore` at a `StorePath`, it MUST be read-only and immutable. Eos MUST NOT permit modification, overwriting, or deletion of existing store paths during execution.
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+#### [eos-cache-determinism]
+
+If the output corresponding to a given `BuildEngine::Plan` already exists in the `ArtifactStore` (build cache) or can be substituted, Eos MUST skip the build execution (`apply`) and return the cached `StorePath`.
+
+```claim
+kind: constraint
+verification:
+  implementation: review
+```
+
+Verification will run property-based tests against the build cache.
+
+#### [eos-transitive-closure]
+
+The store path of any build output MUST be transitively self-contained. All dependencies of a store path MUST exist within the `ArtifactStore` and be immutable.
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+Verification will trace store-scanner references to validate the
+closure.
+
+#### [eos-atom-index-ingest]
+
+Atoms that have been successfully processed (fetched, verified, evaluated, or built) MUST be ingested into the `AtomIndex` via `ingest()`. The daemon MUST NOT silently discard atom metadata after processing. This invariant ensures that every eos instance progressively accumulates discoverable knowledge about the atoms it has encountered.
+
+```claim
+kind: constraint
+verification:
+  implementation: review
+```
 
 ---
 
 ### Transitions
 
-**[engine-plan]**: Determine an atom action's build status.
+#### [engine-plan]
+
+Determine an atom action's build status.
 
 - **PRE**: The `AtomRef` is resolved and its verified content snapshot is present. `ActionParams` and the toolchain composition are known. The scheduler holds a connection to registered executor workers.
 - **POST**: Returns `Cached` if the output tree is verified in HTC's shared CAS, or `NeedsBuild` if the action's `action_id` has no cached `BuildRecord`.
-  `VERIFIED: unverified`
 
-**[engine-apply]**: Execute a build plan to produce store outputs.
+```claim
+kind: constraint
+verification:
+  implementation: review
+```
 
-- **PRE**: The `BuildPlan` is `NeedsBuild`. All transitive build inputs are present and verified in the store. The backend's sandbox is initialized.
+Verification will run unit tests over plan transitions via the
+daemon protocol.
+
+#### [engine-apply]
+
+Execute a build plan to produce store outputs.
+
+- **PRE**: The `BuildPlan` is `NeedsBuild`, as [engine-plan](#engine-plan) determined it. All transitive build inputs are present and verified in the store. The backend's sandbox is initialized.
 - **POST**: The builder executes inside the sandbox. Outputs are verified, registered as read-only, and committed to the `ArtifactStore` via the delegated store backend. Failed builds MUST abort and return an error without mutating existing store paths. The daemon transitions the corresponding `JobStatus` to `Completed` or `Failed` and pushes a `ProgressEvent` to all attached clients.
-  `VERIFIED: unverified`
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+depends: [engine-plan]
+```
+
+Verification will run integration tests over builder execution via
+the backend.
 
 ---
 
 ### Forbidden States
 
-**[no-undeclared-inputs]**: A build execution MUST NOT reference or import any host environment variables or filesystem paths not explicitly declared in the plan's environment or capability set.
-`VERIFIED: unverified`
+#### [no-undeclared-inputs]
 
-**[no-speculative-writes]**: Eos MUST NOT commit outputs to the store for builds that fail post-evaluation verification checks.
-`VERIFIED: unverified`
+A build execution MUST NOT reference or import any host environment variables or filesystem paths not explicitly declared in the plan's environment or capability set.
 
-**[no-dirty-store-paths]**: Eos MUST NOT register a store path in the `ArtifactStore` unless its contents have been verified to match the content digest of the built output.
-`VERIFIED: unverified`
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+Verification will audit environment-variable whitelist enforcement.
+
+#### [no-speculative-writes]
+
+Eos MUST NOT commit outputs to the store for builds that fail post-evaluation verification checks.
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+#### [no-dirty-store-paths]
+
+Eos MUST NOT register a store path in the `ArtifactStore` unless its contents have been verified to match the content digest of the built output.
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
 
 ---
 
 ### Behavioral Properties
 
-**[action-cache-idempotency]**: Multiple concurrent action-cache lookups for the same `action_id` (htc-sad §6.5) MUST yield bisimilar `BuildEngine::Plan` results.
+#### [action-cache-idempotency]
+
+Multiple concurrent action-cache lookups for the same `action_id` (htc-sad §6.5) MUST yield bisimilar results from [engine-plan](#engine-plan).
 
 - **Type**: Safety
-  `VERIFIED: unverified`
 
-**[apply-cleanup-on-abort]**: If a build application fails or aborts, all temporary sandbox resources and partial outputs MUST be completely garbage collected and MUST NOT leak into the `ArtifactStore`.
+```claim
+kind: constraint
+verification:
+  implementation: none
+because: [engine-plan]
+```
+
+#### [apply-cleanup-on-abort]
+
+If an [engine-apply](#engine-apply) fails or aborts, all temporary sandbox resources and partial outputs MUST be completely garbage collected and MUST NOT leak into the `ArtifactStore`.
 
 - **Type**: Safety
-  `VERIFIED: unverified`
 
----
-
-## Verification
-
-| Constraint                        | Method                         | Result     | Detail                                                                    |
-| :-------------------------------- | :----------------------------- | :--------- | :------------------------------------------------------------------------ |
-| `eos-verification-obligation`     | Unit tests                     | UNVERIFIED | Pending implementation of atom snapshot fetcher                           |
-| `eos-verify-ownership`            | Cryptographic sign check       | UNVERIFIED | Pending integration of Coz verification                                   |
-| `eos-verify-plugin-deps`          | Hash verification tests        | UNVERIFIED | Pending lock-reader implementation                                        |
-| `eos-no-unverified-execution`     | Sandbox integration tests      | UNVERIFIED | Verification deferred until sandbox integration                           |
-| `eos-sandbox-network-containment` | Sandbox profile check          | UNVERIFIED | Backend-specific sandbox restriction verification (see eos-sandboxing.md) |
-| `eos-sandbox-host-isolation`      | Directory permission checks    | UNVERIFIED | Verification of filesystem write blocks                                   |
-| `eos-sandbox-reproducibility`     | Binary hash equivalence        | UNVERIFIED | Double-build hash check verification                                      |
-| `eos-bisimulation-equivalence`    | Equivalence tests              | UNVERIFIED | Parity checks between mock and concrete backends                          |
-| `eos-immutable-store`             | Host filesystem audit          | UNVERIFIED | Verification of read-only enforcement via delegated store                 |
-| `eos-cache-determinism`           | Cache hits test                | UNVERIFIED | Property-based tests for build cache                                      |
-| `eos-transitive-closure`          | Reference scanner test         | UNVERIFIED | Store scanner reference tracing validation                                |
-| `eos-atom-index-ingest`           | Integration tests              | UNVERIFIED | Verify atoms are ingested into AtomIndex after processing                 |
-| `engine-plan`                     | State transition audit         | UNVERIFIED | Unit tests for plan transitions via daemon protocol                       |
-| `engine-apply`                    | Sandbox execute tests          | UNVERIFIED | Integration tests for builder execution via backend                       |
-| `no-undeclared-inputs`            | Environment sanitization check | UNVERIFIED | Env whitelist enforcement audit                                           |
-| `no-speculative-writes`           | Aborted commit audit           | UNVERIFIED | Verify store cleanup after failure                                        |
-| `no-dirty-store-paths`            | Integrity validation           | UNVERIFIED | Store post-hash checks audit                                              |
-| `action-cache-idempotency`        | Concurrent tests               | UNVERIFIED | Concurrency validation with `action_id`                                   |
-| `apply-cleanup-on-abort`          | Temporary leak check           | UNVERIFIED | Temporary path leakage validation                                         |
-
----
+```claim
+kind: constraint
+verification:
+  implementation: none
+because: [engine-apply]
+```
 
 ## Implications
 

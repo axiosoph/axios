@@ -26,6 +26,8 @@ pub fn blank_signature() -> Signature {
 /// Fixes timestamps, author, and committer information, and appends the `src` extra header.
 ///
 /// Spec constraint: `[snapshot-deterministic]`, `[snapshot-parentless]`, `[snapshot-src-header]`.
+// @docket: snapshot-deterministic :: cargo test --manifest-path atom/Cargo.toml -p atom-git --test integration -- test_deterministic_commits --exact
+// @docket: snapshot-src-header :: cargo test --manifest-path atom/Cargo.toml -p atom-git --test integration -- test_differential_git_cli test_publish_and_tag_chain --exact
 pub fn write_deterministic_commit(
     repo: &gix::Repository,
     tree_oid: ObjectId,
@@ -55,6 +57,8 @@ pub fn write_deterministic_commit(
 /// establishing the update/rotation audit chain.
 ///
 /// Spec constraint: `[claim-detached]`, `[claim-message-is-coz]`, `[no-non-empty-claim]`.
+// @docket: claim-detached :: cargo test --manifest-path atom/Cargo.toml -p atom-git --test integration -- test_claim_and_key_rotation --exact
+// @docket: claim-message-is-coz :: cargo test --manifest-path atom/Cargo.toml -p atom-git --test integration -- test_claim_and_key_rotation --exact
 pub fn write_claim_commit(
     repo: &gix::Repository,
     claim_message: String,
@@ -94,6 +98,7 @@ pub fn write_claim_commit(
 /// payload, never via git ancestry (`[charter-succession-via-prior]`).
 ///
 /// Spec constraint: `[charter-commit-format]`.
+// @docket: charter-commit-format :: cargo test --manifest-path atom/Cargo.toml -p atom-git --lib -- gix_util::tests::write_charter_commit_is_parentless_with_empty_tree --exact
 pub fn write_charter_commit(
     repo: &gix::Repository,
     charter_message: String,
@@ -124,6 +129,8 @@ pub fn write_charter_commit(
 /// Targets either the atom commit (for initial publish) or the previous publish tag (for updates).
 ///
 /// Spec constraint: `[publish-tag-targets-correct]`, `[publish-tag-message-is-coz]`.
+// @docket: publish-tag-targets-correct :: cargo test --manifest-path atom/Cargo.toml -p atom-git --test integration -- test_publish_and_tag_chain --exact
+// @docket: publish-tag-message-is-coz :: cargo test --manifest-path atom/Cargo.toml -p atom-git --test integration -- test_publish_and_tag_chain --exact
 pub fn write_publish_tag(
     repo: &gix::Repository,
     tag_name: &str,
@@ -161,6 +168,8 @@ pub fn write_publish_tag(
 /// This closes the write-side half of `[tag-chain-semantic-immutable]`
 /// (`docs/specs/git-storage-format.md:758-768`); the read-side half is
 /// enforced separately in `source.rs`'s resolution walk.
+// @docket: tag-chain-semantic-immutable :: cargo test --manifest-path atom/Cargo.toml -p atom-git --test tag_chain -- write_chain_append_tag_rejects_differing_dig write_chain_append_tag_accepts_mode_only_transition --exact
+// @docket: tag-chain-immutable :: cargo test --manifest-path atom/Cargo.toml -p atom-git --test tag_chain -- write_chain_append_tag_accepts_mode_only_transition --exact
 pub fn write_chain_append_tag(
     repo: &gix::Repository,
     tag_name: &str,
@@ -195,6 +204,7 @@ pub fn write_chain_append_tag(
 /// Walk the parent chain of a commit lineage to assert descendants.
 ///
 /// Returns `true` if `descendant` is at or after `ancestor` in Git history.
+// @docket: ancestry-hash-committed :: cargo test --manifest-path atom/Cargo.toml -p atom-conformance --test battery -- backend_ancestry_queryable::ancestry_check_uses_only_commit_graph --exact
 pub fn is_descendant(
     repo: &gix::Repository,
     descendant: ObjectId,
@@ -333,6 +343,7 @@ mod tests {
 /// to call `ObjectId::try_from` on protocol-payload bytes — every other
 /// call site MUST route through one of them, naming which sort it
 /// asserts of its input.
+// @docket: czd-oid-disjoint :: cargo test --manifest-path atom/Cargo.toml -p atom-git --lib -- gix_util::seam::tests::oid_from_src_field_rejects_wrong_length gix_util::seam::tests::oid_from_dig_field_rejects_wrong_length --exact
 pub mod seam {
     use gix::hash::{Error, ObjectId};
 

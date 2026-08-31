@@ -2,6 +2,14 @@ name: Model Check
 
 on:
   workflow_dispatch: {}
+  push:
+    paths:
+      - "docs/specs/**"
+      - ".github/workflows/model-check.yml"
+  pull_request:
+    paths:
+      - "docs/specs/**"
+      - ".github/workflows/model-check.yml"
 
 jobs:
   model-check:
@@ -10,7 +18,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@main
-      # run_model_check.sh re-execs itself inside docs/specs/shell.nix when
+      # Both runners re-exec themselves inside docs/specs/shell.nix when
       # tlc/java are absent from PATH, so no wrapping nix-shell call is
       # needed here.
+      # TLC configs + atom_structure.als:
       - run: docs/specs/run_model_check.sh
+      # atom_backend_seam.als + the surety-of-source safety model:
+      - run: docs/specs/alloy/run_alloy_checks.sh

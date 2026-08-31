@@ -1,10 +1,11 @@
 //! Charter transactions — atom-set chartering and succession.
 //!
-//! A charter defines and re-anchors atom-set identity: the founding
-//! charter's coz digest IS the atom-set's `Anchor` (`[charter-anchor]`,
-//! `[charter-transition]`). Unlike claims and publishes, a charter has
-//! no `anchor`/`label` field — it *defines* the anchor rather than
-//! referencing one.
+//! A charter establishes and re-anchors atom-set identity: the founding
+//! charter effects the atom-set's `Anchor` — a linking role, not a
+//! digest — named and verified by that charter's own coz digest
+//! (`[charter-anchor]`, `[charter-transition]`). Unlike claims and
+//! publishes, a charter has no `anchor`/`label` field — it establishes
+//! the anchor rather than referencing one.
 //!
 //! Spec: `docs/specs/atom-transactions.md` §CharterPayload,
 //! `[charter-*]`, `[chain-*]`.
@@ -25,17 +26,18 @@ pub const TYP_CHARTER: &str = "atom/charter";
 
 /// Payload for an `atom/charter` transaction.
 ///
-/// Charters define and re-anchor atom-set identity. The founding charter
-/// (no `prior`) has no pre-existing anchor to reference — its own coz
-/// digest BECOMES the atom-set's [`Anchor`](crate::Anchor):
-/// `Anchor == czd(charter₀)` (`[charter-anchor]`). A successor charter
-/// (with `prior`) transfers ownership without changing the anchor
-/// (`[charter-succession]`).
+/// Charters establish and re-anchor atom-set identity. The founding charter
+/// (no `prior`) has no pre-existing anchor to reference — it effects the
+/// atom-set's [`Anchor`](crate::Anchor), the linking role a founding
+/// charter fills; that anchor is named and verified by the founding
+/// charter's own coz digest, `czd(charter₀)` (`[charter-anchor]`). A
+/// successor charter (with `prior`) transfers ownership without changing
+/// the anchor (`[charter-succession]`).
 ///
 /// Unlike [`ClaimPayload`](crate::ClaimPayload) and
 /// [`PublishPayload`](crate::PublishPayload), `CharterPayload` carries no
-/// `anchor`/`label` field — it defines the anchor rather than referencing
-/// one.
+/// `anchor`/`label` field — it establishes the anchor rather than
+/// referencing one.
 ///
 /// Spec constraints: `[charter-typ]`, `[charter-anchor]`,
 /// `[charter-succession]`.
@@ -85,6 +87,8 @@ impl CharterPayload {
     /// only at deserialization (see `CharterPayload`'s
     /// `deserialize_with`), so a charter nobody could ever claim under can
     /// never be built through this crate's own API either.
+    // @docket: charter-owner-set :: cargo test --manifest-path atom/Cargo.toml -p atom-id --lib -- charter::tests::charter_payload_rejects_empty_owner_set charter::tests::charter_payload_owner_deserialize_rejects_empty_set
+    // @docket: charter-owner-set-non-empty :: cargo test --manifest-path atom/Cargo.toml -p atom-id --lib -- charter::tests::charter_payload_rejects_empty_owner_set charter::tests::charter_payload_owner_deserialize_rejects_empty_set
     pub fn new(
         alg: Alg,
         now: u64,

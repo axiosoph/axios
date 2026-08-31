@@ -257,6 +257,12 @@ fn find_earliest_claim(repo: &gix::Repository) -> Result<Option<ClaimPayload>, G
 }
 
 impl AtomRegistry for GitRegistry {
+    // @docket: claim-transition-git :: cargo test --manifest-path atom/Cargo.toml -p atom-git --test integration -- test_claim_and_key_rotation test_claim_accepts_chartered_anchor --exact
+    // @docket: registry-ref-claim :: cargo test --manifest-path atom/Cargo.toml -p atom-git --test integration -- test_claim_and_key_rotation test_resolve_registry_branch_returns_real_czd --exact
+    // @docket: single-active-claim-registry :: cargo test --manifest-path atom/Cargo.toml -p atom-git --test integration -- test_claim_and_key_rotation --exact
+    // @docket: claim-replacement-storage :: cargo test --manifest-path atom/Cargo.toml -p atom-git --test integration -- test_claim_and_key_rotation --exact
+    // @docket: refs-atomic-multi :: cargo test --manifest-path atom/Cargo.toml -p atom-conformance --test battery -- backend_refs_atomic_multi::claim_writes_land_both_refs_together --exact
+    // @docket: coz-bit-perfect :: cargo test --manifest-path atom/Cargo.toml -p atom-git --test integration -- test_claim_and_key_rotation --exact
     fn claim(&self, id: &AtomId, owner: &OwnerRef) -> Result<Czd, Self::Error> {
         let repo = self.source.repo();
         let head_oid = repo
@@ -436,6 +442,10 @@ impl AtomRegistry for GitRegistry {
         Ok(czd)
     }
 
+    // @docket: publish-transition-git :: cargo test --manifest-path atom/Cargo.toml -p atom-git --test integration -- test_publish_and_tag_chain test_publish_rejects_fabricated_oid_czd --exact
+    // @docket: registry-ref-version :: cargo test --manifest-path atom/Cargo.toml -p atom-git --test integration -- test_publish_and_tag_chain test_resolve_registry_branch_returns_real_czd --exact
+    // @docket: temporal-vector :: cargo test --manifest-path atom/Cargo.toml -p atom-git --test integration -- test_failures_and_forbidden_states test_publish_and_tag_chain --exact
+    // @docket: no-backdated-src :: cargo test --manifest-path atom/Cargo.toml -p atom-git --test integration -- test_failures_and_forbidden_states --exact
     fn publish(
         &self,
         id: &AtomId,
@@ -648,6 +658,7 @@ impl AtomRegistry for GitRegistry {
         Ok(())
     }
 
+    // @docket: charter-transition-git :: cargo test --manifest-path atom/Cargo.toml -p atom-git --lib -- registry::charter_tests::charter_founds_virgin_source registry::charter_tests::charter_end_to_end_founding_then_succession_resolves_through_public_api --exact
     fn charter(
         &self,
         owner: &[OwnerRef],
@@ -981,6 +992,7 @@ mod charter_tests {
     }
 
     #[test]
+    // @docket: charter-transition :: cargo test --manifest-path atom/Cargo.toml -p atom-git --lib -- registry::charter_tests::charter_founds_authorized_over_preexisting_claim registry::charter_tests::charter_founds_rejects_unauthorized_founder registry::charter_tests::charter_succeeds_accepts_authorized_later_now registry::charter_tests::charter_succeeds_rejects_non_increasing_now registry::charter_tests::charter_succeeds_rejects_unauthorized_signer registry::charter_tests::charter_succeeds_rejects_second_successor_to_same_prior
     fn charter_founds_authorized_over_preexisting_claim() {
         let (_dir, repo) = setup_test_repo();
         let incumbent = gen_keypair();

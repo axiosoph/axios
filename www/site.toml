@@ -1,5 +1,5 @@
 author   = "Axiosophic Systems"
-base_url = "https://axiosoph.github.io/axios"
+base_url = "https://axiosph.netlify.app"
 title    = "Axios Documentation"
 
 [paths]

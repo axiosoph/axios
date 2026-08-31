@@ -449,6 +449,7 @@ fn inject_meta<P: Serialize>(payload: &P) -> Vec<u8> {
 // F8: PublishPayload silently drops the unknown `meta` field under serde
 // — the exact opposite of `[publish-payload-extensible]`'s preserve-all
 // mandate. Greened by n2-payload-fields's `meta` field.
+// @docket: publish-payload-extensible :: cargo test --manifest-path atom/Cargo.toml -p atom-id --test golden_vectors -- publish_payload_preserves_unknown_meta_field
 #[test]
 fn publish_payload_preserves_unknown_meta_field() {
     let injected = inject_meta(&extensibility_publish_payload());
@@ -470,6 +471,7 @@ fn publish_payload_preserves_unknown_meta_field() {
 // `[symmetric-payloads]` ties claim and publish payload shape together,
 // so the same preservation obligation applies. Greened by
 // n2-payload-fields's `meta` field on both payload types.
+// @docket: claim-payload-extensible :: cargo test --manifest-path atom/Cargo.toml -p atom-id --test golden_vectors -- claim_payload_preserves_unknown_meta_field
 #[test]
 fn claim_payload_preserves_unknown_meta_field() {
     let injected = inject_meta(&extensibility_claim_payload());

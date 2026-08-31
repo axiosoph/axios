@@ -62,43 +62,101 @@ with the commitments ([lock-annotation-consistency]).
 These bind the schema as a whole; every section constraint below serves
 one of them.
 
-**[lock-sufficiency]**: The lock MUST pin every worldly discovery needed
+#### [lock-sufficiency]
+
+The lock MUST pin every worldly discovery needed
 to form execution requests for the atom: the transitive dependency
 closure by content identity, and every fetch payload not adopted from an
 ecosystem lockfile in the atom's sources. Build-time resolution or
 discovery of any kind MUST NOT be required by a consumer holding the
 atom snapshot and its lock.
-`RESIDUE: Phase 2 -- whole-closure sufficiency is a resolution-time property; no resolver exists yet (ion-resolve/src/lib.rs: "A full SAT-based resolver and lock file generator are planned but not yet implemented")`
 
-**[lock-recomputability]**: The lock MUST be the output of deterministic
+Whole-closure sufficiency is a resolution-time property; no resolver
+exists yet -- `ion-resolve/src/lib.rs`'s own docstring: "A full
+SAT-based resolver and lock file generator are planned but not yet
+implemented."
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+#### [lock-recomputability]
+
+The lock MUST be the output of deterministic
 resolution: the same manifest and the same discovery snapshot (as pinned
-by [lock-set-snapshot]) MUST re-derive a byte-identical lock.
-Serialization MUST be canonical (see [lock-canonical-form]).
-`RESIDUE: Phase 2 -- depends on both the canonical encoder and resolution determinism, neither implemented (LockFileV2::to_canonical is an explicit unimplemented!() stub; no resolver exists)`
+by [lock-set-snapshot](#lock-set-snapshot)) MUST re-derive a byte-identical lock.
+Serialization MUST be canonical (see [lock-canonical-form](#lock-canonical-form)).
 
-**[lock-choice-policy]**: The choice function is fixed and canonical:
+This depends on both the canonical encoder and resolution
+determinism, neither implemented: `LockFileV2::to_canonical` is an
+explicit `unimplemented!()` stub, and no resolver exists.
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+depends: [lock-set-snapshot, lock-canonical-form]
+```
+
+#### [lock-choice-policy]
+
+The choice function is fixed and canonical:
 among candidates satisfying the manifest's constraints, resolution MUST
 select the highest version under the atom's declared scheme order,
 deviating only through declared, manifest-side overrides. Determinism in
 [lock-recomputability] is therefore two-place — (manifest, snapshot) —
 with the choice policy a constant of this specification (Composition
 Model §6: the recorded choice).
-`RESIDUE: Phase 2 -- the choice function is part of the not-yet-implemented SAT-based resolver (ion-resolve/src/lib.rs)`
 
-**[lock-groundness]**: Every lock value MUST be ground: names bound to
+The choice function is part of the not-yet-implemented SAT-based
+resolver (`ion-resolve/src/lib.rs`).
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+because: [docs/models/composition-model#6]
+```
+
+#### [lock-groundness]
+
+Every lock value MUST be ground: names bound to
 content identities and exact version strings. Version constraints,
 ranges, override declarations, and any other unresolved intent MUST NOT
 appear in the lock; they are manifest-side. The only equality relation a
 lock consumer needs is syntactic.
-`RESIDUE: Phase 2 -- a whole-schema meta-invariant; no check beyond the type shape exists, and the type shape alone does not prevent e.g. a version range being stuffed into the version String field`
 
-**[lock-closure-completeness]**: The `[deps]` section MUST contain the
+This is a whole-schema meta-invariant; no check beyond the type shape
+exists, and the type shape alone does not prevent, e.g., a version
+range being stuffed into the version `String` field.
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+#### [lock-closure-completeness]
+
+The `[deps]` section MUST contain the
 full transitive closure of the atom's dependencies as resolved. Which
 entries are direct is the manifest's knowledge and MUST NOT be
 duplicated in the lock (no root marker, no `[self]`).
-`RESIDUE: Phase 2 -- requires a manifest-driven resolution pipeline to compute the closure and know which entries are direct; no such pipeline exists`
 
-**[lock-action-totality]**: The lock, together with the manifest in the
+This requires a manifest-driven resolution pipeline to compute the
+closure and know which entries are direct; no such pipeline exists.
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+#### [lock-action-totality]
+
+The lock, together with the manifest in the
 same atom snapshot, MUST determine — by pure elaboration, with no
 discovery — all three inputs of the atom's `action_id` (Execution Model
 §2.4): `atom_czd_closure_root` from the dep pins; `params` from the
@@ -106,63 +164,132 @@ manifest's declarations; and the effective `toolchain_composition_root`
 from the manifest's toolchain-role declarations as resolved in the lock,
 after role-keyed override propagation. For closure members, the lock
 MUST let a consumer identify and fetch each member's snapshot, from
-which that member's `action_id` is computed the same way. This
-discharges P7's totality gate (Execution Model §8): the toolchain pin is
-an ordinary dep entry; no dedicated entry type exists or is needed.
-`RESIDUE: Phase 2 -- action_id computation combining lock + manifest + toolchain-override propagation is not implemented anywhere in atom-core or eos`
+which that member's `action_id` is computed the same way — governed by
+*this* lock, the top-level one under computation, never by re-reading
+the member's own nested lock inside its fetched snapshot:
+[lock-closure-completeness](#lock-closure-completeness) already guarantees this lock carries every
+member's fully-resolved entry, so a member's own lock matters only when
+that atom is itself the top level. This discharges P7's totality gate
+(Execution Model §8): the toolchain pin is an ordinary dep entry; no
+dedicated entry type exists or is needed.
 
-**[lock-in-snapshot-locality]**: The lock is carried inside the atom
+The `action_id` computation combining lock, manifest, and
+toolchain-override propagation is not implemented anywhere in
+atom-core or eos.
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+depends: [docs/models/execution-model#2.4, lock-closure-completeness]
+because: [docs/models/execution-model#8]
+```
+
+#### [lock-in-snapshot-locality]
+
+The lock is carried inside the atom
 snapshot it serves — it is reviewed, signed intent. An edit to an atom's
 lock therefore legitimately changes that atom's _own_ action identity
 (its pinned inputs changed). What MUST NOT happen is cross-action
 leakage: the identity of any _other_ action — a dependency's build,
 another atom's job — MUST NOT be derived from this atom's lock; each
 action's identity derives only from its own snapshot's slice (see
-[lock-no-plan-digest]). Canonical form exists partly for this reason:
+[lock-no-plan-digest](#lock-no-plan-digest)). Canonical form exists partly for this reason:
 with exactly one legal serialization and no comments, no
 semantically-inert lock edit exists to spuriously shift identity.
-`RESIDUE: Phase 2 -- cross-action leakage prevention depends on the same unimplemented action_id computation as [lock-action-totality]`
+
+Cross-action leakage prevention depends on the same unimplemented
+`action_id` computation as `[lock-action-totality]`.
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+because: [lock-no-plan-digest]
+```
 
 ## Top level
 
-**[lock-schema-version]**: The lock MUST contain a top-level integer
-field `schema`, in minimal decimal form. This document specifies
-`schema = 2`. Consumers MUST refuse locks whose schema version they do
-not implement.
-`RESIDUE: Phase 1 -- LockFileV2.schema is a typed u64 field, but no code path rejects an unrecognized schema version; no such check or test exists (ion/ion-lock/src/v2.rs)`
+#### [lock-schema-version]
 
-**[lock-tool-owned]**: The lock is tool-authored; humans review lock
+The lock MUST contain a top-level integer
+field `version`, in minimal decimal form. This document specifies
+`version = 0`, denoting a pre-MVP schema: the shape is unstable and no
+compatibility is promised across changes until an MVP fixes it.
+Consumers MUST refuse locks whose version they do not implement.
+
+The field exists as a typed `u64` but under the superseded v2
+framing (named `schema`, valued `2`; `ion/ion-lock/src/v2.rs`); no
+code path rejects an unrecognized version, and no such check or test
+exists.
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+#### [lock-tool-owned]
+
+The lock is tool-authored; humans review lock
 diffs and never hand-edit them in supported workflows. The canonical
 form contains no comments: generator provenance belongs in VCS metadata
 and tool output, never in lock bytes.
-`RESIDUE: Phase 2 -- "no comments in canonical form" is tied to the unimplemented to_canonical encoder; "humans never hand-edit" is a workflow discipline, not machine-checkable by this repo's tooling`
+
+"No comments in canonical form" is tied to the unimplemented
+`to_canonical` encoder; "humans never hand-edit" is a workflow
+discipline, not machine-checkable by this repo's tooling.
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
 
 ## `[sets]` — set anchors and discovery snapshots
 
-**[lock-set-anchor]**: Each key under `[sets]` is a local set alias; its
+#### [lock-set-anchor]
+
+Each key under `[sets]` is a local set alias; its
 `anchor` field MUST be the algorithm-prefixed coz digest of the
 atom-set's founding charter transaction: `anchor = czd(charter₀)`
-(atom-transactions.md's `[charter-anchor]`). The anchor IS the set's
+(atom-transactions.md's [charter-anchor](atom-transactions.md#charter-anchor)). The anchor IS the set's
 identity, and this derivation is backend-agnostic: the value is a coz
 digest regardless of which VCS backend hosts the set's source. This
 supersedes the prior genesis-commit derivation. The founding commit is
 not lost — `charter.src` is the chartering-point revision, and because
 a revision hash commits to its entire ancestry, `charter.src`
 transitively pins the genesis commit (atom-transactions.md's
-`[charter-ancestry]`) without itself being the genesis commit or
+[charter-ancestry](atom-transactions.md#charter-ancestry)) without itself being the genesis commit or
 serving as the set's identity; that role now belongs one layer up, to
 `anchor`. A weak source-repository hash — SHA-1 is not
 collision-resistant (Storage Model §5) — therefore no longer bears on
 the lock's own identity value directly: it bears only on the ancestry
-`charter.src` transitively pins, not on `anchor` itself. Continuity
-across a hash-migrating
-history rewrite is a successor charter's explicit concern
-(atom-transactions.md's `[charter-succession]`, `[anchor-hash-agile]`),
-never this field's: `anchor` is immutable for the set's lifetime
-regardless of what happens to the source repository underneath it.
-`RESIDUE: Phase 2 -- golden_digest_fields_are_byte_exact_canonical_form (ion/ion-lock/tests/v2_corpus.rs) confirms the field decodes/encodes as a well-formed AtomDigest, but not that the value genuinely equals czd(charter₀); no code computes a lock's anchor from charter machinery yet`
+`charter.src` transitively pins, not on `anchor` itself. A
+hash-migrating history rewrite severs the in-protocol path to this
+anchor entirely — chartering the re-hashed history is a genuine fork
+with its own anchor (atom-transactions.md's `[anchor-hash-agile]`
+note), so no such rewrite is ever this field's concern: `anchor` is
+immutable for the set's lifetime regardless of what happens to the
+source repository underneath it.
 
-**[lock-set-charter-head]**: Each `[sets]` entry MUST record a
+`golden_digest_fields_are_byte_exact_canonical_form`
+(`ion/ion-lock/tests/v2_corpus.rs`) confirms the field decodes and
+encodes as a well-formed `AtomDigest`, but not that the value
+genuinely equals `czd(charter₀)`; no code computes a lock's anchor
+from charter machinery yet.
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+depends: [charter-anchor]
+because: [charter-ancestry]
+```
+
+#### [lock-set-charter-head]
+
+Each `[sets]` entry MUST record a
 `charter_head` field: the algorithm-prefixed coz digest of the charter
 transaction — the founding charter, or a later successor — that this
 lock's resolution observed as the **effective charter**
@@ -182,89 +309,288 @@ ownership transfer, atom-transactions.md's `[charter-succession]`) is
 the effective charter at resolution time. Unlike `anchor`, which is
 immutable for the set's lifetime, `charter_head` MAY advance on
 re-resolution as succession proceeds; it MUST NOT regress.
-`RESIDUE: Phase 2 -- charter_head_is_distinct_from_anchor (ion/ion-lock/src/v2.rs) only shows the two fields CAN hold different values; the substantive non-regression/succession-derivation invariant depends on the chain-monotonicity machinery, which is Phase 1 unimplemented (atom/atom-id/tests/charter/chain_monotonicity.rs)`
 
-**[lock-set-snapshot]**: Each `[sets]` entry MUST record a `snapshot`
+`charter_head_is_distinct_from_anchor` (`ion/ion-lock/src/v2.rs`)
+only shows the two fields CAN hold different values; the substantive
+non-regression/succession-derivation invariant depends on the
+chain-monotonicity machinery, which is Phase 1 unimplemented
+(`atom/atom-id/tests/charter/chain_monotonicity.rs`).
+`SUPERSEDED 2026-07-30: charter succession (atom-transactions.md [charter-succession-linear]) no longer exists as a distinct concept under genesis-once; this field's non-regression job is renamed spine_head, per [lock-sets-three-fields](#sets-under-the-spinecloud-split-adr-0009) below.`
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+#### [lock-set-snapshot]
+
+Each `[sets]` entry MUST record a `snapshot`
 field: the algorithm-prefixed object id of the set repository's tip
 commit at discovery time. This pins the discovery snapshot (Composition
 Model §6): re-resolving the same manifest against the same set
 snapshots MUST re-derive the byte-identical lock, making
 [lock-recomputability] auditable rather than aspirational.
-`RESIDUE: Phase 2 -- same digest-format-only reasoning as [lock-set-anchor]; re-derivation determinism depends on the not-yet-implemented resolver`
 
-**[lock-set-mirrors]**: The `mirrors` field MUST be an array of
+Same digest-format-only reasoning as `[lock-set-anchor]`:
+re-derivation determinism depends on the not-yet-implemented
+resolver.
+`SUPERSEDED 2026-07-30: a whole-repository discovery snapshot has no place under the spine/cloud split — the cloud is a history-independent set with no single tip to snapshot, and a fixed cloud root is not a reproducible pin (composition-model.md #the-cloud-a-snapshot-name-for-the-fact-set). Retired outright, not renamed; see [lock-pins-gating-facts](#sets-under-the-spinecloud-split-adr-0009) below.`
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+#### [lock-set-mirrors]
+
+The `mirrors` field MUST be an array of
 transport hints: URLs, or the `"::"` sentinel denoting the local
 workspace source (no remote). Mirrors are NEVER identity and NEVER
 trusted: content fetched from any mirror MUST verify against the
 content identities in this lock. Consumers MAY consult mirrors from any
 other source.
-`RESIDUE: Phase 1 -- SetEntry.mirrors is a raw Vec<String>; no validation of URL shape or the "::" sentinel exists`
 
-**[lock-set-referenced]**: Every set alias appearing in a `[deps]` key
+`SetEntry.mirrors` is a raw `Vec<String>`; no validation of URL shape
+or the `"::"` sentinel exists.
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+#### [lock-set-referenced]
+
+Every set alias appearing in a `[deps]` key
 path MUST have an entry under `[sets]`, and every `[sets]` entry MUST be
 referenced by at least one dep entry.
-`VERIFIED: test (ion/ion-lock/tests/v2_corpus.rs::unreferenced_set_is_rejected, undeclared_set_is_rejected -- tests/support/mod.rs::check_closure checks both directions)`
+
+```claim
+kind: constraint
+verification:
+  implementation: test
+```
+
+## `[sets]` under the spine/cloud split (ADR-0009)
+
+_Added 2026-07-30._ [ADR-0009](../adr/0009-atom-composition-plane.md)
+retires two premises `[lock-set-charter-head]` and `[lock-set-snapshot]`
+above were written against. **`charter_head` is superseded**:
+`atom-transactions.md`'s `[charter-succession-linear]` — the "effective
+charter" the field tracked — no longer exists as a distinct concept once
+genesis is written once and owner rotation is an ordinary spine
+amendment; the field's job (refuse a served chain that regresses) is now
+tracked as the spine's own amendment-chain head, renamed `spine_head`
+below. **`snapshot` is retired outright**, not renamed: it pinned a
+discovery-time repository tip, which was this design's only notion of
+"the world as of resolution." `[lock-pins-gating-facts]` below replaces
+it with something narrower and reproducible — the specific fact czds
+that gated the decision, never a whole-store root, which
+[cloud-history-independent](../models/composition-model.md#the-cloud-a-snapshot-name-for-the-fact-set)
+already rules out as a stable pin: a cloud root is `(subject, store,
+moment)`-relative, so pinning one would make re-resolution
+irreproducible against a store that has since received more facts for
+the same subject.
+
+#### [lock-sets-three-fields]
+
+A `[sets]` entry carries `anchor`, `spine_head`, `mirrors`. Nothing else.
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+#### [lock-pins-gating-facts]
+
+The lock pins the czds of facts that gated a resolution decision. It
+MUST NOT pin a cloud root — a root is `(subject, store, moment)`-relative
+and irreproducible.
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+The manifest side of this same reconciliation: test and check parameters
+already live outside the lock (`[lock-no-params]` above), but nothing yet
+says they live in a section of their own, separate from build params —
+which is what makes editing a test unable to invalidate a build cache
+entry by construction rather than by scheduler discipline (Execution
+Model §5.2's obligation on the manifest/lock pair).
+
+#### [manifest-test-params-separate]
+
+Test and check parameters live in a manifest section feeding test
+requests only — what makes no-rebuild-on-test-edit structural rather
+than a scheduler courtesy.
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
 
 ## `[deps.<set>.<label>]` — the ground pins
 
 Dependency entries are nested tables keyed by set alias, then atom
-label. This two-level keying is the `(set, label)` name anchor; there is
+label. This two-level keying is each entry's name anchor; there is
 no per-entry type dispatch and no `set` field.
 
-**[lock-single-version]**: A lock MUST bind at most one version per
-`(set, label)` — the nested keying makes this structural. Within one
+#### [lock-single-version]
+
+A lock MUST bind at most one version per
+`label` within its `set` — the nested keying makes this structural. Within one
 atom's closure, resolution reconciles to a single shared choice per
 name (Composition Model §4); diamond requirements that cannot reconcile
 are a resolution failure at this layer. Divergent-version coexistence
 is scope territory — environment certificates and co-installation —
 never package-lock state.
-`RESIDUE: Phase 2 -- the nested (set, label) keying structurally prevents two versions under one key, but the substantive claim (diamond requirements reconcile to a single shared choice) is SAT-resolution logic, not implemented (ion-resolve/src/lib.rs)`
 
-**[lock-dep-version]**: The `version` field MUST be the exact, non-empty
+The nested `set`/`label` keying structurally prevents two versions
+under one entry, but the substantive claim (diamond requirements
+reconcile to a single shared choice) is SAT-resolution logic, not
+implemented (`ion-resolve/src/lib.rs`).
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+because: [docs/models/composition-model#4]
+```
+
+#### [lock-dep-version]
+
+The `version` field MUST be the exact, non-empty
 version string of the resolved publish, recorded byte-verbatim as
 published (raw scheme — no normalization of any kind; scheme
 interpretation is a manifest/resolution concern, never a lock concern).
-`RESIDUE: Phase 1 -- DepEntry.version is a plain String; non-emptiness and byte-verbatim-as-published are untested and unenforced (ion/ion-lock/src/v2.rs)`
 
-**[lock-dep-publish]**: The `publish` field MUST be the content digest
+`DepEntry.version` is a plain `String`; non-emptiness and
+byte-verbatim-as-published are untested and unenforced
+(`ion/ion-lock/src/v2.rs`).
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+#### [lock-dep-publish]
+
+The `publish` field MUST be the content digest
 of the resolved publish transaction (the bare publish czd), prefixed
 with its hash algorithm. This is the entry's identity.
-`RESIDUE: Phase 2 -- golden_digest_fields_are_byte_exact_canonical_form (ion/ion-lock/tests/v2_corpus.rs) verifies AtomDigest format round-trip only, not that the value is genuinely the resolved publish transaction's digest`
 
-**[lock-annotation-consistency]**: `version` and the `(set, label)` key
-path MUST equal the values derivable from the entry's `publish`
+`golden_digest_fields_are_byte_exact_canonical_form`
+(`ion/ion-lock/tests/v2_corpus.rs`) verifies `AtomDigest` format
+round-trip only, not that the value is genuinely the resolved publish
+transaction's digest.
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+#### [lock-annotation-consistency]
+
+`version` and the entry's `set`/`label` nesting
+MUST equal the values derivable from the entry's `publish`
 transaction. A mismatch is a hard validation error: annotations exist
 for humans and indexing, never as independent authority.
-`RESIDUE: Phase 2 -- no code cross-references version/(set, label) against the publish transaction's own payload; would require decoding the signed publish CozMessage during lock validation, not implemented`
 
-**[lock-dep-requires]**: The `requires` field MUST be an array listing
+No code cross-references `version`/`set`/`label` against the
+publish transaction's own payload; that would require decoding the
+signed publish `CozMessage` during lock validation, not implemented.
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+#### [lock-dep-requires]
+
+The `requires` field MUST be an array listing
 the entry's direct dependencies as dotted key paths (`"<set>.<label>"`
 for dep entries, `"fetch.<name>"` for fetch entries), sorted bytewise.
 Requires edges are the closure's graph structure. Provider-side owner
 back-pointers MUST NOT exist.
-`RESIDUE: Phase 2 -- resolvability/acyclicity of the requires graph are separately verified ([lock-requires-resolvable], [lock-requires-acyclic]), but bytewise-sortedness of the array is a canonical-serialization concern tied to the unimplemented to_canonical encoder`
 
-**[lock-requires-resolvable]**: Every `requires` edge MUST name an entry
+Resolvability and acyclicity of the requires graph are separately
+verified (`[lock-requires-resolvable]`, `[lock-requires-acyclic]`),
+but bytewise-sortedness of the array is a canonical-serialization
+concern tied to the unimplemented `to_canonical` encoder.
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+#### [lock-requires-resolvable]
+
+Every `requires` edge MUST name an entry
 that exists in this lock. Dangling edges are a hard validation error.
-`VERIFIED: test (ion/ion-lock/tests/v2_corpus.rs::dangling_requires_edge_is_rejected -- tests/support/mod.rs::edge_resolves)`
 
-**[lock-requires-acyclic]**: The requires graph MUST be acyclic — it is
+```claim
+kind: constraint
+verification:
+  implementation: test
+```
+
+#### [lock-requires-acyclic]
+
+The requires graph MUST be acyclic — it is
 the skeleton of the action DAG, and a cyclic build dependency is
 unrealizable.
-`VERIFIED: test (ion/ion-lock/tests/v2_corpus.rs::cyclic_requires_graph_is_rejected -- tests/support/mod.rs::detect_cycle)`
 
-**[lock-dep-liveness]**: Dep-entry liveness is reachability from the
+```claim
+kind: constraint
+verification:
+  implementation: test
+```
+
+#### [lock-dep-liveness]
+
+Dep-entry liveness is reachability from the
 manifest's direct dependencies — the graph's roots, which live
-manifest-side per [lock-closure-completeness]. The lock alone is
+manifest-side per [lock-closure-completeness](#lock-closure-completeness). The lock alone is
 deliberately not a self-contained GC domain: sanitization MUST take its
 roots from the manifest.
-`RESIDUE: Phase 2 -- no manifest-linkage or sanitization/GC pass exists yet; depends on the same unimplemented resolution pipeline as [lock-closure-completeness]`
 
-**[lock-dep-ordering]**: Dep entries MUST be serialized in bytewise
+No manifest-linkage or sanitization/GC pass exists yet; this depends
+on the same unimplemented resolution pipeline as
+`[lock-closure-completeness]`.
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+depends: [lock-closure-completeness]
+```
+
+#### [lock-dep-ordering]
+
+Dep entries MUST be serialized in bytewise
 lexicographic order of set alias, then label. (Fetch entries sort
 independently within `[fetch]`; no cross-section ordering relation
 exists or is needed.)
-`RESIDUE: Phase 2 -- serialization ordering is part of the canonical encoder, an explicit unimplemented!() stub (LockFileV2::to_canonical, ion/ion-lock/src/v2.rs)`
+
+Serialization ordering is part of the canonical encoder, an explicit
+`unimplemented!()` stub (`LockFileV2::to_canonical`,
+`ion/ion-lock/src/v2.rs`).
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
 
 ## `[fetch.<name>]` — promoted fetch pins
 
@@ -273,36 +599,82 @@ reviewed, signed intent; Execution Model §3.3). Origin coincides with
 section: everything under `[fetch]` is promotion-authored and NOT
 regenerable by resolution.
 
-**[lock-fetch-digest]**: Each fetch entry MUST contain a `digest` field:
+#### [lock-fetch-digest]
+
+Each fetch entry MUST contain a `digest` field:
 the algorithm-prefixed content digest of the fetched payload. The digest
 is the identity; the `url` field is a transport hint and MUST NOT be
 treated as authoritative.
-`RESIDUE: Phase 2 -- golden_digest_fields_are_byte_exact_canonical_form (ion/ion-lock/tests/v2_corpus.rs) verifies AtomDigest format round-trip only, not that url is never treated as authoritative by any consumer (no fetch/verify path exists yet)`
 
-**[lock-fetch-naming]**: Fetch names are lock-local labels with no
+`golden_digest_fields_are_byte_exact_canonical_form`
+(`ion/ion-lock/tests/v2_corpus.rs`) verifies `AtomDigest` format
+round-trip only, not that `url` is never treated as authoritative by
+any consumer (no fetch/verify path exists yet).
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+#### [lock-fetch-naming]
+
+Fetch names are lock-local labels with no
 cross-lock meaning. The promoting tool MUST derive names
 deterministically from the discovery context, and a promotion whose
 name collides with an existing entry carrying a different digest MUST
 fail loudly for user resolution. (TOML itself rejects duplicate keys;
 this constraint binds the promoting tool, not the parser.)
-`RESIDUE: Phase 2 -- no promotion/promoting-tool implementation exists yet (record-mode fetch proxy is unimplemented; see ion-manifest.md's P4 flag)`
 
-**[lock-fetch-liveness]**: A fetch entry is live while at least one
+No promotion/promoting-tool implementation exists yet (the
+record-mode fetch proxy is unimplemented; see ion-manifest.md's P4
+flag).
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+#### [lock-fetch-liveness]
+
+A fetch entry is live while at least one
 `requires` edge references it. Automated sanitization MUST NOT remove a
 live fetch entry, and MUST NOT remove a dead one except under an
 explicit user-invoked purge — promoted knowledge is not regenerable and
 its removal is a user decision.
-`RESIDUE: Phase 2 -- no sanitization/purge implementation exists; ion-lock is currently parse/validate-only`
 
-**[lock-fetch-adopted-absent]**: Dependencies pinned by an **adopted**
+No sanitization/purge implementation exists; ion-lock is currently
+parse/validate-only.
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+#### [lock-fetch-adopted-absent]
+
+Dependencies pinned by an **adopted**
 ecosystem lockfile (e.g. `Cargo.lock` shipped inside the atom's sources)
 MUST NOT be re-declared as fetch entries. The adopted lockfile is the
 pin payload, already inside the atom snapshot.
-`RESIDUE: Phase 2 -- cross-referencing adopted ecosystem lockfiles against fetch entries requires atom-sourcing pipeline integration, not implemented anywhere`
+
+Cross-referencing adopted ecosystem lockfiles against fetch entries
+requires atom-sourcing pipeline integration, not implemented
+anywhere.
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
 
 ## Canonical form and write discipline
 
-**[lock-canonical-form]**: Serialization MUST be canonical, defined
+#### [lock-canonical-form]
+
+Serialization MUST be canonical, defined
 concretely as: UTF-8, LF newlines, exactly one terminating newline; no
 comments; fixed section order (`schema`, `[sets]`, `[deps]`, `[fetch]`);
 keys sorted bytewise at every nesting level; exactly one blank line
@@ -313,55 +685,125 @@ strings with TOML's minimal escaping; exactly one space on each side of
 `", "`; integers in minimal decimal form; version strings byte-verbatim
 as published (no Unicode normalization). Two locks with equal content
 MUST be byte-identical.
-`RESIDUE: Phase 2 -- LockFileV2::to_canonical is an explicit unimplemented!() stub by design (ion/ion-lock/src/v2.rs); canonical_form_is_byte_exact is a red test (#[ignore], "canonical encoder is unimplemented by design")`
 
-**[lock-atomic-write]**: Every lock mutation MUST be a whole-file
-atomic write. Write phases (resolution; later promotions) land in their
-own sections; independent promotions MUST be reorder-invariant —
-running two independent promotions in either order MUST yield the same
-bytes (Execution Model §8, P6).
-`RESIDUE: Phase 2 -- no lock-writing code exists at all; ion-lock is currently a parse/validate-only crate (no LockFileV2 writer, temp-then-rename, or promotion-merge path)`
+`LockFileV2::to_canonical` is an explicit `unimplemented!()` stub by
+design (`ion/ion-lock/src/v2.rs`); `canonical_form_is_byte_exact` is
+a red test (`#[ignore]`, "canonical encoder is unimplemented by
+design").
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+#### [lock-atomic-write]
+
+Every lock mutation MUST be a whole-file
+atomic write: after any crash or interruption, either the old lock is
+intact or the new lock has completely replaced it, with no intermediate
+state observable. Implementations SHOULD write to a temporary file and
+rename. Write phases (resolution; later promotions) land in their own
+sections; independent promotions MUST be reorder-invariant — running
+two independent promotions in either order MUST yield the same bytes
+(Execution Model §8, P6).
+
+No lock-writing code exists at all; ion-lock is currently a
+parse/validate-only crate (no `LockFileV2` writer, temp-then-rename,
+or promotion-merge path).
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+because: [docs/models/execution-model#8]
+```
 
 ## Deliberate absences
 
 Each absence is a decision with a source; adding any of these is a
 regression, not an extension.
 
-**[lock-no-compose]**: The lock MUST NOT contain a `[compose]` section,
-composer selection, or evaluator arguments of any kind (ADR-0006 §3).
-`VERIFIED: test (ion/ion-lock/tests/v2_corpus.rs::lock_no_star_violations_are_forbidden_key_errors, typed_parse_alone_silently_accepts_a_lock_no_star_violation -- corpus/v2/violations/lock-no-compose.toml)`
+#### [lock-no-compose]
 
-**[lock-no-params]**: Action parameters MUST NOT appear in the lock.
+The lock MUST NOT contain a `[compose]` section,
+composer selection, or evaluator arguments of any kind (ADR-0006 §3).
+
+```claim
+kind: constraint
+verification:
+  implementation: test
+```
+
+#### [lock-no-params]
+
+Action parameters MUST NOT appear in the lock.
 They are declared in the manifest, which ships inside the atom snapshot
 (they are declared, not resolved).
-`VERIFIED: test (ion/ion-lock/tests/v2_corpus.rs::lock_no_star_violations_are_forbidden_key_errors -- corpus/v2/violations/lock-no-params.toml)`
 
-**[lock-no-toolchain-section]**: The lock MUST NOT contain a toolchain
+```claim
+kind: constraint
+verification:
+  implementation: test
+```
+
+#### [lock-no-toolchain-section]
+
+The lock MUST NOT contain a toolchain
 section or toolchain entry type. Toolchain-role defaults are ordinary
 dependencies declared in the manifest and pinned as ordinary dep
 entries; the _effective_ toolchain after role-keyed override
-propagation is computed per [lock-action-totality], never stored.
-`VERIFIED: test (ion/ion-lock/tests/v2_corpus.rs::lock_no_star_violations_are_forbidden_key_errors -- corpus/v2/violations/lock-no-toolchain-section.toml)`
+propagation is computed per [lock-action-totality](#lock-action-totality), never stored.
 
-**[lock-no-interfaces]**: Interface manifests MUST NOT appear in the
+```claim
+kind: constraint
+verification:
+  implementation: test
+because: [lock-action-totality]
+```
+
+#### [lock-no-interfaces]
+
+Interface manifests MUST NOT appear in the
 lock. They are facts, not choices; they live on the atom metadata chain
 beside build records.
-`VERIFIED: test (ion/ion-lock/tests/v2_corpus.rs::lock_no_star_violations_are_forbidden_key_errors -- corpus/v2/violations/lock-no-interfaces.toml)`
 
-**[lock-no-override-state]**: Override declarations (target-keyed or
+```claim
+kind: constraint
+verification:
+  implementation: test
+```
+
+#### [lock-no-override-state]
+
+Override declarations (target-keyed or
 role-keyed, forced or bounded) MUST NOT appear in the lock. The lock
 records their ground _results_; the pin-diff is the audit trail.
-`VERIFIED: test (ion/ion-lock/tests/v2_corpus.rs::lock_no_star_violations_are_forbidden_key_errors -- corpus/v2/violations/lock-no-override-state.toml)`
 
-**[lock-no-foreign-metadata]**: The lock MUST NOT contain registry
+```claim
+kind: constraint
+verification:
+  implementation: test
+```
+
+#### [lock-no-foreign-metadata]
+
+The lock MUST NOT contain registry
 metadata, timestamps, resolution history, environment markers, or
 conditional entries of any kind. (The `snapshot` field is a content
 identity, not a timestamp.)
-`VERIFIED: test (ion/ion-lock/tests/v2_corpus.rs::lock_no_star_violations_are_forbidden_key_errors -- corpus/v2/violations/lock-no-foreign-metadata.toml)`
+
+```claim
+kind: constraint
+verification:
+  implementation: test
+```
 
 ## Whole-lock hashing is not an identity
 
-**[lock-no-plan-digest]**: Consumers MUST NOT use a digest of the whole
+#### [lock-no-plan-digest]
+
+Consumers MUST NOT use a digest of the whole
 lock file as a cache key, plan identity, job identity, or build
 identity for any action other than the owning atom's own (whose
 snapshot legitimately contains the lock, per
@@ -369,18 +811,27 @@ snapshot legitimately contains the lock, per
 Execution Model §2.4): an edit in one atom's lock MUST NOT shift the
 identity of dependency actions or other atoms' actions. (This retires
 the v1-era `plan_digest` and the job-identity scheme built on it.)
-`VERIFIED: test (ion/ion-lock/tests/v2_corpus.rs::lock_no_star_violations_are_forbidden_key_errors -- corpus/v2/violations/lock-no-plan-digest.toml)`
+
+```claim
+kind: constraint
+verification:
+  implementation: test
+because: [docs/models/execution-model#2.4]
+```
 
 ## Example
+
+_The `[sets.core]` table below shows the [lock-sets-three-fields](#sets-under-the-spinecloud-split-adr-0009)
+shape (`anchor`, `spine_head`, `mirrors`); the pre-ADR-0009 `charter_head`
+and `snapshot` fields shown superseded above do not appear._
 
 ```toml
 schema = 2
 
 [sets.core]
 anchor = "sha256:3fa1c9e0…"
-charter_head = "sha256:3fa1c9e0…"
+spine_head = "sha256:3fa1c9e0…"
 mirrors = ["::", "https://mirror.example.org/core"]
-snapshot = "sha1:b03d55e1…"
 
 [deps.core.gcc]
 publish = "sha256:57de9a02…"

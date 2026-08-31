@@ -157,6 +157,22 @@ fact czd_over_payload {
 
 // [c1] OID is disjoint from every protocol field sort. Structural (distinct
 // top-level sigs), stated explicitly as this model's typed-seam foundation.
+//
+// NOT machine-verified, despite the green `check` below (model-repair pass,
+// 2026-08-24). Distinct top-level Alloy sigs with no `extends`/`in` relation
+// are disjoint BY DECLARATION, before any fact in this file is even
+// consulted -- confirmed directly: `run { some c: Czd, o: OID | c = o } for
+// 4` reports "No instance found" against this same file with every other
+// fact intact, so the negation is unreachable independent of
+// `hash_commitment`, `czd_over_payload`, or any other content this model
+// states. `check oid_disjoint_from_protocol_sorts` therefore restates
+// Alloy's own sig-partition typing, not a discovered property of this
+// model's domain -- no mutation to any FACT here can make it fail, only a
+// change to the SIG declarations themselves, which is the analyzer's type
+// checker doing its job, not this checker. `[backend-seam-typed]` stays
+// `verification.design: none` at its own claim block in
+// atom-backend-contract.md for exactly this reason -- see that claim's own
+// note.
 assert oid_disjoint_from_protocol_sorts {
   no (OID & Czd)
   no (OID & Dig)
@@ -180,6 +196,21 @@ assert ancestry_soundness {
 // surface, so no message's czd can be conflated with the OID of any carrier.
 // (A direct `czd = oid` equality is additionally rejected by the analyzer's
 // type checker; this set-level statement is what a `check` can evaluate.)
+//
+// BOTH conjuncts are vacuous for the same reason `oid_disjoint_from_
+// protocol_sorts` is (see its comment, 2026-08-24 model-repair pass):
+// `CozMessage.czd`'s codomain is Czd and `Object.oid`'s codomain is OID, so
+// `no (CozMessage.czd & Object.oid)` is entailed by sig-disjointness alone
+// -- no fact in this file (including `czd_over_payload`, which states
+// determinism, not disjointness) affects whether it can fail. What
+// `[backend-seam-typed]` actually asks for -- "czd(m) is computed over
+// payload bytes ALONE, independent of which backend object carries m" --
+// is stated here as the FACT `czd_over_payload` (an axiom every generated
+// instance obeys), never as a checked assertion with a reachable
+// counterexample shape; a `fact` is not evidence a `check` produced. This
+// model supplies genuine, non-vacuous coverage for `[backend-ancestry-
+// sound]`/P15 only (`ancestry_soundness`, gated by the real `hash_
+// commitment` fact) -- not for `[backend-seam-typed]`.
 assert carrier_czd_seam {
   no (Czd & OID)
   no (CozMessage.czd & Object.oid)

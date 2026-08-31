@@ -117,7 +117,10 @@ SORT  Tmb      -- Coz signing-key thumbprint. For authorization
                   `[trust-acceptance-procedure]` step 2.
 SORT  Anchor   -- atom-set anchor = czd(charter₀) (atom-transactions.md
                   [charter-anchor]) — a Czd value, NOT a trust anchor
-SORT  AtomId   -- (anchor, label), the composite's identity
+SORT  AtomId   -- a `RuleScope` selector targeting a specific atom by
+                  its `label` within its `anchor` — NOT the atom's
+                  identity, which is the claim record's czd (glossary,
+                  _Atom identity_)
 
 TYPE  SignerRole = "builder" | "assertor"
       -- builder:  authorizes DERIVED facts — execution records and
@@ -182,7 +185,9 @@ A non-normative TOML rendering appears in Appendix A.
 
 ### Invariants
 
-**[trust-anchor-set-format]**: A conforming implementation MUST
+#### [trust-anchor-set-format]
+
+A conforming implementation MUST
 represent the consumer's trust configuration as an `AcceptancePolicy`
 per the type declarations above: a `TrustAnchorSet` holding at most
 one entry per `SignerRef`, an ordered rule list, and explicit
@@ -194,22 +199,42 @@ executions from independent signers upgrade confidence") nor the
 builder/assertor split atom-model.md §4 obligates, while a general
 policy language would exceed this spec's commission; per-entry role
 and quorum is the minimal shape that covers both._
-`VERIFIED: unverified`
 
-**[trust-anchor-sort]**: A trust anchor's `tmb(_)` reference is
+```claim
+kind: constraint
+verification:
+  implementation: none
+because: [docs/models/execution-model#3.4, docs/models/atom-model#4]
+```
+
+#### [trust-anchor-sort]
+
+A trust anchor's `tmb(_)` reference is
 `Tmb`-sorted. `Tmb`, `Anchor`, `Czd`, and `OID` are pairwise disjoint
 sorts: a trust anchor is never the atom-set anchor
 (`czd(charter₀)`), never a protocol content-address, and never a
 backend object id. Any comparison, assignment, or fabrication across
 these sorts is ill-typed and MUST be rejected at the type level where
 the implementation language permits. (This extends
-[atom-backend-contract.md](atom-backend-contract.md)
-`[backend-seam-typed]`'s discipline to the trust surface; the shared
+atom-backend-contract.md's
+[backend-seam-typed](atom-backend-contract.md#backend-seam-typed) discipline to the trust surface; the shared
 word "anchor" is an unfortunate collision this constraint exists to
 defuse.)
-`VERIFIED: unverified`
 
-**[trust-anchored-input]**: Only protocol-anchored signed objects
+```claim
+kind: constraint
+verification:
+  implementation: none
+depends: [backend-seam-typed]
+```
+
+A machine check for this sort-disjointness is a candidate future row
+in the seam Alloy model, owed by atom-backend-contract.md's own
+Verification section.
+
+#### [trust-anchored-input]
+
+Only protocol-anchored signed objects
 enter acceptance evaluation: the record MUST verify under the
 protocol's verification pipeline
 ([atom-transactions.md](atom-transactions.md) §Verification Pipeline)
@@ -220,17 +245,58 @@ value that is local in §5's sense (unanchored) MUST NOT be assigned
 any verdict: it is out of protocol, and no anchor entry, quorum, or
 rule can admit it. Consuming one is out-of-protocol trust by
 definition, outside this policy language entirely.
-`VERIFIED: unverified`
 
-**[trust-signer-relative]**: Verdicts are per-consumer. An
+```claim
+kind: constraint
+verification:
+  implementation: none
+depends: [docs/models/atom-model#5]
+```
+
+#### [trust-excludes-retracted]
+
+A retracted fact carries no verdict: a verifier MUST NOT
+consume a fact that a later, anchored `retracts` fact from the same
+signer has superseded (the `retracts` field itself, and its
+never-delete discipline, are the record model's, not this policy's —
+this claim binds only the acceptance-side consequence). Establishment
+is evaluated net of retractions at the consumer's own evidence
+snapshot — the same anchoring and signer-authority rules that admit
+the fact in the first place govern whether its retraction is itself
+honored. This is independent of
+[trust-anchored-input](#trust-anchored-input): an anchored fact can
+still be excluded from evaluation because a later fact retracted it,
+which anchoring alone does not decide.
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+depends: [trust-anchored-input]
+```
+
+#### [trust-signer-relative]
+
+Verdicts are per-consumer. An
 implementation MUST compute verdicts against the local
 `AcceptancePolicy` and MUST NOT treat another party's verdict as its
 own input: an imported verdict is at most evidence. (Inherited frame:
 Execution Model §3.4 — the stratification governs what a record _can_
 be; signer trust governs what it _is, to you_.)
-`VERIFIED: unverified`
 
-**[trust-role-authorization]**: An anchored signer's records count
+```claim
+kind: constraint
+verification:
+  implementation: none
+because: [docs/models/execution-model#3.4]
+```
+
+Verification will audit the API surface and confirm no verdict-import
+path exists.
+
+#### [trust-role-authorization]
+
+An anchored signer's records count
 only within its roles: a `builder`-role entry authorizes derived
 facts, an `assertor`-role entry authorizes asserted facts (species
 per [atom-model.md §4](../models/atom-model.md)), and an entry with
@@ -246,20 +312,29 @@ concrete fact-kind wire encoding is registered design work
 implementation MUST derive the fact class from the record's object
 kind per the classification table of
 [atom-model.md §5](../models/atom-model.md).
-`VERIFIED: unverified`
 
-**[trust-owner-selector]** _(disambiguated 2026-07-14 — charter vs.
+```claim
+kind: constraint
+verification:
+  implementation: none
+depends: [docs/models/atom-model#5]
+because: [docs/architecture/htc-sad#6.10]
+```
+
+#### [trust-owner-selector]
+
+_(disambiguated 2026-07-14 — charter vs.
 claim ownership no longer share one shape)_: The `owner` signer
 reference matches a record's signer iff that key equals (or is
 authorized under) the atom's EFFECTIVE CLAIM's `owner` —
 `ClaimPayload.owner`, a single `OwnerRef`
-([atom-transactions.md](atom-transactions.md) `[claim-owner-single]`)
+([claim-owner-single](atom-transactions.md#claim-owner-single))
 — at the record's chain position, under
-`[owner-authorization-delegated]`'s per-value semantics. This is
+[owner-authorization-delegated](atom-transactions.md#owner-authorization-delegated)'s per-value semantics. This is
 deliberately the CLAIM layer, never the charter layer: charter
 ownership is now a non-empty SET of principals
-(`[charter-owner-set]`, atom-transactions.md) governing who MAY hold
-a claim under this anchor (`[claim-charter-authorization]`) — a
+([charter-owner-set](atom-transactions.md#charter-owner-set)) governing who MAY hold
+a claim under this anchor ([claim-charter-authorization](atom-transactions.md#claim-charter-authorization)) — a
 decision already made and recorded at claim-authorization time, not
 a pool of keys this selector re-checks per record. "Effective charter
 ownership" and "claim ownership" are therefore two distinct concepts
@@ -278,9 +353,21 @@ _Rationale (delegated decision): "trust the publisher's own builds"
 is the single most common real policy; without this selector it
 would require per-atom anchor maintenance that tracks every key
 rotation by hand._
-`VERIFIED: unverified`
 
-**[trust-threshold-rule]**: Acceptance of a derived execution record
+```claim
+kind: constraint
+verification:
+  implementation: none
+depends: [claim-owner-single, owner-authorization-delegated]
+because: [charter-owner-set, claim-charter-authorization]
+```
+
+Verification needs charter/claim succession fixtures to exercise
+ownership judged at differing chain positions.
+
+#### [trust-threshold-rule]
+
+Acceptance of a derived execution record
 as `fact` for cache service is quorum-gated. For a candidate record
 `r` at action identity `a`, signed by anchored signer `s` (entry
 quorum `q_s`, matched rule minimum `k_r`, both defaulting per the
@@ -301,9 +388,17 @@ evidence that corroborates it. Thresholds do not apply to asserted
 facts: an asserted fact is accepted iff its signer is anchored with
 the `assertor` role — there is no `record_core` for independent
 parties to agree on.
-`VERIFIED: unverified`
 
-**[trust-threshold-independence]**: Signer distinctness is the
+```claim
+kind: constraint
+verification:
+  implementation: none
+depends: [docs/models/atom-model#6, docs/models/execution-model#3.1]
+```
+
+#### [trust-threshold-independence]
+
+Signer distinctness is the
 enforced independence floor: two records signed by the same `Tmb`
 MUST count as one toward any quorum, and one record MUST NOT be
 counted twice. Distinct thumbprints are machine-checkable; genuinely
@@ -311,9 +406,16 @@ independent operation (distinct operators, distinct infrastructure)
 is not — it is the consumer's judgment, exercised in anchor
 curation, and this spec states that honestly rather than pretending
 the floor is the ceiling.
-`VERIFIED: unverified`
 
-**[trust-rule-determinism]**: Rule resolution MUST be deterministic:
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+#### [trust-rule-determinism]
+
+Rule resolution MUST be deterministic:
 the applicable rule for an atom is the FIRST rule in document order
 whose `scope` matches (an `atom(_)` scope matches that composite; a
 `set(_)` scope matches every atom anchored to that set; `role(_)`
@@ -324,22 +426,37 @@ decision): first-match over an ordered list is the simplest total,
 deterministic resolution; most-specific-wins was rejected because
 specificity between `set(_)` and `role(_)` scopes has no natural
 order and would demand a tie-break rule of its own._
-`VERIFIED: unverified`
 
-**[trust-mode-rule]**: A rule carrying `require_mode: "reproducible"`
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+#### [trust-mode-rule]
+
+A rule carrying `require_mode: "reproducible"`
 MUST cause verdict `refused` for any derived execution record of an
 in-scope atom whose effective declared mode is not `reproducible`
-(mode per [atom-transactions.md](atom-transactions.md)
-`[publish-mode]`; declaration semantics per
+(mode per
+[publish-mode](atom-transactions.md#publish-mode); declaration semantics per
 [atom-model.md §6](../models/atom-model.md)). The gate reads the
 SIGNED DECLARATION, never witness statistics — a policy composed on
 declarations has an accountable party behind every tier
 (atom-model.md §6, "Consumers compose policy on declarations");
 witness counts enter only through `[trust-threshold-rule]`'s
 corroboration of individual records.
-`VERIFIED: unverified`
 
-**[trust-contested-refusal]**: The contested-action hook. A
+```claim
+kind: constraint
+verification:
+  implementation: none
+depends: [publish-mode, docs/models/atom-model#6]
+```
+
+#### [trust-contested-refusal]
+
+The contested-action hook. A
 **standing divergence finding** exists at action identity `a`, for
 this consumer, iff the in-scope atom's effective declared mode is
 `reproducible` AND there exist two records at `a` from distinct
@@ -367,22 +484,37 @@ anchored signer dissolves the finding _for that consumer_ — findings
 are as signer-relative as fact-hood itself, which is why an alarm is
 a per-consumer investigation trigger rather than a global verdict
 (atom-model.md §6).
-`VERIFIED: unverified`
 
-**[trust-finding-derivable]**: Standing divergence findings MUST be
+```claim
+kind: constraint
+verification:
+  implementation: none
+depends: [docs/models/atom-model#6]
+```
+
+#### [trust-finding-derivable]
+
+Standing divergence findings MUST be
 derivable from chain state plus the local policy alone: a consumer
 holding the atom's publish chain and metadata (enumerable per
-[atom-backend-contract.md](atom-backend-contract.md)
-`[backend-enumeration]`, carried append-only per
-`[backend-chain-append]`) and its own `AcceptancePolicy` can compute
+[backend-enumeration](atom-backend-contract.md#backend-enumeration), carried append-only per
+[backend-chain-append](atom-backend-contract.md#backend-chain-append)) and its own `AcceptancePolicy` can compute
 every finding this spec defines with no out-of-band data. Both exit
 events are observable the same way: a mode amendment is a signed
 chain append; an anchor revision is a local policy edit. An
 implementation MUST NOT require a coordination service, registry, or
 third-party feed to detect or resolve findings.
-`VERIFIED: unverified`
 
-**[trust-policy-pure]**: Verdict computation MUST be a pure function
+```claim
+kind: constraint
+verification:
+  implementation: none
+depends: [backend-enumeration, backend-chain-append]
+```
+
+#### [trust-policy-pure]
+
+Verdict computation MUST be a pure function
 of `(record, fact snapshot, policy)`: the same record evaluated
 against the same chain snapshot under the same policy yields the same
 verdict, on every conforming implementation. This is what lets the
@@ -392,21 +524,81 @@ an unrepeatable acceptance decision would poison P7's determinism
 one layer up. When a witness pick is recorded, the implementation
 SHOULD record a digest of the policy that made it, so the choice is
 auditable against the configuration that produced it.
-`VERIFIED: unverified`
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+because: [docs/models/execution-model#2.2]
+```
+
+### Verdict basis and scoped freshness (ADR-0009)
+
+_Added 2026-07-30._ Two extensions to the type declarations and rule
+language above, from the design-of-record §9a discussion, by way of
+[ADR-0009](../adr/0009-atom-composition-plane.md): a bare
+`Verdict` tag tells a caller *what* was decided but not *on what basis*,
+and the acceptance procedure has no way yet to express a freshness
+requirement without making refusal-on-stale the global default — which
+Open Question 1 already names as unfixed.
+
+**A verdict without its basis is a lie by omission.** A caller holding
+only `fact` cannot distinguish a pinned anchor from a first-use TOFU
+accept, cannot see how old the fact snapshot the verdict rested on was,
+and cannot see whether the record backing it was a certified lower bound
+or a mere `Declared`-class assertion (`J`'s generating set, per Execution
+Model §4.2, never — on its own — the certified interval). Each of those
+is silently lost the moment `Verdict` erases to a bare tag.
+
+#### [verdict-carries-basis]
+
+A verdict carries its trust surface, its assumption basis, whether its
+anchor was pinned or accepted on first use, and the age of the fact
+snapshot it rests on. No `Into<bool>`.
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+because: [docs/models/execution-model#4.2]
+```
+
+**Refusing offline gains no information.** [ADR-0007
+§16](../adr/0007-atom-version-integrity-system.md)'s Tier 2, read
+literally, makes a stale head refuse — the same Nix TTL-expiry failure
+this whole design exists to avoid, transplanted. The fix is that
+freshness refusal is one more `PolicyRule` field, scoped exactly the way
+`require_mode` already is: a rule MAY require freshness for the scope it
+matches, and no rule refuses staleness it was never asked to.
+
+#### [freshness-refusal-scoped]
+
+Refusal on stale freshness is a scoped policy rule; refuse-on-stale is
+**not** the global default. Refusing offline yields no information — it
+only stops work.
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+because: [docs/adr/0007-atom-version-integrity-system#16]
+```
 
 ### The acceptance procedure
 
-**[trust-acceptance-procedure]**: A conforming implementation MUST
+#### [trust-acceptance-procedure]
+
+A conforming implementation MUST
 evaluate every signed record it would consume as a fact — at cache
 service, at substitution, at resolution over asserted facts — by the
 following ordered procedure, and MUST NOT consume a record as a fact
 through any other path:
 
 1. **Anchoring.** Verify the record per
-   `[trust-anchored-input]`. Unanchored ⇒ no verdict; stop.
+   [trust-anchored-input](#trust-anchored-input). Unanchored ⇒ no verdict; stop.
 2. **Signer.** Resolve the record's signing `tmb` against
    `policy.anchors` (including `owner` expansion per
-   `[trust-owner-selector]`; on a double match, the explicit
+   [trust-owner-selector](#trust-owner-selector); on a double match, the explicit
    `tmb(_)` entry governs, per that constraint). No matching
    entry ⇒ `evidence`. **The signing `tmb` used for this resolution
    MUST be `tmb(verifying_key)` — the thumbprint of the key that
@@ -435,14 +627,14 @@ through any other path:
    requirement for its own (structurally separate) protocol-level
    check.
 3. **Role.** Check the entry's roles against the record's fact class
-   per `[trust-role-authorization]`. Not covered ⇒ `evidence`.
+   per [trust-role-authorization](#trust-role-authorization). Not covered ⇒ `evidence`.
 4. **Rule.** Resolve the applicable rule per
-   `[trust-rule-determinism]`.
-5. **Mode.** Apply `[trust-mode-rule]`. Gate fails ⇒ `refused`.
-6. **Contested.** Apply `[trust-contested-refusal]`. Standing finding
+   [trust-rule-determinism](#trust-rule-determinism).
+5. **Mode.** Apply [trust-mode-rule](#trust-mode-rule). Gate fails ⇒ `refused`.
+6. **Contested.** Apply [trust-contested-refusal](#trust-contested-refusal). Standing finding
    with `refuse` ⇒ `refused`.
 7. **Quorum.** For derived execution records, apply
-   `[trust-threshold-rule]`. Threshold unmet ⇒ `evidence` (the record
+   [trust-threshold-rule](#trust-threshold-rule). Threshold unmet ⇒ `evidence` (the record
    stands, more corroboration may yet arrive); met ⇒ `fact`.
    For asserted facts, the verdict is `fact` at this step.
 
@@ -451,32 +643,63 @@ The procedure is total over the anchored signed-object classes of
 (intent-class objects are governed by the protocol's own transaction
 verification, not by this policy — step 1 admits them as chain
 context, not as verdict subjects).
-`VERIFIED: unverified`
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+depends: [trust-anchored-input, trust-owner-selector, trust-role-authorization, trust-rule-determinism, trust-mode-rule, trust-contested-refusal, trust-threshold-rule]
+```
+
+Verification will run golden verdict vectors over the worked example
+of Appendix B.
 
 ### Behavioral Properties
 
-**[trust-verdict-total]**: For every anchored fact-class signed
-object and every well-formed `AcceptancePolicy`, the acceptance
-procedure MUST terminate with exactly one verdict. No record is ever
+#### [trust-verdict-total]
+
+For every anchored fact-class signed
+object and every well-formed `AcceptancePolicy`, the
+[trust-acceptance-procedure](#trust-acceptance-procedure) MUST terminate with exactly one verdict. No record is ever
 part-fact; no policy state makes the procedure abstain.
 
 - **Type**: Safety
-  `VERIFIED: unverified`
 
-**[trust-no-silent-serve]**: A record MUST NOT be served as a cache
-hit or substitution unless the procedure returned `fact` for it under
+```claim
+kind: constraint
+verification:
+  implementation: none
+depends: [trust-acceptance-procedure]
+```
+
+Verification will fuzz records against policies and confirm exactly
+one verdict is always produced.
+
+#### [trust-no-silent-serve]
+
+A record MUST NOT be served as a cache
+hit or substitution unless the [trust-acceptance-procedure](#trust-acceptance-procedure) returned `fact` for it under
 the serving consumer's policy at a snapshot at or after the record's
 append. Serving evidence is a conformance violation, whatever the
 record's cryptographic validity.
 
 - **Type**: Safety
-  `VERIFIED: unverified`
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+depends: [trust-acceptance-procedure]
+```
 
 ## Proof Obligations
 
-Continuing the substrate-wide P-numbering (P1–P11 in the substrate
-models; P12–P14 in [atom-model.md §10](../models/atom-model.md);
-P15–P16 in [atom-backend-contract.md](atom-backend-contract.md)):
+Continuing the substrate-wide P-numbering (P1–P10 in the substrate
+models — P11 renumbered to P18, see
+[Execution Model v0.11](../models/execution-model.md), to resolve a
+collision with eos-scheduling.md's independent obligation numbering;
+P12–P14 in [atom-model.md §10](../models/atom-model.md); P15–P16 in
+[atom-backend-contract.md](atom-backend-contract.md)):
 
 - **P17 — acceptance coherence.** (a) Totality and determinism: the
   acceptance procedure is a total function of
@@ -497,31 +720,12 @@ P15–P16 in [atom-backend-contract.md](atom-backend-contract.md)):
 
 ## Verification
 
-Every constraint above carries `VERIFIED: unverified` — this spec
-lands as specification, with its evaluators named here and owed. The
-owed machine check, named precisely: **the P14+P17 TLC model** (see
-Proof Obligations) covering mode declarations, record appends,
+This specification lands with its evaluators named but not yet run.
+The owed machine check, named precisely: **the P14+P17 TLC model**
+(see Proof Obligations) covering mode declarations, record appends,
 finding formation, the two exits, and the verdict function. Until it
-lands, discharge is by the test batteries below plus review.
-
-| Constraint | Method | Result | Detail |
-| :--- | :--- | :--- | :--- |
-| trust-anchor-set-format | review + rustc at impl | pending | schema literal; one-entry-per-signer enforced by type/dedup |
-| trust-anchor-sort | rustc (disjoint newtypes) | pending | no cross-sort construction; candidate future row in the seam Alloy model (owed by atom-backend-contract §Verification) |
-| trust-anchored-input | policy test | pending | unanchored signed value → no verdict, refused as input |
-| trust-signer-relative | review | pending | design-level: no verdict-import path exists in the API surface |
-| trust-role-authorization | policy test | pending | builder-only entry offered an asserted fact → evidence; non-owner builder accepted |
-| trust-owner-selector | integration test | pending | needs charter/claim succession fixtures; ownership judged per chain position |
-| trust-threshold-rule | policy test + TLC (P17b) | pending | K = max(entry quorum, rule minimum); insufficient corroboration → evidence |
-| trust-threshold-independence | policy test + TLC (P17b) | pending | same-tmb double-count and same-record double-count rejected |
-| trust-rule-determinism | property test | pending | first-match total order; verdict invariant under re-evaluation |
-| trust-mode-rule | policy test | pending | require_mode against witnessed-mode atom → refused |
-| trust-contested-refusal | policy test + TLC (P17c) | pending | finding stands → refuse default; serve requires explicit opt-out; operator surfaced |
-| trust-finding-derivable | integration test | pending | finding computed from chain fixtures + policy alone, offline |
-| trust-policy-pure | property test | pending | verdict(record, snapshot, policy) stable across runs/implementations |
-| trust-acceptance-procedure | policy test battery | pending | golden verdict vectors over the worked example of Appendix B |
-| trust-verdict-total | property test + TLC (P17a) | pending | fuzz records × policies; exactly one verdict, always |
-| trust-no-silent-serve | integration test | pending | serve path rejects evidence-verdict records |
+lands, discharge is by each constraint's own named evaluator (test
+battery or review) as recorded in the claim register.
 
 ## Annex: Split-view (equivocation) detection — OPEN
 

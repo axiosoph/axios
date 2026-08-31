@@ -16,8 +16,9 @@ correct — implementations can be swapped without downstream breakage;
   state (AtomSource, BuildEngine), not constructors. Identity is
   behavioral, not structural.
 - **Functorial resource flow** — atoms transfer between stores with
-  different capabilities while preserving identity (atom-id stable
-  through ingest).
+  different capabilities while preserving identity: ingest copies
+  content and metadata, it never re-claims, so the claim czd (§1) that
+  an atom's identity resolves to is unchanged by transfer.
 - **Protocol sequencing** — operations must occur in defined order:
   claim before publish, resolve before plan before apply.
 - **Layer discipline** — strict downward dependency (ion → eos → atom).
@@ -94,21 +95,22 @@ coalgebras via projection, so the current model remains valid.
 
 **Objects:**
 
-| Object   | Description                                               | Layer |
-| :------- | :-------------------------------------------------------- | :---- |
-| Atom     | Fundamental unit of publishing                            | L1    |
-| Atom-id  | Protocol-level identity pair: (anchor, label)             | L1    |
-| Label    | Human-readable name                                       | L1    |
-| Anchor   | Cryptographic commitment establishing atom-set identity   | L1    |
-| Owner    | Opaque identity digest (e.g., Coz tmb, Cyphr PR)          | L1    |
-| Atom-set | Collection of atoms sharing a common anchor               | L1    |
-| Version  | Abstract version (via VersionScheme — ecosystem-agnostic) | L1    |
-| Revision | A specific commit in source history                       | L1    |
-| Manifest | Metadata: label + version (minimal trait surface)         | L1    |
-| Plan     | Engine-specific build recipe (associated type)            | L2    |
-| Output   | Engine-specific build result (associated type)            | L2    |
-| Artifact | Content-addressed blob in artifact store                  | L2    |
-| Digest   | Content-addressed hash                                    | L2    |
+| Object    | Description                                                                                                                                             | Layer |
+| :-------- | :------------------------------------------------------------------------------------------------------------------------------------------------------ | :---- |
+| Atom      | Fundamental unit of publishing                                                                                                                          | L1    |
+| Claim-czd | The claim record's content digest — an atom's permanent, through-time identity, fixed at the moment of claim (atom-model.md §2)                         | L1    |
+| Atom-id   | Pre-signature preimage: the `(anchor, label)` pair, meaningful only before a claim exists — never identity (atom-model.md §2, glossary _Atom identity_) | L1    |
+| Label     | Human-readable name                                                                                                                                     | L1    |
+| Anchor    | Cryptographic commitment establishing atom-set identity                                                                                                 | L1    |
+| Owner     | Opaque identity digest (e.g., Coz tmb, Cyphr PR)                                                                                                        | L1    |
+| Atom-set  | Collection of atoms sharing a common anchor                                                                                                             | L1    |
+| Version   | Abstract version (via VersionScheme — ecosystem-agnostic)                                                                                               | L1    |
+| Revision  | A specific commit in source history                                                                                                                     | L1    |
+| Manifest  | Metadata: label + version (minimal trait surface)                                                                                                       | L1    |
+| Plan      | Engine-specific build recipe (associated type)                                                                                                          | L2    |
+| Output    | Engine-specific build result (associated type)                                                                                                          | L2    |
+| Artifact  | Content-addressed blob in artifact store                                                                                                                | L2    |
+| Digest    | Content-addressed hash                                                                                                                                  | L2    |
 
 **Substrate objects (ADR-0005 / htc-sad §1.5, §2 — extension):** the
 layer tags below use the substrate's own designation (`HTC`, ADR-0005
@@ -128,12 +130,26 @@ nouns, one function."
 **Key morphisms:**
 
 ```
-has_id:        Atom      → Atom-id     (each atom has exactly one id)
+has_identity:  Atom      → Claim-czd   (an atom's permanent identity is
+                                        --  its claim record's czd)
 has_label:     Atom      → Label       (each atom has exactly one label)
 belongs_to:    Atom      → Atom-set    (each atom belongs to one set)
 identified_by: Atom-set  → Anchor      (each set has exactly one anchor)
+pair_of:       Atom      → Atom-id     (the derivable pre-signature
+                                        --  pair; not identity)
 computed_from: Atom-id   → (Anchor × Label)
-claimed_by:    Atom      → Owner       (ownership via signed claim)
+genesis_claim: (Anchor × Label) → Claim-czd
+                                        -- the once-only claim lookup:
+                                        --  resolved by walking the
+                                        --  signed, append-only claim
+                                        --  log (ADR-0007 §3, §10),
+                                        --  never a pure function of
+                                        --  the pair's bytes
+owner_fold:    Claim-czd → Owner       -- current owner, folded from
+                                        --  the claim scope's Fact log
+                                        --  (ADR-0007 §3), never from
+                                        --  the genesis record itself
+claimed_by:    Atom      → Owner       (= owner_fold ∘ has_identity)
 pins:          Revision  → Version     (each revision pins one version)
 described_by:  Atom      → Manifest    (at a given version)
 derives:       Revision  → Plan        (given a build engine)
@@ -141,6 +157,13 @@ produces:      Plan      → Set(Output) (a plan produces outputs)
 stores_as:     Output    → Artifact    (each output stored as artifact)
 addressed_by:  Artifact  → Digest      (content-addressed)
 ```
+
+`has_identity = genesis_claim ∘ (identified_by ∘ belongs_to, has_label)`
+by construction — see diagram 2 below. `Atom-id` (`pair_of`,
+`computed_from`) remains in the olog because it is still a real value:
+the pre-signature preimage of an unclaimed development atom, and the
+precomputed lookup input `ClaimReq` carries (§2.2, §3.1). It carries no
+identity content of its own.
 
 **Substrate morphisms (extension):**
 
@@ -180,19 +203,61 @@ substrate objects.
    revision → same plan → same output → same digest. _Formal statement
    of reproducibility._
 
-2. **Identity stability:** `computed_from ∘ (identified_by ∘ belongs_to,
-has_label) = has_id` commutes. Atom-id is computed from (anchor,
-   label), neither of which changes across versions. _Formal statement
+2. **Identity stability:** `genesis_claim ∘ (identified_by ∘ belongs_to,
+has_label) = has_identity` commutes. Unlike the retired
+   `computed_from`-based diagram, `genesis_claim` is not a pure function
+   of its inputs' bytes — it is a lookup into an append-only,
+   genesis-once claim log (ADR-0007 §3, §10): the same `label`, within the
+   same `anchor`, always resolves to the same claim, and therefore the same
+   identity, because a claim is written exactly once per label-scope and
+   is never reissued or replaced — not because a pair is hashed.
+   Publishing a new version advances `pins`, `described_by`, `derives`,
+   and the version-scope Revision/Plan/Output/Artifact chain; none of
+   these touch `belongs_to`, `has_label`, or the claim itself, so
+   `has_identity` is invariant across every version of one claimed atom.
+   **Survives, on firmer ground than before:** the old diagram's
+   stability rested on the coincidence that two syntactic fields happen
+   not to change; this one rests on a protocol invariant (genesis-once)
+   that forbids the claim from ever being replaced. _Formal statement
    that publishing new versions does not alter atom identity._
 
-3. **Ownership independence:** `claimed_by` is independent of `has_id`.
-   Ownership can change (claim revocation + reclaim) without altering
-   the atom-id. _Formal statement that identity and ownership are
-   separate concerns._
+3. **Ownership independence:** `claimed_by = owner_fold ∘ has_identity`
+   factors ownership through identity, and the two live in disjoint
+   strata: `has_identity` names a single genesis record, signed once and
+   never mutated, reissued, or replaced (ADR-0007 §3, "genesis-once");
+   `owner_fold` folds a separate, append-only Fact log layered on top of
+   that genesis record (owner rotation is a `fact_type`, ADR-0007 §3)
+   and structurally cannot touch the genesis record it extends.
+   Ownership can therefore change — an owner-rotation fact, or a
+   threshold's co-signs crossing quorum — while `has_identity` is
+   incapable of changing. **Survives, and is now definitional rather
+   than empirical:** the retired diagram's own justification ("claim
+   revocation + reclaim") named a mechanism this corpus's current,
+   ratified doctrine does not have — a claim is genesis-once and is
+   never replaced (glossary, _Genesis record / genesis-once_); ownership
+   changes are Facts appended beside the claim, never new claims. That
+   mechanism is corrected here, not merely relabeled. _Formal statement
+   that identity and ownership are separate concerns._
 
-4. **Verification chain:** Given a publish CozMessage referencing a
-   claim czd, `claim.anchor × claim.label → Atom-id` and
-   `publish.dig → Atom-commit → Tree` commute with verification.
+4. **Verification chain:** The retired diagram keyed verification on
+   recomputing `claim.anchor × claim.label → Atom-id` — treating the
+   fused pair as something a verifier reconstructs and checks against.
+   That was exactly the repudiated mechanism: identity commits to a
+   signature event, not to publicly computable bytes (glossary, _czd_,
+   _Claim_), so there is nothing to recompute — a verifier does not
+   derive the claim czd from anchor and label, it resolves and checks
+   the actual signed claim record. **Restated:** given a publish record
+   referencing a claim czd, `publish.under → Claim-czd` (walking the
+   publish record's `under` chain link to its claim genesis, and
+   confirming that genesis is canonical under genesis-once, ADR-0007
+   §10) and `publish.dig → Atom-commit → Tree` (the content-digest
+   chain) commute with verification. Both legs stay local — chain-link
+   walking and digest recomputation, no external oracle — so "local
+   verification is sufficient" **survives**, but over the object
+   verification actually depends on (the claim czd, reached by walking
+   signed chain links), not a recomputed pair. This is the sharpest
+   correction of the three: the old statement named the wrong
+   verification target, not merely the wrong stability argument.
    _Formal statement that local verification is sufficient._
 
 ### 2. Coalgebras — Behavioral Observation
@@ -258,6 +323,119 @@ F_registry(R) = F_source(R)                   -- inherits AtomSource
 
 Trait inheritance (`AtomRegistry: AtomSource`) is a coalgebra morphism —
 the forgetful map dropping claim/publish observers.
+
+#### 2.2a. MaterializedView (registry-internal, derived — not a trait)
+
+One underlying carrier — the record log `L` that `F_registry`'s own
+observers (`resolve`, `discover`, `genesis_claim`, `owner_fold`, §1)
+already fold over — with three per-scope views into it, used in the
+term's formal database-theory sense (record-anchored publishing
+amendment, Decision 12): a materialized index over one base relation,
+not a second source of truth.
+
+```
+view_s : Target_s → Chain          for s ∈ {Charter, Claim, Publish}
+```
+
+`Target_s` is the scope's own anchor: the repository's single charter
+for `s = Charter`; `(Anchor, Label)` — the pair `genesis_claim`
+resolves, §1 — for `s = Claim`; `(Anchor, Label, Version)` for
+`s = Publish`. Each `view_s` starts at its own target and is extended
+by one commit per record relevant to that scope as it lands; the three
+chains share no prefix — `view_Publish` does not begin with the
+commits `view_Charter` or `view_Claim` would also contain, even though
+a publish is logically under both.
+
+**A view is a derived structure over `L`, not an independent
+coalgebra.** It would be possible to give `Chain` its own coalgebra
+`c: Chain → F(Chain)` and a bisimulation closure over it, the way
+§2.1–§2.3's traits are modeled — but that would assert `Chain` carries
+behavioral identity worth checking on its own terms, i.e. that two
+views producing the same observations are thereby equivalent and
+trustworthy. That is precisely the authority a view must never carry
+(below). `L` remains the only carrier with real coalgebraic identity
+in this scope; `view_s` is a memoized projection of it, and its
+correctness is stated as a relation TO `L`, never as an equivalence
+class of its own.
+
+**[view-structure-not-query]** For the record portion, `view_s` is a
+*filter* over `L` — it selects the subsequence of records relevant to
+`Target_s`, in `L`'s own order, following `L`'s own `pay.under` links —
+never a *join* across scopes. Concretely: appending one record to `L`
+performs materialization work in exactly the views whose scope that
+record belongs to (O(1) chains touched), never in a descendant view
+merely because it is logically "under" the changed scope. *Falsifier:*
+a single fact append that requires extending or rewriting a chain
+belonging to a different, unrelated target — e.g. a claim-level fact
+forcing an update to one specific unrelated publish's chain. That is
+the exact write-amplification shape a single interleaved chain per
+publish would have had, and the reason three separate chains replaced
+it.
+
+**[view-derived-not-authoritative]** A client that has independently
+fetched and verified `L` (or the reachable portion of it for the scope
+in question) resolves the true state of `Target_s` by walking `L`'s
+own signed `under`/`prior` links — never by trusting `chain.tip`'s
+content alone. `view_s`'s relation to `L` is therefore soundness-only,
+an inclusion rather than an equality:
+
+```
+named(view_s(Target_s))  ⊆  reachable_in_L(Target_s)
+```
+
+every commit in the chain names a record that is present, unaltered,
+at the log position it claims — checkable by recomputing that commit's
+tree hash against `L`'s own tree at that position (the same
+never-trust-the-git-object pattern Decision 1 states for checkpoint
+parent edges, applied one level up to a chain built from them; made
+checkable at all by Decision 10's choice to point each chain commit at
+`L`'s actual tree rather than a synthesized subset). *Falsifier:* a
+chain commit whose named record does not appear in `L`, or appears
+altered from what `L` holds at that position — this is what would make
+a view deceptive rather than merely stale, and Decision 10's
+same-tree choice makes it structurally unrepresentable, not merely
+disallowed by convention.
+
+**[view-liveness]** A conforming registry MUST advance
+`view_s(Target_s)`'s chain tip to include every record in `L` relevant
+to `Target_s` by the time it next serves a read of that view. Let
+`tip_L(Target_s)` be the tip reachable by walking `L`'s own
+`under`/`prior` chain for scope `s`:
+
+```
+∀ read of view_s(Target_s):  tip(view_s(Target_s)) ⊒ tip_L(Target_s)
+```
+
+This is a liveness property, independent of [view-derived-not-authoritative]'s
+safety property: a registry can violate [view-liveness] (serve a
+stale-but-honest chain) without ever violating
+[view-derived-not-authoritative] (nothing in that stale chain is
+altered or invented) — precisely "can only be slow or broken, never
+deceptive." *Falsifier:* fetch `L` directly (paying the full-log cost)
+and find a record relevant to `Target_s`, reachable via
+`under`/`prior`, that `view_s(Target_s)`'s current chain tip does not
+include.
+
+**[view-record-vs-content]** The three invariants above bind the
+RECORD portion of a view uniformly across all three scopes. The
+CONTENT portion (the atom-content commit, hung as a second parent off
+`view_Publish(Target_Publish)`'s *first* chain commit — never a later
+one, since that commit is unambiguously "the publish commit" once the
+three chains share no prefix) is a distinct mechanism and must not be
+described by the same pair. Content has no staleness state — it is
+attached once, at chain-commit creation, and no later fact ever
+extends or replaces it — and no accelerator framing: it is not a cache
+of something reachable another way, it is the only path to a package's
+payload. *Falsifier for conflation:* [view-liveness] would tolerate a
+registry temporarily lagging `tip_L`; nothing tolerates the content
+commit's absence even momentarily — the ref is unusable without it
+(the publish record is unreachable-with-payload, not merely stale).
+Any invariant above whose violation the content commit's absence would
+satisfy is proof the two were wrongly merged into one construct.
+
+**Bisimulation:** deliberately not stated. A view has no independent
+behavioral identity to be bisimilar under — see the derived-structure
+note above.
 
 #### 2.3. AtomStore (atom-core, L1)
 
@@ -365,14 +543,15 @@ Convention: `!T` = send, `?T` = receive, `⊕` = internal choice
 !ClaimReq . ?Result<Czd> . !PublishReq . ?Result<()> . end
 ```
 
-`AtomId` is the abstract pair `(anchor, label)` itself — never a
-digest of it (atom-sad §6.1, `[identity-content-addressed]`); no step
-in this protocol depends on a precomputed identity hash.
-ClaimReq carries (anchor, label, owner, key). On success, returns
-the claim's czd. PublishReq carries (anchor, label, claim_czd,
-dig, src, path, version). Claim MUST succeed before publish —
-the client cannot send `PublishReq` without first receiving the
-claim czd to embed in the publish payload.
+A `ClaimReq` carries an `anchor` and a `label` to name the label being
+claimed, nothing more — not identity (atom-model.md §2; atom-sad §6.1,
+"Identity: the Claim czd, Not the Pair"). Identity is the claim's czd, which this
+session produces and every step after depends on: ClaimReq carries
+(anchor, label, owner, key); on success, it returns the claim's czd.
+PublishReq carries (anchor, label, claim_czd, dig, src, path,
+version). Claim MUST succeed before publish — the client cannot send
+`PublishReq` without first receiving the claim czd to embed in the
+publish payload.
 
 #### 3.2. BuildSession (ion → BuildEngine)
 
@@ -401,13 +580,15 @@ cache-skipping decision tree at the executor's granularity.
 
 ```
 ⊕ {
-  from_registry:  !&dyn AtomSource . ?Result<()> . end,
-  from_local:     !&dyn AtomSource . ?Result<()> . end
+  from_registry:  !&dyn AtomContent . ?Result<()> . end,
+  from_local:     !&dyn AtomContent . ?Result<()> . end
 }
 ```
 
 Ion selects which population method to use. Both branches use `ingest`
-with different source implementations (remote registry vs local path).
+with different source implementations (remote registry vs local
+path); ingest's own signature (§2.3) takes `dyn AtomContent`, not
+`dyn AtomSource`, so this session must carry the same type.
 
 ### 4. Concurrency, Scheduling, and Error Recovery
 
@@ -544,12 +725,18 @@ not a limitation — the model extends to async without restructuring.
 
 | Check                | Result  | Detail                                                      |
 | :------------------- | :------ | :---------------------------------------------------------- |
-| Olog commutativity   | PASS    | Crypto chain and identity stability diagrams commute        |
+| Olog commutativity   | PASS    | All four §1 diagrams commute; identity stability, ownership |
+|                      |         | independence, and verification chain re-derived over the    |
+|                      |         | claim czd (2026-08-05, atom-model.md §2) — each re-checked  |
+|                      |         | independently, not assumed from stability alone; see §1     |
 | Coalgebra structure  | PASS    | All coalgebras follow canonical c: X → F(X) form            |
 | Bisimulation closure | PASS    | Ingest ⊇ + content = conditions correct; all well-defined   |
 | Content factoring    | PASS    | F_content × F_source product preserves bisimulation;        |
 |                      |         | forgetful F_content → F_source drops content observer only  |
 | Session type duality | PASS    | All duals well-formed; ⊕/& inversion checks out             |
+| View safety/liveness | PASS    | §2.2a's soundness (⊆) and liveness (⊒) conditions are       |
+|                      |         | independent — each has its own falsifier and neither        |
+|                      |         | subsumes the other; deliberately not modeled as a coalgebra |
 | Formalism coverage   | PARTIAL | Manifest/VersionScheme are algebraic (constructors), not    |
 |                      |         | coalgebraic (observers) — correctly omitted from coalgebras |
 | Minimality           | PASS    | No unused formalisms; each captures a distinct concern      |

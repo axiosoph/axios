@@ -8,6 +8,8 @@ audience = "Developers, architects, and users seeking to understand the Axios mo
 > [!WARNING]
 > Axios is in **early-stage active development**. Specifications, protocols, and APIs are pre-1.0 and will change.
 
+**New here?** Start with the [FAQ](explanation/faq.html) — the whole project explained in one place: what Axios is, why it matters, how each layer works, and how to get involved.
+
 Axios is a set of independent projects for decentralized source publishing, hermetic builds, and package management. The stack has six layers and a utility crate:
 
 0. **L0: Cyphr** — Signing and message-digest primitives ([Coz](https://github.com/Cyphrme/Coz)), external to this repository; every layer above signs and verifies through it.

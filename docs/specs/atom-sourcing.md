@@ -101,14 +101,18 @@ TYPE  LockEntry = {
       -- Minimum per-entry fields. Mirror URLs are captured at the set
       -- level (anchor → mirrors), not per-entry. `dig` is NOT stored —
       -- it lives in the signed publish payload and MUST be verified by
-      -- peeling the publish_czd tag chain on acquisition. Adapters MAY
+      -- walking the atom commit's second-parent edge off the first
+      -- commit of the publish_czd's materialized view chain on
+      -- acquisition. Adapters MAY
       -- add src (provenance), requires (transitive deps), pkg (PURL
       -- type), or any ecosystem-specific fields.
 ```
 
 ### Invariants
 
-**[set-anchor-bijection]**: The mapping between set names and anchors
+#### [set-anchor-bijection]
+
+The mapping between set names and anchors
 MUST be bijective. Specifically:
 
 - An anchor MUST NOT appear in more than one set.
@@ -117,31 +121,59 @@ MUST be bijective. Specifically:
 Violations indicate misconfiguration or supply-chain attack.
 Implementations MUST reject the entire resolution if a bijection
 violation is detected.
-`VERIFIED: unverified`
 
-**[atom-version-identity]**: If two mirrors in the same set advertise
+```claim
+kind: constraint
+verification:
+  implementation: property-test
+```
+
+#### [atom-version-identity]
+
+If two mirrors in the same set advertise
 the same atom (same label) at the same version, their atom snapshot
 digests (`dig`) MUST be identical. A mismatch MUST be treated as
 evidence of tampering or misconfiguration. Implementations MUST reject
 the atom and SHOULD surface the conflicting mirrors and digests in the
 error message.
-`VERIFIED: unverified`
 
-**[mirror-staleness-tolerance]**: One mirror having MORE atoms or
+```claim
+kind: constraint
+verification:
+  implementation: property-test
+```
+
+#### [mirror-staleness-tolerance]
+
+One mirror having MORE atoms or
 versions than another mirror in the same set is NOT an error. Mirrors
 MAY sync at different cadences. The invariant constrains conflicting
 content, not missing content. Resolvers SHOULD aggregate availability
 across all mirrors in a set and resolve from the union.
-`VERIFIED: unverified`
 
-**[version-total-order]**: The ecosystem adapter MUST define a total
+```claim
+kind: constraint
+verification:
+  implementation: property-test
+```
+
+#### [version-total-order]
+
+The ecosystem adapter MUST define a total
 order over version strings for each atom type. The protocol treats
 versions as opaque strings; the adapter provides comparison semantics
 (e.g., semver for cargo, PEP 440 for pypi). Resolvers rely on this
 order for constraint satisfaction and highest-match selection.
-`VERIFIED: unverified`
 
-**[lock-entry-sufficient]**: A lock entry for a **published** atom
+```claim
+kind: constraint
+verification:
+  implementation: property-test
+```
+
+#### [lock-entry-sufficient]
+
+A lock entry for a **published** atom
 MUST capture at minimum: `set`, `label`, `version`, and
 `publish_czd`. Mirror URLs are NOT per-entry — the lock MUST separately
 capture the mapping from anchors to mirror sets (anchor → mirrors),
@@ -150,21 +182,31 @@ These four fields are sufficient to reproduce the exact fetch without
 re-resolving: `set` + `label` + `version` locates the atom by name;
 `publish_czd` pins the exact signed publish. The atom's `dig` is NOT
 stored in the lock — it lives in the signed publish payload (the
-`publish_czd`-pinned source of truth); on acquisition the peeled
-content-addressed sha MUST equal `payload.dig`, or the fetch MUST be
-rejected as tampered (SAD §6.5; SAD §8 failure mode 8.3). The atom
-commit is peelable from the `publish_czd` tag chain; no `rev` field is
-needed. Adapters MAY extend the lock entry with additional fields.
+`publish_czd`-pinned source of truth); on acquisition the atom commit
+reached by walking the second-parent edge off the first commit of
+`publish_czd`'s materialized view chain MUST hash to `payload.dig`, or
+the fetch MUST be rejected as tampered (SAD §6.5; SAD §8 failure mode
+8.3). That second-parent edge is the atom commit's only path to a
+consumer; no `rev` field is needed. Adapters MAY extend the lock entry
+with additional fields.
 
 Local development atoms (see §Local Development Sets) are exempt from
 the `publish_czd` requirement — they have no publish. A dev lock entry
 MUST still capture `set`, `label`, and `version`, and SHOULD indicate
 that the resolution is local-only.
-`VERIFIED: unverified`
+
+```claim
+kind: constraint
+verification:
+  implementation: test
+because: [docs/architecture/atom-sad#6.5]
+```
 
 ### Transitions
 
-**[source-discovery]**: A resolver MAY discover atom sources from
+#### [source-discovery]
+
+A resolver MAY discover atom sources from
 manifest declarations.
 
 - **PRE**: The manifest declares one or more mirror sets, each with at
@@ -172,52 +214,108 @@ manifest declarations.
 - **POST**: A validated set of `MirrorSet` values exists. Each set has
   a name, one or more mirror URLs, and a discovered anchor. All mirrors
   in a set have been queried (or a subset, per the resolver's fetch
-  strategy). `[set-anchor-bijection]` holds across all sets.
-  `VERIFIED: unverified`
-  `RESIDUE: Phase 1/2 -- AtomSource/AtomStore/AtomRegistry are defined and implemented (atom/atom-core/src/lib.rs; atom-git's GitSource/GitRegistry/GitStore), but no source-discovery pipeline reading manifest declarations into a MirrorSet exists; the MirrorSet type itself is not defined anywhere in the codebase`
+  strategy). [set-anchor-bijection](#set-anchor-bijection) holds across all sets.
 
-**[mirror-validation]**: Before aggregating atoms from a set's mirrors,
+`AtomSource`, `AtomStore`, and `AtomRegistry` are defined and
+implemented (`atom/atom-core/src/lib.rs`; atom-git's
+`GitSource`/`GitRegistry`/`GitStore`), but no source-discovery
+pipeline reading manifest declarations into a `MirrorSet` exists; the
+`MirrorSet` type itself is not defined anywhere in the codebase.
+
+```claim
+kind: constraint
+verification:
+  implementation: test
+depends: [set-anchor-bijection]
+```
+
+#### [mirror-validation]
+
+Before aggregating atoms from a set's mirrors,
 the resolver MUST validate mirror consistency.
 
 - **PRE**: At least one mirror in the set has been queried. The set's
   anchor has been discovered from at least one mirror.
 - **POST**: All queried mirrors in the set share the same anchor
-  (`[set-anchor-bijection]`). All atoms advertised by multiple mirrors
-  have consistent digests (`[atom-version-identity]`). Atoms from all
+  ([set-anchor-bijection](#set-anchor-bijection)). All atoms advertised by multiple mirrors
+  have consistent digests ([atom-version-identity](#atom-version-identity)). Atoms from all
   queried mirrors are aggregated into a single availability set
-  (`[mirror-staleness-tolerance]`).
-  `VERIFIED: unverified`
-  `RESIDUE: Phase 1/2 -- same reasoning as [source-discovery]; the source traits exist and are implemented, but no mirror-validation/aggregation pipeline exists`
+  ([mirror-staleness-tolerance](#mirror-staleness-tolerance)).
 
-**[lock-capture]**: After version selection, the resolver MUST capture
+As with `[source-discovery]`, the source traits exist and are
+implemented, but no mirror-validation/aggregation pipeline exists.
+
+```claim
+kind: constraint
+verification:
+  implementation: test
+depends: [set-anchor-bijection, atom-version-identity, mirror-staleness-tolerance]
+```
+
+#### [lock-capture]
+
+After version selection, the resolver MUST capture
 the resolution in a lock entry.
 
 - **PRE**: A specific version of a specific atom has been selected. The
-  atom's `publish_czd` is known (located in the publish tag chain). At
+  atom's `publish_czd` is known (read from the record reached by
+  resolving the publish ref to its materialized view chain). At
   least one source set (anchor) is known.
 - **POST**: A `LockEntry` exists with `set`, `label`, `version`, and
-  `publish_czd` populated per `[lock-entry-sufficient]`. The `dig` is
-  NOT stored in the lock; it is verified on acquisition by peeling the
-  publish tag chain (`payload.dig` MUST equal the peeled atom commit
-  sha). The lock entry is sufficient to reproduce the fetch and verify
+  `publish_czd` populated per [lock-entry-sufficient](#lock-entry-sufficient). The `dig` is
+  NOT stored in the lock; it is verified on acquisition by walking the
+  second-parent edge off the first commit of the publish view chain
+  (`payload.dig` MUST equal the atom commit reached that way). The
+  lock entry is sufficient to reproduce the fetch and verify
   integrity without re-resolving.
-  `VERIFIED: unverified`
-  `RESIDUE: Phase 1/2 -- same reasoning as [source-discovery]; the source traits exist and are implemented, but no lock-capture pipeline exists (note: this v1-era LockEntry shape -- genesis-commit "set", "pkg" PURL -- predates and is unreconciled with the v2 lock schema)`
+
+As with `[source-discovery]`, the source traits exist and are
+implemented, but no lock-capture pipeline exists. Note: this v1-era
+`LockEntry` shape (genesis-commit `set`, `pkg` PURL) predates and is
+unreconciled with the v2 lock schema.
+
+```claim
+kind: constraint
+verification:
+  implementation: test
+depends: [lock-entry-sufficient]
+```
 
 ### Forbidden States
 
-**[no-cross-set-anchor]**: An anchor MUST NOT appear in more than one
-named set within a single resolution context. If detected, the resolver
-MUST reject the entire resolution — not just the conflicting set.
-`VERIFIED: unverified`
+#### [no-cross-set-anchor]
 
-**[no-conflicting-digest]**: Two mirrors in the same set MUST NOT
-advertise the same atom at the same version with different digests. If
+An anchor MUST NOT appear in more than one
+named set within a single resolution context — the forbidden-state
+mirror of [set-anchor-bijection](#set-anchor-bijection)'s per-set requirement. If detected,
+the resolver MUST reject the entire resolution — not just the
+conflicting set.
+
+```claim
+kind: constraint
+verification:
+  implementation: property-test
+depends: [set-anchor-bijection]
+```
+
+#### [no-conflicting-digest]
+
+Two mirrors in the same set MUST NOT
+advertise the same atom at the same version with different digests —
+the violation [atom-version-identity](#atom-version-identity) forbids. If
 detected, the resolver MUST reject the atom and SHOULD identify the
 conflicting mirrors.
-`VERIFIED: unverified`
 
-**[no-unpublished-dependency]**: An atom MUST NOT be publishable if any
+```claim
+kind: constraint
+verification:
+  implementation: property-test
+depends: [atom-version-identity]
+```
+
+#### [no-unpublished-dependency]
+
+An atom MUST NOT be publishable if any
 of its **direct** atom dependencies exist only as local development
 versions (no remote published version exists). All direct dependencies
 MUST be published and locked to remote references before the depending
@@ -229,48 +327,85 @@ this gate on direct dependencies, then by induction no published atom
 can transitively depend on an unpublished atom. The gate cascades
 through the publishing chain without resolvers walking the transitive
 closure.
-`VERIFIED: unverified`
+
+```claim
+kind: constraint
+verification:
+  implementation: test
+```
 
 ### Behavioral Properties
 
-**[aggregation-monotonic]**: Adding a mirror to a set MUST NOT reduce
+#### [aggregation-monotonic]
+
+Adding a mirror to a set MUST NOT reduce
 the set of available atoms. A resolver that aggregates from N mirrors
 MUST make available at least the union of atoms from all N mirrors.
-This is a consequence of `[mirror-staleness-tolerance]`.
+This is a consequence of [mirror-staleness-tolerance](#mirror-staleness-tolerance).
 
 - **Type**: Safety
-  `VERIFIED: unverified`
 
-**[resolution-reproducible]**: Given the same lock file, a resolver
+```claim
+kind: constraint
+verification:
+  implementation: property-test
+depends: [mirror-staleness-tolerance]
+```
+
+#### [resolution-reproducible]
+
+Given the same lock file, a resolver
 MUST reproduce the same fetch targets. Lock entries contain sufficient
-information (`set`, `label`, `version`, `publish_czd`, sources) to
+information (`set`, `label`, `version`, `publish_czd`, sources) per
+[lock-entry-sufficient](#lock-entry-sufficient) to
 deterministically identify the exact atom version without re-resolving.
 
 - **Type**: Safety
-  `VERIFIED: unverified`
 
-**[concurrent-validation-safe]**: Implementations SHOULD support
+```claim
+kind: constraint
+verification:
+  implementation: property-test
+depends: [lock-entry-sufficient]
+```
+
+#### [concurrent-validation-safe]
+
+Implementations SHOULD support
 concurrent validation of mirrors within a set for performance.
 Concurrent validation MUST produce the same result as sequential
 validation — the invariant checks are commutative over mirror ordering.
 
 - **Type**: Safety
-  `VERIFIED: unverified`
 
-**[czd-divergence-handling]**: If two mirrors in the same set advertise
+```claim
+kind: constraint
+verification:
+  implementation: property-test
+```
+
+#### [czd-divergence-handling]
+
+If two mirrors in the same set advertise
 the same atom at the same version with identical `dig` but different
 `publish_czd` values, the resolver MUST derive each publish's claim
 (from the publish payload) and check whether the claims are in the
 same claim chain (one is an ancestor of the other). If they are, the
 resolver SHOULD prefer the newest claim and SHOULD surface the claim's
-`meta` fields (see atom-transactions.md `[claim-payload-extensible]`)
+`meta` fields (see [claim-payload-extensible](atom-transactions.md#claim-payload-extensible))
 to inform the user — particularly `meta.supersedes` and
 `meta.announcement`. If the claims are NOT in the same chain (genuinely
 distinct ownership), the resolver MUST treat this as a conflict and
 reject the atom.
 
 - **Type**: Safety
-  `VERIFIED: unverified`
+
+```claim
+kind: constraint
+verification:
+  implementation: test
+because: [claim-payload-extensible]
+```
 
 ## Sourcing Pipeline
 
@@ -375,32 +510,25 @@ A resolver or build system MAY accept atom content from a peer client as a fallb
 
 Peer-assisted resolution is a transport-level concern: the atom content enters the store through the same `AtomStore::ingest()` path as any other source. The peer acts as an `AtomSource` that the store ingests from. All ingestion invariants apply — the store verifies atom integrity before accepting content from a peer, just as it would from a registry.
 
-**[peer-source-last-resort]**: Peer-assisted resolution SHOULD be the lowest-priority source. The resolution priority order is:
+#### [peer-source-last-resort]
+
+Peer-assisted resolution SHOULD be the lowest-priority source. The resolution priority order is:
 
 1. Local store (previously ingested atoms)
 2. Remote mirrors (authoritative sources)
 3. Peer client (fallback)
 
 This ordering ensures that authoritative sources are preferred and that the peer is only consulted when all other options are exhausted.
-`VERIFIED: unverified`
-`RESIDUE: Phase 1/2 -- AtomSource itself is defined and implemented (atom/atom-core/src/lib.rs; atom-git's GitSource), but no peer-specific AtomSource implementation exists, and no priority-ordering/fallback logic (local store -> mirrors -> peer) is implemented anywhere in the codebase`
+
+`AtomSource` itself is defined and implemented (`atom/atom-core/src/lib.rs`; atom-git's `GitSource`), but no peer-specific `AtomSource` implementation exists, and no priority-ordering/fallback logic (local store → mirrors → peer) is implemented anywhere in the codebase.
+
+```claim
+kind: constraint
+verification:
+  implementation: test
+```
 
 ## Verification
-
-| Constraint                 | Method      | Result | Detail                                                                                                 |
-| :------------------------- | :---------- | :----- | :----------------------------------------------------------------------------------------------------- |
-| set-anchor-bijection       | agent-check | pass   | Bijective mapping is well-defined; no contradictions with other invariants                             |
-| atom-version-identity      | agent-check | pass   | Consistent with cryptographic assumptions (collision-resistant digests)                                |
-| mirror-staleness-tolerance | agent-check | pass   | Non-constraining (permits superset); no contradiction possible                                         |
-| version-total-order        | agent-check | pass   | Requirement on adapter, not protocol; no internal contradiction                                        |
-| lock-entry-sufficient      | agent-check | pass   | Fields are a subset of publish/claim payloads; all derivable                                           |
-| no-cross-set-anchor        | agent-check | pass   | Corollary of set-anchor-bijection                                                                      |
-| no-conflicting-digest      | agent-check | pass   | Corollary of atom-version-identity                                                                     |
-| no-unpublished-dependency  | agent-check | pass   | Ensures remote evaluability; no contradiction with local dev                                           |
-| aggregation-monotonic      | agent-check | pass   | Follows from staleness tolerance definition                                                            |
-| resolution-reproducible    | agent-check | pass   | Lock entry fields are deterministic; no stochastic components                                          |
-| concurrent-validation-safe | agent-check | pass   | Invariant checks are per-atom or per-set; commutative                                                  |
-| czd-divergence-handling    | agent-check | pass   | Chain ancestry check is well-defined; distinct-chain rejection is consistent with set-anchor-bijection |
 
 All constraints are internally consistent. No contradictions detected
 between invariants. Verification is agent-level (Tier 1); formal

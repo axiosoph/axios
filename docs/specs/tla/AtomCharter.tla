@@ -1,5 +1,42 @@
 --------------------------- MODULE AtomCharter ---------------------------
 (***************************************************************************)
+(* SUPERSEDED DESIGN -- 2026-08-05.  This module machine-checks charter and *)
+(* claim SUCCESSION: ownership change by writing a new charter or claim     *)
+(* record that replaces the last one.  ADR-0007 SS3 ("One record shape:     *)
+(* genesis-once, facts-forever") abolished that design: "Charter, claim,    *)
+(* and publish are each a permanent, single genesis record for their scope *)
+(* -- never reissued, never superseded by a record of the same kind... the *)
+(* anchor IS the first and only charter, full stop... the only way to get  *)
+(* a new one is a genuine fork."  Ownership change is now a FACT on the    *)
+(* one eternal record, authorized by that record's current owner-fold --   *)
+(* never a new charter or claim.  ADR-0007's own header names               *)
+(* AtomCharter_Succession.cfg and AtomCharter_Rotation.cfg explicitly among *)
+(* "the stale formal models that machine-check the superseded design" --   *)
+(* that is the ADR's text, not an inference drawn here.                    *)
+(*                                                                         *)
+(* Of Next's seven disjuncts, four are built on the abolished mechanism    *)
+(* and verify a design of historical record only: CharterSucceed,          *)
+(* CharterAddMember, CharterRemoveMember, ClaimReplace (and the invariants *)
+(* that reason about their output: SuccessionAuthorized,                   *)
+(* TransferDualSigned, ReplacementAuthority, MonotonicHead, ForkFailClosed *)
+(* insofar as they range over successor/replacement charters or claims).   *)
+(* Three are not: CharterFound (a genuine genesis), Claim (a genuine       *)
+(* genesis), and ConsumerObserve.  AnchorIsFoundingCzd, FoundingUnique,    *)
+(* ClaimAuthorized, ClaimAncestry, OwnerSetNonEmpty, and AnchorImmutable   *)
+(* remain meaningful wherever they quantify over founding-only structure.  *)
+(*                                                                         *)
+(* This module is NOT deleted and its actions are NOT repaired into        *)
+(* genesis-once compliance -- a well-formed model of an abolished          *)
+(* mechanism reading as current is worse than a broken one.  A green run   *)
+(* over the four superseded actions is regression cover on the DESIGN OF   *)
+(* RECORD this repo used to have, not a live protocol guarantee; see       *)
+(* docs/specs/run_model_check.sh's historical/superseded partition. A      *)
+(* genesis-once replacement model (fact-fold authorization over one        *)
+(* eternal genesis record) is real, unscheduled work -- ADR-0007's Open    *)
+(* Items already places it in a future spec-drafting pass, not improvised  *)
+(* here.                                                                    *)
+(***************************************************************************)
+(***************************************************************************)
 (* Charter layer of the atom transaction protocol (2026-07-14 owner-set     *)
 (* amendment).                                                              *)
 (*                                                                         *)
@@ -296,7 +333,16 @@ Claim(anchor, label, owner, key, src) ==
 \*                         charter's owner set but NOT by the replaced
 \*                         claim's owner; governance = TRUE (marked, first-
 \*                         class seizure).
-\* Anchor/label are never altered by replacement (identity is stable).
+\* Anchor/label are copied unchanged from `old` below -- a structural
+\* consistency check, not a definition of identity (glossary-repudiated,
+\* 2026-07-18: anchor+label are never identity, only a claim's
+\* pre-signature preimage). The atom's actual identity -- the label-scope
+\* genesis claim's czd (atom-model.md §2) -- survives replacement because
+\* `prior` chains back to that genesis claim, which is written exactly
+\* once and never reissued: identity persistence here is a consequence of
+\* this model's append-only construction (no claim's `czd` or `prior` is
+\* ever mutated once created), not a state-space property this action's
+\* guards independently establish.
 ClaimReplace(old, key, src) ==
     LET czd     == ClaimCzd(KeyOwner[key], key, src, clock)
         ownerOK == Authorized(key, old.owner)
@@ -371,6 +417,7 @@ Spec == Init /\ [][Next]_vars
 \* [charter-anchor] + [anchor-content-addressed] (dynamic facet) +
 \* [anchor-immutable] (charter facet): a founding charter's anchor is its own
 \* czd; a successor inherits its prior's anchor, never minting a fresh one.
+\* @docket: charter-anchor :: docs/specs/run_model_check.sh
 AnchorIsFoundingCzd ==
     \A c \in charters :
         /\ (c.prior = NoPrior => c.anchor = c.czd)
@@ -392,6 +439,7 @@ OwnerSetNonEmpty ==
 \* charter at claim time). Replacement claims chain their authority to the
 \* replaced claim, not the charter, and are governed by ReplacementAuthority
 \* instead.
+\* @docket: claim-charter-authorization :: docs/specs/run_model_check.sh
 ClaimAuthorized ==
     \A cl \in claims :
         cl.prior = NoClaimPrior =>
@@ -401,6 +449,7 @@ ClaimAuthorized ==
                 /\ AuthorizedBySet(cl.key, c.owner)
 
 \* [charter-ancestry]: a claim's src descends from its authorizing charter's src.
+\* @docket: charter-ancestry :: docs/specs/run_model_check.sh
 ClaimAncestry ==
     \A cl \in claims :
         \E c \in charters :
@@ -408,6 +457,7 @@ ClaimAncestry ==
 
 \* [charter-succession]: a successor is signed by a key authorized by SOME
 \* member of the prior's owner set, and preserves the anchor.
+\* @docket: charter-succession :: docs/specs/run_model_check.sh
 SuccessionAuthorized ==
     \A c \in charters :
         c.prior # NoPrior =>
@@ -425,6 +475,7 @@ SuccessionAuthorized ==
 \* embedded in c's own message. Pure removal (c.owner \subseteq p.owner) is
 \* explicitly exempt: no possession-proof is owed by, or from, a departing
 \* principal.
+\* @docket: charter-succession-linear :: docs/specs/run_model_check.sh
 TransferDualSigned ==
     \A c \in charters :
         (\E p \in charters : p.czd = c.prior /\ ~(c.owner \subseteq p.owner))
@@ -436,12 +487,21 @@ TransferDualSigned ==
 
 \* [claim-replacement-authority]: every replacement is validly authorized and
 \* its governance flag is set iff (and only iff) it is a governance seizure.
+\* The anchor/label conjuncts below are a regression guard on ClaimReplace's
+\* construction (both fields are copied unchanged from `old` there, so
+\* these two conjuncts hold at every reachable state by that construction
+\* alone) -- NOT a machine-checked proof that identity is stable. This
+\* model has no state where anchor/label COULD drift on replacement, so
+\* TLC exploring this conjunct proves the guard exists, not that identity
+\* -- the genesis claim's czd -- persists; that persistence is definitional
+\* (an append-only chain whose czds are never mutated or reissued), the
+\* same review-residue category as [charter-typ], not a state-space fact.
 ReplacementAuthority ==
     \A cl \in claims :
         cl.prior # NoClaimPrior =>
             \E old \in claims :
                 /\ old.czd = cl.prior
-                /\ cl.anchor = old.anchor        \* identity never altered
+                /\ cl.anchor = old.anchor        \* regression guard, not identity
                 /\ cl.label = old.label
                 /\ ( \/ (Authorized(cl.key, old.owner) /\ cl.governance = FALSE)
                      \/ (~Authorized(cl.key, old.owner)
@@ -450,8 +510,14 @@ ReplacementAuthority ==
                                /\ AuthorizedBySet(cl.key, c.owner))
                          /\ cl.governance = TRUE) )
 
-\* [anchor-immutable]: a claim's anchor equals its authorizing charter's anchor,
-\* so identity is fixed to the founding czd across claims and replacements.
+\* [anchor-immutable]: a claim's anchor equals its authorizing charter's
+\* anchor -- the ATOM-SET's anchor stays fixed to the founding charter's
+\* czd across claims and replacements. This is anchor (atom-set) stability,
+\* not individual atom identity: many claims, many labels, share one
+\* anchor. An atom's own identity is its (genesis) claim's czd, never the
+\* anchor (glossary-repudiated, 2026-07-18: naming the anchor, or the
+\* fused anchor+label pair, as identity).
+\* @docket: anchor-immutable :: docs/specs/run_model_check.sh
 AnchorImmutable ==
     \A cl \in claims :
         \E c \in charters :
@@ -468,6 +534,7 @@ TypeOK ==
 
 \* [chain-monotonicity]: recordedHead never regresses -- each step keeps it,
 \* starts it from NoHead, or advances it to a descendant (old head an ancestor).
+\* @docket: chain-monotonicity :: docs/specs/run_model_check.sh
 MonotonicHead ==
     [][ \/ recordedHead' = recordedHead
         \/ recordedHead = NoHead

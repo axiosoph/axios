@@ -48,9 +48,9 @@ artifacts. It mediates the boundary between:
   dependency graph, and hands eos a pre-coarsened atom-DAG read directly off
   the lock — nodes are atoms identified by `publish_czd`, edges are the
   dependency relationships already resolved into the lock.
-- **L1 (Atom)**: The identity layer. Atom verifies sovereign signatures, maps
-  human-readable labels to the `(anchor, label)` identity pair, and manages
-  Git-based snapshot retrieval.
+- **L1 (Atom)**: The identity layer. Atom verifies sovereign signatures,
+  resolves human-readable labels to their claim identity within a
+  repository anchor, and manages Git-based snapshot retrieval.
 
 Eos does not build; building is HTC's (L2) contract. Eos dispatches build
 actions to executor workers implementing HTC's executor trait — the primary

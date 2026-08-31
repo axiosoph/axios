@@ -73,7 +73,7 @@ construction rather than by patching.
   distro-grade interface extraction (rpm `elfdeps`, `dpkg-shlibdeps`,
   `libabigail`). Nobody has composed them into one package substrate.
 - **Axios's own lock is already the composition primitive, one layer up.**
-  The keystone lock decided 2026-06-28 — `(set, label) → {version,
+  The keystone lock decided 2026-06-28 — nested `set` → `label` → `{version,
 publish_czd}`, name-anchored, never remotely resolved, store-keyed by
   `blake3(publish_czd)` — is structurally identical to the runtime
   composition object this ADR introduces: a name → signed-content-pointer
@@ -91,9 +91,11 @@ publish_czd}`, name-anchored, never remotely resolved, store-keyed by
   differentiator from the Nix ecosystem" — the roadmap deletes
   the evaluation scheduler and any MVP dependency on `snix-eval`/the Nix
   language outright. ADR-0004's atom-id-as-prediction-oracle
-  argument states `atom-id = digest(anchor, label)` — the
-  keystone identity decision made `AtomId` the abstract pair, not a digest of
-  it. `layer-boundaries.md` has no slot for compositions, manifests, or
+  argument states `atom-id = digest(anchor, label)` — current doctrine
+  makes identity the claim record's czd instead, with `AtomId` surviving
+  only as the digest of the pre-signature preimage `(anchor, label)` for
+  an unclaimed development atom (`docs/models/atom-model.md`
+  §2). `layer-boundaries.md` has no slot for compositions, manifests, or
   build records to be owned by — its own ownership rule demands
   this be resolved before implementation, which is what the layer
   designation below does.
@@ -240,9 +242,9 @@ normalization): HTC SAD §4.
 The composition substrate ships with no interpreted composition/expression
 language and no dependency on `nixpkgs` as a package corpus. ~~A
 passthrough-snix executor (linking `snix-eval` to run legacy Nix
-expressions) MAY exist as an **optional legacy escape hatch**~~ — withdrawn
-per the supersession note above; no evaluator exists in this design at any
-tier.
+expressions) was considered as an **optional legacy escape hatch**~~ —
+withdrawn per the supersession note above; no evaluator exists in this
+design at any tier.
 
 ### 9. Layer designation: L2, "Hermetic Transactional Composition" (HTC) [htc-layer-designation]
 
@@ -505,10 +507,11 @@ by substituting a composition-shaped plan-equivalent.
 - ~~`AtomId → Version → Revision → Plan → Output` labeled `(czd)` under
   `AtomId`~~ (§The cryptographic chain diagram) and ~~`AtomDigest` listed
   in the `atom-id` crate's responsibility column~~ (§atom/ table) →
-  **CONTRADICTS** the keystone identity decision, the identical defect
-  struck in ADR-0004's supersession below: `AtomId` is the abstract pair
-  `(anchor, label)`, not a digest of it, and there is no `AtomDigest` of
-  identity (atom-sad §6.1, `[identity-content-addressed]`).
+  identity is the claim record's czd, not the abstract pair `(anchor,
+  label)` — the pair is only the pre-signature preimage for an unclaimed
+  development atom (`docs/models/atom-model.md` §2; the keystone-era
+  pair reading was itself repudiated 2026-07-18). `AtomDigest` is a real
+  type in `atom-id` (`atom-id/src/digest.rs`).
 - ~~`"Plan" is the abstract term. For the snix engine, a plan is a
 derivation (.drv)`~~ (§Decision, the cryptographic-chain prose) → the
   MVP plan-equivalent is the atom **action**, identified by `action_id`
@@ -569,12 +572,13 @@ are described through:
 - ~~`atom-id = digest(anchor, label) is cryptographically stable across
 versions`~~ (§The Atom-Id Advantage, restated once more in §Why It Is
   Highly Efficacious for This Domain, item 2 "Atom-id prediction oracle")
-  → **CONTRADICTS** the
-  keystone identity decision: `AtomId` is the abstract pair `(anchor,
-label)`, not a digest of it (atom-sad §6.1, `[identity-content-
-addressed]`). The argument's substance — that atom identity is stable
-  across builds and therefore a high-quality prediction key — survives
-  unchanged over the pair; only the digest formula is wrong and is struck.
+  → identity is the claim record's czd, not the abstract pair `(anchor,
+  label)` — the pair is only the pre-signature preimage for an unclaimed
+  development atom (`docs/models/atom-model.md` §2; the keystone-era
+  pair reading was itself repudiated 2026-07-18). The argument's
+  substance — that atom identity is stable across builds and therefore
+  a high-quality prediction key — survives unchanged over the claim czd;
+  only the digest formula is wrong, and it is struck above.
 - ~~terminology note casting "plan" as the `[derivation]`-equivalent unit
   the scheduler operates on~~ (the ADR's opening terminology note) → the
   scheduler's unit under this ADR is the atom **action**, identified by

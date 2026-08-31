@@ -20,7 +20,7 @@
 //!
 //! [`AtomDigest`] is a compact, self-describing multihash of an [`AtomId`],
 //! used for store-level indexing and git ref paths. Multiple valid digests
-//! exist per identity — one per algorithm.
+//! exist per `AtomId` — one per algorithm.
 //!
 //! ## `content_hash`
 //!
@@ -217,6 +217,8 @@ mod hash {
     }
 
     #[cfg(test)]
+    // @docket: content-hash-is-tree-digest :: cargo test --manifest-path atom/Cargo.toml -p atom-core --lib -- hash::tests::single_regular_file_at_root hash::tests::single_symlink_at_root hash::tests::empty_root_hashes_to_blake3_of_empty_string
+    // @docket: content-hash-algorithm :: cargo test --manifest-path atom/Cargo.toml -p atom-core --lib -- hash::tests::git_tie_break_orders_foo_txt_before_foo_directory hash::tests::nested_directories_recurse_bottom_up hash::tests::two_independent_constructions_of_same_content_are_byte_identical hash::tests::nul_in_filename_is_rejected hash::tests::executable_bit_changes_digest_and_uses_100755 hash::tests::renaming_a_file_changes_the_digest
     mod tests {
         use super::*;
 
@@ -482,7 +484,7 @@ pub trait AtomEntry {
     where
         Self: 'a;
 
-    /// The unique identity of the atom.
+    /// The atom's `AtomId`: its anchor+label coordinate.
     fn id(&self) -> &AtomId;
 
     /// Iterate over all resolved versions of the atom.
@@ -515,6 +517,9 @@ pub trait AtomVersion {
 ///
 /// Observations are wrapped in `Result` to distinguish "not found"
 /// (`Ok(None)`) from backend failure (`Err`).
+// @docket: trait-async-io :: cargo check --manifest-path atom/Cargo.toml -p atom-core
+// resolve/discover below (and AtomStore::ingest/contains) are
+// Future-returning; AtomRegistry::claim/publish/charter stay sync fn.
 pub trait AtomSource: Send + Sync + 'static {
     /// Backend-defined observation type returned by [`resolve`](Self::resolve).
     type Entry: AtomEntry;
@@ -522,7 +527,7 @@ pub trait AtomSource: Send + Sync + 'static {
     /// Backend-specific error type.
     type Error: std::error::Error + Send + Sync + 'static;
 
-    /// Look up an atom by its identity.
+    /// Look up an atom by its `AtomId` coordinate.
     ///
     /// Returns `Ok(None)` if the atom is not present in this source.
     /// Returns `Err` on backend failure (network, disk, permission, etc.).
@@ -594,7 +599,7 @@ pub trait AtomContent: AtomSource {
     ///
     /// # Arguments
     ///
-    /// * `id` — the atom's identity
+    /// * `id` — the atom's `AtomId` coordinate
     /// * `dig` — backend-specific content snapshot digest (e.g., 20-byte git tree OID)
     ///
     /// Returns `None` if the content is not found.
@@ -613,7 +618,7 @@ pub trait AtomContent: AtomSource {
 /// Session ordering is enforced by data flow: [`claim`](Self::claim)
 /// returns a [`Czd`] that [`publish`](Self::publish) requires as input.
 pub trait AtomRegistry: AtomSource {
-    /// Establish ownership of an atom identity.
+    /// Claim a label, establishing the atom's identity.
     ///
     /// Returns the claim's [`Czd`] (coz digest), which must be passed
     /// to [`publish`](Self::publish) to authorize version publication.

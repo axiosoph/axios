@@ -70,6 +70,14 @@ the trichotomy, both on purpose:
   writes. It is defined once, in §6, and both sibling models state their
   obligations against that definition.
 
+#### [comp-evaluator-exclusion-law]
+
+```claim
+kind: invariant
+verification:
+  implementation: none
+```
+
 ## 1. The language-free purity thesis
 
 Nix's purity is folklorically attributed to its purely functional
@@ -161,6 +169,14 @@ are properties of the arrow's formation, not of the endpoints.
 faithfulness: P5, P7. If any of these weakens, this corollary names
 exactly what breaks with it.
 
+#### [comp-endpoint-completeness]
+
+```claim
+kind: invariant
+verification:
+  implementation: none
+```
+
 ## 2. The composition domain
 
 All values are content-addressed; identity is digest (storage model A2).
@@ -186,6 +202,14 @@ adds one value of its own:
   technologies could return different `readdir` orders for one view, and
   a build sensitive to enumeration order would break action-stratum
   bisimulation (execution model §6.1).
+
+#### [comp-enumeration-order]
+
+```claim
+kind: invariant
+verification:
+  implementation: none
+```
 
 ## 3. Composition merge is a partial commutative monoid
 
@@ -220,6 +244,14 @@ denotation domains (equivalently: mandate a prefix-free normal form and
 check keys there). _Proof obligation P1 (cheap, Alloy-able): the concrete
 merge implementation satisfies the laws AND detects exactly the
 denotational conflicts — the graft case is in P1's scope explicitly._
+
+#### [comp-merge-monoid-p1]
+
+```claim
+kind: invariant
+verification:
+  implementation: none
+```
 
 ## 4. Interfaces: the typing of compositions
 
@@ -372,6 +404,14 @@ is an Export-tier mapping that gives layering _meaning_ — the layer
 boundary is a certified linking boundary, not an accident of Dockerfile
 ordering.
 
+#### [comp-containment-law]
+
+```claim
+kind: invariant
+verification:
+  implementation: none
+```
+
 ## 5. The two strata of intent
 
 Atoms are the unit of publishable, versioned, signed intent. The question
@@ -426,8 +466,8 @@ environment atom  manifest ──formation───▶ certificate  (pinned inte
 The certificate is the environment's lockfile — the same
 intent→pinned-elaboration shape, fourth instantiation of the binding
 algebra. Both strata version and resolve through ion's existing
-machinery; environment members ARE references (set/label/version
-constraints) — what environments lack is not dependency _declaration_ but
+machinery; environment members ARE references (`set`, `label`, and
+`version` constraints) — what environments lack is not dependency _declaration_ but
 build-input _semantics_ (no toolchain, no fetch set, no build/runtime dep
 split).
 
@@ -460,6 +500,14 @@ snapshot consumed**: formation is pure in `(intent, fact-set)`,
 recomputable by anyone holding both. Publication gating (execution model
 §3.2) is the degenerate case; staged rollouts and policy-gated
 environments are the general one.
+
+#### [comp-strata-steps-pure]
+
+```claim
+kind: invariant
+verification:
+  implementation: none
+```
 
 ## 6. The fact-set: the substrate's only state
 
@@ -504,6 +552,41 @@ only state is an append-only, commutative, signer-attributed set is what
 makes the whole design tractable under decentralization: replicas
 converge by union, and nothing anyone writes can invalidate what another
 party already consumed (they pinned their snapshot).
+
+#### [comp-factset-laws]
+
+```claim
+kind: invariant
+verification:
+  implementation: none
+```
+
+### The cloud: a snapshot name for the fact-set
+
+_Added 2026-07-30._ Snapshot pinning above requires a name for "which
+snapshot" — a digest of the fact-set as it stood when a formation
+consumed it. Nothing in this model supplied one until
+[ADR-0009](../adr/0009-atom-composition-plane.md) Decision 6 realized the
+fact-set concretely as a store-level tree, sparse and sorted rather than
+insertion-ordered, per subject. Sortedness is what buys the property
+below: two replicas holding the identical fact-set compute the identical
+root regardless of the order each one happened to receive its appends in
+— exactly the "converge by union" law above, restated as a computable
+digest rather than only as a merge rule. [Fact
+Exchange](../specs/fact-exchange.md) is the protocol that ships this
+tree's roots as a summary without asking anyone to trust it.
+
+#### [cloud-history-independent]
+
+A subject's fact-tree root depends only on the *set* of facts, never on
+arrival order. Two stores holding identical facts compute an identical
+root.
+
+```claim
+kind: invariant
+verification:
+  implementation: none
+```
 
 ## 7. The override algebra: generators live inside the model
 
@@ -600,7 +683,7 @@ thus form a **partial commutative idempotent monoid** — the merge
 monoid's shape (§3) recurring one level up: `⊕` for content, delta
 union for choices. Override application is order-independent by
 construction; the overlay-ordering folklore of function-based override
-systems is structurally unexpressible here. _Proof obligation P11
+systems is structurally unexpressible here. _Proof obligation P18
 (§10): the delta monoid laws and compilation soundness._
 
 **Property (generator normal form).** Environments are freely generated
@@ -612,6 +695,14 @@ diffing; a generator here is _statically diffable_ as a certificate
 delta before it is ever applied. The package is the primitive of the
 generator/environment relation; environments are states; generators are
 transitions compiled to the operator algebra.
+
+#### [comp-override-algebra]
+
+```claim
+kind: invariant
+verification:
+  implementation: none
+```
 
 ## 8. Materialization, installation, and transactional update
 
@@ -719,13 +810,30 @@ choice policy)`, and its certificate is **recomputable**: any holder
   yields a valid certificate (§7). Testable against the composer
   implementation.
 
-- **P11** — **the delta monoid and its compiler**: choice-delta union
-  satisfies the partial-monoid laws with exact same-point conflict
-  detection (the §3 mirror at the choice level), and normal-form
-  compilation is sound: elaborating under `defaults ∪ Δ` yields the
-  same state as applying Δ's compiled edit set
+- **P18** _(renumbered from P11; the number is out of sequence with
+  P8/P9 above because the substrate-wide chain now runs P1–P10, P12–P17
+  before it — see [Execution Model](execution-model.md) v0.11 for the
+  scope note)_ — **the delta monoid and its compiler**: choice-delta
+  union satisfies the partial-monoid laws with exact same-point
+  conflict detection (the §3 mirror at the choice level), and
+  normal-form compilation is sound: elaborating under `defaults ∪ Δ`
+  yields the same state as applying Δ's compiled edit set
   `(remove, add, rebind, re-certify)` to the default elaboration (§7).
+  Was P11 until 2026-08-04: that number also names an unrelated,
+  independently-numbered obligation in
+  [eos-scheduling.md](eos-scheduling.md) (Failure Isolation,
+  discharged) — the two were never the same namespace, but the shared
+  digit let a reader who asked "is P11 discharged?" find the wrong
+  answer first. This obligation remains **unproved**.
 
 Seam obligations shared with the execution model, homed there: **P6**
 (promotion coherence — the arrow of §0's cycle), **P7** (`resolve`
 determinism and totality — the arrow from intent into requests).
+
+#### [comp-proof-obligations-scope]
+
+```claim
+kind: invariant
+verification:
+  implementation: none
+```

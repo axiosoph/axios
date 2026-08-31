@@ -31,8 +31,8 @@ git CAS gap relabeled a present correctness defect._
 
 **Problem Domain:** The atom protocol is backend-agnostic by design:
 its transactions (charter, claim, publish) are coz objects, its
-identity is the abstract `(anchor, label)` pair, and its verification
-pipeline is local computation over signed payloads
+identity is the claim record's czd, and its verification pipeline is
+local computation over signed payloads
 ([atom-transactions](atom-transactions.md)). Git is the reference
 backend, specified concretely in
 [git-storage-format](git-storage-format.md). What has never been
@@ -158,14 +158,26 @@ answers ancestry queries from an unrelated index does not conform.
 
 ### Invariants
 
-**[backend-store-immutable]**: `get(put(x)) = x`, and a stored object
+#### [backend-store-immutable]
+
+`get(put(x)) = x`, and a stored object
 MUST NOT be mutable under its OID: `get` is a partial function of the
 OID alone, stable across time and replicas. (The artifact-store A1/A2
 analogue; every protocol claim of the form "the ref moved but the old
 object persists" rests on it.)
-`VERIFIED: unverified`
 
-**[backend-store-injective]**: The backend's content serialization
+```claim
+kind: constraint
+verification:
+  implementation: test
+```
+
+Verification will round-trip a store→get and confirm mutation
+attempts fail.
+
+#### [backend-store-injective]
+
+The backend's content serialization
 MUST be canonical: one content value, one byte serialization, one OID;
 two distinct content values MUST NOT share an OID (up to collision
 resistance of the backend hash). For atom content trees this is
@@ -173,9 +185,19 @@ load-bearing for `[snapshot-deterministic]`-class reproducibility:
 any party constructing the same atom content MUST obtain the same
 carrier identity. This is P16, the intent-store analogue of the
 artifact store's P10.
-`VERIFIED: unverified`
 
-**[backend-ancestry-sound]**: The ancestry relation `⊑` MUST be sound
+```claim
+kind: constraint
+verification:
+  implementation: test
+```
+
+Verification will audit canonical serialization against a fixture
+battery.
+
+#### [backend-ancestry-sound]
+
+The ancestry relation `⊑` MUST be sound
 with respect to the backend's content-addressing: `a ⊑ b` MUST hold
 iff `a` is reachable from `b` through `parents`, and a revision
 identifier MUST commit to its entire ancestry — `parents` participates
@@ -196,9 +218,16 @@ whatever its other properties. This is P15; the protocol properties
 that quantify over it are `[charter-ancestry]`, `[temporal-vector]`,
 `[no-backdated-src]`, and the claim that "the charter's `src`
 transitively pins the genesis."
-`VERIFIED: unverified`
 
-**[backend-ancestry-queryable]**: A conforming backend MUST support
+```claim
+kind: constraint
+verification:
+  design: model-check
+```
+
+#### [backend-ancestry-queryable]
+
+A conforming backend MUST support
 ancestry queries (`a ⊑ b`) without transferring or materializing full
 content — revision metadata alone suffices (git discharges this with
 treeless `tree:0` fetching, `[temporal-vector]`). Provenance
@@ -212,9 +241,16 @@ CANNOT be discharged from a shallow view — a shallow boundary is
 indistinguishable from a true root to a naive walk, so a
 depth-limited fetch MUST NOT serve as the basis for any
 `[temporal-vector]`/`[charter-ancestry]` judgment.
-`VERIFIED: unverified`
 
-**[backend-refs-linearizable]**: On the **authoritative store** —
+```claim
+kind: constraint
+verification:
+  implementation: test
+```
+
+#### [backend-refs-linearizable]
+
+On the **authoritative store** —
 the registry or store a write transition executes against — each ref
 MUST behave as a linearizable register per name: reads observe the
 latest committed write, and `cas(name, expected, new)` MUST atomically
@@ -236,12 +272,23 @@ consumers who compare nothing. Cross-consumer equivocation detection
 requires gossip or witness-cosigning machinery that is trust-layer
 future work — registered under Open Questions, alongside the
 acceptance-policy spec (Execution Model §9.7).
-`VERIFIED: unverified`
 
-**[backend-refs-atomic-multi]**: The **authoritative store** MUST
+```claim
+kind: constraint
+verification:
+  implementation: test
+```
+
+Verification will run a concurrent CAS battery against one ref on the
+authoritative store.
+
+#### [backend-refs-atomic-multi]
+
+The **authoritative store** MUST
 support atomic multi-ref transactions: a protocol transition that
-writes several names (claim ref + protective src ref; version ref +
-src ref; ingestion of many versions with claims) MUST be
+writes several names (the main log ref plus the affected scope's
+view-chain ref — charter, claim, or publish — advancing together as a
+fact lands; ingestion of many versions with claims) MUST be
 all-or-nothing per store — including on any *single* push target,
 individually (atomic push is a single-remote guarantee). Torn states
 are forbidden states of every transition that writes more than one
@@ -252,60 +299,155 @@ time (`[backend-replica-reads]`).
 (Reference instantiation: `gix::refs::Transaction` + atomic push,
 [git-storage-format](git-storage-format.md) §Implementation Guidance,
 Atomicity — promoted here from guidance to law.)
-`VERIFIED: unverified`
 
-**[backend-replica-reads]**: Mirrors and replicas are
+```claim
+kind: constraint
+verification:
+  implementation: test
+```
+
+Verification will inject a crash/interrupt mid multi-ref transaction
+and confirm the result is all-or-nothing.
+
+#### [backend-replica-reads]
+
+Mirrors and replicas are
 eventually-consistent reads of the authoritative store, and their
 lawful behavior is discharged at the protocol layer, cited here rather
 than re-invented: convergence is by monotone append propagation (the
-chains only grow, `[backend-chain-append]`); staleness is legitimate
-and non-erroneous (`[mirror-staleness-tolerance]`,
+chains only grow, [backend-chain-append](#backend-chain-append)); staleness is legitimate
+and non-erroneous ([mirror-staleness-tolerance](atom-sourcing.md#mirror-staleness-tolerance),
 [atom-sourcing](atom-sourcing.md)); regression below a consumer's
-recorded head is a detected rollback (`[chain-monotonicity]`,
+recorded head is a detected rollback ([chain-monotonicity](atom-transactions.md#chain-monotonicity),
 [atom-transactions](atom-transactions.md)); and cross-mirror
 divergence in content is tamper evidence, not a race
-(`[atom-version-identity]`, `[no-conflicting-digest]`,
-`[czd-divergence-handling]` — [atom-sourcing](atom-sourcing.md)).
-`VERIFIED: unverified`
+([atom-version-identity](atom-sourcing.md#atom-version-identity), [no-conflicting-digest](atom-sourcing.md#no-conflicting-digest),
+[czd-divergence-handling](atom-sourcing.md#czd-divergence-handling) — [atom-sourcing](atom-sourcing.md)).
 
-**[backend-seam-typed]**: `Czd` and `OID` MUST be disjoint sorts, in
+```claim
+kind: constraint
+verification:
+  implementation: none
+depends: [backend-chain-append, mirror-staleness-tolerance, chain-monotonicity, atom-version-identity, no-conflicting-digest, czd-divergence-handling]
+```
+
+#### [backend-seam-typed]
+
+`Czd` and `OID` MUST be disjoint sorts, in
 the specification and in implementations (distinct types, no implicit
 conversion). For any stored `CozMessage` `m`, `czd(m)` is computed by
 the coz layer over `m`'s payload bytes and MUST be independent of
 `oid(carrier(m))` — the backend object that happens to carry `m`.
 The OID-sorted surfaces are exactly: the `dig` and `src` fields of
-transaction payloads, the carrier-level `src` extra header of an atom
-snapshot, and the OID-rendering ref-path segment families below;
+transaction payloads, and any OID-rendering ref-path segment family
+the instantiation defines (git currently defines none — see below);
 `anchor`, `czd`, `publish_czd`, `claim`, `tmb`, `owner` are NEVER
-OID-sorted. Any comparison, assignment, or fabrication across the two
+OID-sorted. The atom snapshot's carrier-level `src` extra header,
+formerly a third OID-sorted surface, is gone: the record-anchored
+publishing redesign drops it, since the record checkpoint's second
+parent (`[backend-liveness-protection]` below) already binds the
+source revision intrinsically, and the signed payload's own `src`
+field states the fact once, in the coz layer — carrying it a second
+time in git structure would itself violate the standing rule that git
+carries no verification-load-bearing meaning of its own.
+
+Any comparison, assignment, or fabrication across the two
 sorts is ill-typed and MUST be rejected at the type level where the
 implementation language permits.
 
 **Ref paths are typed encodings.** Identity-bearing ref-path segments
 are renderings of sorted values, not strings: each segment family
-renders **exactly one sort** (git: `refs/atom/src/{oid}` renders OID;
-`refs/atom/claims/d/{claim_czd}` renders Czd;
-`refs/atom/d/{blake3(publish_czd)}` renders a Czd reduction), and
-parsing a segment MUST rehydrate it to that family's sort before any
-use. Comparing or transplanting raw segments across families is
-ill-typed exactly as field-level cross-sort comparison is — a
-prefix-naming convention over a bare `String` type does not discharge
-this clause. (The two landed identity-conflation defects were both
-violations of this law; see §Verification for what the existing models
-could and could not catch.)
-`VERIFIED: unverified`
+renders **exactly one sort** (git: `refs/atom/claims/d/{claim_czd}`
+renders Czd; `refs/atom/d/{blake3(publish_czd)}` renders a Czd
+reduction), and parsing a segment MUST rehydrate it to that family's
+sort before any use. Comparing or transplanting raw segments across
+families is ill-typed exactly as field-level cross-sort comparison is
+— a prefix-naming convention over a bare `String` type does not
+discharge this clause. No ref-path segment family in the current git
+instantiation renders OID: the sole such family,
+`refs/atom/src/{oid}`, is retired under the record-anchored publishing
+redesign (its GC-protection job is now done structurally — see
+`[backend-liveness-protection]`), leaving the ref-path namespace
+entirely Czd-sorted in practice. The disjoint-sorts law is stated
+sort-generally and still binds should a future instantiation add an
+OID-rendering ref family. (The two landed identity-conflation defects
+were both violations of this law; see §Verification for what the
+existing models could and could not catch.)
 
-**[backend-carriage-bit-perfect]**: The backend MUST carry protocol
+```claim
+kind: constraint
+verification:
+  design: none
+  implementation: none
+```
+
+**Not machine-verified, checked directly (model-repair pass, 2026-08-24).**
+`docs/specs/alloy/atom_backend_seam.als` exists and its `run_alloy_checks.sh`
+gate is green, but neither speaks to this claim. `oid_disjoint_from_
+protocol_sorts` and `carrier_czd_seam` both reduce to `Czd ∩ OID = ∅`
+between distinct top-level Alloy sigs with no `extends`/`in` relation —
+disjoint by declaration, before any fact in the file is consulted. Confirmed
+directly, not inferred: `run { some c: Czd, o: OID | c = o } for 4` against
+that file (every other fact intact) reports "No instance found" — the
+negation is structurally unreachable, so no mutation to the model's facts
+could ever make either `check` fail. See the two assertions' own comments in
+`atom_backend_seam.als` for the full argument. The ref-path/`RefName` clause
+has a second, independent gap: no such sort exists in the model at all, and
+the git instantiation currently defines no OID-rendering ref-path family for
+one to check against (the sole historical instance, `refs/atom/src/{oid}`,
+is retired — see this claim's own text above). The model supplies genuine
+coverage for `[backend-ancestry-sound]`/P15 only (`ancestry_soundness`,
+gated by the real `hash_commitment` fact) — `design: none` above states that
+honestly rather than omitting the key, since this claim plainly has a
+design-level target, just no check yet able to close it.
+
+#### [czd-oid-phantom-typed]
+
+Protocol digests are phantom-typed by what they address and are
+disjoint from backend object ids, rejected at the type level — the
+constraint form of the `Czd ∩ OID = ∅` law
+[backend-seam-typed](#backend-seam-typed) states above.
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+depends: [backend-seam-typed]
+```
+
+**Checked against the current code, not assumed.** `atom-id/src/digest.rs`'s
+`AtomDigest` is the single, untyped digest representation the crate
+actually ships — its own doc comment states it is "shared by the
+store-level index... and every digest-shaped lock field — coz
+transaction digests, git object ids, and content hashes alike." That is
+the opposite of a disjoint-sorts encoding: one type carries `Czd` and
+`OID` values interchangeably. Grade `none`, not `type`, until a rename or
+a newtype split lands.
+
+#### [backend-carriage-bit-perfect]
+
+The backend MUST carry protocol
 payloads byte-exactly: no re-serialization, reformatting, or
 normalization of `CozMessage` content, ever — verification is
 re-hashing, so a single altered byte severs the trust chain. This
 generalizes [git-storage-format](git-storage-format.md)
 `[coz-bit-perfect]` and satisfies
-[atom-transactions](atom-transactions.md) `[backend-bit-perfect]` at
+[backend-bit-perfect](atom-transactions.md#backend-bit-perfect) at
 the contract level: it binds every backend, not the git encoding.
-`VERIFIED: unverified`
 
-**[backend-chain-append]**: The backend MUST realize each atom's
+```claim
+kind: constraint
+verification:
+  implementation: test
+because: [backend-bit-perfect]
+```
+
+Verification will store a payload, retrieve it, and byte-compare
+(extends git-storage-format.md's `[coz-bit-perfect]` battery).
+
+#### [backend-chain-append]
+
+The backend MUST realize each atom's
 transaction and fact chains as **append-only** structures: appending a
 new chain element (claim replacement, publish update, fact append —
 [atom-model](../models/atom-model.md) §4) MUST NOT destroy, alter, or
@@ -314,41 +456,91 @@ audit trail ([git-storage-format](git-storage-format.md)
 `[tag-chain-immutable]`, generalized). Monotone history is
 load-bearing for the plane's laws (atom-model §6, "monotone history is
 the structural cost").
-`VERIFIED: unverified`
 
-**[backend-enumeration]**: Given a source, a zero-trust consumer MUST
+```claim
+kind: constraint
+verification:
+  implementation: test
+because: [docs/models/atom-model#6]
+```
+
+#### [backend-enumeration]
+
+Given a source, a zero-trust consumer MUST
 be able to enumerate: candidate charters
-([atom-transactions](atom-transactions.md) `[anchor-resolvable]`),
+([anchor-resolvable](atom-transactions.md#anchor-resolvable)),
 the labels claimed there, the versions published per label, and each
 chain's current tip — without downloading content and without trusting
 the publisher (enumeration yields candidates; verification is local).
 Version discovery MUST be object-free where the transport allows
 (git: `ls-refs` advertisement, atom-sad §6.8). The backend provides
 carriage and enumeration, never trust.
-`VERIFIED: unverified`
 
-**[backend-refs-sole-mutability]**: Refs MUST be the backend's ONLY
-mutable state: `Store` is immutable (`[backend-store-immutable]`),
+```claim
+kind: constraint
+verification:
+  implementation: test
+depends: [anchor-resolvable]
+```
+
+#### [backend-refs-sole-mutability]
+
+Refs MUST be the backend's ONLY
+mutable state: `Store` is immutable ([backend-store-immutable](#backend-store-immutable)),
 `⊑` is derived from hash-committed structure
-(`[backend-ancestry-sound]`), and every protocol-visible state change
+([backend-ancestry-sound](#backend-ancestry-sound)), and every protocol-visible state change
 is a ref movement. This is what transfers the storage model's §4
 reasoning to the intent store — liveness is reachability from refs,
 rollback is retaining an old ref target, GC is dropping the
 unreachable — and it is the premise `[backend-liveness-protection]`
 leans on.
-`VERIFIED: unverified`
 
-**[backend-liveness-protection]**: State reachable from protocol refs
+```claim
+kind: constraint
+verification:
+  design: review
+depends: [backend-store-immutable, backend-ancestry-sound]
+```
+
+#### [backend-liveness-protection]
+
+Because refs are the backend's only mutable state
+([backend-refs-sole-mutability](#backend-refs-sole-mutability)), state reachable from those refs
 MUST be protected from the backend's garbage collection: an object the
 protocol can still name (a locked `publish_czd`'s chain, a claim
 referenced by surviving publishes, a `src` revision underpinning
-ancestry checks) MUST NOT be collected while so named. Where the
-backend's native GC cannot see protocol reachability, the
-instantiation MUST write protective names (git: `refs/atom/src/{oid}`,
-`[store-claim-ref]`'s GC-protection purpose).
-`VERIFIED: unverified`
+ancestry checks) MUST NOT be collected while so named. This is an
+obligation on the *outcome* — nothing protocol-reachable may vanish —
+never on a specific technique for producing it. Where the backend's
+native GC cannot already see protocol reachability, the instantiation
+MUST make it visible: by writing a protective name, by embedding the
+dependency structurally into an object the backend's GC already treats
+as reachable, or by any other means the backend's own reachability
+semantics honor.
 
-**[backend-hash-strength]**: The `dig` and `src` protocol fields
+Git no longer discharges the `src`-revision case by protective naming.
+Under the record-anchored publishing redesign, the checkpoint commit
+that records a publish carries the source commit as a second git
+parent, so ordinary parent-reachability from `refs/atom/log` already
+protects it — transitively, for every publish ever made, from that one
+ref — with no per-revision ref to write or maintain. This is a
+strictly stronger discharge of the same obligation than the retired
+`refs/atom/src/{oid}` protective-ref family it replaces: a name can be
+forgotten to write; a hash-committed parent link cannot. Claim chains
+remain protected by naming (`[store-claim-ref]`'s GC-protection
+purpose); the two mechanisms coexist because they protect different
+objects, not because one technique is preferred over the other.
+
+```claim
+kind: constraint
+verification:
+  implementation: test
+depends: [backend-refs-sole-mutability]
+```
+
+#### [backend-hash-strength]
+
+The `dig` and `src` protocol fields
 inherit the **backend's** hash strength, not the coz layer's: a
 backend whose object hash is not collision-resistant (git's default
 SHA-1) makes `dig` forgeable in principle, independent of every
@@ -356,14 +548,14 @@ signature in the chain. A conforming backend MUST document its object
 hash and its collision-resistance status.
 
 The closure mechanism is protocol-level, not backend-level:
-`content_hash` ([atom-transactions](atom-transactions.md)
-`[content-hash-is-tree-digest]`, `[content-hash-algorithm]`) is a
+`content_hash` ([content-hash-is-tree-digest](atom-transactions.md#content-hash-is-tree-digest),
+[content-hash-algorithm](atom-transactions.md#content-hash-algorithm)) is a
 publisher-signed BLAKE3 digest carried as ordinary `PublishPayload`
 data. It requires no backend-specific support — a conforming backend
 merely stores and returns the field bit-perfectly like any other
-signed payload content (`[backend-carriage-bit-perfect]`); no backend
+signed payload content ([backend-carriage-bit-perfect](#backend-carriage-bit-perfect)); no backend
 computes, verifies, or otherwise special-cases it. Its obligation
-level is the three-tier split in `[content-hash-obligation]`
+level is the three-tier split in [content-hash-obligation](atom-transactions.md#content-hash-obligation)
 (schema-optional, MUST-verify-when-present,
 SHOULD-include-when-the-backend's-own-hash-is-weak) — this contract
 does not restate that split, only points to it as the discharge of
@@ -373,19 +565,27 @@ This mechanism does NOT extend to `src`: `src`'s ancestry and temporal
 verification is a property of the backend's own commit-parent graph
 structure, not of any single value, and is irreducible without
 migrating the backend's own history to a stronger hash
-(`[content-hash-obligation]`'s "Known limit" documents this in full).
+([content-hash-obligation](atom-transactions.md#content-hash-obligation)'s "Known limit" documents this in full).
 A conforming backend with a weak object hash therefore remains
 forgeable on `src`-anchored ancestry claims regardless of
 `content_hash`'s presence; this is a stated, permanent limit of this
 mechanism, not an oversight.
 
 The anchor and all czd-sorted identities are unaffected by
-construction (`[anchor-hash-agile]`).
-`VERIFIED: unverified`
+construction ([anchor-hash-agile](git-storage-format.md#anchor-hash-agile)).
+
+```claim
+kind: constraint
+verification:
+  implementation: test
+depends: [backend-carriage-bit-perfect, content-hash-obligation, content-hash-is-tree-digest, content-hash-algorithm, anchor-hash-agile]
+```
 
 ### Behavioral Properties
 
-**[backend-substitutable]**: Two conforming backends carrying the same
+#### [backend-substitutable]
+
+Two conforming backends carrying the same
 protocol state MUST be interchangeable to every consumer: the
 coalgebras a backend implements (`AtomSource`, `AtomRegistry`,
 `AtomStore` — [publishing-stack-layers](../models/publishing-stack-layers.md)
@@ -400,9 +600,17 @@ MUST produce the expected results) — which establishes conformance on
 the tested trace set, never the universally-quantified claim itself.
 
 - **Type**: Safety
-  `VERIFIED: unverified`
 
-**[backend-verification-carried]**: A conforming backend MUST make the
+```claim
+kind: constraint
+verification:
+  implementation: test
+depends: [docs/models/publishing-stack-layers#2.1, docs/models/execution-model#6.1]
+```
+
+#### [backend-verification-carried]
+
+A conforming backend MUST make the
 full local verification pipeline
 ([atom-transactions](atom-transactions.md) §Local Verification, steps
 1–13) executable from carried state alone — every transaction of every
@@ -410,12 +618,20 @@ chain retrievable bit-perfect, every ancestry premise queryable — with
 zero writes and zero further network round-trips once state is local.
 
 - **Type**: Safety
-  `VERIFIED: unverified`
+
+```claim
+kind: constraint
+verification:
+  implementation: test
+```
 
 ## Proof Obligations
 
-Continuing the substrate-wide P-numbering (P1–P11 in the substrate
-models; P12–P14 in [atom-model](../models/atom-model.md) §10):
+Continuing the substrate-wide P-numbering (P1–P10 in the substrate
+models — P11 renumbered to P18, see
+[Execution Model v0.11](../models/execution-model.md), to resolve a
+collision with eos-scheduling.md's independent obligation numbering;
+P12–P14 in [atom-model](../models/atom-model.md) §10):
 
 - **P15 — ancestry soundness.** `[backend-ancestry-sound]` holds in
   the instantiation: the backend's revision identifiers commit to
@@ -433,47 +649,30 @@ models; P12–P14 in [atom-model](../models/atom-model.md) §10):
 
 ## Verification
 
-**The owed evaluator, named precisely.** The seam law's machine check
-is an Alloy model (planned home: `docs/specs/alloy/atom_backend_seam.als`)
-carrying a **unified `OID` sort disjoint from `Czd`**, modeling: czd
-computation independent of carrier OID, the OID-typing of exactly the
-payload/carrier/ref-encoding surfaces named in `[backend-seam-typed]`,
-and ancestry as reachability over hash-committed parent links (P15's
-abstract row). This model is REQUIRED work, not optional hardening,
-and the precise deficiency it fills is this: `atom_structure.als`
-already declares `Czd`, `Dig`, and `Src` as disjoint top-level sorts —
-a direct czd-versus-dig comparison is analyzer-rejected today — but
-those sorts are **ancestry-free field atoms**: there is no unified OID
-sort carrying hash-committed `parents` (so P15's "asserting false
-ancestry requires a collision" is inexpressible), and no carrier
-objects at all (so the czd/carrier seam — czd computed over payload
-bytes, independent of `oid(carrier(m))` — has no surface on which to
-be checked). `AtomCharter.tla` likewise models ancestry as an
-abstract, trusted numeric order (`Descends(a,b) == a >= b` over
-naturals) — assumed sound, never derived from hash commitment. The
-landed defects were carrier-seam and fabrication bugs, which live
-exactly on the surfaces the existing models do not carry. Until the
-model lands, `[backend-seam-typed]`'s discharge is the rustc row
-below plus review.
-
-| Constraint                   | Method           | Result  | Detail                                                              |
-| :--------------------------- | :--------------- | :------ | :------------------------------------------------------------------ |
-| backend-store-immutable      | integration-test | pending | store→get round-trip; mutation attempts fail                        |
-| backend-store-injective      | unit-test (P16)  | pending | canonical serialization audit + fixture battery                     |
-| backend-ancestry-sound       | review + Alloy (P15) | pending | per-backend Merkle argument; replacement disabled on protocol paths; abstract row in seam model |
-| backend-ancestry-queryable   | integration-test | pending | ancestry check with content transfer disabled; shallow view rejected as ancestry basis |
-| backend-refs-linearizable    | integration-test | pending | concurrent CAS battery on one ref, authoritative store (split-view boundary: Open Questions) |
-| backend-refs-atomic-multi    | integration-test | pending | multi-ref txn: crash/interrupt yields all-or-nothing, per store     |
-| backend-replica-reads        | review-residue   | pending | discharged at the protocol layer (cited sourcing + monotonicity constraints) |
-| backend-seam-typed           | rustc + machine (Alloy) | pending | disjoint newtypes; no cross-construction outside named surfaces; ref-segment rehydration audit; seam model |
-| backend-carriage-bit-perfect | integration-test | pending | store → retrieve → byte-compare (extends coz-bit-perfect)           |
-| backend-chain-append         | integration-test | pending | append preserves prior chain objects and their retrievability       |
-| backend-enumeration          | integration-test | pending | charters/labels/versions/tips enumerable object-free                |
-| backend-refs-sole-mutability | integration-test | pending | protocol-visible mutation outside the ref namespace absent/rejected |
-| backend-liveness-protection  | integration-test | pending | GC pass collects nothing protocol-reachable                         |
-| backend-hash-strength        | review-residue   | pending | documentation obligation; closure is protocol-level (`content_hash`, atom-transactions.md), not backend-level |
-| backend-substitutable        | integration-test | pending | golden-trace conformance across two backends (Execution Model §6.1 testable form; trace-set conformance, not the universal claim) |
-| backend-verification-carried | integration-test | pending | pipeline steps 1–13 offline against carried state                   |
+**The seam model has landed; it discharges P15, not `[backend-seam-typed]`
+(corrected 2026-08-24 — the paragraph below described the model as owed
+after it had already been committed).** `docs/specs/alloy/atom_backend_seam.als`
+carries a unified `OID` sort disjoint from `Czd`, hash-committed `parents`,
+and carrier objects, exactly filling the deficiency `atom_structure.als` left
+(that file's `Czd`/`Dig`/`Src` are ancestry-free field atoms with no unified
+OID sort and no carrier objects — P15's ancestry law and the czd/carrier seam
+both had no surface to be checked on). `ancestry_soundness` genuinely
+machine-checks P15 / `[backend-ancestry-sound]`, gated by the real
+`hash_commitment` fact — that grade stands. It does NOT machine-check
+`[backend-seam-typed]`: `oid_disjoint_from_protocol_sorts` and
+`carrier_czd_seam` both reduce to disjointness between distinct top-level
+Alloy sigs, which is true by declaration before any fact in the file is
+consulted — confirmed directly (`run { some c: Czd, o: OID | c = o } for 4`
+against the file reports "No instance found" with every fact intact), not
+inferred. No mutation to this model's facts can make either check fail, so
+neither backs a `model-check` grade (see the two assertions' own comments in
+the file). The ref-path/`RefName` clause has no sort in the model at all,
+and the git instantiation currently defines no OID-rendering ref-path family
+to check it against. `[backend-seam-typed]`'s discharge remains disjoint
+newtypes checked by rustc, an audit that no cross-construction occurs
+outside the named surfaces, and a ref-segment rehydration audit, plus
+review — unchanged by the model landing, since the model does not reach this
+claim.
 
 ## Appendix A: The Git Instantiation
 
@@ -493,13 +692,13 @@ spec relies on today without stating — each is an amendment item
 | backend-refs-linearizable    | `[publish-transition-git]` POST: CAS on the claim ref (SHOULD, one site)             | **PARTIAL — present correctness defect**: SHOULD-grade CAS leaves a TOCTOU window between claim replacement and publish; priority amendment |
 | backend-refs-atomic-multi    | §Implementation Guidance, Atomicity: `gix::refs::Transaction`, atomic push (single-remote — discharges the per-store law) | **PARTIAL** — guidance, not a tagged constraint |
 | backend-replica-reads        | protocol layer: `[mirror-staleness-tolerance]`, `[atom-version-identity]`, `[czd-divergence-handling]` (atom-sourcing); `[chain-monotonicity]` (atom-transactions) | Discharged (protocol layer) |
-| backend-seam-typed           | `[anchor-hash-agile]` (anchor is not an ObjectId) is one instance                    | **GAP** — no general law; the landed bug class lived here |
-| backend-seam-typed (ref encodings) | `TYPE RefPath = String`; czd-hex, blake3-hex, and oid-hex segments distinguished only by prefix convention | **GAP** — typed-encoding statement absent |
+| backend-seam-typed           | `[anchor-hash-agile]` (anchor is not an ObjectId) is one instance; `atom_backend_seam.als` exists but its disjoint-sorts checks are vacuous by Alloy sig construction (§Verification, 2026-08-24) | **GAP** — no general law; the landed bug class lived here |
+| backend-seam-typed (ref encodings) | `TYPE RefPath = String`; czd-hex and blake3-hex segments distinguished only by prefix convention — no oid-hex family remains (the sole instance, `refs/atom/src/{oid}`, is retired) | **GAP** — typed-encoding statement absent |
 | backend-carriage-bit-perfect | `[coz-bit-perfect]`                                                                  | Discharged |
 | backend-chain-append         | `[tag-chain-immutable]`, `[claim-detached]` chains, `[publish-update-transition]`    | Discharged for claim/publish chains; **GAP** for charter encoding (git spec Open Questions #6) |
 | backend-enumeration          | atom-sad §6.8 (object-free `ls-refs` discovery), `[ingestion-portable]`, `[anchor-resolvable]` (protocol) | Discharged except charter enumeration (Open Questions #6) |
 | backend-refs-sole-mutability | git object DB immutability + all protocol mutation via `refs/atom/*`                | **GAP (implicit)** — true of the design, stated nowhere |
-| backend-liveness-protection  | `refs/atom/src/{oid}` protective refs; `[store-claim-ref]` GC protection             | Discharged |
+| backend-liveness-protection  | second-parent embedding of the source commit on `refs/atom/log`'s publish checkpoints (transitive, one ref, record-anchored publishing redesign); `[store-claim-ref]` GC protection for claim chains | Discharged |
 | backend-hash-strength        | `[oid-hash-inheritance]` states the dig/src SHA-1 inheritance; the closure itself (`content_hash`) is protocol-level (atom-transactions.md), carried bit-perfectly per `[backend-carriage-bit-perfect]` with no git-specific handling | Discharged |
 | backend-substitutable        | `[snapshot-deterministic]` + canonical serialization make git a valid golden-trace subject | **PARTIAL** — the property is inherently cross-backend (interchangeability WITH another backend); git's own determinism is discharged, but nothing to compare against exists yet |
 | backend-verification-carried | git's object model: once fetched, all objects read from the local database with zero network — structural to distributed version control | Discharged (implicit) — no git-storage-format.md constraint states this as an obligation; it is true of the design, not stated |

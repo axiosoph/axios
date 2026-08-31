@@ -333,6 +333,7 @@ mod tests {
         assert_eq!(oct.avg(leaf), 3.0);
     }
 
+    // @docket: eos-scheduler-placement :: cargo test --manifest-path tools/eos-sim/Cargo.toml --lib -- --exact peft::tests::selection_prefers_warm_then_minimises_objective peft::tests::oct_is_downstream_cost
     #[test]
     fn selection_prefers_warm_then_minimises_objective() {
         let g =

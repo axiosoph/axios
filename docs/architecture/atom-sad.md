@@ -20,9 +20,11 @@
 
   Maintained as Architecture-as-Code. Diagrams are Mermaid.js, inline.
 
-  Settled design inputs: the keystone resolution (AtomId = abstract (anchor,label)
-  pair; 2-value name-anchored lock; blake3(publish_czd)-keyed store; algorithm
-  agility deleted from identity, retained only in the Coz czd); the
+  Settled design inputs: the keystone resolution (AtomId's pair form as the
+  pre-signature preimage of an unclaimed development atom — not identity,
+  which is the claim czd, §6.1; 2-value name-anchored lock;
+  blake3(publish_czd)-keyed store; algorithm agility retained only in the Coz
+  czd); the
   composition-unit repositioning (atom sits ABOVE language package
   managers — one implementation, per-ecosystem internals as plugins);
   the atom protocol-plane formalization (atom-model.md,
@@ -63,10 +65,14 @@ publish chain of the set that packaged it — not from upstream's own
 release artifacts; upstream's bytes are pinned _inside_ that signed
 intent, they do not sign it.
 
+#### [atom-layer-ownership-boundary]
+
 Atom owns:
 
-- **Identity** — the `AtomId = (anchor, label)` pair: a stable, algorithm-free,
-  permanent name for an atom across all its versions and ownership changes.
+- **Identity** — the claim record's czd: a stable, algorithm-free, permanent
+  name for an atom across all its versions and ownership changes (§6.1). The
+  `(anchor, label)` pair is its pre-claim preimage — identity's only
+  manifestation as a value before any claim exists.
 - **Ownership** — the signed claim→publish protocol (via Coz) that binds an owner
   to an identity and makes every _published_ atom cryptographically accountable.
 - **Content-addressed storage** — append-only publish/claim history over git
@@ -78,6 +84,12 @@ Atom does **not** own: evaluation or build (L3, eos), dependency resolution or t
 lock file as a whole (L4, ion), or key management and signing primitives (Cyphr/Coz,
 below L1). Atom defines the identity contract those layers consume; it never
 consumes them.
+
+```claim
+kind: requirement
+verification:
+  implementation: none
+```
 
 ### 1.2 External Actors
 
@@ -111,7 +123,7 @@ graph TB
 
 | Boundary      | Inside Atom                                                                             | Outside Atom                                                                    |
 | :------------ | :-------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------ |
-| **Identity**  | `AtomId = (anchor, label)`; anchor = `czd(charter₀)`, the founding charter's coz digest | Key material, signature primitives (Coz/Cyphr)                                  |
+| **Identity**  | The claim record's czd (§6.1); `AtomId` is a digest over an unclaimed atom's pre-signature preimage `(anchor, label)`; the anchor is named and verified by `czd(charter₀)`, the founding charter's coz digest | Key material, signature primitives (Coz/Cyphr)                                  |
 | **Ownership** | claim/publish protocol; claim/publish chains; the owner→identity binding                | Owner identity _systems_ (Coz `tmb`, Cyphr `PR`) — `Owner` is opaque            |
 | **Storage**   | git-object encoding; registry + store ref layout; ingest                                | Build execution, artifact store (L3)                                            |
 | **Discovery** | object-free ref advertisement; set→mirrors indirection                                  | Version _semantics_ (`VersionScheme` is a trait; its per-ecosystem dialects are internal plugins above L1, §1.1) |
@@ -135,8 +147,8 @@ both namespaces, but they are not conflated.
 | :------------- | :----------------------------------- | :---------------------------------- |
 | **Purpose**    | resolution + acquisition by _name_   | content-addressed _colocation_      |
 | **Keyed by**   | `label` / `version` (human-readable) | `blake3(publish_czd)` (digest)      |
-| **Ref prefix** | `refs/atom/{pub,claims/pub,src}/…`   | `refs/atom/{d,dev,claims/d}/…`      |
-| **Mutability** | append-only (tag/claim chains)       | accumulating; digest refs immutable |
+| **Ref prefix** | `refs/atom/{pub,claims/pub}/…`       | `refs/atom/{d,dev,claims/d}/…`      |
+| **Mutability** | append-only (materialized view chains) | accumulating; digest refs immutable |
 | **Discovery**  | object-free `ls-refs` enumeration    | by digest only (no enumeration)     |
 
 Registries are what make decentralized bulk resolution possible (enumerate a
@@ -154,7 +166,7 @@ graph TB
   subgraph REPO["Atom-bearing git repository"]
     REG["AtomRegistry refs\nrefs/atom/pub/{label}/{version}\nrefs/atom/claims/pub/{label}"]
     STORE["AtomStore refs\nrefs/atom/d/{blake3(publish_czd)}\nrefs/atom/claims/d/{claim_czd}"]
-    OBJ["git object DB\n(atom commits, publish tags, claim commits)"]
+    OBJ["git object DB\n(atom commits, publish view-chain commits, claim commits)"]
   end
   MIR["Mirror registries\n(set → {mirror URLs})"]
 
@@ -168,10 +180,12 @@ graph TB
 
 ### 2.1 AtomRegistry
 
-The append-only, name-keyed publishing surface. `claim()` stakes ownership of an
-`(anchor, label)`; `publish()` records a new signed publish tag at
-`refs/atom/pub/{label}/{version}`. Implements `AtomSource` for object-free discovery.
-Within a single registry, `label` is unique (`[registry-ref-label-unique]`).
+The append-only, name-keyed publishing surface. `claim()` stakes ownership of a
+`label` within an `anchor`; `publish()` starts a new publish's materialized view
+chain — an ordinary commit, never a tag — at `refs/atom/pub/{label}/{version}`,
+its first commit carrying the atom commit as a second parent (§6.7). Implements
+`AtomSource` for object-free discovery. Within a single registry, `label` is
+unique (`[registry-ref-label-unique]`).
 
 ### 2.2 AtomStore
 
@@ -184,8 +198,8 @@ resolution cache: an atom fetched once is content-addressed for reuse.
 ### 2.3 AtomSource (Git Backend)
 
 `atom-git` implements `AtomContent`/`AtomStore` over a git repository: it reads atom
-commits, walks publish tag chains and claim chains, and verifies the anchor against
-the set's founding charter (`Anchor := czd(charter₀)`). The git object DB is the
+commits, walks publish and claim materialized view chains, and verifies the anchor against
+the set's founding charter by recomputing its czd (`czd(charter₀)`). The git object DB is the
 substrate; the registry/store refs are views over it. The obligations this
 backend discharges — and the ones still open against it — are enumerated
 in the [Atom Backend Contract](../specs/atom-backend-contract.md)'s
@@ -237,8 +251,11 @@ Defines the four traits and their algebraic relationships (`atom-core/src/lib.rs
 
 ### 3.2 atom-id — Identity Primitives
 
-`Anchor`, `Label`, and `AtomId = (anchor, label)`. The `AtomId` is the **pair
-itself** — not a hash of it. No digest type is exported for identity (see §6.1).
+`Anchor`, `Label`, and `AtomId` — the algorithm-free pre-signature preimage of
+an unclaimed development atom is the pair `(anchor, label)`; `AtomId` is the
+deterministic digest computed over that preimage (atom-transactions.md
+`[identity-content-addressed]`), never the pair itself. `AtomId` is **not**
+the atom's identity; identity is the claim record's czd (see §6.1).
 
 ### 3.3 atom-uri — URI Parsing
 
@@ -248,8 +265,9 @@ The URI is a locator, not the identity (`[uri-not-metadata]`).
 ### 3.4 atom-git — Git Bridge
 
 Implements `AtomContent`/`AtomStore` over git objects per `git-storage-format.md`:
-charter-based anchor verification (`Anchor := czd(charter₀)`), atom-commit
-snapshots, publish tag chains, claim chains, and the registry/store ref layouts.
+charter-based anchor verification (recomputing the anchor's czd against
+`czd(charter₀)`), atom-commit snapshots, publish and claim materialized
+view chains, and the registry/store ref layouts.
 
 ## 4. Core Lifecycles
 
@@ -274,14 +292,19 @@ sequenceDiagram
   Coz-->>Dev: publish CozMessage (publish_czd)
   Dev->>Reg: publish(message)
   Note over Reg: PRE — claim non-revoked (chain tip); now>claim.now; key authorized by owner
-  Reg-->>Dev: refs/atom/pub/{label}/{version} → publish tag → atom commit
+  Reg-->>Dev: refs/atom/pub/{label}/{version} → publish view chain\n(chain's first commit; atom commit as 2nd parent)
 ```
 
 ### 4.2 Resolve and Acquire (name-anchored)
 
-Acquisition is **name-anchored**: registries are name-keyed, and a published version
-is the moving tip of an append-only publish tag chain peeling to an immutable atom
-commit. The lock pins `publish_czd`; resolution locates that pin within the chain.
+Acquisition is **name-anchored**: registries are name-keyed, and a published
+version's ref names the tip of its own materialized view chain — an
+append-only chain of ordinary commits over the record, never a tag chain.
+A consumer MUST read and verify the record the chain carries before content
+is reachable at all: the atom's immutable content is a second, parentless
+commit hung off the chain's FIRST commit as a second parent, and that edge
+is the only path to it. The lock pins `publish_czd`; resolution locates
+that record among the chain's commits.
 
 ```mermaid
 sequenceDiagram
@@ -292,34 +315,38 @@ sequenceDiagram
   Ion->>Set: look up mirrors for set (anchor)
   Ion->>Reg: ls-refs refs/atom/pub/{label}/* (object-free)
   Reg-->>Ion: refname→OID (versions advertised)
-  Ion->>Reg: fetch refs/atom/pub/{label}/{version} (tip of tag chain)
-  Reg-->>Ion: publish tag chain → atom commit
-  Note over Ion: locate pinned publish_czd in the chain;\nverify peeled content sha == payload.dig
+  Ion->>Reg: fetch refs/atom/pub/{label}/{version} (whole publish view chain — never depth-1)
+  Reg-->>Ion: publish view chain (record) → atom commit (2nd parent, chain's first commit)
+  Note over Ion: locate pinned publish_czd among the chain's records;\nverify atom commit sha == payload.dig
   Ion->>Store: ingest by blake3(publish_czd)
   Note over Ion: moved tip ⇒ "metadata updated / key rotated" warning + optional czd bump (non-fatal)
 ```
 
-Content reproducibility is guaranteed by the chain-invariant core
-`(label, version, dig, src, path)` (`[tag-chain-semantic-immutable]`): the chain may
-grow (appended signing/`meta`), but the bytes a version resolves to cannot change.
+Content reproducibility is guaranteed by the record's own invariant core
+`(label, version, dig, src, path)`: the chain may grow — one commit per
+later fact — but a materialized chain is a derived index over the signed
+record, never authoritative over it (ADR-0009 Decisions 9, 13), so the
+bytes a version resolves to cannot change regardless of how far the chain
+has grown.
 
 ### 4.3 Ingest
 
-`store.ingest(source)` pulls an atom's objects (commit, tag chain, claim) into a
+`store.ingest(source)` pulls an atom's objects (commit, view chain, claim) into a
 store, keyed by `blake3(publish_czd)`. Ingest preserves identity and content exactly
 (`[ingest-preserves-identity]`, `[coz-bit-perfect]`): `resolve(store) ⊇
 resolve(source)` for the ingested atom (`[store-accumulates]`).
 
 ## 5. State Machine Models
 
-### 5.1 Publish Tag Chain
+### 5.1 Publish View Chain
 
 ```mermaid
 stateDiagram-v2
-  [*] --> Published: initial publish (tag → atom commit)
-  Published --> Published: metadata update\n(new tag → previous tag; old tag persists)
+  [*] --> Published: initial publish (chain's first commit; atom commit as 2nd parent)
+  Published --> Published: a later fact lands\n(new commit parents onto the chain's previous tip; ref advances)
   note right of Published
-    [tag-chain-immutable]: updates append, never rewrite.
+    Updates append a new commit to the chain, never rewrite it — the
+    chain is a derived materialized view (ADR-0009), never authoritative.
     (label,version,dig,src,path) invariant across the chain;
     only signing meta / key / meta.* may differ.
   end note
@@ -334,7 +361,7 @@ stateDiagram-v2
   Claimed --> Superseded: meta.supersedes:"revoke"\n(new claim in chain carries revocation)
   note right of Claimed
     [single-active-claim-registry]: ≤1 active claim/AtomId;
-    [claim-replacement-transition]: chain to previous, old publishes stay valid.
+    [claim-replacement-storage]: chain to previous, old publishes stay valid.
     Revocation is verify-time: walk to the active claim at the chain tip.
   end note
 ```
@@ -355,27 +382,39 @@ carve-out obligation instantiate); and a publish carries a declared
 (atom-model §6; the payload field is a pending `atom-transactions.md`
 amendment, tracked in atom-model §8).
 
-### 6.1 Identity is the Abstract Pair
+### 6.1 Identity: the Claim czd, Not the Pair
 
-**Invariant `[identity-content-addressed]`**: an atom's identity (`AtomId`) MUST be
-determined solely by the pair `(anchor, label)`, and MUST NOT depend on any key,
-signature, signed message, or hash algorithm. The `AtomId` is **not a hash of
-`(anchor, label)`** — it is the pair. ("Content-addressed" here means the _anchor_ is
-a content hash and identity is permanent; it does **not** mean the id is a digest.)
-There is no `AtomDigest` of identity and no store-chosen algorithm agility at this
-layer. **Invariant `[identity-stability]`**: the `AtomId` MUST NOT change across
-versions, ownership transfers, or key rotations.
+**Identity is the claim record's czd — not the `(anchor, label)` pair, and not a
+hash of it.** The pair once served as `AtomId` and was named as identity; that
+naming is glossary-repudiated (2026-07-18, atom-model.md §2; glossary, _Atom
+identity_). The pair's only legitimate roles are as the **pre-signature
+preimage** of an unclaimed development atom — its sole manifestation as a
+value, before any claim exists — and as a **teaching form**: the simplest
+shape for conveying the naming principle, used only where prose says so
+explicitly. Identity stability holds regardless; it is now carried by the
+claim czd rather than the pair.
+
+The pair itself stays algorithm-free by construction and stable across
+versions, ownership transfers, and key rotations, since `anchor` and `label`
+never change (`atom-transactions.md` `[identity-content-addressed]`,
+`[identity-stability]`) — properties of the pair's construction, not of
+identity. Those two invariants still name the pair as "identity" in their own
+prose; that is drift against the 2026-07-18 correction, tracked in Appendix D
+rather than repeated here.
 
 ### 6.2 The Anchor
 
-**(Amended 2026-07-08 — the charter.)** The anchor is the coz digest of the
-atom-set's founding charter transaction: `Anchor := czd(charter₀)`
-(atom-transactions.md `[charter-anchor]`) — backend-agnostic, since a charter
-is a coz object regardless of backend. This replaces the earlier
+**(Amended 2026-07-08 — the charter.)** The anchor is the linkage the
+atom-set's founding charter transaction effects — a role, not a value; its
+czd (`czd(charter₀)`, atom-transactions.md `[charter-anchor]`) is the
+reference and verification handle every consumer uses — backend-agnostic,
+since a charter is a coz object regardless of backend. This replaces the earlier
 genesis-commit derivation; the genesis commit is not lost — the charter's
 `src` transitively pins it (a revision hash commits to its entire ancestry) —
 but it no longer _is_ the anchor. The anchor is: **immutable**
-(`[anchor-immutable]` — successor charters chain without changing it),
+(`[anchor-immutable]` — the charter is written once and never reissued;
+later change, a key rotation included, lands as signed facts folded onto
+it),
 **content-addressed over a signed, owned payload**
 (`[anchor-content-addressed]`), **unique** (distinct charters yield distinct
 anchors; two charters over the same history are two deliberately distinct
@@ -384,9 +423,11 @@ and verifies the founding charter from the source without trusting the
 publisher; selecting among candidate charters is the consumer's recorded
 trust decision (`[anchor-resolvable]`, supersedes `[anchor-discoverable]`).
 Git hash agility is handled by the charter, not by silence: a SHA-256 re-hash
-rewrites history, so continuity across it is an explicit successor charter
-(`[anchor-hash-agile]`, `[charter-succession]`); absent succession, the
-re-hashed repository is a distinct atom-set.
+rewrites history, severing any in-protocol path to the original anchor. A
+new charter over the re-hashed history is by definition a genuine fork with
+its own identity (`[anchor-hash-agile]`, `[charter-fork-distinction]`);
+continuity between the two anchors is at most an out-of-band trust decision
+a consumer makes on other evidence, never a protocol guarantee.
 
 ### 6.3 Ownership: Claim Before Publish
 
@@ -403,10 +444,10 @@ specs** and are consolidated here:
 
 - Claims form an append-only **chain**: a replacement claim's commit is parented to
   the previous, and `refs/atom/claims/pub/{label}` advances to the tip
-  (`[single-active-claim-registry]`, `[claim-replacement-transition]`). Reclaiming
+  (`[single-active-claim-registry]`, `[claim-replacement-storage]`). Reclaiming
   with new keys is the normal key-rotation path; existing publishes remain valid
   under the claim they referenced.
-- **Revocation is carried in publish/claim tag metadata** —
+- **Revocation is carried in publish/claim record metadata** —
   `meta.supersedes: "update" | "revoke"`, `meta.superseded-by` — and carries
   cryptographic assurance precisely because the new claim chains to the previous
   (`git-storage-format.md` §extensible-meta).
@@ -419,17 +460,26 @@ specs** and are consolidated here:
 
 ### 6.5 The Lock Contribution (2-value)
 
-The atom-required lock entry (`[lock-entry-sufficient]`, `[lock-capture]`) is keyed
-by `AtomId = (set, label)` and carries exactly two values: the resolved `version` and
-the **bare** `publish_czd` (original algorithm — the lock represents the _actual_
-cryptographic security the signature covers). `set` resolves to mirrors via a shared
-`[sets] → mirrors` table.
+The atom-required lock entry (`[lock-entry-sufficient]`, `[lock-capture]`)
+currently nests its map key by `set` then `label` and carries exactly two
+values: the resolved `version` and the **bare** `publish_czd` (original
+algorithm — the lock represents the _actual_ cryptographic security the
+signature covers). That nesting is a lock-schema implementation choice, not a
+claim about the atom's identity or its resolution path: `set` resolves to
+mirrors via a shared `[sets] → mirrors` table, and `label` is what a claim is
+actually found by within that set's log — never a fused pair (§6.1; glossary,
+_Atom identity_, _Deprecated and repudiated formulations_).
 
-- **No hashed `id`** — the `(set, label)` pair _is_ the identity and the map key.
-- **No `rev`** — the atom commit is peelable from the `publish_czd`'s tag chain.
+- **No hashed `id`** — the lock's nested `set`/`label` map key is sufficient
+  on its own for a unique entry, so no separate hashed identifier is needed.
+  This is the same implementation-choice caveat as above, not a claim that the
+  pair is the atom's identity (§6.1) or its lookup path.
+- **No `rev`** — the atom commit hangs off the first commit of the
+  `publish_czd`'s materialized view chain as a second parent; a consumer
+  reaches it only by walking that edge.
 - **`dig` is not stored** — it lives in the signed publish payload (the czd-pinned
-  source of truth); on acquisition the peeled content-addressed sha **MUST equal**
-  `payload.dig`, or there is tampering.
+  source of truth); on acquisition the atom commit reached via that
+  second-parent edge **MUST equal** `payload.dig`, or there is tampering.
 
 `blake3` wraps `publish_czd` **only** as the store-key reduction (§6.6), never in the
 lock.
@@ -445,20 +495,24 @@ colocation without coordination (`[store-claim-disambiguation]`, recast off
 
 ### 6.7 The Export Contract (self-describing git object)
 
-The atom's **git object is self-describing**: the publish tag carries the signed
-`CozMessage` (version, `dig`, `src`, `path`, and `claim` → owner) and peels to the
-atom commit (the content). Consumers read **behind the `publish_czd`**, not from
-copied lock fields:
+The atom's **git object is self-describing**: the publish view chain's
+first commit carries the append-only record — read from its tree, never
+its commit message, since git is storage and never authority here — naming
+version, `dig`, `src`, `path`, and `claim` → owner, and that same commit's
+second parent is the atom commit (the content). Consumers read **behind the
+`publish_czd`**, not from copied lock fields:
 
 - **Eos** reads what it needs (`dig`, the content tree, version) directly from the
   atom's git object via `AtomContent`.
 - **Ion** may derive wire-handoff fields from that same object at resolution time.
 
-Nothing about the atom is copied into the lock beyond the `(set, label) →
-{version, publish_czd}` pointer. The L3/L4 boundary is `AtomContent` (the forgetful
-functor dropping store-mutating observers). _Note:_ `ion-eos-contract.md`
-`[handoff-atom-fields]` carries only the minimal pointer `(set, label, version,
-publish_czd)`; eos reads `rev`/`dig`/content from the self-describing git object.
+Nothing about the atom is copied into the lock beyond the map entry `(set,
+label) → {version, publish_czd}` — the lock-schema key described in §6.5, not
+a claim about atom identity or lookup path. The L3/L4 boundary is
+`AtomContent` (the forgetful functor dropping store-mutating observers).
+_Note:_ `ion-eos-contract.md` `[handoff-atom-fields]` carries only the minimal
+field tuple `(set, label, version, publish_czd)`; eos reads `rev`/`dig`/content
+from the self-describing git object.
 (Earlier drafts mandated eos _receive_ `rev`/`id` — that over-specification has
 been realigned.)
 
@@ -468,6 +522,32 @@ Version discovery is an `ls-refs` advertisement over `refs/atom/pub/{label}/{ver
 returning `refname→OID` with no object download — the standard git protocol-v2
 primitive. This is spec-mandated; axios's own implementation is a build task (the
 PoC's `get_atoms` proves the pattern). See Appendix D.
+
+### 6.9 The Store Format Is a Public Contract (ADR-0009)
+
+_Added 2026-07-30. This section is scoped narrowly: it cites
+[Atom Model](../models/atom-model.md) and [ADR-0009](../adr/0009-atom-composition-plane.md)
+only, not §6.6 above — `blake3(publish_czd)`-keyed reduction is
+[retired](../specs/atom-store-format.md#store-keyed-by-czd) under the
+spine/cloud split; that revision is separate, still-owed work (ADR-0007's
+own "Obligates amendment of" list), not performed here._ Story 4 of the
+design session that produced ADR-0009 names the audience this obligation
+protects: a consumer holding neither ion nor eos, reading a store
+directly. Treating the on-disk format as ion's implementation detail
+means that audience breaks first — the format has to be specified and
+versioned at this layer, independent of any frontend.
+[Atom Store Format](../specs/atom-store-format.md) is that specification.
+
+#### [store-format-public-contract]
+
+The store's on-disk format is a public, versioned contract, documented
+independently of ion or any other frontend.
+
+```claim
+kind: requirement
+verification:
+  implementation: none
+```
 
 ## 7. Wire and Storage Formats
 
@@ -485,10 +565,10 @@ PoC's `get_atoms` proves the pattern). See Appendix D.
 | :-- | :--------------------------------------------------- | :------------------------------------------------------------------- |
 | 8.1 | Claim name collision (label taken in registry)       | claim rejected (`[registry-ref-label-unique]`)                       |
 | 8.2 | Publish without/with-revoked claim                   | publish invalid (`[no-unclaimed-publish]`, verify-time tip check)    |
-| 8.3 | Peeled content sha ≠ payload.dig                     | tamper/funny-business — reject the fetched atom                      |
+| 8.3 | Second-parent content commit sha ≠ payload.dig       | tamper/funny-business — reject the fetched atom                      |
 | 8.4 | Mirror divergence (same atom@version, different dig) | conflict, reject (`[no-conflicting-digest]`)                         |
 | 8.5 | Distinct-ownership czd divergence                    | reject unless same claim chain (`[czd-divergence-handling]`)         |
-| 8.6 | Moved publish-tag tip (metadata appended)            | non-fatal: warn "metadata updated / key rotated" + optional czd bump, **iff** the new tag's VALUE for a policy-relevant overwrite-class field (signing identity — `tmb`, `key`, `alg` — or `mode`; atom-transactions.md `[amendment-field-classification]`) DIFFERS from the value established by the immediately preceding tag in the chain. This is a value-change check, not a field-presence check: every signed tag necessarily sets `tmb` and `now` (both overwrite-class), so a presence-based trigger would fire on every tip move, making the routine case unreachable. A routine re-sign that reuses the same key and mode is not a signing-identity or mode change even though `tmb`/`now` are necessarily re-set. `now` and `meta` value-changes are never themselves policy-relevant (every tag necessarily has a distinct `now`; a `meta` edit such as `min-compatible` is not an ownership signal) and never trigger this warning regardless of change. A tip move that changes no policy-relevant overwrite field's value — whether because it carries only append-class (fact) entries, or because it merely re-asserts the same signing identity and mode — is routine and MUST NOT trip this warning: ownership-relevant and routine tip moves are distinguished mechanically by whether a policy-relevant overwrite field's *value* changed (atom-model §4; atom-transactions.md `[amendment-field-classification]`, `[fact-kind-table]`) |
+| 8.6 | Moved publish-chain tip (a later fact lands)         | non-fatal: warn "metadata updated / key rotated" + optional czd bump, **iff** the new chain commit's VALUE for a policy-relevant overwrite-class field (signing identity — `tmb`, `key`, `alg` — or `mode`; atom-transactions.md `[amendment-field-classification]`) DIFFERS from the value established by the immediately preceding commit in the chain. This is a value-change check, not a field-presence check: every signed record necessarily sets `tmb` and `now` (both overwrite-class), so a presence-based trigger would fire on every tip move, making the routine case unreachable. A routine re-sign that reuses the same key and mode is not a signing-identity or mode change even though `tmb`/`now` are necessarily re-set. `now` and `meta` value-changes are never themselves policy-relevant (every record necessarily has a distinct `now`; a `meta` edit such as `min-compatible` is not an ownership signal) and never trigger this warning regardless of change. A tip move that changes no policy-relevant overwrite field's value — whether because it carries only append-class (fact) entries, or because it merely re-asserts the same signing identity and mode — is routine and MUST NOT trip this warning: ownership-relevant and routine tip moves are distinguished mechanically by whether a policy-relevant overwrite field's *value* changed (atom-model §4; atom-transactions.md `[amendment-field-classification]`, `[fact-kind-table]`) |
 
 ## 9. Known Gaps and Future Explorations
 
@@ -496,7 +576,7 @@ PoC's `get_atoms` proves the pattern). See Appendix D.
 | :-- | :----------------------------------------------------------------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1   | Object-free discovery unbuilt in axios                                                                                                                       | spec-mandated; PoC `get_atoms` proves the pattern                                                                                                                                                                                                                                                          |
 | 2   | FsSource sentinel anchor value/encoding unconstrained                                                                                                        | local atoms; needs a protocol-level constant                                                                                                                                                                                                                                                               |
-| 3   | `rev` peel mechanism (locate commit from `publish_czd`; GC of an old chain tip)                                                                              | specify the failure mode when a serving mirror has GC'd                                                                                                                                                                                                                                                    |
+| 3   | atom-commit lookup mechanism (from `publish_czd`, via the chain's second-parent edge; GC if a registry drops the chain)                                     | specify the failure mode when a serving mirror has GC'd                                                                                                                                                                                                                                                    |
 | 4   | Cross-ecosystem `VersionScheme` adapters                                                                                                                     | trait surface defined; concrete adapters are internal plugins of the one implementation, registered above L1 (one meta-PM, many version dialects)                                                                                                                                                          |
 | 5   | Signed metadata append as the substrate's fact-publication channel (build records, interface manifests — HTC/L2, per ADR-0005 §Open Items, htc-sad.md §6.10) | **Closed at the spec level, 2026-07-14**: atom-model §4 gives the partition law; the mechanism is now defined — atom-transactions.md `[amendment-field-classification]` (identity/overwrite/append field classification), `[fact-kind-table]` (the concrete fact-kind list, derived/asserted, with authorization tier), and `[fact-claim-owner-gated]` (the builder≠claim-owner signer-authorization policy for claim-owner-gated facts — lifecycle markers plus `runtime-requires` — riding trust-model.md's existing `SignerRole`/`[trust-owner-selector]` machinery). The Rust implementation of this mechanism is separate, not-yet-landed work. |
 
@@ -517,18 +597,18 @@ Out of scope for the atom layer:
 | :------------- | :------------------------------------------------------------------------------- |
 | Composite      | The genus an atom reifies as intent: a package, environment, or system with its determined closure (atom-model §2) |
 | Mode           | The publish-carried reproducibility declaration, `reproducible` \| `witnessed` (atom-model §6)                     |
-| Anchor         | `czd(charter₀)` — the founding charter's coz digest; immutable atom-set identity |
-| AtomId         | The abstract pair `(anchor, label)` — the identity, not a hash                   |
+| Anchor         | The founding charter's linking role (not a digest); named and verified by `czd(charter₀)`, the founding charter's coz digest; immutable atom-set identity |
+| AtomId         | The deterministic digest of an unclaimed development atom's pre-signature preimage `(anchor, label)`, not the atom's identity (§6.1); the lock nests its map key by `set` then `label` (§6.5) |
 | Atom-set       | Atoms sharing a common anchor                                                    |
 | Label          | Human-readable atom name (UAX #31)                                               |
 | OwnerRef       | `{kind, value}` — a `kind`-tagged opaque identity digest (Coz `tmb`, Cyphr `PR`); `kind` names the identity framework (`single-key` implemented; `hierarchical`/`rooted-identity` reserved), `value` stays opaque to the protocol regardless of `kind` |
 | Owner (claim)  | `ClaimPayload.owner` — a single `OwnerRef`: the one identity accountable for a label |
 | Owner (charter) | `CharterPayload.owner` — a non-empty SET of `OwnerRef`s: the team recognized under this anchor, flat and equally authoritative |
-| Claim          | Signed `CozMessage` binding an `OwnerRef` → `(anchor, label)`                    |
+| Claim          | Signed `CozMessage` binding an `OwnerRef` → a `label` within an `anchor`         |
 | Publish        | Signed `CozMessage` recording a version; references a claim `czd`                |
 | czd            | Coz message digest (multihash); `publish_czd`, `claim_czd`                       |
 | dig            | Hash of the reproducible atom snapshot (in the publish payload)                  |
-| Revision (rev) | A specific commit in source history (peelable from the tag chain)                |
+| Revision (rev) | A specific commit in source history; carried by the signed publish payload's `src` field, not encoded on the atom commit itself |
 | Version        | Abstract version via `VersionScheme` (ecosystem-agnostic)                        |
 
 ## Appendix B: Crate Map
@@ -547,8 +627,8 @@ Out of scope for the atom layer:
 | §4.1 Claim/Publish     | [atom-transactions.md](../specs/atom-transactions.md) §Transitions                                                                         |
 | §4.2 Resolve/Acquire   | [atom-sourcing.md](../specs/atom-sourcing.md), [git-storage-format.md](../specs/git-storage-format.md)                                     |
 | §4.3 Ingest            | [atom-transactions.md](../specs/atom-transactions.md) `[ingest-preserves-identity]`                                                        |
-| §5.1 Publish Tag Chain | [git-storage-format.md](../specs/git-storage-format.md) `[tag-chain-immutable]`, `[tag-chain-semantic-immutable]`                          |
-| §5.2 Claim Chain       | [git-storage-format.md](../specs/git-storage-format.md) `[single-active-claim-registry]`, `[claim-replacement-transition]`                 |
+| §5.1 Publish View Chain | [git-storage-format.md](../specs/git-storage-format.md) (materialized view chain; [ADR-0009](../adr/0009-atom-composition-plane.md) Decisions 6, 9, 13) |
+| §5.2 Claim Chain       | [git-storage-format.md](../specs/git-storage-format.md) `[single-active-claim-registry]`, `[claim-replacement-storage]`                    |
 | §6 plane semantics     | [atom-model.md](../models/atom-model.md) (composite duality §2, partition law §4, anchoring law §5, reproducibility contract §6)            |
 | §2.3 backend duties    | [atom-backend-contract.md](../specs/atom-backend-contract.md) (git instantiation: its Appendix A)                                          |
 | §6.1 Identity          | [atom-transactions.md](../specs/atom-transactions.md) `[identity-content-addressed]`, `[identity-stability]`                               |
@@ -562,17 +642,47 @@ Out of scope for the atom layer:
 
 ## Appendix D: Known Specification Drift
 
-The keystone realignment — pair-only `AtomId` (no
-`AtomDigest`/`[digest-algorithm-agile]`), the 2-value name-anchored lock, the flat
-`blake3(publish_czd)` store, and name-anchored acquisition — has been applied across
-`atom-transactions.md`, `atom-sourcing.md`, and `git-storage-format.md`, which are
-aligned to this SAD. The 2026-07-08 charter amendment (`Anchor := czd(charter₀)`,
+The keystone realignment — the `AtomId` pair as the lock's map key (not
+identity, §6.1), the 2-value name-anchored lock, the flat
+`blake3(publish_czd)` store, and name-anchored acquisition — has been applied
+across `atom-transactions.md`, `atom-sourcing.md`, and `git-storage-format.md`,
+which are aligned to this SAD in those respects. (The identity portion of that
+realignment is itself superseded by the 2026-07-18 correction — see the next
+paragraph.) The 2026-07-08 charter amendment (`Anchor := czd(charter₀)`,
 atom-transactions.md `[charter-anchor]`) has likewise been propagated across those
 specifications and this SAD (§6.2). One deliberate, explicitly marked gap remains:
 the git backend's storage encoding and ref layout for charter transactions is not
 yet specified (`git-storage-format.md` Open Questions #6) — tracked as
 atom-milestone design work, not silent drift. (The L4 consequences — the ion lock
 cross-references and the eos handoff — are tracked by `ion-sad.md`.)
+
+A further drift, opened by the 2026-07-21 glossary refinement
+(`docs/glossary.md`, "Deprecated and repudiated formulations"): the
+2026-07-08 amendment's own equation, `Anchor := czd(charter₀)` stated as a
+*definition*, is itself now repudiated — the anchor is the charter's
+linking role, not a digest; its czd is the reference and verification
+handle, never the anchor itself. This SAD's §6.2, Appendix A, and the
+§1.3/§2.3/§3.4 mentions have been realigned to the corrected framing. The
+registered constraints built on the equation have not: `atom-transactions.md`'s
+`[charter-anchor]` and `[claim-chains-charter]`; `git-storage-format.md`'s
+`[anchor-is-genesis]`, `[anchor-hash-agile]`, `[charter-commit-format]`,
+`[dev-atom-unchartered-local]`, `[fs-ingest-transition]`,
+`[anchor-oldest-root]`, and `[anchor-vector-authenticity]`;
+`trust-model.md`'s `[trust-anchor-sort]`; and `lock-file-schema.md`'s
+`[lock-set-anchor]` — together with the mechanized encodings in
+`alloy/atom_structure.als` (`sig Anchor in Czd {}`) and
+`tla/AtomCharter.tla`'s Anchor-semantics comment — still assert the
+equation. Each is a registered docket claim or the formal evaluator of
+one, so redesigning the `Anchor` type is separate follow-on work, tracked
+here as owed, not silent, drift.
+
+A further drift, opened by the 2026-07-18 identity correction (§6.1): the
+`[identity-content-addressed]` and `[identity-stability]` invariants
+(`atom-transactions.md`) still name the `(anchor, label)` pair itself as
+identity — the framing this SAD corrected in §6.1. Per this document's own
+precedence rule (front matter), the formal-semantics correction
+(atom-model.md §2) governs and this SAD already realigns; `atom-transactions.md`'s
+invariant prose does not yet, and is tracked here as owed, not silent, drift.
 
 The 2026-07-12 plane formalization (atom-model.md, atom-backend-contract.md)
 obligates a set of spec amendments that are **registered, not yet landed**:
@@ -602,5 +712,5 @@ follow-on design work, not silent drift.
 
 | Document                   | Issue                                                                      | Corrected In                                                                                                                                    |
 | :------------------------- | :------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `alloy/atom_structure.als` | `identity_content_addressed` assertion name could be misread as hash-based | Clarifying comment added; name **kept** to match the retained `[identity-content-addressed]` spec tag + evaluator linkage; body already correct |
-| `tla/AtomTransactions.tla` | none — comment accurately reads "deterministic function of (anchor,label)" | No change needed; body and comment already correct                                                                                              |
+| `alloy/atom_structure.als` | Its `AtomId { anchor, label }` signature and `identity_bijection` fact encoded the pair-as-identity doctrine, repudiated 2026-07-18 (§6.1) | **Certification reissued for the charter/claim/identity shape; the fact-append layer stays uncertified because it isn't modeled.** The identity-only fix recorded here previously (`identity_content_addressed`/`verification_chain` re-derived over the claim's own `czd`) still holds, unchanged by what follows. The gap this row flagged as owed — the `Charter { prior: lone Charter }` succession chain — is now discharged: succession was abolished 2026-08-05 (not repaired), the same abolition `[charter-succession]`/`[charter-succession-linear]` record in atom-transactions.md. `Charter` is now `{ czd: one Czd }` alone; `Anchor := czd(charter)` is established directly (`charter_properties` fact), with no founding/successor split. Re-checked: `anchor_content_addressed` and `claim_chains_charter`, re-quantified over `Charter` directly with no change in meaning, both re-verified UNSAT (valid); `fork_scenario` and the charter-rooted `charter_rooted_fork` re-verified SAT (consistent) — `docs/specs/run_model_check.sh`, exit 0. `charter_fork_distinction`'s dedicated assertion was retired, not re-verified: without the founding/successor split it depended on, it collapsed into a direct restatement of `charter_properties`'s own czd-injectivity conjunct — checking it would check a fact against itself. Its content remains covered, folded into `anchor_content_addressed`'s uniqueness half; no separate `charter_fork_distinction` check exists in the file, and this row does not claim one. The row's earlier concern about "the model's Claim/Publish shape generally" is resolved by inspection, not merely by the charter fix: `Claim` and `Publish` never carried a `prior` field of their own — the succession assumption lived entirely in the retired `founders`-quantified facts, and a `prior`/`founder`/`succession` grep over the current file returns nothing. **What this SAD now certifies:** every anchor resolves to exactly one charter and every claim's anchor traces to exactly one charter (existence + czd-injectivity, machine-checked); the identity-bearing assertions above, untouched by this pass and still current. **What it does not certify:** the fact-based owner-change mechanism ADR-0007 §3 requires — `[charter-owner-fact]`, `[charter-owner-fact-linear]`, `[claim-owner-fact]` — has no model in this file at all, and those three remain graded `evaluator: none` in atom-transactions.md; this row's certification is scoped to the file's structural charter/claim/identity shape, not to the fact-append layer ADR-0007 §3 adds on top of it. |
+| `tla/AtomTransactions.tla` | Its "deterministic function of `(anchor,label)`" identity formula encodes the pair-as-identity doctrine, repudiated 2026-07-18 (§6.1) | **Certification withdrawn, not reissued.** This row previously recorded an "already correct" verdict that assumed the repudiated doctrine; that verdict no longer holds, and this SAD does not re-certify the file's current body. The model's identity formula is under separate rework; re-audit is owed once that lands, not performed here. |

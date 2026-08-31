@@ -43,7 +43,7 @@ The `alurl` crate saves typing by expanding `+`-prefixed identifiers in source s
 
 ## Adapter dispatch and PURL types
 
-Atom does not implement the full Package URL (PURL) specification. PURL assumes hardcoded layout conventions that don't map to Atom's `(anchor, label)` identity model.
+Atom does not implement the full Package URL (PURL) specification. PURL assumes hardcoded layout conventions that don't map to how Atom addresses a package — a repository anchor paired with a human-readable label, not a registry-relative path.
 
 Instead, the protocol borrows only the ecosystem type identifiers from PURL (`"cargo"`, `"npm"`, `"pypi"`) to populate the `pkg` field in the claim transaction. This lets clients dispatch lockfile handling to the right ecosystem adapter:
 

@@ -28,6 +28,7 @@ use crate::source::CozMessageEnvelope;
 /// every resolution silently misses with no error. `hex_encode` is the
 /// same helper already shared by every other czd-keyed ref family in this
 /// crate (`refs/atom/claims/d/*`, `refs/atom/d/*`).
+// @docket: charter-ref-by-czd :: cargo test --manifest-path atom/Cargo.toml -p atom-git --lib -- charter_store::tests::charter_ref_name_is_hex_keyed --exact
 pub fn charter_ref_name(czd_bytes: &[u8]) -> String {
     format!(
         "refs/atom/charter/d/{}",
@@ -55,6 +56,7 @@ pub fn charter_ref_name(czd_bytes: &[u8]) -> String {
 /// forged successor with their OWN key while declaring a legitimate
 /// charter-set member's thumbprint, defeating the per-link authorization
 /// check -- a full anchor takeover, not a narrow gap.
+// @docket: charter-message-is-coz :: cargo test --manifest-path atom/Cargo.toml -p atom-git --lib -- charter_store::tests::resolve_founding_charter_accepts_real_founding_charter charter_store::tests::resolve_founding_charter_rejects_forged_tmb --exact
 fn parse_and_verify_charter_commit(
     repo: &gix::Repository,
     oid: gix::hash::ObjectId,
@@ -85,8 +87,9 @@ fn parse_and_verify_charter_commit(
 
 /// Resolve the founding charter of the atom-set anchored at `anchor`.
 ///
-/// Since `anchor == czd(charter₀)` by definition (`[charter-anchor]`),
-/// this is a direct keyed lookup at `refs/atom/charter/d/{anchor-hex}`.
+/// Since the anchor is named and verified by `czd(charter₀)`
+/// (`[charter-anchor]`), this is a direct keyed lookup at
+/// `refs/atom/charter/d/{anchor-hex}`.
 /// Returns `Ok(None)` — not an error — when: the ref doesn't exist, the
 /// stored payload's recomputed czd does not bind to `anchor` (the
 /// czd-binding hole, adversarially rejected), or the payload carries a
@@ -142,6 +145,8 @@ pub fn resolve_founding_charter(
 /// extends past it. See that function's doc comment for the
 /// steady-state-unchanged caveat a caller passing a real recorded head
 /// MUST account for.
+// @docket: charter-succession-via-prior :: cargo test --manifest-path atom/Cargo.toml -p atom-git --lib -- charter_store::tests::resolve_effective_charter_walks_multilink_chain_to_correct_tail charter_store::tests::resolve_effective_charter_fails_closed_on_divergent_successor --exact
+// @docket: charter-src-reachable :: cargo test --manifest-path atom/Cargo.toml -p atom-git --lib -- charter_store::tests::resolve_effective_charter_walks_multilink_chain_to_correct_tail --exact
 pub fn resolve_effective_charter(
     repo: &gix::Repository,
     anchor: &Anchor,
@@ -257,6 +262,7 @@ mod tests {
 
     use super::*;
 
+    // @docket: charter-transition :: cargo test --manifest-path atom/Cargo.toml -p atom-git --lib -- charter_store::tests::resolve_founding_charter_accepts_real_founding_charter charter_store::tests::charterstore_get_charter_accepts_through_trait_interface charter_store::tests::resolve_effective_charter_walks_multilink_chain_to_correct_tail
     #[test]
     fn charter_ref_name_is_hex_keyed() {
         let bytes = [0xde, 0xad, 0xbe, 0xef];

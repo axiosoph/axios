@@ -254,11 +254,13 @@ their replacements and marks them formally deprecated:
   §Atom-DAG Intake Surface below), which is opaque to the daemon.
 - **`BuildRequest.evalArgs`** — superseded by `ActionParams.variantFlags`
   (same successor as `ComposerSpec`).
-- **`AtomId.digest`** — this shipped shape names a hash of the
-  `(anchor, label)` pair, which CONTRADICTS the keystone identity decision
-  that `AtomId` is the abstract pair itself, not a digest of it (atom-sad
-  §6.1, `[identity-content-addressed]`). See the PROPOSED successor shape
-  below.
+- **`AtomId.digest`** — this shipped shape is a digest, which does **not**
+  contradict current identity doctrine: identity is the claim record's czd,
+  itself a digest — not the `(anchor, label)` pair (glossary, _Atom
+  identity_, repudiated 2026-07-18). It is listed here only because a
+  PROPOSED successor below cited the now-repudiated decision as grounds to
+  replace it; that successor's justification is marked void where it
+  appears.
 
 #### Atom-DAG Intake Surface — PROPOSED (Post-ADR-0005)
 
@@ -294,7 +296,7 @@ struct ActionParams {
 # the scheduler gates them through confidence weighting and they never
 # alter correctness guarantees (Theorem 3 decay applies, ADR-0004 §2).
 struct AtomDagNode {
-  atomId @0 :AtomId;                 # publish_czd / (set, label) reference — see below
+  atomId @0 :AtomId;                 # publish_czd, or an unclaimed atom's digest of its set+label — see below
   predictedDurationMs @1 :UInt64;    # Predicted build duration (0 = unknown)
   predictedMemPeakKb @2 :UInt64;     # Predicted peak memory in KiB (0 = unknown)
   predictedOutputKb @3 :UInt64;      # Predicted output size in KiB (0 = unknown)
@@ -313,11 +315,27 @@ struct AtomDagEdge {
 #   dagNodes     @5 :List(AtomDagNode); # atom-DAG nodes, by publish_czd
 #   dagEdges     @6 :List(AtomDagEdge); # dependency edges, read off the lock
 #   actionParams @7 :ActionParams;      # successor of composer/evalArgs
+```
 
-# PROPOSED successor to AtomId (append-only; keystone re-spec — ADR-0005,
-# atom-sad §6.1 `[identity-content-addressed]`). The shipped `AtomId.digest`
-# field (Implemented Schema, above) is deprecated per the note above; the
-# target shape references the atom by the abstract pair, not a digest of it:
+> **JUSTIFICATION VOID (2026-07-18 repudiation) — MUST NOT be promoted
+> out of PROPOSED on this basis.** The `struct AtomId` successor below
+> was proposed on the strength of the keystone decision that `AtomId`
+> is the abstract `(anchor, label)` pair, not a digest of it (ADR-0005,
+> atom-sad §6.1 `[identity-content-addressed]`). That decision is
+> repudiated (glossary, _Atom identity_): identity is the claim
+> record's czd, itself a digest, and the shipped `AtomId.digest` field
+> this proposal targets for replacement does not actually contradict
+> current doctrine (see the corrected note under Deprecated Fields,
+> above). The proposal is kept, unpromoted, as the record of the
+> question it raised — a correct successor shape, if the shipped field
+> needs one, is a separate design decision not made here.
+
+```capnp
+# PROPOSED successor to AtomId (append-only) — VOID JUSTIFICATION, see
+# the callout above. Originally cited the keystone re-spec (ADR-0005,
+# atom-sad §6.1 `[identity-content-addressed]`) as grounds to replace
+# the shipped `AtomId.digest` field with the pair below; that citation
+# no longer holds.
 struct AtomId {
   set   @0 :Text;   # anchor hash of the atom-set (see AtomSetEntry.anchor)
   label @1 :Text;   # human-readable atom label within the set
@@ -525,84 +543,192 @@ struct BatchPresenceResult {
 
 ### Invariants
 
-**[eos-network-sovereign-auth]**: All daemon connections and inter-node wire
+#### [eos-network-sovereign-auth]
+
+All daemon connections and inter-node wire
 sessions MUST authenticate using sovereign identities at Layer 1 (Cyphr
 sovereign principals). Authentication proceeds via signed challenge-response
 over `NodeIdentity` payloads. Eos MUST NOT accept connections authenticated
 solely by web-PKI TLS certificates. The signing algorithm is determined by the
 Cyphr cryptographic suite — implementations MUST NOT hardcode a specific curve
 or scheme.
-`VERIFIED: unverified`
 
-**[eos-trustless-substitution]**: When fetching a pre-built artifact from a
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+Verification will exercise challenge-response authentication against
+Cyphr Principal Roots.
+
+#### [eos-trustless-substitution]
+
+When fetching a pre-built artifact from a
 remote substituter at a given store path, Eos MUST verify that the content
 digest of the fetched artifact matches the expected digest derivable from the
 verified `Plan`. Eos MUST NOT import substituted artifacts that fail this
 content-address verification.
-`VERIFIED: unverified`
 
-**[eos-origin-attestation]**: A build artifact committed to a shared cache
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+Verification will inject a corrupted artifact into the cache and
+confirm it is rejected.
+
+#### [eos-origin-attestation]
+
+A build artifact committed to a shared cache
 MUST be accompanied by an `OriginAttestation`: a signature from the worker
 node's `NodeIdentity` over the tuple `(PlanHash, OutputDigest)`. The
 attestation MUST include a timestamp for freshness verification.
-`VERIFIED: unverified`
 
-**[eos-protocol-capability-matching]**: During the connection handshake, the
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+Verification will check `OriginAttestation` signature validation
+directly.
+
+#### [eos-protocol-capability-matching]
+
+During the connection handshake, the
 client and daemon MUST exchange `HandshakeRequest`/`HandshakeResponse`
 payloads declaring supported backends (`supportedBackends`) and protocol
 version (`apiVersion`). If no common backend exists, or if the API versions
 are incompatible, the connection MUST be terminated with a rejection reason.
-`VERIFIED: unverified`
 
-**[eos-signature-freshness]**: `NodeIdentity` payloads and
-`OriginAttestation` records MUST carry a timestamp and nonce. The receiving
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+Verification will exercise the handshake and confirm a capability
+mismatch causes rejection.
+
+#### [eos-signature-freshness]
+
+The `NodeIdentity` payloads
+[eos-network-sovereign-auth](#eos-network-sovereign-auth) authenticates with and the
+`OriginAttestation` records [eos-origin-attestation](#eos-origin-attestation) requires
+MUST carry a timestamp and nonce. The receiving
 node MUST reject payloads whose timestamp deviates from the receiver's system
 clock by more than a configurable freshness window (default: 5 minutes).
 Nonces MUST NOT be reused within the freshness window to prevent replay.
-`VERIFIED: unverified`
 
-**[eos-capability-lifecycle]**: A `BuildJob` capability returned by
+```claim
+kind: constraint
+verification:
+  implementation: none
+depends: [eos-network-sovereign-auth, eos-origin-attestation]
+```
+
+Verification will replay an expired `NodeIdentity` payload and
+confirm rejection.
+
+#### [eos-capability-lifecycle]
+
+A `BuildJob` capability returned by
 `submitBuild` MUST remain valid for the duration of the job. Dropping the
 capability reference (client disconnect or explicit release) MUST detach the
 client from progress streaming but MUST NOT cancel or terminate the
 underlying build. Cancellation MUST only occur via an explicit `cancel()`
 invocation on the `BuildJob` capability.
-`VERIFIED: unverified`
 
-**[eos-progress-multiplexing]**: Multiple clients MUST be able to attach
-`ProgressStream` callbacks to the same `BuildJob` concurrently. Each
+```claim
+kind: constraint
+verification:
+  implementation: review
+```
+
+Verification will drop a `BuildJob` capability and confirm the build
+continues.
+
+#### [eos-progress-multiplexing]
+
+Multiple clients MUST be able to
+[attach-progress](#attach-progress) `ProgressStream` callbacks to the same `BuildJob` concurrently. Each
 attached callback MUST receive the same sequence of `BuildStatus` updates.
 When a client drops its `ProgressStream` capability, the daemon MUST clean up
 that callback's resources without disturbing other attached clients.
-`VERIFIED: unverified`
 
-**[eos-transport-agnosticism]**: The protocol layer MUST be decoupled from
+```claim
+kind: constraint
+verification:
+  implementation: review
+depends: [attach-progress]
+```
+
+Verification will attach two clients to the same job and confirm
+both receive events.
+
+#### [eos-transport-agnosticism]
+
+The protocol layer MUST be decoupled from
 the transport layer. All protocol operations MUST function identically over
 any transport satisfying `AsyncRead + AsyncWrite`. Transport-specific
 concerns (socket paths, TLS handshakes, Cyphr authentication) MUST be
 resolved before the Cap'n Proto `TwoPartyVatNetwork` is instantiated.
-`VERIFIED: unverified`
 
-**[eos-wot-substitution-threshold]**: When strict substitution policy is
-enabled, Eos MUST require that a substituted artifact carry attestations from
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+Verification will run the identical test suite over both UDS and TCP
+transports.
+
+#### [eos-wot-substitution-threshold]
+
+When strict substitution policy is
+enabled, Eos MUST require that a substituted artifact carry
+[eos-origin-attestation](#eos-origin-attestation)s from
 at least _M_ of _N_ configured trusted builders (Web of Trust threshold)
 before accepting the artifact. The threshold values _M_ and _N_ are
 deployment-configurable.
-`VERIFIED: unverified`
 
-**[eos-discovery-read-only]**: The `AtomDiscovery` capability MUST NOT expose
+```claim
+kind: constraint
+verification:
+  implementation: none
+depends: [eos-origin-attestation]
+```
+
+Verification will configure an M-of-N threshold, inject insufficient
+attestations, and confirm rejection.
+
+#### [eos-discovery-read-only]
+
+The `AtomDiscovery` capability MUST NOT expose
 mutation operations. Discovery is strictly observation-only: `resolve`,
 `contains`, and `search` are pure reads with no side effects on daemon state.
 This is consistent with Eos consuming `AtomSource` (a read-only trait) per
 the formal model. Any future method added to `AtomDiscovery` MUST preserve
 this read-only invariant.
-`VERIFIED: unverified`
+
+```claim
+kind: constraint
+verification:
+  implementation: type
+```
+
+Verification will audit the `AtomDiscovery` API surface for mutation
+operations.
 
 ---
 
 ### Transitions
 
-**[daemon-startup]**: Initialize the Eos daemon and begin accepting
+#### [daemon-startup]
+
+Initialize the Eos daemon and begin accepting
 connections.
 
 - **PRE**: A valid configuration exists specifying the transport endpoint
@@ -612,21 +738,42 @@ connections.
   spawns the worker pool, and enters the listening state. The daemon MUST
   create the socket file (UDS) or bind the TCP port before signaling
   readiness.
-  `VERIFIED: unverified`
 
-**[client-connect]**: Establish an authenticated session between a client and
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+Verification will confirm socket creation and readiness signaling.
+
+#### [client-connect]
+
+Establish an authenticated session between a client and
 the daemon.
 
 - **PRE**: The daemon is in the listening state. A client opens a transport
   connection (Unix stream or TCP stream).
 - **POST**: The client and daemon exchange `HandshakeRequest` /
-  `HandshakeResponse` payloads. If authentication succeeds and capabilities
-  match, the connection is promoted to an authenticated Cap'n Proto RPC
+  `HandshakeResponse` payloads. If [eos-network-sovereign-auth](#eos-network-sovereign-auth) succeeds and
+  [eos-protocol-capability-matching](#eos-protocol-capability-matching)
+  finds a common backend and version, the connection is promoted to an authenticated Cap'n Proto RPC
   session. The client receives an `EosDaemon` bootstrap capability. If
   authentication fails, the connection is closed with a rejection reason.
-  `VERIFIED: unverified`
 
-**[submit-build]**: Submit a build request and receive a job capability.
+```claim
+kind: constraint
+verification:
+  implementation: none
+depends: [eos-network-sovereign-auth, eos-protocol-capability-matching]
+```
+
+Verification will exercise both successful and rejected handshake
+transitions.
+
+#### [submit-build]
+
+Submit a build request and receive a job capability.
 
 - **PRE**: An authenticated client holds an `EosDaemon` capability.
 - **POST**: The client invokes `submitBuild(request: BuildRequest)`. The
@@ -637,9 +784,18 @@ the daemon.
   `JobId` already exists, the existing `BuildJob` capability is returned
   (deduplication). Otherwise, a new job is enqueued and a fresh `BuildJob`
   capability is returned. The build proceeds asynchronously.
-  `VERIFIED: unverified`
 
-**[attach-progress]**: Attach a progress callback to a running build.
+```claim
+kind: constraint
+verification:
+  implementation: review
+```
+
+Verification will submit identical plans and confirm deduplication.
+
+#### [attach-progress]
+
+Attach a progress callback to a running build.
 
 - **PRE**: A client holds a `BuildJob` capability.
 - **POST**: The client invokes `attachProgress(callback)`, passing a
@@ -647,100 +803,233 @@ the daemon.
   `BuildStatus` updates via `callback.update()`. The `-> stream` annotation
   provides built-in backpressure. When the build completes, the daemon
   invokes `callback.done()`.
-  `VERIFIED: unverified`
 
-**[detach-progress]**: Detach from progress streaming without cancelling the
+```claim
+kind: constraint
+verification:
+  implementation: review
+```
+
+Verification will attach a callback and confirm `BuildStatus`
+delivery.
+
+#### [detach-progress]
+
+Detach from progress streaming without cancelling the
 build.
 
-- **PRE**: A client has an attached `ProgressStream` callback.
+- **PRE**: A client has a callback [attach-progress](#attach-progress) attached as a `ProgressStream`.
 - **POST**: The client drops its `ProgressStream` capability. The Cap'n
   Proto runtime notifies the daemon of the dropped reference. The daemon
   removes that callback from the job's subscriber list and reclaims
   associated resources. The build continues unaffected.
-  `VERIFIED: unverified`
 
-**[cancel-build]**: Cancel a running build.
+```claim
+kind: constraint
+verification:
+  implementation: review
+depends: [attach-progress]
+```
 
-- **PRE**: A client holds a `BuildJob` capability for a job in `Queued` or
+Verification will drop a `ProgressStream` and confirm cleanup
+without interrupting the build.
+
+#### [cancel-build]
+
+Cancel a running build.
+
+- **PRE**: A client holds the `BuildJob` capability [submit-build](#submit-build) returned, for a job in `Queued` or
   `Building` state.
 - **POST**: The client invokes `cancel()` on the `BuildJob`. The daemon
   transitions the job to `Cancelled` state and notifies all attached
   `ProgressStream` callbacks. In-flight build work is terminated. The
   `BuildJob` capability remains valid but subsequent operations return the
   `Cancelled` status.
-  `VERIFIED: unverified`
 
-**[request-substitute]**: Query remote caches for pre-built artifacts.
+```claim
+kind: constraint
+verification:
+  implementation: review
+depends: [submit-build]
+```
+
+Verification will cancel via the capability and confirm the job
+transitions to `Cancelled`.
+
+#### [request-substitute]
+
+Query remote caches for pre-built artifacts.
 
 - **PRE**: An Eos daemon has a plan in the `NeedsBuild` state and at least
   one configured remote substituter.
 - **POST**: The daemon sends a `SubstitutionQuery` to each configured
-  `SubstitutionService`. If a valid `SubstitutionResult` is returned
-  containing verified `OriginAttestation`s that satisfy the Web of Trust
-  threshold, Eos fetches the artifact via `fetchArtifact()`, verifies the
+  `SubstitutionService`, per [eos-trustless-substitution](#eos-trustless-substitution). If a valid `SubstitutionResult` is returned
+  containing verified [eos-origin-attestation](#eos-origin-attestation)s that satisfy the
+  [eos-wot-substitution-threshold](#eos-wot-substitution-threshold),
+  Eos fetches the artifact via `fetchArtifact()`, verifies the
   content digest, and bypasses local build execution.
-  `VERIFIED: unverified`
 
-**[client-disconnect]**: Graceful or abrupt session termination.
+```claim
+kind: constraint
+verification:
+  implementation: none
+depends: [eos-trustless-substitution, eos-origin-attestation, eos-wot-substitution-threshold]
+```
+
+Verification will mock a substituter and confirm attestation and
+digest checks.
+
+#### [client-disconnect]
+
+Graceful or abrupt session termination.
 
 - **PRE**: A client has an active RPC session.
-- **POST**: All capability references held by the client are dropped. The
-  Cap'n Proto runtime cleans up associated server-side state (progress
-  callbacks, pending responses). No running builds are cancelled — only
-  explicit `cancel()` terminates builds.
-  `VERIFIED: unverified`
+- **POST**: All capability references held by the client are dropped, which
+  under [eos-capability-lifecycle](#eos-capability-lifecycle) detaches progress streaming but never cancels a
+  build. The Cap'n Proto runtime cleans up associated server-side state
+  (progress callbacks, pending responses). No running builds are cancelled —
+  only explicit `cancel()` terminates builds.
 
-**[daemon-shutdown]**: Graceful daemon termination.
+```claim
+kind: constraint
+verification:
+  implementation: review
+because: [eos-capability-lifecycle]
+```
+
+Verification will disconnect abruptly and confirm resource cleanup.
+
+#### [daemon-shutdown]
+
+Graceful daemon termination.
 
 - **PRE**: A shutdown signal is received (SIGTERM, explicit command).
 - **POST**: The daemon stops accepting new connections, drains in-flight
   builds to completion (or cancels them per policy), notifies connected
   clients, closes all transport endpoints, and removes the socket file (UDS).
-  `VERIFIED: unverified`
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+Verification will send SIGTERM and confirm graceful drain and socket
+removal.
 
 ---
 
 ### Forbidden States
 
-**[no-unattested-substitution]**: Eos MUST NOT accept artifacts from
-substituters that lack valid `OriginAttestation`s when strict substitution
-policy is enabled. Artifacts without attestations meeting the configured
-Web of Trust threshold MUST be rejected.
-`VERIFIED: unverified`
+#### [no-unattested-substitution]
 
-**[no-unencrypted-secrets]**: Worker nodes MUST NOT transmit private keys or
+Eos MUST NOT accept artifacts from
+substituters that lack valid [eos-origin-attestation](#eos-origin-attestation)s when strict substitution
+policy is enabled. Artifacts without attestations meeting the configured
+[eos-wot-substitution-threshold](#eos-wot-substitution-threshold) MUST be rejected.
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+depends: [eos-wot-substitution-threshold, eos-origin-attestation]
+```
+
+Verification will confirm rejection when attestations are missing.
+
+#### [no-unencrypted-secrets]
+
+Worker nodes MUST NOT transmit private keys or
 plaintext credentials over the network during build execution or session
 establishment.
-`VERIFIED: unverified`
 
-**[no-unauthorized-handshake]**: A connection MUST NOT be promoted to an
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+Verification will run static analysis for credential exposure in
+wire payloads.
+
+#### [no-unauthorized-handshake]
+
+A connection MUST NOT be promoted to an
 authenticated RPC session if the `HandshakeRequest` signature does not
-validate against the declared `NodeIdentity` (sovereign principal).
-`VERIFIED: unverified`
+validate against the declared `NodeIdentity`, the sovereign principal
+[eos-network-sovereign-auth](#eos-network-sovereign-auth) requires.
 
-**[no-cancel-on-drop]**: Dropping a `BuildJob` or `ProgressStream` capability
-MUST NOT implicitly cancel the associated build. Only an explicit `cancel()`
+```claim
+kind: constraint
+verification:
+  implementation: none
+depends: [eos-network-sovereign-auth]
+```
+
+Verification will present an invalid signature and confirm
+connection rejection.
+
+#### [no-cancel-on-drop]
+
+Dropping a `BuildJob` or `ProgressStream` capability
+MUST NOT implicitly cancel the associated build, per
+[eos-capability-lifecycle](#eos-capability-lifecycle). Only an explicit `cancel()`
 invocation MAY terminate a build.
-`VERIFIED: unverified`
 
-**[no-unauthenticated-capability]**: The `EosDaemon` bootstrap capability
+```claim
+kind: constraint
+verification:
+  implementation: review
+because: [eos-capability-lifecycle]
+```
+
+Verification will drop all client capabilities and confirm the build
+completes.
+
+#### [no-unauthenticated-capability]
+
+The `EosDaemon` bootstrap capability
+[client-connect](#client-connect) returns
 MUST NOT be issued to a connection that has not completed the authenticated
 handshake. Unauthenticated transports MUST NOT expose any RPC surface.
-`VERIFIED: unverified`
+
+```claim
+kind: constraint
+verification:
+  implementation: none
+depends: [client-connect]
+```
+
+Verification will skip the handshake and confirm RPC calls are
+rejected.
 
 ---
 
 ### Behavioral Properties
 
-**[eventual-cache-consistency]**: If a build artifact is successfully pushed
-to a remote binary cache, subsequent `SubstitutionQuery` requests for that
+#### [eventual-cache-consistency]
+
+If a build artifact is successfully pushed
+to a remote binary cache, subsequent [request-substitute](#request-substitute)
+`SubstitutionQuery` requests for that
 artifact's plan hash MUST return the artifact within a bounded propagation
 delay.
 
 - **Type**: Liveness
-  `VERIFIED: unverified`
 
-**[reproducible-build-consensus]**: For high-security environments, Eos MAY
+```claim
+kind: constraint
+verification:
+  implementation: none
+depends: [request-substitute]
+```
+
+Verification will push to the cache and confirm the artifact
+returns within the bounded propagation delay.
+
+#### [reproducible-build-consensus]
+
+For high-security environments, Eos MAY
 schedule the same `Plan` on _N_ independent, distrusted worker nodes and
 verify that the resulting output digests are identical (majority consensus)
 before committing the output. This follows the Trustix model: builders
@@ -748,15 +1037,35 @@ publish signed `PlanHash → OutputDigest` mappings, and clients enforce an
 _M_-of-_N_ agreement threshold.
 
 - **Type**: Safety
-  `VERIFIED: unverified`
 
-**[capability-cleanup-on-disconnect]**: When a client disconnects (gracefully
+```claim
+kind: constraint
+verification:
+  implementation: none
+```
+
+Verification will dual-build with injected non-determinism and
+confirm detection.
+
+#### [capability-cleanup-on-disconnect]
+
+When a client
+[client-disconnect](#client-disconnect)s (gracefully
 or abruptly), all server-side resources associated with that client's
 capabilities MUST be reclaimed within a bounded interval. No resource leak
 MAY persist after the Cap'n Proto runtime processes the disconnection.
 
 - **Type**: Liveness
-  `VERIFIED: unverified`
+
+```claim
+kind: constraint
+verification:
+  implementation: review
+depends: [client-disconnect]
+```
+
+Verification will cycle rapid connect/disconnect and confirm no
+resource leaks.
 
 ---
 
@@ -1068,40 +1377,6 @@ Artifact transfer (for substitution and cache distribution) uses the
 - On error, the capability is dropped, and the transfer is aborted.
 - Content integrity is verified after transfer completes by comparing the
   full content's Blake3 digest against the expected `contentDigest`.
-
----
-
-## Verification
-
-| Constraint                         | Method           | Result     | Detail                                                               |
-| :--------------------------------- | :--------------- | :--------- | :------------------------------------------------------------------- |
-| `eos-network-sovereign-auth`       | Unit tests       | UNVERIFIED | Challenge-response verification with Cyphr Principal Roots           |
-| `eos-trustless-substitution`       | Integration test | UNVERIFIED | Inject corrupted artifact into cache, verify rejection               |
-| `eos-origin-attestation`           | Signature check  | UNVERIFIED | Verify `OriginAttestation` signature validation                      |
-| `eos-protocol-capability-matching` | Handshake test   | UNVERIFIED | Capability mismatch → connection rejection                           |
-| `eos-signature-freshness`          | Replay test      | UNVERIFIED | Replay expired `NodeIdentity` payload, verify rejection              |
-| `eos-capability-lifecycle`         | Integration test | UNVERIFIED | Drop `BuildJob` cap, verify build continues                          |
-| `eos-progress-multiplexing`        | Integration test | UNVERIFIED | Attach two clients to same job, verify both receive events           |
-| `eos-transport-agnosticism`        | Integration test | UNVERIFIED | Run identical test suite over UDS and TCP transports                 |
-| `eos-wot-substitution-threshold`   | Policy test      | UNVERIFIED | Configure M-of-N, inject insufficient attestations, verify rejection |
-| `daemon-startup`                   | Integration test | UNVERIFIED | Verify socket creation and readiness signaling                       |
-| `client-connect`                   | Unit test        | UNVERIFIED | Verify handshake transitions (success and rejection)                 |
-| `submit-build`                     | Integration test | UNVERIFIED | Submit identical plans, verify deduplication                         |
-| `attach-progress`                  | Integration test | UNVERIFIED | Attach callback, verify `BuildStatus` delivery                       |
-| `detach-progress`                  | Integration test | UNVERIFIED | Drop `ProgressStream`, verify cleanup without build interruption     |
-| `cancel-build`                     | Integration test | UNVERIFIED | Cancel via capability, verify job transitions to `Cancelled`         |
-| `request-substitute`               | Integration test | UNVERIFIED | Mock substituter, verify attestation and digest checks               |
-| `client-disconnect`                | Integration test | UNVERIFIED | Abrupt disconnect, verify resource cleanup                           |
-| `daemon-shutdown`                  | Integration test | UNVERIFIED | SIGTERM, verify graceful drain and socket removal                    |
-| `no-unattested-substitution`       | Policy audit     | UNVERIFIED | Verify rejection when attestations are missing                       |
-| `no-unencrypted-secrets`           | Code audit       | UNVERIFIED | Static analysis for credential exposure in wire payloads             |
-| `no-unauthorized-handshake`        | Signature check  | UNVERIFIED | Invalid signature → connection rejection                             |
-| `no-cancel-on-drop`                | Integration test | UNVERIFIED | Drop all client capabilities, verify build completes                 |
-| `no-unauthenticated-capability`    | Integration test | UNVERIFIED | Skip handshake, verify RPC calls are rejected                        |
-| `eventual-cache-consistency`       | Integration test | UNVERIFIED | Cache push → propagation delay → query verification                  |
-| `reproducible-build-consensus`     | Consensus test   | UNVERIFIED | Dual-build with injected non-determinism, verify detection           |
-| `capability-cleanup-on-disconnect` | Stress test      | UNVERIFIED | Rapid connect/disconnect cycles, verify no resource leaks            |
-| `eos-discovery-read-only`          | API audit        | UNVERIFIED | Verify `AtomDiscovery` exposes no mutation operations                |
 
 ---
 

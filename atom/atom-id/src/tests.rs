@@ -872,6 +872,9 @@ fn gen_ed25519_key() -> (Vec<u8>, Vec<u8>, crate::Thumbprint) {
 }
 
 #[test]
+// @docket: sig-over-pay :: cargo test --manifest-path atom/Cargo.toml -p atom-id --lib -- tests::verify_claim_roundtrip tests::verify_publish_roundtrip
+// @docket: claim-key-required :: cargo test --manifest-path atom/Cargo.toml -p atom-id --lib -- tests::verify_claim_roundtrip
+// @docket: claim-transition :: cargo test --manifest-path atom/Cargo.toml -p atom-id --lib -- tests::verify_claim_roundtrip
 fn verify_claim_roundtrip() {
     let (prv, pub_bytes, tmb) = gen_ed25519_key();
     let claim = crate::ClaimPayload::new(
@@ -895,6 +898,8 @@ fn verify_claim_roundtrip() {
 }
 
 #[test]
+// @docket: publish-key-optional :: cargo test --manifest-path atom/Cargo.toml -p atom-id --lib -- tests::verify_publish_roundtrip
+// @docket: publish-transition :: cargo test --manifest-path atom/Cargo.toml -p atom-id --lib -- tests::verify_publish_roundtrip
 fn verify_publish_roundtrip() {
     let (prv, pub_bytes, tmb) = gen_ed25519_key();
     let publish = crate::PublishPayload::new(
