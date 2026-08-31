@@ -265,12 +265,13 @@ serving as the set's identity; that role now belongs one layer up, to
 `anchor`. A weak source-repository hash — SHA-1 is not
 collision-resistant (Storage Model §5) — therefore no longer bears on
 the lock's own identity value directly: it bears only on the ancestry
-`charter.src` transitively pins, not on `anchor` itself. Continuity
-across a hash-migrating
-history rewrite is a successor charter's explicit concern
-(atom-transactions.md's `[charter-succession]`, `[anchor-hash-agile]`),
-never this field's: `anchor` is immutable for the set's lifetime
-regardless of what happens to the source repository underneath it.
+`charter.src` transitively pins, not on `anchor` itself. A
+hash-migrating history rewrite severs the in-protocol path to this
+anchor entirely — chartering the re-hashed history is a genuine fork
+with its own anchor (atom-transactions.md's `[anchor-hash-agile]`
+note), so no such rewrite is ever this field's concern: `anchor` is
+immutable for the set's lifetime regardless of what happens to the
+source repository underneath it.
 
 `golden_digest_fields_are_byte_exact_canonical_form`
 (`ion/ion-lock/tests/v2_corpus.rs`) confirms the field decodes and

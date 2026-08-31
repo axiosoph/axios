@@ -412,7 +412,9 @@ since a charter is a coz object regardless of backend. This replaces the earlier
 genesis-commit derivation; the genesis commit is not lost — the charter's
 `src` transitively pins it (a revision hash commits to its entire ancestry) —
 but it no longer _is_ the anchor. The anchor is: **immutable**
-(`[anchor-immutable]` — successor charters chain without changing it),
+(`[anchor-immutable]` — the charter is written once and never reissued;
+later change, a key rotation included, lands as signed facts folded onto
+it),
 **content-addressed over a signed, owned payload**
 (`[anchor-content-addressed]`), **unique** (distinct charters yield distinct
 anchors; two charters over the same history are two deliberately distinct
@@ -421,9 +423,11 @@ and verifies the founding charter from the source without trusting the
 publisher; selecting among candidate charters is the consumer's recorded
 trust decision (`[anchor-resolvable]`, supersedes `[anchor-discoverable]`).
 Git hash agility is handled by the charter, not by silence: a SHA-256 re-hash
-rewrites history, so continuity across it is an explicit successor charter
-(`[anchor-hash-agile]`, `[charter-succession]`); absent succession, the
-re-hashed repository is a distinct atom-set.
+rewrites history, severing any in-protocol path to the original anchor. A
+new charter over the re-hashed history is by definition a genuine fork with
+its own identity (`[anchor-hash-agile]`, `[charter-fork-distinction]`);
+continuity between the two anchors is at most an out-of-band trust decision
+a consumer makes on other evidence, never a protocol guarantee.
 
 ### 6.3 Ownership: Claim Before Publish
 
