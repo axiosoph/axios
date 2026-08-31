@@ -23,6 +23,18 @@ runtime. Build outputs are analyzed into **interface manifests**
 _justified_ — every entry is present because a named requirement binds to
 it, not because a hash-scan guessed.
 
+There is a shorter way to say what went wrong upstream: **Nix does the
+right things with the wrong primitives.** Its real trust model is
+recomputation — trust no one, re-derive everything from the recipe —
+with one mechanism answering three questions that each have a canonical
+primitive of their own: _who says so_ (a signature), _is this the
+content_ (a content digest), and _did the recipe really produce this_
+(independent builds corroborating, the one job recomputation is right
+for). That cost cannot be optimized away, because the cost is the trust
+model itself, paid in compute. Axios factors the jobs back onto their
+own primitives, and reproducibility survives, demoted from mechanism to
+evidence.
+
 The price of entry is deliberately low: builds run upstream's own,
 unmodified build process inside a hermetic view. There is no interpreted
 expression language to learn, no world-rebuild distribution to maintain,

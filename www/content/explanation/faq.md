@@ -89,6 +89,60 @@ of running Nix in production made its deployment model's awkwardness a
 personally felt limit. A system verified all the way to _where it runs_
 is not the only end goal here, but it is a major one.
 
+### Where does Nix fit in?
+
+Nix is the closest prior art — close enough that Axios is best read as
+a formal successor to it — and one sentence covers the relationship:
+**Nix does the right things with the wrong primitives.**
+
+Unbundle Nix and you find several tools fused into one. Each is a job
+Nix identified correctly, and each maps onto the layer that does that
+one job with the primitive built for it:
+
+- a rudimentary, _unsigned_ version-integrity system → **Atom**
+- a hermetic build layer → **HTC**
+- a networked build protocol → **Eos**
+- a storage protocol → content-addressed storage over git (entry 18)
+- a configuration-management tool → scoped per atom (entry 28)
+- a full functional evaluator → removed entirely; it was never
+  load-bearing (entry 16)
+
+Nix does all of these poorly because it does them all at once, through
+one primitive: _recompute it yourself_. That is Nix's actual trust
+model — trust no one, re-derive everything from the recipe — and every
+famous cost traces to the stance. Identity is a hash of inputs, so the
+world rebuilds when a low-level input changes. Nothing is signed,
+because why sign what everyone re-derives. Reproducibility is
+load-bearing, because "same hash" is the only way two machines can
+agree. Recomputation is proof by redoing the work — the most expensive
+verification there is — so Nix's cost cannot be optimized away. The
+cost _is_ the trust model, paid in compute. The tell is the binary
+cache: at the one point Nix stops recomputing, it has nothing left,
+and falls back to trusting a hardcoded key. Signing was always
+necessary; recomputation just hid it.
+
+Recompute-it-yourself was doing three jobs, and each has a canonical
+primitive: _who says so_ is a signature; _is this the content_ is a
+content hash; _did the recipe really produce this_ is corroboration —
+independent builds agreeing, the one job recomputation is right for.
+Axios factors the three back out and keeps recomputation only as
+evidence. (If a signature doesn't prove the build, note that
+recomputation never did either: it proved that the same recipe yields
+the same bytes. Attestation plus corroboration gives the same
+assurance without every consumer redoing the work.)
+
+The pattern repeats down the stack. The runtime closure is guessed by
+scanning artifacts for store-path strings, when the right primitive is
+the runtime interface itself (entries 10–12). A version is named by a
+derivation hash, when the right primitives are resolution and a lock —
+Nix has neither natively, nor even a native notion of "the package,"
+which is exactly why the derivation is so verbose (entry 24). Package,
+environment, and system are all forced through one grain, the
+derivation, when each is its own boundary (entry 13). In every case
+the right primitive is not exotic: it is the object the rest of the
+world already understands. Entry 9 covers why this makes a successor,
+not a patch.
+
 ---
 
 ## Part I — Atoms: identity you can verify
@@ -308,7 +362,10 @@ forces composition at the wrong layer. Nix discovers runtime
 dependencies by scanning build outputs for embedded hash strings,
 which is error-prone guesswork, when the right layer to compose at is
 the runtime interface itself: what a binary imports, what a library
-provides (entries 10 and 11).
+provides (entries 10 and 11). Both blockers are Part 0's _right
+things, wrong primitives_ at maximum strength: the jobs were
+identified correctly, but they are fused into one mechanism so
+tightly that the right primitives cannot be retrofitted around it.
 
 The full argument is the blog post [_Nix Is Right. Its Cost Is
 Not._](https://nrd.sh/blog/store-was-never-the-point.html) That post is
